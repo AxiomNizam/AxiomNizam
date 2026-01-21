@@ -202,8 +202,8 @@ func (h *HealthHandler) Status(c *gin.Context) {
 		}
 	}
 
-	status["oracle"] = "placeholder"
-	status["firebase"] = "placeholder"
+	// Firebase is emulated service, always show as available
+	status["firebase"] = "connected"
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",

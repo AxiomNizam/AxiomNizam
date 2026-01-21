@@ -63,6 +63,14 @@ func main() {
 	router.PUT("/api/postgres/users/:id", postgresHandler.UpdateUser)
 	router.DELETE("/api/postgres/users/:id", postgresHandler.DeleteUser)
 
+	// CRUD routes for Firebase
+	firebaseHandler := handlers.NewFirebaseHandler("http://firebase:9000")
+	router.POST("/api/firebase/users", firebaseHandler.CreateUser)
+	router.GET("/api/firebase/users", firebaseHandler.GetAllUsers)
+	router.GET("/api/firebase/users/:id", firebaseHandler.GetUserByID)
+	router.PUT("/api/firebase/users/:id", firebaseHandler.UpdateUser)
+	router.DELETE("/api/firebase/users/:id", firebaseHandler.DeleteUser)
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
@@ -75,7 +83,21 @@ func main() {
 	fmt.Println("  GET  /api/mysql/users/:id - Get user by ID (MySQL)")
 	fmt.Println("  PUT  /api/mysql/users/:id - Update user (MySQL)")
 	fmt.Println("  DELETE /api/mysql/users/:id - Delete user (MySQL)")
-	fmt.Println("  (Similar endpoints available for /api/mariadb/users and /api/postgres/users)")
+	fmt.Println("  POST /api/mariadb/users   - Create user (MariaDB)")
+	fmt.Println("  GET  /api/mariadb/users   - Get all users (MariaDB)")
+	fmt.Println("  GET  /api/mariadb/users/:id - Get user by ID (MariaDB)")
+	fmt.Println("  PUT  /api/mariadb/users/:id - Update user (MariaDB)")
+	fmt.Println("  DELETE /api/mariadb/users/:id - Delete user (MariaDB)")
+	fmt.Println("  POST /api/postgres/users  - Create user (PostgreSQL)")
+	fmt.Println("  GET  /api/postgres/users  - Get all users (PostgreSQL)")
+	fmt.Println("  GET  /api/postgres/users/:id - Get user by ID (PostgreSQL)")
+	fmt.Println("  PUT  /api/postgres/users/:id - Update user (PostgreSQL)")
+	fmt.Println("  DELETE /api/postgres/users/:id - Delete user (PostgreSQL)")
+	fmt.Println("  POST /api/firebase/users  - Create user (Firebase)")
+	fmt.Println("  GET  /api/firebase/users  - Get all users (Firebase)")
+	fmt.Println("  GET  /api/firebase/users/:id - Get user by ID (Firebase)")
+	fmt.Println("  PUT  /api/firebase/users/:id - Update user (Firebase)")
+	fmt.Println("  DELETE /api/firebase/users/:id - Delete user (Firebase)")
 	fmt.Println()
 
 	router.Run(fmt.Sprintf("%s:%s", apiHost, apiPort))

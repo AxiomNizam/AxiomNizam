@@ -20,14 +20,76 @@ All services are up and running on their respective ports:
 
 ## Quick Test Endpoints
 
-### Health & Status
-```bash
-# Health check
-curl http://localhost:8000/health
+### Health & Status Check
 
-# Check all connections
+#### Health Endpoint
+```bash
+curl http://localhost:8000/health
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "message": "AxiomNizam API is running"
+}
+```
+
+#### Status Endpoint - Check All Database Connections
+```bash
 curl http://localhost:8000/status
 ```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "message": "System status",
+  "data": {
+    "elasticsearch": "connected",
+    "etcd": "connected",
+    "mariadb": "connected",
+    "mongodb": "connected",
+    "mysql": "connected",
+    "postgres": "connected",
+    "valkey": "connected"
+  }
+}
+```
+
+## All Available API Endpoints
+
+### System Health & Status
+- `GET /health` - Check API is running
+- `GET /status` - Check all database connections
+
+### MySQL CRUD Operations
+- `POST /api/mysql/users` - Create new user
+- `GET /api/mysql/users` - Get all users
+- `GET /api/mysql/users/:id` - Get user by ID
+- `PUT /api/mysql/users/:id` - Update user
+- `DELETE /api/mysql/users/:id` - Delete user
+
+### MariaDB CRUD Operations
+- `POST /api/mariadb/users` - Create new user
+- `GET /api/mariadb/users` - Get all users
+- `GET /api/mariadb/users/:id` - Get user by ID
+- `PUT /api/mariadb/users/:id` - Update user
+- `DELETE /api/mariadb/users/:id` - Delete user
+
+### PostgreSQL CRUD Operations
+- `POST /api/postgres/users` - Create new user
+- `GET /api/postgres/users` - Get all users
+- `GET /api/postgres/users/:id` - Get user by ID
+- `PUT /api/postgres/users/:id` - Update user
+- `DELETE /api/postgres/users/:id` - Delete user
+
+### Firebase CRUD Operations
+- `POST /api/firebase/users` - Create new user
+- `GET /api/firebase/users` - Get all users
+- `GET /api/firebase/users/:id` - Get user by ID
+- `PUT /api/firebase/users/:id` - Update user
+- `DELETE /api/firebase/users/:id` - Delete user
 
 ---
 
@@ -122,7 +184,17 @@ curl -X DELETE http://localhost:8000/api/postgres/users/1
 
 ## Testing with Powershell
 
-### Create User
+### Health Check
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/health" -Method GET | Select-Object -ExpandProperty Content
+```
+
+### Status Check - All Database Connections
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/status" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MySQL - Create User
 ```powershell
 $body = @{
     name = "John Doe"
@@ -133,15 +205,20 @@ $body = @{
 Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users" `
   -Method POST `
   -Body $body `
-  -ContentType "application/json"
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
 ```
 
-### Get All Users
+### MySQL - Get All Users
 ```powershell
-Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users" -Method GET
+Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
 ```
 
-### Update User
+### MySQL - Get User by ID
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users/1" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MySQL - Update User
 ```powershell
 $body = @{
     name = "Jane Doe"
@@ -152,12 +229,141 @@ $body = @{
 Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users/1" `
   -Method PUT `
   -Body $body `
-  -ContentType "application/json"
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
 ```
 
-### Delete User
+### MySQL - Delete User
 ```powershell
-Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users/1" -Method DELETE
+Invoke-WebRequest -Uri "http://localhost:8000/api/mysql/users/1" -Method DELETE | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MariaDB - Create User
+```powershell
+$body = @{
+    name = "Alice Smith"
+    email = "alice@example.com"
+    age = 25
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8000/api/mariadb/users" `
+  -Method POST `
+  -Body $body `
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MariaDB - Get All Users
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/mariadb/users" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MariaDB - Get User by ID
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/mariadb/users/1" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MariaDB - Update User
+```powershell
+$body = @{
+    name = "Alice Updated"
+    email = "alice.new@example.com"
+    age = 26
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8000/api/mariadb/users/1" `
+  -Method PUT `
+  -Body $body `
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### MariaDB - Delete User
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/mariadb/users/1" -Method DELETE | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### PostgreSQL - Create User
+```powershell
+$body = @{
+    name = "Bob Smith"
+    email = "bob@example.com"
+    age = 35
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8000/api/postgres/users" `
+  -Method POST `
+  -Body $body `
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### PostgreSQL - Get All Users
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/postgres/users" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### PostgreSQL - Get User by ID
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/postgres/users/1" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### PostgreSQL - Update User
+```powershell
+$body = @{
+    name = "Bob Updated"
+    email = "bob.new@example.com"
+    age = 36
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8000/api/postgres/users/1" `
+  -Method PUT `
+  -Body $body `
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### PostgreSQL - Delete User
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/postgres/users/1" -Method DELETE | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### Firebase - Create User
+```powershell
+$body = @{
+    name = "Firebase User"
+    email = "firebase@example.com"
+    age = 40
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8000/api/firebase/users" `
+  -Method POST `
+  -Body $body `
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### Firebase - Get All Users
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/firebase/users" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### Firebase - Get User by ID
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/firebase/users/1" -Method GET | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### Firebase - Update User
+```powershell
+$body = @{
+    name = "Firebase User Updated"
+    email = "firebase.updated@example.com"
+    age = 41
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8000/api/firebase/users/1" `
+  -Method PUT `
+  -Body $body `
+  -ContentType "application/json" | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
+```
+
+### Firebase - Delete User
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8000/api/firebase/users/1" -Method DELETE | Select-Object -ExpandProperty Content | ConvertFrom-Json | ConvertTo-Json
 ```
 
 ---
