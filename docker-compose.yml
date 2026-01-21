@@ -144,6 +144,25 @@ services:
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
 
+  # # Oracle Database
+  # oracle:
+  #   image: container-registry.oracle.com/database/express:latest
+  #   container_name: oracle
+  #   ports:
+  #     - "1521:1521"
+  #   environment:
+  #     ORACLE_PWD: oracle123
+  #     ORACLE_CHARACTERSET: AL32UTF8
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - oracle-data:/opt/oracle/oradata
+  #   healthcheck:
+  #     test: ["CMD", "sqlplus", "-V"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
 networks:
   app-network:
     driver: bridge
@@ -155,3 +174,4 @@ volumes:
   mongodb-data:
   percona-data:
   elasticsearch-data:
+  # oracle-data:
