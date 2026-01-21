@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # Go application
+  app:
+    build: .
+    container_name: go-app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - valkey
+      - keycloak
+      - etcd
+      - mysql
+      - mariadb
+      - postgres
+      - mongodb
+      - percona
+      - elasticsearch
+    networks:
+      - app-network
+
+  # Valkey (Redis alternative)
+  valkey:
+    image: valkey/valkey:latest
+    container_name: valkey
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    command: valkey-server --appendonly yes
+
+  # Keycloak
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    networks:
+      - app-network
+    command: start-dev
+
+  # etcd
+  etcd:
+    image: quay.io/coreos/etcd:latest
+    container_name: etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    environment:
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+    networks:
+      - app-network
+
+  # MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_db
+    networks:
+      - app-network
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  # MariaDB
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb
+    ports:
+      - "3307:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: app_db
+    networks:
+      - app-network
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+  # PostgreSQL
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+    networks:
+      - app-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # MongoDB
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    networks:
+      - app-network
+    volumes:
+      - mongodb-data:/data/db
+
+  # Percona MySQL
+  percona:
+    image: percona:latest
+    container_name: percona
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_db
+    networks:
+      - app-network
+    volumes:
+      - percona-data:/var/lib/mysql
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:latest
+    container_name: elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    networks:
+      - app-network
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  mariadb-data:
+  postgres-data:
+  mongodb-data:
+  percona-data:
+  elasticsearch-data:
