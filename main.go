@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -35,7 +37,13 @@ func initConnections() error {
 	var err error
 
 	// MySQL
-	mysqlDSN := "root:root@tcp(mysql:3306)/app_db?charset=utf8mb4&parseTime=True&loc=Local"
+	mysqlDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		getEnv("MYSQL_USER", "root"),
+		getEnv("MYSQL_PASSWORD", "root"),
+		getEnv("MYSQL_HOST", "localhost"),
+		getEnv("MYSQL_PORT", "3306"),
+		getEnv("MYSQL_DATABASE", "app_db"),
+	)
 	mysqlDB, err = gorm.Open(mysql.Open(mysqlDSN), &gorm.Config{})
 	if err != nil {
 		log.Printf("❌ MySQL connection failed: %v", err)
@@ -44,7 +52,13 @@ func initConnections() error {
 	}
 
 	// MariaDB
-	mariadbDSN := "root:root@tcp(mariadb:3306)/app_db?charset=utf8mb4&parseTime=True&loc=Local"
+	mariadbDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		getEnv("MARIADB_USER", "root"),
+		getEnv("MARIADB_PASSWORD", "root"),
+		getEnv("MARIADB_HOST", "localhost"),
+		getEnv("MARIADB_PORT", "3306"),
+		getEnv("MARIADB_DATABASE", "app_db"),
+	)
 	mysqlDB2, err = gorm.Open(mysql.Open(mariadbDSN), &gorm.Config{})
 	if err != nil {
 		log.Printf("❌ MariaDB connection failed: %v", err)
@@ -53,7 +67,14 @@ func initConnections() error {
 	}
 
 	// PostgreSQL
-	postgresDSN := "host=postgres user=postgres password=postgres dbname=app_db port=5432 sslmode=disable"
+	postgresDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
+		getEnv("POSTGRES_HOST", "localhost"),
+		getEnv("POSTGRES_USER", "postgres"),
+		getEnv("POSTGRES_PASSWORD", "postgres"),
+		getEnv("POSTGRES_DATABASE", "app_db"),
+		getEnv("POSTGRES_PORT", "5432"),
+		getEnv("POSTGRES_SSLMODE", "disable"),
+	)
 	postgresDB, err = gorm.Open(postgres.Open(postgresDSN), &gorm.Config{})
 	if err != nil {
 		log.Printf("❌ PostgreSQL connection failed: %v", err)
@@ -62,8 +83,14 @@ func initConnections() error {
 	}
 
 	// MongoDB
+	mongoURI := fmt.Sprintf("mongodb://%s:%s@%s:%s",
+		getEnv("MONGODB_USER", "root"),
+		getEnv("MONGODB_PASSWORD", "root"),
+		getEnv("MONGODB_HOST", "localhost"),
+		getEnv("MONGODB_PORT", "27017"),
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	mongoClient, err = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://root:root@mongodb:27017"))
+	mongoClient, err = mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	cancel()
 	if err != nil {
 		log.Printf("❌ MongoDB connection failed: %v", err)
@@ -73,7 +100,8 @@ func initConnections() error {
 
 	// Valkey
 	valkeyClient = redis.NewClient(&redis.Options{
-		Addr: "valkey:6379",
+		Addr: fmt.Sprintf("%s:%s", getEnv("VALKEY_HOST", "localhost"), getEnv("VALKEY_PORT", "6379")),
+		Password: getEnv("VALKEY_PASSWORD", ""),
 	})
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	_, err = valkeyClient.Ping(ctx).Result()
@@ -85,7 +113,15 @@ func initConnections() error {
 	}
 
 	// Elasticsearch
-	elasticClient, err = elastic.NewDefaultClient()
+	elasticClient, err = elastic.NewClient(
+		elastic.Config{
+			Addresses: []string{fmt.Sprintf("%s://%s:%s",
+				getEnv("ELASTICSEARCH_SCHEME", "http"),
+				getEnv("ELASTICSEARCH_HOST", "localhost"),
+				getEnv("ELASTICSEARCH_PORT", "9200"),
+			)},
+		},
+	)
 	if err != nil {
 		log.Printf("❌ Elasticsearch connection failed: %v", err)
 	} else {
@@ -94,7 +130,7 @@ func initConnections() error {
 
 	// etcd
 	etcdClient, err = etcdclient.New(etcdclient.Config{
-		Endpoints:   []string{"etcd:2379"},
+		Endpoints:   []string{fmt.Sprintf("%s:%s", getEnv("ETCD_HOST", "localhost"), getEnv("ETCD_PORT", "2379"))},
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
@@ -104,6 +140,15 @@ func initConnections() error {
 	}
 
 	return nil
+}
+
+// Helper function to get environment variables with defaults
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }
 
 // Response structure
@@ -331,7 +376,11 @@ func statusCheck(c *gin.Context) {
 	})
 }
 
-func main() {
+func main() {	// Load environment variables from .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("⚠️  No .env file found, using system environment variables")
+	}
 	fmt.Println("� Starting AxiomNizam API Server...\n")
 
 	// Initialize all connections
@@ -360,7 +409,10 @@ func main() {
 	// etcd endpoint
 	router.GET("/query/etcd", queryEtcd)
 
-	fmt.Println("📡 API Server running on http://localhost:8000")
+	apiPort := getEnv("API_PORT", "8000")
+	apiHost := getEnv("API_HOST", "0.0.0.0")
+
+	fmt.Printf("📡 API Server running on http://%s:%s\n", apiHost, apiPort)
 	fmt.Println("\nAvailable endpoints:")
 	fmt.Println("  GET  /health              - Health check")
 	fmt.Println("  GET  /status              - Check all connections")
@@ -372,5 +424,5 @@ func main() {
 	fmt.Println("  GET  /query/etcd          - Query etcd")
 	fmt.Println()
 
-	router.Run(":8000")
+	router.Run(fmt.Sprintf("%s:%s", apiHost, apiPort))
 }

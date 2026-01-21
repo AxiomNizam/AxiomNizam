@@ -5,6 +5,8 @@ services:
     container_name: axiomnizam
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     depends_on:
       - valkey
       - keycloak
@@ -58,7 +60,7 @@ services:
   # MySQL
   mysql:
     image: mysql:8.0
-    container_name: mysql
+    container_name: mysql8
     ports:
       - "3306:3306"
     environment:
@@ -96,7 +98,7 @@ services:
     networks:
       - app-network
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
 
   # MongoDB
   mongodb:
