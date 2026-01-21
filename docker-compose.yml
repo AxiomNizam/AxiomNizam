@@ -2,9 +2,9 @@ version: '3.8'
 
 services:
   # Go application
-  app:
+  axiomnizam:
     build: .
-    container_name: go-app
+    container_name: axiomnizam
     ports:
       - "8000:8000"
     depends_on:
