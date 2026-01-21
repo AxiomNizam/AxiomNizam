@@ -3,8 +3,11 @@ FROM golang:1.21 AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum* ./
-RUN go mod download 2>/dev/null || true
+ENV GOFLAGS=-mod=mod
+
+COPY go.mod ./
+RUN go mod download -x
+RUN go get -d ./...
 
 COPY . .
 
