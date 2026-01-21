@@ -59,8 +59,6 @@ func (h *FirebaseHandler) GetAllUsers(c *gin.Context) {
 
 // GetUserByID handles GET /users/:id for Firebase
 func (h *FirebaseHandler) GetUserByID(c *gin.Context) {
-	id := c.Param("id")
-
 	// In a real implementation, this would fetch from Firebase by ID
 	// For now, return simulated data
 	user := models.User{
@@ -79,7 +77,6 @@ func (h *FirebaseHandler) GetUserByID(c *gin.Context) {
 
 // UpdateUser handles PUT /users/:id for Firebase
 func (h *FirebaseHandler) UpdateUser(c *gin.Context) {
-	id := c.Param("id")
 	var user models.User
 	if err := c.BindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{

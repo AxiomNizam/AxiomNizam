@@ -27,7 +27,7 @@ type Connections struct {
 	Valkey        *redis.Client
 	Elasticsearch *elastic.Client
 	Etcd          *etcdclient.Client
-	Oracle        interface{} // Placeholder for Oracle connection
+	Oracle        *gorm.DB
 	Firebase      interface{} // Placeholder for Firebase connection
 }
 
@@ -111,8 +111,13 @@ func InitConnections(cfg *config.Config) *Connections {
 		log.Printf("❌ etcd connection failed: %v", err)
 	}
 
-	// Oracle (placeholder)
-	log.Println("⚠️  Oracle connection - placeholder (requires Oracle client libraries)")
+	// Oracle
+	if db, err := gorm.Open(postgres.Open(cfg.GetOracleDSN()), &gorm.Config{}); err == nil {
+		conns.Oracle = db
+		log.Println("✅ Oracle connected")
+	} else {
+		log.Printf("⚠️  Oracle connection failed: %v", err)
+	}
 
 	// Firebase (placeholder)
 	log.Println("⚠️  Firebase connection - placeholder (requires Firebase credentials)")
@@ -144,6 +149,7 @@ func (c *Connections) IsConnected() map[string]bool {
 		"valkey":       c.Valkey != nil,
 		"elasticsearch": c.Elasticsearch != nil,
 		"etcd":         c.Etcd != nil,
+		"oracle":       c.Oracle != nil,
 	}
 	return status
 }

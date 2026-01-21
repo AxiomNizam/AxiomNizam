@@ -21,6 +21,7 @@ type Config struct {
 	Valkey     ValKeyConfig
 	Elasticsearch ElasticsearchConfig
 	Etcd       EtcdConfig
+	Keycloak   KeycloakConfig
 }
 
 type APIConfig struct {
@@ -53,6 +54,13 @@ type ElasticsearchConfig struct {
 type EtcdConfig struct {
 	Host string
 	Port string
+}
+
+type KeycloakConfig struct {
+	Host     string
+	Port     string
+	Realm    string
+	ClientID string
 }
 
 type FirebaseConfig struct {
@@ -146,6 +154,12 @@ func LoadConfig() *Config {
 			Host: getEnv("ETCD_HOST", "localhost"),
 			Port: getEnv("ETCD_PORT", "2379"),
 		},
+		Keycloak: KeycloakConfig{
+			Host:     getEnv("KEYCLOAK_HOST", "localhost"),
+			Port:     getEnv("KEYCLOAK_PORT", "8080"),
+			Realm:    getEnv("KEYCLOAK_REALM", "master"),
+			ClientID: getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam"),
+		},
 	}
 }
 
@@ -195,6 +209,12 @@ func (c *Config) GetOracleConnectionString() string {
 		c.Oracle.User, c.Oracle.Password, c.Oracle.Host, c.Oracle.Port, c.Oracle.SID)
 }
 
+// GetOracleDSN returns Oracle DSN for GORM
+func (c *Config) GetOracleDSN() string {
+	return fmt.Sprintf("user=%s password=%s host=%s port=%s database=%s",
+		c.Oracle.User, c.Oracle.Password, c.Oracle.Host, c.Oracle.Port, c.Oracle.SID)
+}
+
 // GetElasticsearchURL returns Elasticsearch URL
 func (c *Config) GetElasticsearchURL() string {
 	return fmt.Sprintf("http://%s:%s", c.Elasticsearch.Host, c.Elasticsearch.Port)
@@ -203,6 +223,11 @@ func (c *Config) GetElasticsearchURL() string {
 // GetEtcdEndpoint returns etcd endpoint
 func (c *Config) GetEtcdEndpoint() string {
 	return fmt.Sprintf("%s:%s", c.Etcd.Host, c.Etcd.Port)
+}
+
+// GetKeycloakURL returns Keycloak URL
+func (c *Config) GetKeycloakURL() string {
+	return fmt.Sprintf("http://%s:%s", c.Keycloak.Host, c.Keycloak.Port)
 }
 
 // GetValkeyAddr returns Valkey address

@@ -12,4 +12,5 @@ require (
 	gorm.io/gorm v1.25.4
 	github.com/elastic/go-elasticsearch/v8 v8.10.0
 	go.etcd.io/etcd/client/v3 v3.5.9
+	github.com/golang-jwt/jwt/v5 v5.0.0
 )

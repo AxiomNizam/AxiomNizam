@@ -6,8 +6,8 @@ WORKDIR /app
 ENV GOFLAGS=-mod=mod
 
 COPY go.mod ./
-RUN go mod download -x
-RUN go get -d ./...
+RUN go mod tidy
+RUN go mod download
 
 COPY . .
 

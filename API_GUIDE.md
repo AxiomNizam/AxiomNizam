@@ -404,6 +404,113 @@ Invoke-WebRequest -Uri "http://localhost:8000/api/firebase/users/1" -Method DELE
 
 ---
 
+## Oracle Database CRUD Operations
+
+### Create User
+```bash
+curl -X POST http://localhost:8000/api/oracle/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30
+  }'
+```
+
+**Response (201 Created):**
+```json
+{
+  "status": "ok",
+  "message": "User created successfully in Oracle",
+  "data": {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30
+  }
+}
+```
+
+### Get All Users
+```bash
+curl http://localhost:8000/api/oracle/users
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "message": "Users retrieved successfully from Oracle",
+  "data": [
+    {
+      "id": 1,
+      "name": "Oracle User",
+      "email": "oracle@example.com",
+      "age": 30
+    }
+  ]
+}
+```
+
+### Get User by ID
+```bash
+curl http://localhost:8000/api/oracle/users/1
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "message": "User retrieved successfully from Oracle",
+  "data": {
+    "id": 1,
+    "name": "Oracle User",
+    "email": "oracle@example.com",
+    "age": 30
+  }
+}
+```
+
+### Update User
+```bash
+curl -X PUT http://localhost:8000/api/oracle/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "age": 28
+  }'
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "message": "User updated successfully in Oracle",
+  "data": {
+    "id": 1,
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "age": 28
+  }
+}
+```
+
+### Delete User
+```bash
+curl -X DELETE http://localhost:8000/api/oracle/users/1
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "message": "User deleted successfully from Oracle"
+}
+```
+
+---
+
 ## User Model
 
 ```go
