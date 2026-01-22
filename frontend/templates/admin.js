@@ -12,6 +12,14 @@ let filteredMethod = 'ALL';
 console.log('Admin - Backend URL:', BACKEND_URL);
 
 window.addEventListener('DOMContentLoaded', function() {
+    // Set user name from localStorage
+    const userName = localStorage.getItem('userName');
+    if (userName) {
+        const userNameElem = document.getElementById('adminUserName');
+        if (userNameElem) {
+            userNameElem.textContent = userName;
+        }
+    }
     loadAPIs();
 });
 

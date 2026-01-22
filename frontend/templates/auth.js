@@ -81,7 +81,8 @@ function handleLogin(event) {
         localStorage.setItem('userName', userName);
         localStorage.setItem('userRole', 'admin');
         closeLoginModal();
-        window.location.reload();
+        // Redirect to admin dashboard after successful login
+        window.location.href = '/admin';
     })
     .catch(function(error) {
         console.error('❌ Login error:', error);

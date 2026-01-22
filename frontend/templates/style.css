@@ -312,7 +312,49 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 30px;
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.admin-header .header-left,
+.manager-header .header-left {
+    flex: 1;
+    text-align: left;
+}
+
+.admin-header .header-right,
+.manager-header .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.logout-btn {
+    background: linear-gradient(135deg, var(--danger-color), #dc2626);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    font-size: 0.95em;
+}
+
+.logout-btn:hover {
+    box-shadow: 0 5px 15px rgba(239, 68, 68, 0.3);
+    transform: translateY(-2px);
 }
 
 .dashboard-header h1,
@@ -320,6 +362,7 @@ body {
 .manager-header h1 {
     font-size: 32px;
     margin-bottom: 10px;
+    margin: 0;
 }
 
 .subtitle {

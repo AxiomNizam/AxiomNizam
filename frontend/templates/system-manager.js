@@ -10,6 +10,14 @@ const BACKEND_URL = (() => {
 console.log('System Manager - Backend URL:', BACKEND_URL);
 
 window.addEventListener('DOMContentLoaded', function() {
+    // Set user name from localStorage
+    const userName = localStorage.getItem('userName');
+    if (userName) {
+        const userNameElem = document.getElementById('managerUserName');
+        if (userNameElem) {
+            userNameElem.textContent = userName;
+        }
+    }
     loadStatusData();
     loadDatabases();
     setInterval(loadStatusData, 30000);
