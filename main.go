@@ -88,6 +88,12 @@ func main() {
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
 
+	// Authentication endpoints (no auth required)
+	authHandler := handlers.NewAuthHandler()
+	router.POST("/auth/login", authHandler.Login)
+	router.POST("/auth/refresh", authHandler.RefreshToken)
+	router.GET("/auth/validate", authHandler.ValidateToken)
+
 	// Apply auth middleware to protected routes
 	var authMiddleware gin.HandlerFunc
 	if tokenValidator != nil {

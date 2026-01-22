@@ -1,18 +1,19 @@
 // Authentication Module
 const AUTH_CONFIG = {
-    keycloakURL: 'http://localhost:8080',
-    keycloakRealm: 'axiomnizam',
-    keycloakClient: 'axiomnizam-frontend',
-    clientSecret: ''
+    apiURL: window.location.origin.replace(':7000', ':8000'), // Backend API URL
+    loginEndpoint: '/auth/login',
+    refreshEndpoint: '/auth/refresh'
 };
 
 let authToken = null;
+let refreshToken = null;
 let userName = null;
 let userRole = 'user';
 
 // Initialize authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
     authToken = localStorage.getItem('authToken');
+    refreshToken = localStorage.getItem('refreshToken');
     userName = localStorage.getItem('userName');
     userRole = localStorage.getItem('userRole') || 'user';
     
@@ -30,36 +31,38 @@ function handleLogin(event) {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
 
-    const body = new URLSearchParams();
-    // Use backend client for authentication (has secret)
-    body.append('client_id', 'axiomnizam-backend');
-    body.append('client_secret', '6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72');
-    body.append('grant_type', 'password');
-    body.append('username', username);
-    body.append('password', password);
-
     const loginBtn = event.target.querySelector('button[type="submit"]');
     const originalText = loginBtn.textContent;
     loginBtn.disabled = true;
     loginBtn.textContent = 'Logging in...';
 
-    fetch(AUTH_CONFIG.keycloakURL + '/realms/' + AUTH_CONFIG.keycloakRealm + '/protocol/openid-connect/token', {
+    // Send credentials to backend API (which handles Keycloak auth securely)
+    fetch(AUTH_CONFIG.apiURL + AUTH_CONFIG.loginEndpoint, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
         },
-        body: body
+        body: JSON.stringify({
+            username: username,
+            password: password
+        })
     })
     .then(function(response) {
         if (!response.ok) {
-            throw new Error('Login failed: ' + response.statusText);
+            return response.json().then(function(data) {
+                throw new Error(data.error || 'Login failed: ' + response.statusText);
+            });
         }
         return response.json();
     })
     .then(function(data) {
         authToken = data.access_token;
-        userName = username;
+        refreshToken = data.refresh_token || null;
+        userName = data.username;
         localStorage.setItem('authToken', authToken);
+        if (refreshToken) {
+            localStorage.setItem('refreshToken', refreshToken);
+        }
         localStorage.setItem('userName', userName);
         localStorage.setItem('userRole', 'admin');
         closeLoginModal();
