@@ -1,49 +1,74 @@
 {{ define "public-dashboard" }}
-<div class="old-dashboard-container">
-    <div class="old-dashboard-header">
-        <h1>🚀 AxiomNizam Dashboard</h1>
-        <p class="old-dashboard-subtitle">Backend Status & Health Monitor</p>
+<div class="dashboard-container">
+    <!-- Header Section -->
+    <div class="dashboard-header">
+        <div class="header-content">
+            <h1>🚀 AxiomNizam Dashboard</h1>
+            <p class="subtitle">Real-time Backend Status & API Monitor</p>
+        </div>
     </div>
 
-    <div class="old-dashboard-controls">
-        <button onclick="refreshData()" class="refresh-btn">🔄 Refresh Now</button>
-        <div class="auto-refresh-toggle">
-            <label>
+    <!-- Control Panel -->
+    <div class="control-panel">
+        <div class="control-left">
+            <button onclick="refreshData()" class="btn btn-primary">🔄 Refresh Now</button>
+            <label class="auto-refresh-label">
                 <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()" checked>
-                Auto-refresh every 5 seconds
+                <span>Auto-refresh every 5 seconds</span>
             </label>
         </div>
-        <div class="refresh-time">Last updated: <span id="lastUpdate">-</span></div>
-    </div>
-
-    <div id="messages"></div>
-
-    <div class="old-dashboard-content">
-        <!-- Health Card -->
-        <div class="old-dashboard-card">
-            <h2>💚 Health Status</h2>
-            <div id="healthContent" class="loading">Loading...</div>
-        </div>
-
-        <!-- Database Status Card -->
-        <div class="old-dashboard-card">
-            <h2>🗄️ Database Connections</h2>
-            <div id="statusContent" class="loading">Loading...</div>
+        <div class="control-right">
+            <div class="last-update">Last updated: <span id="lastUpdate">-</span></div>
         </div>
     </div>
 
-    <!-- APIs List Card -->
-    <div class="old-dashboard-card" style="margin-top: 30px;">
-        <h2>📡 Available APIs</h2>
-        <div id="apisContent" class="loading">Loading...</div>
+    <!-- Messages Area -->
+    <div id="messages" class="messages-area"></div>
+
+    <!-- Status Cards Grid -->
+    <div class="status-grid">
+        <!-- Health Status Card -->
+        <div class="status-card">
+            <div class="card-header">
+                <h2>💚 Health Status</h2>
+            </div>
+            <div id="healthContent" class="card-content loading">Loading...</div>
+        </div>
+
+        <!-- Database Connections Card -->
+        <div class="status-card">
+            <div class="card-header">
+                <h2>🗄️ Database Connections</h2>
+            </div>
+            <div id="statusContent" class="card-content loading">Loading...</div>
+        </div>
+
+        <!-- Backend Info Card -->
+        <div class="status-card">
+            <div class="card-header">
+                <h2>📡 Backend URL</h2>
+            </div>
+            <div class="card-content">
+                <div class="backend-url-display" id="backendInfo">-</div>
+            </div>
+        </div>
     </div>
 
-    <div class="backend-info">
-        <p>📡 Backend: <span id="backendInfo"></span></p>
+    <!-- APIs Section -->
+    <div class="apis-section">
+        <div class="section-header">
+            <h2>📦 Available APIs</h2>
+            <p>Click any endpoint for details</p>
+        </div>
+        <div id="apisContent" class="apis-grid loading">Loading...</div>
     </div>
+
     <!-- Hidden element to pass backend URL to JS -->
     <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
 </div>
+
+<script src="/static/dashboard.js"></script>
+{{ end }}
 
 <style>
     .old-dashboard-container {
