@@ -1,0 +1,225 @@
+{{ define "system-manager" }}
+<!-- System Manager Interface -->
+<div class="system-manager-container">
+    <!-- Header -->
+    <div class="manager-header">
+        <h1>🖥️ System Manager</h1>
+        <p class="subtitle">System Monitoring & Control Center</p>
+    </div>
+
+    <!-- Live Status Section -->
+    <div class="live-status">
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <div class="status-text">
+                <div class="status-title">System Status</div>
+                <div class="status-value" id="liveStatus">Loading...</div>
+            </div>
+        </div>
+        <div class="status-time">Last Updated: <span id="statusTime">--:--:--</span></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-navigation">
+        <button class="tab-btn active" onclick="switchManagerTab('overview')">
+            <span class="tab-icon">📊</span> Overview
+        </button>
+        <button class="tab-btn" onclick="switchManagerTab('databases')">
+            <span class="tab-icon">🗄️</span> Databases
+        </button>
+        <button class="tab-btn" onclick="switchManagerTab('monitoring')">
+            <span class="tab-icon">📈</span> Monitoring
+        </button>
+        <button class="tab-btn" onclick="switchManagerTab('operations')">
+            <span class="tab-icon">⚙️</span> Operations
+        </button>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="overview" class="tab-content active">
+        <div class="overview-section">
+            <h3>System Overview</h3>
+            <div class="overview-grid">
+                <div class="overview-card">
+                    <div class="card-icon">⚡</div>
+                    <div class="card-content">
+                        <div class="card-title">CPU Usage</div>
+                        <div class="card-value" id="cpuUsage">--</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="cpuProgress" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overview-card">
+                    <div class="card-icon">🧠</div>
+                    <div class="card-content">
+                        <div class="card-title">Memory Usage</div>
+                        <div class="card-value" id="memoryUsage">--</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="memoryProgress" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overview-card">
+                    <div class="card-icon">💾</div>
+                    <div class="card-content">
+                        <div class="card-title">Disk Usage</div>
+                        <div class="card-value" id="diskUsage">--</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="diskProgress" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overview-card">
+                    <div class="card-icon">🌐</div>
+                    <div class="card-content">
+                        <div class="card-title">Network I/O</div>
+                        <div class="card-value" id="networkIO">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overview-section-large">
+                <h4>Service Status</h4>
+                <div class="service-list" id="serviceStatus">
+                    <div class="service-item">
+                        <div class="service-name">Backend API</div>
+                        <div class="service-status running">✓ Running</div>
+                    </div>
+                    <div class="service-item">
+                        <div class="service-name">Frontend Server</div>
+                        <div class="service-status running">✓ Running</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Databases Tab -->
+    <div id="databases" class="tab-content">
+        <div class="databases-section">
+            <div class="section-header">
+                <h3>Database Management</h3>
+                <button class="btn-primary" onclick="refreshDatabases()">Refresh</button>
+            </div>
+
+            <div class="database-controls">
+                <button class="btn-secondary" onclick="createDatabase()">+ Create Database</button>
+                <button class="btn-secondary" onclick="backupDatabases()">📦 Backup All</button>
+                <button class="btn-secondary" onclick="restoreDatabases()">📥 Restore</button>
+            </div>
+
+            <div class="database-grid" id="databaseList">
+                <div class="loading">Loading databases...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monitoring Tab -->
+    <div id="monitoring" class="tab-content">
+        <div class="monitoring-section">
+            <h3>Performance Monitoring</h3>
+            <div class="chart-container">
+                <div class="chart-item">
+                    <h4>Request Rate</h4>
+                    <div class="chart-placeholder">📈 Chart visualization area</div>
+                </div>
+                <div class="chart-item">
+                    <h4>Response Times</h4>
+                    <div class="chart-placeholder">📊 Chart visualization area</div>
+                </div>
+            </div>
+
+            <div class="metrics-table">
+                <h4>Detailed Metrics</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Current</th>
+                            <th>Average</th>
+                            <th>Peak</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metricsBody">
+                        <tr>
+                            <td>API Response Time</td>
+                            <td>45ms</td>
+                            <td>52ms</td>
+                            <td>120ms</td>
+                            <td><span class="status-ok">✓ Good</span></td>
+                        </tr>
+                        <tr>
+                            <td>Database Query Time</td>
+                            <td>12ms</td>
+                            <td>15ms</td>
+                            <td>45ms</td>
+                            <td><span class="status-ok">✓ Good</span></td>
+                        </tr>
+                        <tr>
+                            <td>Error Rate</td>
+                            <td>0.1%</td>
+                            <td>0.15%</td>
+                            <td>0.5%</td>
+                            <td><span class="status-ok">✓ Low</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operations Tab -->
+    <div id="operations" class="tab-content">
+        <div class="operations-section">
+            <h3>System Operations</h3>
+            
+            <div class="operations-grid">
+                <div class="operation-card">
+                    <h4>Database Operations</h4>
+                    <div class="operation-buttons">
+                        <button class="btn-secondary" onclick="executeOp('db-optimize')">🔧 Optimize All</button>
+                        <button class="btn-secondary" onclick="executeOp('db-cleanup')">🧹 Cleanup</button>
+                        <button class="btn-secondary" onclick="executeOp('db-reindex')">📑 Reindex</button>
+                    </div>
+                </div>
+
+                <div class="operation-card">
+                    <h4>System Maintenance</h4>
+                    <div class="operation-buttons">
+                        <button class="btn-secondary" onclick="executeOp('clear-cache')">💨 Clear Cache</button>
+                        <button class="btn-secondary" onclick="executeOp('optimize-memory')">🧠 Optimize Memory</button>
+                        <button class="btn-secondary" onclick="executeOp('cleanup-logs')">📝 Cleanup Logs</button>
+                    </div>
+                </div>
+
+                <div class="operation-card">
+                    <h4>System Control</h4>
+                    <div class="operation-buttons">
+                        <button class="btn-secondary" onclick="executeOp('restart-services')">🔄 Restart Services</button>
+                        <button class="btn-warning" onclick="executeOp('stop-services')">⏹️ Stop Services</button>
+                        <button class="btn-danger" onclick="executeOp('system-restart')">⚠️ System Restart</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="operation-log">
+                <h4>Operation Log</h4>
+                <div class="operation-log-viewer" id="operationLog">
+                    <div class="log-entry">
+                        <span class="log-time">[10:00:00]</span>
+                        <span class="log-type info">INFO</span>
+                        <span>System manager initialized</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/system-manager.js"></script>
+{{ end }}

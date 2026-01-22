@@ -17,18 +17,23 @@
   },
   "item": [
     {
-      "name": "Authentication",
+      "name": "Authentication & Login",
       "item": [
         {
-          "name": "Get Access Token",
+          "name": "Backend: Get Client Credentials Token",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "pm.environment.set(\"token\", jsonData.access_token);",
-                  "console.log('Token saved: ' + jsonData.access_token.substring(0, 20) + '...');"
+                  "if (pm.response.code === 200) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"backend_token\", jsonData.access_token);",
+                  "  pm.environment.set(\"token_expires_in\", jsonData.expires_in);",
+                  "  console.log('Backend Token saved (expires in: ' + jsonData.expires_in + 's)');",
+                  "} else {",
+                  "  console.error('Failed to get backend token');",
+                  "}"
                 ]
               }
             }
@@ -46,22 +51,17 @@
               "urlencoded": [
                 {
                   "key": "client_id",
-                  "value": "admin-cli",
+                  "value": "{{backend_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{backend_client_secret}}",
                   "type": "text"
                 },
                 {
                   "key": "grant_type",
-                  "value": "password",
-                  "type": "text"
-                },
-                {
-                  "key": "username",
-                  "value": "{{admin_username}}",
-                  "type": "text"
-                },
-                {
-                  "key": "password",
-                  "value": "{{admin_password}}",
+                  "value": "client_credentials",
                   "type": "text"
                 }
               ]
@@ -77,6 +77,198 @@
                 "protocol",
                 "openid-connect",
                 "token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "User: Login with Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"user_token\", jsonData.access_token);",
+                  "  pm.environment.set(\"refresh_token\", jsonData.refresh_token);",
+                  "  pm.environment.set(\"user_token_expires_in\", jsonData.expires_in);",
+                  "  console.log('User Token saved (expires in: ' + jsonData.expires_in + 's)');",
+                  "} else {",
+                  "  console.error('Login failed: ' + pm.response.code);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{frontend_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloak_url}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check User Session (Validate Token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/userinfo",
+              "host": [
+                "{{keycloak_url}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "userinfo"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refresh User Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"user_token\", jsonData.access_token);",
+                  "  console.log('User Token refreshed');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{frontend_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "refresh_token",
+                  "type": "text"
+                },
+                {
+                  "key": "refresh_token",
+                  "value": "{{refresh_token}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloak_url}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{frontend_client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "refresh_token",
+                  "value": "{{refresh_token}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/logout",
+              "host": [
+                "{{keycloak_url}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "logout"
               ]
             }
           }
@@ -1145,23 +1337,51 @@
       "value": "http://localhost:8080"
     },
     {
-      "key": "admin_username",
-      "value": "admin"
-    },
-    {
-      "key": "admin_password",
-      "value": "admin"
-    },
-    {
-      "key": "client_id",
-      "value": "admin-cli"
-    },
-    {
       "key": "realm",
-      "value": "master"
+      "value": "axiomnizam"
+    },
+    {
+      "key": "backend_client_id",
+      "value": "axiomnizam-backend"
+    },
+    {
+      "key": "backend_client_secret",
+      "value": "6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72"
+    },
+    {
+      "key": "frontend_client_id",
+      "value": "axiomnizam-frontend"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin"
+    },
+    {
+      "key": "backend_token",
+      "value": ""
+    },
+    {
+      "key": "user_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
     },
     {
       "key": "token",
+      "value": ""
+    },
+    {
+      "key": "token_expires_in",
+      "value": ""
+    },
+    {
+      "key": "user_token_expires_in",
       "value": ""
     }
   ]

@@ -1,0 +1,176 @@
+{{ define "layout.html" }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Navigation Bar -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <span class="logo-icon">⚙️</span>
+                    <span class="logo-text">AxiomNizam</span>
+                </div>
+                
+                <div class="nav-center">
+                    <a href="/" class="nav-link {{ if eq .page "public-dashboard" }}active{{ end }}">
+                        <span class="nav-icon">📊</span>
+                        <span>Dashboard</span>
+                    </a>
+                    {{ if .isAuth }}
+                    <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}">
+                        <span class="nav-icon">🔧</span>
+                        <span>Admin</span>
+                    </a>
+                    <a href="/system-manager" class="nav-link {{ if eq .page "system-manager" }}active{{ end }}">
+                        <span class="nav-icon">🖥️</span>
+                        <span>System Manager</span>
+                    </a>
+                    {{ end }}
+                </div>
+                
+                <div class="nav-right">
+                    <div class="theme-switcher">
+                        <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="toggleTheme()">🌙</button>
+                    </div>
+                    {{ if .isAuth }}
+                    <div class="user-info">
+                        <span class="user-icon">👤</span>
+                        <span class="user-name">{{ .userName }}</span>
+                    </div>
+                    <button class="btn-logout" onclick="logout()">Logout</button>
+                    {{ else }}
+                    <button class="btn-login" onclick="openLoginModal()">Login</button>
+                    {{ end }}
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            {{ if eq .pageName "public-dashboard" }}
+                {{ template "public-dashboard" . }}
+            {{ else if eq .pageName "admin" }}
+                {{ template "admin" . }}
+            {{ else if eq .pageName "system-manager" }}
+                {{ template "system-manager" . }}
+            {{ end }}
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p>&copy; 2026 AxiomNizam - All Rights Reserved</p>
+                <div class="footer-links">
+                    <a href="#">Documentation</a>
+                    <a href="#">Support</a>
+                    <a href="#">Status</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content login-modal">
+            <div class="modal-header">
+                <h2>🔐 Login</h2>
+                <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" placeholder="Enter username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" placeholder="Enter password" required>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large">Login with Keycloak</button>
+                </form>
+                <p class="login-hint">Demo: Use admin/admin credentials</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Response Modal -->
+    <div id="responseModal" class="modal">
+        <div class="modal-content response-modal">
+            <div class="modal-header">
+                <h2 id="modalTitle">Response</h2>
+                <button class="modal-close" onclick="closeResponseModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Response content here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/auth.js"></script>
+    <script>
+        // Theme management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            setTheme(savedTheme);
+        }
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            updateThemeButton(theme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const themes = ['dark', 'light', 'default'];
+            const currentIndex = themes.indexOf(currentTheme);
+            const nextTheme = themes[(currentIndex + 1) % themes.length];
+            setTheme(nextTheme);
+        }
+
+        function updateThemeButton(theme) {
+            const btn = document.getElementById('themeToggle');
+            if (btn) {
+                const icons = { 'dark': '🌙', 'light': '☀️', 'default': '💻' };
+                btn.textContent = icons[theme] || '🌙';
+            }
+        }
+
+        // Check authentication on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            initTheme();
+            const token = localStorage.getItem('authToken');
+            if (!token && window.location.pathname !== '/') {
+                window.location.href = '/';
+            }
+        });
+
+        function openLoginModal() {
+            document.getElementById('loginModal').style.display = 'flex';
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        function closeResponseModal() {
+            document.getElementById('responseModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('loginModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+    </script>
+</body>
+</html>
+{{ end }}

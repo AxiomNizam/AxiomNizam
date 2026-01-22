@@ -1,0 +1,94 @@
+{{ define "admin" }}
+<!-- Admin Interface -->
+<div class="admin-container">
+    <!-- Header -->
+    <div class="admin-header">
+        <h1>🔧 Admin Dashboard</h1>
+        <p class="subtitle">API Testing & System Configuration</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-navigation">
+        <button class="tab-btn active" onclick="switchTab('api-testing')">
+            <span class="tab-icon">🧪</span> API Testing
+        </button>
+        <button class="tab-btn" onclick="switchTab('logs')">
+            <span class="tab-icon">📝</span> Logs
+        </button>
+        <button class="tab-btn" onclick="switchTab('settings')">
+            <span class="tab-icon">⚙️</span> Settings
+        </button>
+    </div>
+
+    <!-- API Testing Tab -->
+    <div id="api-testing" class="tab-content active">
+        <div class="api-testing-section">
+            <!-- API Search & Filter -->
+            <div class="api-controls">
+                <div class="search-box">
+                    <input type="text" id="apiSearch" placeholder="🔍 Search APIs..." onkeyup="filterAPIs()">
+                </div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
+                    <button class="filter-btn" onclick="filterByMethod('GET')">GET</button>
+                    <button class="filter-btn" onclick="filterByMethod('POST')">POST</button>
+                    <button class="filter-btn" onclick="filterByMethod('PUT')">PUT</button>
+                    <button class="filter-btn" onclick="filterByMethod('DELETE')">DELETE</button>
+                </div>
+            </div>
+
+            <!-- API Categories with Test Buttons -->
+            <div class="api-categories" id="apiCategories">
+                <div class="loading">Loading APIs...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Tab -->
+    <div id="logs" class="tab-content">
+        <div class="logs-section">
+            <div class="logs-header">
+                <h3>System Logs</h3>
+                <button class="btn-secondary" onclick="clearLogs()">Clear Logs</button>
+            </div>
+            <div class="logs-viewer" id="logsViewer">
+                <div class="log-entry info">
+                    <span class="log-time">[2026-01-22 10:00:00]</span>
+                    <span class="log-level">INFO</span>
+                    <span class="log-message">Admin Dashboard loaded</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settings" class="tab-content">
+        <div class="settings-section">
+            <h3>System Settings</h3>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <div class="setting-label">Backend URL</div>
+                    <div class="setting-value">{{ .backendURL }}</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">Authentication</div>
+                    <div class="setting-value">Keycloak OAuth2</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">API Timeout</div>
+                    <input type="number" class="setting-input" value="30" min="1" max="300"> seconds
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">Auto-refresh</div>
+                    <label class="toggle">
+                        <input type="checkbox" checked>
+                        <span class="toggle-switch"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/admin.js"></script>
+{{ end }}
