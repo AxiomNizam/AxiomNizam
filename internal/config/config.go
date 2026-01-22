@@ -10,18 +10,18 @@ import (
 
 // Config holds all configuration
 type Config struct {
-	API        APIConfig
-	MySQL      DatabaseConfig
-	MariaDB    DatabaseConfig
-	Percona    DatabaseConfig
-	PostgreSQL DatabaseConfig
-	MongoDB    DatabaseConfig
-	Oracle     DatabaseConfig
-	Firebase   FirebaseConfig
-	Valkey     ValKeyConfig
+	API           APIConfig
+	MySQL         DatabaseConfig
+	MariaDB       DatabaseConfig
+	Percona       DatabaseConfig
+	PostgreSQL    DatabaseConfig
+	MongoDB       DatabaseConfig
+	Oracle        DatabaseConfig
+	Firebase      FirebaseConfig
+	Valkey        ValKeyConfig
 	Elasticsearch ElasticsearchConfig
-	Etcd       EtcdConfig
-	Keycloak   KeycloakConfig
+	Etcd          EtcdConfig
+	Keycloak      KeycloakConfig
 }
 
 type APIConfig struct {
@@ -57,21 +57,22 @@ type EtcdConfig struct {
 }
 
 type KeycloakConfig struct {
-	Host     string
-	Port     string
-	Realm    string
-	ClientID string
+	Host         string
+	Port         string
+	Realm        string
+	ClientID     string
+	ClientSecret string
 }
 
 type FirebaseConfig struct {
-	ProjectID     string
-	PrivateKeyID  string
-	PrivateKey    string
-	ClientEmail   string
-	ClientID      string
-	AuthURI       string
-	TokenURI      string
-	DatabaseURL   string
+	ProjectID    string
+	PrivateKeyID string
+	PrivateKey   string
+	ClientEmail  string
+	ClientID     string
+	AuthURI      string
+	TokenURI     string
+	DatabaseURL  string
 }
 
 // LoadConfig loads configuration from environment
@@ -155,10 +156,11 @@ func LoadConfig() *Config {
 			Port: getEnv("ETCD_PORT", "2379"),
 		},
 		Keycloak: KeycloakConfig{
-			Host:     getEnv("KEYCLOAK_HOST", "localhost"),
-			Port:     getEnv("KEYCLOAK_PORT", "8080"),
-			Realm:    getEnv("KEYCLOAK_REALM", "master"),
-			ClientID: getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam"),
+			Host:         getEnv("KEYCLOAK_HOST", "localhost"),
+			Port:         getEnv("KEYCLOAK_PORT", "8080"),
+			Realm:        getEnv("KEYCLOAK_REALM", "master"),
+			ClientID:     getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam"),
+			ClientSecret: getEnv("KEYCLOAK_CLIENT_SECRET", ""),
 		},
 	}
 }
