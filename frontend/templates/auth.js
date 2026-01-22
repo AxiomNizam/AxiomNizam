@@ -1,9 +1,19 @@
 // Authentication Module
-const AUTH_CONFIG = {
-    apiURL: window.location.origin.replace(':7000', ':8000'), // Backend API URL
-    loginEndpoint: '/auth/login',
-    refreshEndpoint: '/auth/refresh'
-};
+const AUTH_CONFIG = (() => {
+    // Determine backend API URL based on current location
+    let apiURL = 'http://localhost:8000';
+    if (window.location.hostname && window.location.hostname !== 'localhost') {
+        // For non-localhost environments, construct the URL
+        apiURL = window.location.protocol + '//' + window.location.hostname + ':8000';
+    }
+    return {
+        apiURL: apiURL,
+        loginEndpoint: '/auth/login',
+        refreshEndpoint: '/auth/refresh'
+    };
+})();
+
+console.log('🔐 Auth Config:', AUTH_CONFIG);
 
 let authToken = null;
 let refreshToken = null;
@@ -36,8 +46,11 @@ function handleLogin(event) {
     loginBtn.disabled = true;
     loginBtn.textContent = 'Logging in...';
 
+    const loginURL = AUTH_CONFIG.apiURL + AUTH_CONFIG.loginEndpoint;
+    console.log('🔐 Attempting login to:', loginURL);
+
     // Send credentials to backend API (which handles Keycloak auth securely)
-    fetch(AUTH_CONFIG.apiURL + AUTH_CONFIG.loginEndpoint, {
+    fetch(loginURL, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -48,6 +61,7 @@ function handleLogin(event) {
         })
     })
     .then(function(response) {
+        console.log('📡 Login response status:', response.status);
         if (!response.ok) {
             return response.json().then(function(data) {
                 throw new Error(data.error || 'Login failed: ' + response.statusText);
@@ -56,6 +70,7 @@ function handleLogin(event) {
         return response.json();
     })
     .then(function(data) {
+        console.log('✅ Login successful:', data);
         authToken = data.access_token;
         refreshToken = data.refresh_token || null;
         userName = data.username;
@@ -69,6 +84,7 @@ function handleLogin(event) {
         window.location.reload();
     })
     .catch(function(error) {
+        console.error('❌ Login error:', error);
         loginBtn.disabled = false;
         loginBtn.textContent = originalText;
         alert('Login failed: ' + error.message + '\n\nDemo: Use admin/admin');

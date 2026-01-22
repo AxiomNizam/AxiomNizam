@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
@@ -23,7 +26,7 @@ type AuthHandler struct {
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler() *AuthHandler {
 	return &AuthHandler{
-		keycloakURL:    getEnv("KEYCLOAK_URL", "http://localhost:8080"),
+		keycloakURL:    getEnv("KEYCLOAK_URL", "http://keycloak:8080"),
 		keycloakRealm:  getEnv("KEYCLOAK_REALM", "axiomnizam"),
 		keycloakClient: getEnv("KEYCLOAK_CLIENT", "axiomnizam-backend"),
 		clientSecret:   getEnv("KEYCLOAK_CLIENT_SECRET", "6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72"),
@@ -69,6 +72,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Prepare the Keycloak token request
 	tokenURL := h.keycloakURL + "/realms/" + h.keycloakRealm + "/protocol/openid-connect/token"
+	log.Printf("📝 Login attempt for user: %s, token URL: %s\n", req.Username, tokenURL)
 
 	// Use form-urlencoded body for token request
 	body := url.Values{}
@@ -78,13 +82,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	body.Add("username", req.Username)
 	body.Add("password", req.Password)
 
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	// Make request to Keycloak
-	resp, err := http.Post(
+	resp, err := client.Post(
 		tokenURL,
 		"application/x-www-form-urlencoded",
 		strings.NewReader(body.Encode()),
 	)
 	if err != nil {
+		log.Printf("❌ Keycloak connection error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  "Failed to connect to authentication service: " + err.Error(),
@@ -96,6 +106,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("❌ Failed to read response: %v\n", err)
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  "Failed to read authentication response: " + err.Error(),
@@ -103,9 +114,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	log.Printf("📋 Keycloak response status: %d\n", resp.StatusCode)
+	log.Printf("📋 Keycloak response body: %s\n", string(responseBody))
+
 	// Parse token response
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
+		log.Printf("❌ Failed to parse JSON: %v\n", err)
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  "Failed to parse authentication response: " + err.Error(),
@@ -115,21 +130,25 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Check if Keycloak returned an error
 	if tokenResp.Error != "" {
+		log.Printf("❌ Keycloak auth error: %s - %s\n", tokenResp.Error, tokenResp.ErrorDesc)
 		c.JSON(http.StatusUnauthorized, models.Response{
 			Status: "error",
-			Error:  "Authentication failed: " + tokenResp.ErrorDesc,
+			Error:  fmt.Sprintf("Authentication failed: %s", tokenResp.ErrorDesc),
 		})
 		return
 	}
 
 	// Check response status code
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("❌ Keycloak returned status %d\n", resp.StatusCode)
 		c.JSON(http.StatusUnauthorized, models.Response{
 			Status: "error",
 			Error:  "Authentication failed with status: " + resp.Status,
 		})
 		return
 	}
+
+	log.Printf("✅ Login successful for user: %s\n", req.Username)
 
 	// Success - return token info
 	c.JSON(http.StatusOK, gin.H{
