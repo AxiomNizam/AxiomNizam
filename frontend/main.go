@@ -21,9 +21,9 @@ type HealthResponse struct {
 
 // StatusResponse represents the status endpoint response
 type StatusResponse struct {
-	Status  string                 `json:"status"`
-	Message string                 `json:"message"`
-	Data    map[string]string      `json:"data"`
+	Status  string            `json:"status"`
+	Message string            `json:"message"`
+	Data    map[string]string `json:"data"`
 }
 
 var backendURL string
@@ -43,8 +43,9 @@ func main() {
 
 	router := gin.Default()
 
-	// Serve static files
+	// Serve static files and HTML templates
 	router.LoadHTMLGlob("templates/*")
+	router.Static("/static", "templates/")
 
 	// Routes
 	router.GET("/", dashboardHandler)
