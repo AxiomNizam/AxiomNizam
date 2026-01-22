@@ -22,6 +22,7 @@ type Config struct {
 	Elasticsearch ElasticsearchConfig
 	Etcd          EtcdConfig
 	Keycloak      KeycloakConfig
+	Discord       DiscordConfig
 }
 
 type APIConfig struct {
@@ -62,6 +63,10 @@ type KeycloakConfig struct {
 	Realm        string
 	ClientID     string
 	ClientSecret string
+}
+
+type DiscordConfig struct {
+	WebhookURL string
 }
 
 type FirebaseConfig struct {
@@ -161,6 +166,9 @@ func LoadConfig() *Config {
 			Realm:        getEnv("KEYCLOAK_REALM", "master"),
 			ClientID:     getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam"),
 			ClientSecret: getEnv("KEYCLOAK_CLIENT_SECRET", ""),
+		},
+		Discord: DiscordConfig{
+			WebhookURL: getEnv("DISCORD_WEBHOOK_URL", ""),
 		},
 	}
 }

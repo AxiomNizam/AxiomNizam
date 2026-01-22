@@ -278,6 +278,100 @@
         .auto-refresh-toggle input[type="checkbox"] {
             cursor: pointer;
         }
+
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .api-item {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .api-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .api-method {
+            display: inline-block;
+            font-weight: bold;
+            font-size: 0.75em;
+            padding: 4px 8px;
+            border-radius: 3px;
+            margin-bottom: 8px;
+        }
+
+        .api-method.get {
+            background: #d4edff;
+            color: #0066cc;
+        }
+
+        .api-method.post {
+            background: #fff4d4;
+            color: #cc6600;
+        }
+
+        .api-method.put {
+            background: #fff0f6;
+            color: #cc0066;
+        }
+
+        .api-method.delete {
+            background: #ffe6e6;
+            color: #cc0000;
+        }
+
+        .api-path {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #333;
+            word-break: break-all;
+            margin-bottom: 6px;
+        }
+
+        .api-description {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .api-auth {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-top: 5px;
+        }
+
+        .api-auth.required {
+            background: #fff4d4;
+            color: #cc6600;
+        }
+
+        .api-auth.optional {
+            background: #e6f7ff;
+            color: #0066cc;
+        }
+
+        .api-category {
+            margin-bottom: 25px;
+        }
+
+        .api-category-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
     </style>
 </head>
 <body>
@@ -314,6 +408,12 @@
             </div>
         </div>
 
+        <!-- APIs List Card -->
+        <div class="card" style="margin-top: 30px;">
+            <h2>📡 Available APIs</h2>
+            <div id="apisContent" class="loading">Loading...</div>
+        </div>
+
         <div class="backend-info">
             <p>📡 Connected to: <strong id="backendInfo">{{ .backendURL }}</strong></p>
         </div>
@@ -325,6 +425,7 @@
         // Initial load
         window.addEventListener('DOMContentLoaded', () => {
             refreshData();
+            loadAPIs();
             startAutoRefresh();
         });
 
@@ -332,6 +433,97 @@
             fetchHealth();
             fetchStatus();
             updateLastRefreshTime();
+        }
+
+        function loadAPIs() {
+            const apisContent = document.getElementById('apisContent');
+            apisContent.innerHTML = '';
+
+            const apiCategories = {
+                'Health & Status': [
+                    { method: 'GET', path: '/health', description: 'Health check (no auth)' },
+                    { method: 'GET', path: '/status', description: 'Check all connections (no auth)' },
+                ],
+                'MySQL': [
+                    { method: 'GET', path: '/api/mysql/users', description: 'List all users', auth: 'required' },
+                    { method: 'GET', path: '/api/mysql/users/:id', description: 'Get user by ID', auth: 'required' },
+                    { method: 'POST', path: '/api/mysql/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/mysql/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/mysql/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'MariaDB': [
+                    { method: 'GET', path: '/api/mariadb/users', description: 'List all users', auth: 'required' },
+                    { method: 'POST', path: '/api/mariadb/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/mariadb/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/mariadb/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'PostgreSQL': [
+                    { method: 'GET', path: '/api/postgres/users', description: 'List all users', auth: 'required' },
+                    { method: 'POST', path: '/api/postgres/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/postgres/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/postgres/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'MongoDB': [
+                    { method: 'GET', path: '/api/mongodb/users', description: 'List all users', auth: 'required' },
+                    { method: 'POST', path: '/api/mongodb/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/mongodb/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/mongodb/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'Firebase': [
+                    { method: 'GET', path: '/api/firebase/users', description: 'List all users', auth: 'required' },
+                    { method: 'POST', path: '/api/firebase/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/firebase/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/firebase/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'Oracle': [
+                    { method: 'GET', path: '/api/oracle/users', description: 'List all users', auth: 'required' },
+                    { method: 'POST', path: '/api/oracle/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/oracle/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/oracle/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'Percona': [
+                    { method: 'GET', path: '/api/percona/users', description: 'List all users', auth: 'required' },
+                    { method: 'POST', path: '/api/percona/users', description: 'Create user', auth: 'admin' },
+                    { method: 'PUT', path: '/api/percona/users/:id', description: 'Update user', auth: 'admin' },
+                    { method: 'DELETE', path: '/api/percona/users/:id', description: 'Delete user', auth: 'admin' },
+                ],
+                'Admin Operations': [
+                    { method: 'POST', path: '/api/admin/database/create', description: 'Create database', auth: 'admin' },
+                    { method: 'GET', path: '/api/admin/database/list', description: 'List databases', auth: 'admin' },
+                    { method: 'POST', path: '/api/admin/table/create', description: 'Create table', auth: 'admin' },
+                    { method: 'GET', path: '/api/admin/table/list', description: 'List tables', auth: 'admin' },
+                ],
+                'Notifications': [
+                    { method: 'POST', path: '/api/notifications/send', description: 'Send custom notification', auth: 'required' },
+                    { method: 'POST', path: '/api/notifications/health', description: 'Send health notification', auth: 'required' },
+                    { method: 'POST', path: '/api/notifications/status', description: 'Send status notification', auth: 'required' },
+                    { method: 'GET', path: '/api/notifications/status', description: 'Get service status (no auth)' },
+                ],
+            };
+
+            let html = '';
+            for (const [category, apis] of Object.entries(apiCategories)) {
+                html += `<div class="api-category">
+                    <div class="api-category-title">${category}</div>
+                    <div class="api-grid">`;
+
+                for (const api of apis) {
+                    const methodClass = api.method.toLowerCase();
+                    const authClass = api.auth === 'admin' ? 'required' : (api.auth ? 'required' : 'optional');
+                    const authText = api.auth === 'admin' ? '🔐 Admin Only' : (api.auth ? '🔐 Required' : '✅ No Auth');
+
+                    html += `<div class="api-item">
+                        <div class="api-method ${methodClass}">${api.method}</div>
+                        <div class="api-path">${api.path}</div>
+                        <div class="api-description">${api.description}</div>
+                        ${api.auth ? `<div class="api-auth ${authClass}">${authText}</div>` : ''}
+                    </div>`;
+                }
+
+                html += `</div></div>`;
+            }
+
+            apisContent.innerHTML = html;
         }
 
         function fetchHealth() {

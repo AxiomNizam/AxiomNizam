@@ -67,6 +67,10 @@ func main() {
 	}
 	adminHandler := handlers.NewAdminHandler(dbConnections)
 
+	// Notification handler
+	discordWebhookURL := cfg.Discord.WebhookURL
+	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
+
 	// Health check endpoints (no auth required)
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
@@ -167,6 +171,16 @@ func main() {
 	router.POST("/api/admin/table/create", adminMiddleware, adminHandler.CreateTable)
 	router.GET("/api/admin/table/list", adminMiddleware, adminHandler.ListTables)
 
+	// ====================================
+	// NOTIFICATION ENDPOINTS (Auth Required)
+	// ====================================
+
+	// Notification endpoints (authenticated users)
+	router.POST("/api/notifications/send", authMiddleware, notificationHandler.SendNotification)
+	router.POST("/api/notifications/health", authMiddleware, notificationHandler.SendHealthNotification)
+	router.POST("/api/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
+	router.GET("/api/notifications/status", notificationHandler.GetNotificationStatus)
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
@@ -232,6 +246,12 @@ func main() {
 	fmt.Println("  GET  /api/admin/database/list   - List all databases")
 	fmt.Println("  POST /api/admin/table/create    - Create a new table")
 	fmt.Println("  GET  /api/admin/table/list      - List all tables")
+	fmt.Println()
+	fmt.Println("Notification endpoints (authenticated users):")
+	fmt.Println("  POST /api/notifications/send    - Send custom notification to Discord")
+	fmt.Println("  POST /api/notifications/health  - Send health check notification")
+	fmt.Println("  POST /api/notifications/status  - Send status report notification")
+	fmt.Println("  GET  /api/notifications/status  - Get notification service status (no auth)")
 	fmt.Println()
 
 	router.Run(fmt.Sprintf("%s:%s", apiHost, apiPort))

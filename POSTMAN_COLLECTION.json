@@ -1047,6 +1047,92 @@
           }
         }
       ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Send Custom Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"System Alert\",\"message\":\"Custom notification test\",\"type\":\"info\",\"include_data\":true}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/notifications/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "send"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Health Check Notification",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Status Report Notification",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Notification Service Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "status"
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [
