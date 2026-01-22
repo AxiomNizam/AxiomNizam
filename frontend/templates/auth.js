@@ -31,8 +31,9 @@ function handleLogin(event) {
     const password = document.getElementById('password').value;
 
     const body = new URLSearchParams();
-    body.append('client_id', AUTH_CONFIG.keycloakClient);
-    body.append('client_secret', AUTH_CONFIG.clientSecret);
+    // Use backend client for authentication (has secret)
+    body.append('client_id', 'axiomnizam-backend');
+    body.append('client_secret', '6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72');
     body.append('grant_type', 'password');
     body.append('username', username);
     body.append('password', password);
