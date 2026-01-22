@@ -79,10 +79,20 @@ function handleLogin(event) {
             localStorage.setItem('refreshToken', refreshToken);
         }
         localStorage.setItem('userName', userName);
-        localStorage.setItem('userRole', 'admin');
+        
+        // Decode JWT to get user roles
+        const userRole = extractUserRole(authToken);
+        console.log('👤 User role:', userRole);
+        localStorage.setItem('userRole', userRole);
+        
         closeLoginModal();
-        // Redirect to admin dashboard after successful login
-        window.location.href = '/admin';
+        
+        // Redirect based on user role
+        if (userRole === 'system-manager') {
+            window.location.href = '/system-manager';
+        } else {
+            window.location.href = '/admin';
+        }
     })
     .catch(function(error) {
         console.error('❌ Login error:', error);
@@ -98,7 +108,55 @@ function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userName');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('refreshToken');
     window.location.href = '/';
+}
+
+// Decode JWT token and extract user role
+function extractUserRole(token) {
+    try {
+        // JWT format: header.payload.signature
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            console.warn('⚠️ Invalid token format');
+            return 'user';
+        }
+        
+        // Decode the payload (second part)
+        const payload = parts[1];
+        // Add padding if needed
+        const padded = payload + '=='.substring(0, (4 - payload.length % 4) % 4);
+        const decoded = JSON.parse(atob(padded));
+        
+        console.log('🔐 Token decoded:', decoded);
+        
+        // Check for realm roles
+        if (decoded.realm_access && decoded.realm_access.roles) {
+            const roles = decoded.realm_access.roles;
+            console.log('📋 Realm roles:', roles);
+            
+            // Check for admin role
+            if (roles.includes('admin') || roles.includes('realm-admin')) {
+                return 'admin';
+            }
+            
+            // Check for system-manager role
+            if (roles.includes('system-manager') || roles.includes('system_manager')) {
+                return 'system-manager';
+            }
+            
+            // Check for other specific roles
+            if (roles.includes('manager')) {
+                return 'system-manager';
+            }
+        }
+        
+        // Default to user role
+        return 'user';
+    } catch (error) {
+        console.error('❌ Error decoding token:', error);
+        return 'user';
+    }
 }
 
 function getAuthHeaders() {
