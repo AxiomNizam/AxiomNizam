@@ -11,6 +11,7 @@ import (
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -45,9 +46,26 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
-	// Initialize handlers
+	// Initialize all handlers
 	healthHandler := handlers.NewHealthHandler(conns)
 	userHandler := handlers.NewUserHandler(conns.MySQL)
+	mariadbHandler := handlers.NewUserHandler(conns.MariaDB)
+	postgresHandler := handlers.NewUserHandler(conns.PostgreSQL)
+	perconaHandler := handlers.NewUserHandler(conns.Percona)
+	mongoHandler := handlers.NewMongoDBHandler(conns.MongoDB)
+	firebaseHandler := handlers.NewFirebaseHandler("http://firebase:9000")
+	oracleHandler := handlers.NewOracleHandler(conns.Oracle)
+
+	// Admin handler for database and table creation
+	// Only include SQL databases (MongoDB and Firebase don't support SQL DDL operations)
+	dbConnections := map[string]*gorm.DB{
+		"mysql":    conns.MySQL,
+		"mariadb":  conns.MariaDB,
+		"postgres": conns.PostgreSQL,
+		"percona":  conns.Percona,
+		"oracle":   conns.Oracle,
+	}
+	adminHandler := handlers.NewAdminHandler(dbConnections)
 
 	// Health check endpoints (no auth required)
 	router.GET("/health", healthHandler.Health)
@@ -61,103 +79,159 @@ func main() {
 		authMiddleware = func(c *gin.Context) { c.Next() }
 	}
 
-	// CRUD routes for MySQL (protected by auth)
-	router.POST("/api/mysql/users", authMiddleware, userHandler.CreateUser)
+	// Get admin middleware (requires admin role)
+	var adminMiddleware gin.HandlerFunc
+	if tokenValidator != nil {
+		adminMiddleware = func(c *gin.Context) {
+			authMiddleware(c)
+			if !c.IsAborted() {
+				auth.RequireAdmin()(c)
+			}
+		}
+	} else {
+		adminMiddleware = func(c *gin.Context) { c.Next() }
+	}
+
+	// CRUD routes for MySQL
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/mysql/users", authMiddleware, userHandler.GetAllUsers)
 	router.GET("/api/mysql/users/:id", authMiddleware, userHandler.GetUserByID)
-	router.PUT("/api/mysql/users/:id", authMiddleware, userHandler.UpdateUser)
-	router.DELETE("/api/mysql/users/:id", authMiddleware, userHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/mysql/users", adminMiddleware, userHandler.CreateUser)
+	router.PUT("/api/mysql/users/:id", adminMiddleware, userHandler.UpdateUser)
+	router.DELETE("/api/mysql/users/:id", adminMiddleware, userHandler.DeleteUser)
 
-	// CRUD routes for MariaDB (protected by auth)
-	mariadbHandler := handlers.NewUserHandler(conns.MariaDB)
-	router.POST("/api/mariadb/users", authMiddleware, mariadbHandler.CreateUser)
+	// CRUD routes for MariaDB
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/mariadb/users", authMiddleware, mariadbHandler.GetAllUsers)
 	router.GET("/api/mariadb/users/:id", authMiddleware, mariadbHandler.GetUserByID)
-	router.PUT("/api/mariadb/users/:id", authMiddleware, mariadbHandler.UpdateUser)
-	router.DELETE("/api/mariadb/users/:id", authMiddleware, mariadbHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/mariadb/users", adminMiddleware, mariadbHandler.CreateUser)
+	router.PUT("/api/mariadb/users/:id", adminMiddleware, mariadbHandler.UpdateUser)
+	router.DELETE("/api/mariadb/users/:id", adminMiddleware, mariadbHandler.DeleteUser)
 
-	// CRUD routes for PostgreSQL (protected by auth)
-	postgresHandler := handlers.NewUserHandler(conns.PostgreSQL)
-	router.POST("/api/postgres/users", authMiddleware, postgresHandler.CreateUser)
+	// CRUD routes for PostgreSQL
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/postgres/users", authMiddleware, postgresHandler.GetAllUsers)
 	router.GET("/api/postgres/users/:id", authMiddleware, postgresHandler.GetUserByID)
-	router.PUT("/api/postgres/users/:id", authMiddleware, postgresHandler.UpdateUser)
-	router.DELETE("/api/postgres/users/:id", authMiddleware, postgresHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/postgres/users", adminMiddleware, postgresHandler.CreateUser)
+	router.PUT("/api/postgres/users/:id", adminMiddleware, postgresHandler.UpdateUser)
+	router.DELETE("/api/postgres/users/:id", adminMiddleware, postgresHandler.DeleteUser)
 
-	// CRUD routes for Percona (protected by auth)
-	perconaHandler := handlers.NewUserHandler(conns.Percona)
-	router.POST("/api/percona/users", authMiddleware, perconaHandler.CreateUser)
+	// CRUD routes for Percona
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/percona/users", authMiddleware, perconaHandler.GetAllUsers)
 	router.GET("/api/percona/users/:id", authMiddleware, perconaHandler.GetUserByID)
-	router.PUT("/api/percona/users/:id", authMiddleware, perconaHandler.UpdateUser)
-	router.DELETE("/api/percona/users/:id", authMiddleware, perconaHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/percona/users", adminMiddleware, perconaHandler.CreateUser)
+	router.PUT("/api/percona/users/:id", adminMiddleware, perconaHandler.UpdateUser)
+	router.DELETE("/api/percona/users/:id", adminMiddleware, perconaHandler.DeleteUser)
 
-	// CRUD routes for MongoDB (protected by auth)
-	mongoHandler := handlers.NewMongoDBHandler(conns.MongoDB)
-	router.POST("/api/mongodb/users", authMiddleware, mongoHandler.CreateUser)
+	// CRUD routes for MongoDB
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/mongodb/users", authMiddleware, mongoHandler.GetAllUsers)
 	router.GET("/api/mongodb/users/:id", authMiddleware, mongoHandler.GetUserByID)
-	router.PUT("/api/mongodb/users/:id", authMiddleware, mongoHandler.UpdateUser)
-	router.DELETE("/api/mongodb/users/:id", authMiddleware, mongoHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/mongodb/users", adminMiddleware, mongoHandler.CreateUser)
+	router.PUT("/api/mongodb/users/:id", adminMiddleware, mongoHandler.UpdateUser)
+	router.DELETE("/api/mongodb/users/:id", adminMiddleware, mongoHandler.DeleteUser)
 
-	// CRUD routes for Firebase (protected by auth)
-	firebaseHandler := handlers.NewFirebaseHandler("http://firebase:9000")
-	router.POST("/api/firebase/users", authMiddleware, firebaseHandler.CreateUser)
+	// CRUD routes for Firebase
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/firebase/users", authMiddleware, firebaseHandler.GetAllUsers)
 	router.GET("/api/firebase/users/:id", authMiddleware, firebaseHandler.GetUserByID)
-	router.PUT("/api/firebase/users/:id", authMiddleware, firebaseHandler.UpdateUser)
-	router.DELETE("/api/firebase/users/:id", authMiddleware, firebaseHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/firebase/users", adminMiddleware, firebaseHandler.CreateUser)
+	router.PUT("/api/firebase/users/:id", adminMiddleware, firebaseHandler.UpdateUser)
+	router.DELETE("/api/firebase/users/:id", adminMiddleware, firebaseHandler.DeleteUser)
 
-	// CRUD routes for Oracle (protected by auth)
-	oracleHandler := handlers.NewOracleHandler(conns.Oracle)
-	router.POST("/api/oracle/users", authMiddleware, oracleHandler.CreateUser)
+	// CRUD routes for Oracle
+	// Read operations (allowed for all authenticated users)
 	router.GET("/api/oracle/users", authMiddleware, oracleHandler.GetAllUsers)
 	router.GET("/api/oracle/users/:id", authMiddleware, oracleHandler.GetUserByID)
-	router.PUT("/api/oracle/users/:id", authMiddleware, oracleHandler.UpdateUser)
-	router.DELETE("/api/oracle/users/:id", authMiddleware, oracleHandler.DeleteUser)
+	// Write operations (allowed only for admin users)
+	router.POST("/api/oracle/users", adminMiddleware, oracleHandler.CreateUser)
+	router.PUT("/api/oracle/users/:id", adminMiddleware, oracleHandler.UpdateUser)
+	router.DELETE("/api/oracle/users/:id", adminMiddleware, oracleHandler.DeleteUser)
+
+	// ====================================
+	// ADMIN OPERATIONS (Admin Only)
+	// ====================================
+
+	// Database management endpoints (admin only)
+	router.POST("/api/admin/database/create", adminMiddleware, adminHandler.CreateDatabase)
+	router.GET("/api/admin/database/list", adminMiddleware, adminHandler.ListDatabases)
+
+	// Table management endpoints (admin only)
+	router.POST("/api/admin/table/create", adminMiddleware, adminHandler.CreateTable)
+	router.GET("/api/admin/table/list", adminMiddleware, adminHandler.ListTables)
 
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
 	fmt.Printf("📡 API Server running on http://%s:%s\n", apiHost, apiPort)
-	fmt.Println("\nAvailable endpoints:")
-	fmt.Println("  GET  /health                  - Health check")
-	fmt.Println("  GET  /status                  - Check all connections")
-	fmt.Println("  POST /api/mysql/users         - Create user (MySQL)")
-	fmt.Println("  GET  /api/mysql/users         - Get all users (MySQL)")
-	fmt.Println("  GET  /api/mysql/users/:id     - Get user by ID (MySQL)")
-	fmt.Println("  PUT  /api/mysql/users/:id     - Update user (MySQL)")
-	fmt.Println("  DELETE /api/mysql/users/:id   - Delete user (MySQL)")
-	fmt.Println("  POST /api/mariadb/users       - Create user (MariaDB)")
-	fmt.Println("  GET  /api/mariadb/users       - Get all users (MariaDB)")
-	fmt.Println("  GET  /api/mariadb/users/:id   - Get user by ID (MariaDB)")
-	fmt.Println("  PUT  /api/mariadb/users/:id   - Update user (MariaDB)")
-	fmt.Println("  DELETE /api/mariadb/users/:id - Delete user (MariaDB)")
-	fmt.Println("  POST /api/postgres/users      - Create user (PostgreSQL)")
-	fmt.Println("  GET  /api/postgres/users      - Get all users (PostgreSQL)")
-	fmt.Println("  GET  /api/postgres/users/:id  - Get user by ID (PostgreSQL)")
-	fmt.Println("  PUT  /api/postgres/users/:id  - Update user (PostgreSQL)")
-	fmt.Println("  DELETE /api/postgres/users/:id - Delete user (PostgreSQL)")
-	fmt.Println("  POST /api/percona/users       - Create user (Percona)")
-	fmt.Println("  GET  /api/percona/users       - Get all users (Percona)")
-	fmt.Println("  GET  /api/percona/users/:id   - Get user by ID (Percona)")
-	fmt.Println("  PUT  /api/percona/users/:id   - Update user (Percona)")
-	fmt.Println("  DELETE /api/percona/users/:id - Delete user (Percona)")
-	fmt.Println("  POST /api/mongodb/users       - Create user (MongoDB)")
-	fmt.Println("  GET  /api/mongodb/users       - Get all users (MongoDB)")
-	fmt.Println("  GET  /api/mongodb/users/:id   - Get user by ID (MongoDB)")
-	fmt.Println("  PUT  /api/mongodb/users/:id   - Update user (MongoDB)")
-	fmt.Println("  DELETE /api/mongodb/users/:id - Delete user (MongoDB)")
-	fmt.Println("  POST /api/firebase/users      - Create user (Firebase)")
-	fmt.Println("  GET  /api/firebase/users      - Get all users (Firebase)")
-	fmt.Println("  GET  /api/firebase/users/:id  - Get user by ID (Firebase)")
-	fmt.Println("  PUT  /api/firebase/users/:id  - Update user (Firebase)")
-	fmt.Println("  DELETE /api/firebase/users/:id - Delete user (Firebase)")
-	fmt.Println("  POST /api/oracle/users        - Create user (Oracle)")
-	fmt.Println("  GET  /api/oracle/users        - Get all users (Oracle)")
-	fmt.Println("  GET  /api/oracle/users/:id    - Get user by ID (Oracle)")
-	fmt.Println("  PUT  /api/oracle/users/:id    - Update user (Oracle)")
-	fmt.Println("  DELETE /api/oracle/users/:id  - Delete user (Oracle)")
+	fmt.Println("\n🔐 RBAC Security Model:")
+	fmt.Println("  ✅ READ  operations (GET)     - Allowed for all authenticated users")
+	fmt.Println("  ❌ WRITE operations (POST/PUT/DELETE) - Allowed ONLY for users with 'admin' role\n")
+	fmt.Println("Available endpoints:")
+	fmt.Println("  GET  /health                  - Health check (no auth)")
+	fmt.Println("  GET  /status                  - Check all connections (no auth)")
+	fmt.Println()
+	fmt.Println("MySQL endpoints:")
+	fmt.Println("  GET  /api/mysql/users         - List users (authenticated users)")
+	fmt.Println("  GET  /api/mysql/users/:id     - Get user (authenticated users)")
+	fmt.Println("  POST /api/mysql/users         - Create user (admin only)")
+	fmt.Println("  PUT  /api/mysql/users/:id     - Update user (admin only)")
+	fmt.Println("  DELETE /api/mysql/users/:id   - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("MariaDB endpoints:")
+	fmt.Println("  GET  /api/mariadb/users       - List users (authenticated users)")
+	fmt.Println("  GET  /api/mariadb/users/:id   - Get user (authenticated users)")
+	fmt.Println("  POST /api/mariadb/users       - Create user (admin only)")
+	fmt.Println("  PUT  /api/mariadb/users/:id   - Update user (admin only)")
+	fmt.Println("  DELETE /api/mariadb/users/:id - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("PostgreSQL endpoints:")
+	fmt.Println("  GET  /api/postgres/users      - List users (authenticated users)")
+	fmt.Println("  GET  /api/postgres/users/:id  - Get user (authenticated users)")
+	fmt.Println("  POST /api/postgres/users      - Create user (admin only)")
+	fmt.Println("  PUT  /api/postgres/users/:id  - Update user (admin only)")
+	fmt.Println("  DELETE /api/postgres/users/:id - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("Percona endpoints:")
+	fmt.Println("  GET  /api/percona/users       - List users (authenticated users)")
+	fmt.Println("  GET  /api/percona/users/:id   - Get user (authenticated users)")
+	fmt.Println("  POST /api/percona/users       - Create user (admin only)")
+	fmt.Println("  PUT  /api/percona/users/:id   - Update user (admin only)")
+	fmt.Println("  DELETE /api/percona/users/:id - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("MongoDB endpoints:")
+	fmt.Println("  GET  /api/mongodb/users       - List users (authenticated users)")
+	fmt.Println("  GET  /api/mongodb/users/:id   - Get user (authenticated users)")
+	fmt.Println("  POST /api/mongodb/users       - Create user (admin only)")
+	fmt.Println("  PUT  /api/mongodb/users/:id   - Update user (admin only)")
+	fmt.Println("  DELETE /api/mongodb/users/:id - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("Firebase endpoints:")
+	fmt.Println("  GET  /api/firebase/users      - List users (authenticated users)")
+	fmt.Println("  GET  /api/firebase/users/:id  - Get user (authenticated users)")
+	fmt.Println("  POST /api/firebase/users      - Create user (admin only)")
+	fmt.Println("  PUT  /api/firebase/users/:id  - Update user (admin only)")
+	fmt.Println("  DELETE /api/firebase/users/:id - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("Oracle endpoints:")
+	fmt.Println("  GET  /api/oracle/users        - List users (authenticated users)")
+	fmt.Println("  GET  /api/oracle/users/:id    - Get user (authenticated users)")
+	fmt.Println("  POST /api/oracle/users        - Create user (admin only)")
+	fmt.Println("  PUT  /api/oracle/users/:id    - Update user (admin only)")
+	fmt.Println("  DELETE /api/oracle/users/:id  - Delete user (admin only)")
+	fmt.Println()
+	fmt.Println("Admin endpoints (admin role required):")
+	fmt.Println("  POST /api/admin/database/create - Create a new database")
+	fmt.Println("  GET  /api/admin/database/list   - List all databases")
+	fmt.Println("  POST /api/admin/table/create    - Create a new table")
+	fmt.Println("  GET  /api/admin/table/list      - List all tables")
 	fmt.Println()
 
 	router.Run(fmt.Sprintf("%s:%s", apiHost, apiPort))

@@ -44,10 +44,54 @@ func Middleware(validator *TokenValidator) gin.HandlerFunc {
 		c.Set("user", claims)
 		c.Set("username", claims.PreferredUsername)
 		c.Set("email", claims.Email)
+		c.Set("roles", claims.RealmAccess.Roles)
 
-		log.Printf("✅ Token validated for user: %s", claims.PreferredUsername)
+		log.Printf("✅ Token validated for user: %s (roles: %v)", claims.PreferredUsername, claims.RealmAccess.Roles)
 		c.Next()
 	}
+}
+
+// RequireRole returns a middleware that checks if the user has the required role
+func RequireRole(requiredRole string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get user claims from context
+		userInterface, exists := c.Get("user")
+		if !exists {
+			c.JSON(401, gin.H{
+				"error": "unauthorized: no user claims found",
+			})
+			c.Abort()
+			return
+		}
+
+		claims, ok := userInterface.(*Claims)
+		if !ok {
+			c.JSON(401, gin.H{
+				"error": "unauthorized: invalid user claims",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if user has required role
+		if !claims.HasRole(requiredRole) {
+			c.JSON(403, gin.H{
+				"error":      fmt.Sprintf("forbidden: user does not have '%s' role", requiredRole),
+				"user_roles": claims.RealmAccess.Roles,
+				"required":   requiredRole,
+			})
+			c.Abort()
+			return
+		}
+
+		log.Printf("✅ User %s authorized with role: %s", claims.PreferredUsername, requiredRole)
+		c.Next()
+	}
+}
+
+// RequireAdmin returns a middleware that checks if the user has admin role
+func RequireAdmin() gin.HandlerFunc {
+	return RequireRole("admin")
 }
 
 // OptionalMiddleware returns a Gin middleware that doesn't block on missing tokens

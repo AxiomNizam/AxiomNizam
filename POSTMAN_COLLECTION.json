@@ -931,6 +931,122 @@
           }
         }
       ]
+    },
+    {
+      "name": "Admin - Database Management",
+      "item": [
+        {
+          "name": "Create Database",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"database_name\":\"new_database\",\"db_type\":\"mysql\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/database/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "database",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Databases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/database/list?db_type=mysql",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "database",
+                "list"
+              ],
+              "query": [
+                {
+                  "key": "db_type",
+                  "value": "mysql"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Table Management",
+      "item": [
+        {
+          "name": "Create Table",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"table_name\":\"products\",\"db_type\":\"mysql\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\",\"nullable\":false,\"primary\":true},{\"name\":\"name\",\"type\":\"VARCHAR\",\"size\":255,\"nullable\":false},{\"name\":\"price\",\"type\":\"DECIMAL\",\"size\":10,\"nullable\":true}]}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/table/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "table",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Tables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/table/list?db_type=mysql",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "table",
+                "list"
+              ],
+              "query": [
+                {
+                  "key": "db_type",
+                  "value": "mysql"
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [

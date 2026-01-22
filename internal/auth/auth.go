@@ -16,13 +16,33 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// RealmAccess contains realm-level roles from Keycloak
+type RealmAccess struct {
+	Roles []string `json:"roles"`
+}
+
 // Claims represents JWT claims from Keycloak
 type Claims struct {
-	Sub               string `json:"sub"`
-	PreferredUsername string `json:"preferred_username"`
-	Email             string `json:"email"`
-	Name              string `json:"name"`
+	Sub               string                 `json:"sub"`
+	PreferredUsername string                 `json:"preferred_username"`
+	Email             string                 `json:"email"`
+	Name              string                 `json:"name"`
+	RealmAccess       RealmAccess            `json:"realm_access"`
+	ResourceAccess    map[string]interface{} `json:"resource_access"`
 	jwt.RegisteredClaims
+}
+
+// HasRole checks if the claims contain a specific role
+func (c *Claims) HasRole(role string) bool {
+	if c == nil || c.RealmAccess.Roles == nil {
+		return false
+	}
+	for _, r := range c.RealmAccess.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
 }
 
 // KeycloakConfig holds Keycloak configuration
