@@ -128,30 +128,48 @@ function extractUserRole(token) {
         const padded = payload + '=='.substring(0, (4 - payload.length % 4) % 4);
         const decoded = JSON.parse(atob(padded));
         
-        console.log('🔐 Token decoded:', decoded);
+        console.log('🔐 Full token payload:', JSON.stringify(decoded, null, 2));
         
-        // Check for realm roles
+        // Check for realm roles (most common in Keycloak)
         if (decoded.realm_access && decoded.realm_access.roles) {
             const roles = decoded.realm_access.roles;
-            console.log('📋 Realm roles:', roles);
+            console.log('📋 Realm roles found:', roles);
             
-            // Check for admin role
-            if (roles.includes('admin') || roles.includes('realm-admin')) {
-                return 'admin';
-            }
-            
-            // Check for system-manager role
-            if (roles.includes('system-manager') || roles.includes('system_manager')) {
-                return 'system-manager';
-            }
-            
-            // Check for other specific roles
-            if (roles.includes('manager')) {
-                return 'system-manager';
+            // Check each role and determine user type
+            for (let i = 0; i < roles.length; i++) {
+                const role = roles[i].toLowerCase();
+                console.log(`  - Checking role: "${role}"`);
+                
+                // Check for admin role
+                if (role.includes('admin') && !role.includes('account')) {
+                    console.log('✅ Detected as ADMIN role');
+                    return 'admin';
+                }
+                
+                // Check for system-manager role (various formats)
+                if (role === 'system-manager' || role === 'system_manager' || 
+                    role.includes('manager') || role === 'system-admin') {
+                    console.log('✅ Detected as SYSTEM-MANAGER role');
+                    return 'system-manager';
+                }
             }
         }
         
-        // Default to user role
+        // Check for client roles
+        if (decoded.resource_access) {
+            const clientRoles = decoded.resource_access['axiomnizam-backend'];
+            if (clientRoles && clientRoles.roles) {
+                console.log('📋 Client roles found:', clientRoles.roles);
+                
+                for (let i = 0; i < clientRoles.roles.length; i++) {
+                    const role = clientRoles.roles[i].toLowerCase();
+                    if (role.includes('admin')) return 'admin';
+                    if (role === 'system-manager' || role === 'system_manager') return 'system-manager';
+                }
+            }
+        }
+        
+        console.log('ℹ️ No admin/manager roles found, defaulting to user');
         return 'user';
     } catch (error) {
         console.error('❌ Error decoding token:', error);
