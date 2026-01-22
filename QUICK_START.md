@@ -1,195 +1,170 @@
-# Quick Start Guide - AxiomNizam Frontend
+# Quick Start - AxiomNizam (5 minutes)
 
-## The Problem & Solution
-
-### What Was Fixed:
-1. **Data Not Loading** → Backend CORS + Frontend fetch improvements
-2. **No Theme Support** → Added 3 themes (Dark/Light/Default)
+Get up and running in 5 minutes with just 4 commands.
 
 ---
 
-## How to Run
+## Step 1: Start Services (1 min)
 
-### Backend
 ```bash
-cd AxiomNizam
-go run main.go
-# Runs on http://localhost:8000
+docker-compose up -d
 ```
 
-### Frontend
+This starts:
+- ✅ Keycloak (http://localhost:8080)
+- ✅ Backend API (http://localhost:8000)
+- ✅ Frontend Dashboard (http://localhost:7000)
+- ✅ All databases
+
+**Wait for services to be ready** (check: `docker-compose ps`)
+
+---
+
+## Step 2: Get Your Token (2 min)
+
+Copy and run this command to get an authentication token:
+
 ```bash
-cd AxiomNizam/frontend
-go run main.go
-# Runs on http://localhost:7000
+TOKEN=$(curl -s -X POST http://localhost:8080/realms/axiomnizam/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=axiomnizam-backend&client_secret=6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72&grant_type=client_credentials" \
+  | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+echo "Your token: $TOKEN"
 ```
 
-### Open in Browser
-```
-http://localhost:7000
-```
+Save the token value - you'll need it for the next step.
 
 ---
 
-## What You'll See
+## Step 3: Test the API (1 min)
 
-### Dashboard Loading Data
-✅ System Status: **OK** or **OFFLINE**
-✅ Databases Connected: **0-6** (counts connected databases)
-✅ Response Time: **--ms** (when backend responds)
-✅ Uptime: **--** (system uptime)
-✅ Database Connections: Shows each DB status (✅ or ❌)
+Replace `YOUR_TOKEN` with the token from Step 2:
 
-### Theme Button
-🌙 **Dark** - Blue + Dark Gray (default)
-☀️ **Light** - Professional light colors
-💻 **Default** - Cyan + Indigo blend
-
-Click the icon in top-right to switch themes!
-
----
-
-## API Endpoints Being Queried
-
-### Health Check (No Auth Required)
-```
-GET http://localhost:8000/health
-Response: {"status":"ok","message":"AxiomNizam API is running"}
+```bash
+curl http://localhost:8000/api/mysql/users \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-### System Status (No Auth Required)
-```
-GET http://localhost:8000/status
-Response: {
-    "status":"ok",
-    "message":"System status",
-    "data":{
-        "mysql":"connected",
-        "postgres":"connected",
-        "mongodb":"disconnected",
-        ...
-    }
+**Expected response:**
+```json
+{
+  "status": "success",
+  "message": "Users retrieved successfully",
+  "data": []
 }
 ```
 
 ---
 
-## Debugging
+## Step 4: View the Dashboard (1 min)
 
-### Check Backend Connectivity
+Open your browser:
+```
+http://localhost:7000
+```
+
+You'll see:
+- ✅ Health status
+- ✅ Database connections
+- ✅ Available APIs
+- ✅ API documentation
+
+---
+
+## 🎉 You're Done!
+
+Your AxiomNizam API is now running. What's next?
+
+### Try Some Commands
+
+**Create a MySQL user** (Admin only):
 ```bash
-# In PowerShell
-curl.exe http://localhost:8000/health
-curl.exe http://localhost:8000/status
+curl -X POST http://localhost:8000/api/mysql/users \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice Smith",
+    "email": "alice@example.com",
+    "age": 28
+  }'
 ```
 
-### Check Frontend Console
-1. Open browser (F12)
-2. Go to **Console** tab
-3. Look for logs like:
-   ```
-   Backend URL: http://localhost:8000
-   Fetching health from: http://localhost:8000/health
-   Health data: {status: "ok", ...}
-   ```
-
-### Check Network Calls
-1. Open browser (F12)
-2. Go to **Network** tab
-3. Should see requests to:
-   - `http://localhost:8000/health`
-   - `http://localhost:8000/status`
-4. Both should return **Status 200**
-
----
-
-## Theme Persistence
-
-Themes are saved to browser's localStorage:
-- Close and reopen browser → Theme stays same
-- Clear cache → Resets to Dark theme
-- Works offline ✅
-
----
-
-## If Data Still Shows "Loading..."
-
-1. **Check backend is running:**
-   ```bash
-   curl.exe http://localhost:8000/health
-   ```
-
-2. **Check browser console (F12):**
-   - Look for red errors
-   - Common: "Failed to fetch" or "Cannot read property"
-
-3. **Check network tab (F12):**
-   - Verify requests are going to correct URL
-   - Verify responses return HTTP 200
-   - Check response body is valid JSON
-
-4. **Restart both:**
-   ```bash
-   # Stop backend & frontend (Ctrl+C)
-   # Run backend first, then frontend
-   ```
-
----
-
-## File Structure
-
+**Get all users**:
+```bash
+curl http://localhost:8000/api/mysql/users \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
-AxiomNizam/
-├── main.go                          # Backend API
-├── go.mod, go.sum                  # Backend dependencies
-├── frontend/
-│   ├── main.go                     # Frontend server
-│   ├── go.mod, go.sum             # Frontend dependencies
-│   └── templates/
-│       ├── layout.html             # Navigation + Theme toggle
-│       ├── public-dashboard.html   # Dashboard page
-│       ├── admin.html              # Admin page
-│       ├── system-manager.html     # System manager page
-│       ├── style.css               # Styles (with theme variables)
-│       ├── dashboard.js            # Dashboard data loading ✨
-│       ├── admin.js                # Admin logic
-│       ├── system-manager.js       # System manager logic
-│       └── auth.js                 # Authentication
-└── FRONTEND_FIXES.md               # Detailed fix documentation
+
+**Check health** (No token needed):
+```bash
+curl http://localhost:8000/health
+```
+
+**Check database connections** (No token needed):
+```bash
+curl http://localhost:8000/status
 ```
 
 ---
 
-## What Changed
+## 📋 What You Have
 
-### Backend (main.go)
-- ✅ Added CORS middleware for cross-origin requests
-- ✅ Enabled all HTTP methods (GET, POST, PUT, DELETE, OPTIONS)
-
-### Frontend (dashboard.js)
-- ✅ Fixed fetch requests with `mode: 'cors'`
-- ✅ Better error handling for API responses
-- ✅ Proper data extraction from backend responses
-- ✅ Console logging for debugging
-
-### Frontend (style.css)
-- ✅ Added theme CSS variables (3 complete palettes)
-- ✅ Smooth transitions between themes
-- ✅ All components respect theme variables
-
-### Frontend (layout.html)
-- ✅ Added theme toggle button
-- ✅ Theme persistence logic
-- ✅ Theme icons that change with selection
+| Service | URL | Status |
+|---------|-----|--------|
+| Frontend | http://localhost:7000 | ✅ Running |
+| Backend API | http://localhost:8000 | ✅ Running |
+| Keycloak | http://localhost:8080 | ✅ Running |
+| Databases | localhost:3306+ | ✅ Connected |
 
 ---
 
-## Test It Out!
+## 🔑 Default Credentials
 
-1. Start backend: `go run main.go` (in backend folder)
-2. Start frontend: `go run main.go` (in frontend/folder)
-3. Open http://localhost:7000
-4. Watch data load automatically! 📊
-5. Click theme button to change colors! 🎨
+| Item | Value |
+|------|-------|
+| Keycloak Realm | `axiomnizam` |
+| Client ID | `axiomnizam-backend` |
+| Client Secret | `6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72` |
+| Keycloak Admin | `admin` / `admin` |
 
-Enjoy! 🚀
+---
+
+## 🐛 Troubleshooting
+
+### Services not starting?
+```bash
+# Check what's running
+docker-compose ps
+
+# View logs
+docker-compose logs
+```
+
+### Token error?
+- Make sure Keycloak is ready (wait 30 seconds)
+- Check the realm URL is correct
+- Verify client credentials
+
+### API returns 401?
+- Your token might be expired
+- Get a new token using Step 2
+- Make sure to include `Bearer ` before the token
+
+### Can't connect to database?
+- Check if services are fully running
+- Wait another 30 seconds and try again
+- Check docker logs: `docker-compose logs`
+
+---
+
+## 📚 Learn More
+
+- **Full setup guide**: See [SETUP_GUIDE.md](SETUP_GUIDE.md)
+- **All API endpoints**: See [API_REFERENCE.md](API_REFERENCE.md)
+- **Authentication details**: See [AUTHENTICATION.md](AUTHENTICATION.md)
+- **Postman testing**: See [POSTMAN_API_GUIDE.md](POSTMAN_API_GUIDE.md)
+
+---
+
+**That's it! You're ready to use AxiomNizam.** 🚀
