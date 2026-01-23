@@ -13,7 +13,8 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	elastic "github.com/elastic/go-elasticsearch/v8"
+
+	// elastic "github.com/elastic/go-elasticsearch/v8" // Temporarily disabled
 	etcdclient "go.etcd.io/etcd/client/v3"
 )
 
@@ -25,7 +26,7 @@ type Connections struct {
 	PostgreSQL    *gorm.DB
 	MongoDB       *mongo.Client
 	Valkey        *redis.Client
-	Elasticsearch *elastic.Client
+	Elasticsearch interface{} // Temporarily disabled elasticsearch
 	Etcd          *etcdclient.Client
 	Oracle        *gorm.DB
 	Firebase      interface{} // Placeholder for Firebase connection
@@ -91,14 +92,15 @@ func InitConnections(cfg *config.Config) *Connections {
 	}
 
 	// Elasticsearch
-	if client, err := elastic.NewClient(elastic.Config{
-		Addresses: []string{cfg.GetElasticsearchURL()},
-	}); err == nil {
-		conns.Elasticsearch = client
-		log.Println("✅ Elasticsearch connected")
-	} else {
-		log.Printf("❌ Elasticsearch connection failed: %v", err)
-	}
+	// Temporarily disabled - build issue with elasticsearch module
+	// if client, err := elastic.NewClient(elastic.Config{
+	// 	Addresses: []string{cfg.GetElasticsearchURL()},
+	// }); err == nil {
+	// 	conns.Elasticsearch = client
+	// 	log.Println("✅ Elasticsearch connected")
+	// } else {
+	// 	log.Printf("❌ Elasticsearch connection failed: %v", err)
+	// }
 
 	// etcd
 	if client, err := etcdclient.New(etcdclient.Config{
@@ -141,15 +143,15 @@ func (c *Connections) Close() {
 // IsConnected returns connection status for all databases
 func (c *Connections) IsConnected() map[string]bool {
 	status := map[string]bool{
-		"mysql":        c.MySQL != nil,
-		"mariadb":      c.MariaDB != nil,
-		"percona":      c.Percona != nil,
-		"postgres":     c.PostgreSQL != nil,
-		"mongodb":      c.MongoDB != nil,
-		"valkey":       c.Valkey != nil,
+		"mysql":         c.MySQL != nil,
+		"mariadb":       c.MariaDB != nil,
+		"percona":       c.Percona != nil,
+		"postgres":      c.PostgreSQL != nil,
+		"mongodb":       c.MongoDB != nil,
+		"valkey":        c.Valkey != nil,
 		"elasticsearch": c.Elasticsearch != nil,
-		"etcd":         c.Etcd != nil,
-		"oracle":       c.Oracle != nil,
+		"etcd":          c.Etcd != nil,
+		"oracle":        c.Oracle != nil,
 	}
 	return status
 }

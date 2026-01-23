@@ -3,11 +3,18 @@ FROM golang:1.23 AS builder
 
 WORKDIR /app
 
+# Install build dependencies for CGO (required for MySQL/PostgreSQL drivers)
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set Go environment variables with better fallback options
 ENV GOFLAGS=-mod=mod
 ENV GOPROXY=https://proxy.golang.org,https://goproxy.io,direct
 ENV GOSUMDB=off
 ENV GO111MODULE=on
+ENV CGO_ENABLED=1
 
 # Copy both go.mod and source for early tidy
 COPY go.mod .
@@ -36,7 +43,7 @@ RUN go clean -cache
 
 # Build the application with verbose output
 RUN --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o axiomnizam .
+    GOOS=linux GOARCH=amd64 go build -v -o axiomnizam .
 
 # Runtime stage
 FROM alpine:latest
