@@ -80,6 +80,13 @@ func main() {
 	}
 	adminHandler := handlers.NewAdminHandler(dbConnections)
 
+	// Dynamic Query handlers for each database
+	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL)
+	mariadbDynamicHandler := handlers.NewDynamicQueryHandler(conns.MariaDB)
+	postgresDynamicHandler := handlers.NewDynamicQueryHandler(conns.PostgreSQL)
+	perconaDynamicHandler := handlers.NewDynamicQueryHandler(conns.Percona)
+	oracleDynamicHandler := handlers.NewDynamicQueryHandler(conns.Oracle)
+
 	// Notification handler
 	discordWebhookURL := cfg.Discord.WebhookURL
 	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
@@ -179,6 +186,43 @@ func main() {
 	router.DELETE("/api/oracle/users/:id", adminMiddleware, oracleHandler.DeleteUser)
 
 	// ====================================
+	// DYNAMIC QUERY ENDPOINTS (Auth Required)
+	// ====================================
+	// These endpoints allow dynamic SQL queries via Postman or any HTTP client
+	// GET requests only support SELECT queries
+	// POST requests support all query types (SELECT, INSERT, UPDATE, DELETE, CREATE, etc.)
+
+	// MySQL Dynamic Queries
+	router.GET("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQuery)
+	router.POST("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mysql/query/batch", authMiddleware, mysqlDynamicHandler.BatchQueries)
+	router.GET("/api/mysql/schema", authMiddleware, mysqlDynamicHandler.TableSchema)
+
+	// MariaDB Dynamic Queries
+	router.GET("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQuery)
+	router.POST("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mariadb/query/batch", authMiddleware, mariadbDynamicHandler.BatchQueries)
+	router.GET("/api/mariadb/schema", authMiddleware, mariadbDynamicHandler.TableSchema)
+
+	// PostgreSQL Dynamic Queries
+	router.GET("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQuery)
+	router.POST("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/postgres/query/batch", authMiddleware, postgresDynamicHandler.BatchQueries)
+	router.GET("/api/postgres/schema", authMiddleware, postgresDynamicHandler.TableSchema)
+
+	// Percona Dynamic Queries
+	router.GET("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQuery)
+	router.POST("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/percona/query/batch", authMiddleware, perconaDynamicHandler.BatchQueries)
+	router.GET("/api/percona/schema", authMiddleware, perconaDynamicHandler.TableSchema)
+
+	// Oracle Dynamic Queries
+	router.GET("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQuery)
+	router.POST("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/oracle/query/batch", authMiddleware, oracleDynamicHandler.BatchQueries)
+	router.GET("/api/oracle/schema", authMiddleware, oracleDynamicHandler.TableSchema)
+
+	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
 
@@ -265,6 +309,17 @@ func main() {
 	fmt.Println("  GET  /api/admin/database/list   - List all databases")
 	fmt.Println("  POST /api/admin/table/create    - Create a new table")
 	fmt.Println("  GET  /api/admin/table/list      - List all tables")
+	fmt.Println()
+	fmt.Println("Dynamic Query endpoints (authenticated users):")
+	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")
+	fmt.Println("       Example: /api/mysql/query?q=SELECT * FROM users&params=1")
+	fmt.Println("  POST /api/{db}/query            - Execute any query (SELECT/INSERT/UPDATE/DELETE/CREATE)")
+	fmt.Println("       Body: {\"query\": \"SQL_QUERY\", \"params\": [\"value1\", \"value2\"]}")
+	fmt.Println("  POST /api/{db}/query/batch      - Execute multiple queries at once")
+	fmt.Println("       Body: [{\"query\": \"SQL_QUERY\", \"params\": []}]")
+	fmt.Println("  GET  /api/{db}/schema           - Get table schema")
+	fmt.Println("       Example: /api/mysql/schema?table=users")
+	fmt.Println("  Available databases: mysql, mariadb, postgres, percona, oracle")
 	fmt.Println()
 	fmt.Println("Notification endpoints (authenticated users):")
 	fmt.Println("  POST /api/notifications/send    - Send custom notification to Discord")
