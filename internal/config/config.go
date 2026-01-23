@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -23,6 +24,7 @@ type Config struct {
 	Etcd          EtcdConfig
 	Keycloak      KeycloakConfig
 	Discord       DiscordConfig
+	RateLimiting  RateLimitingConfig
 }
 
 type APIConfig struct {
@@ -67,6 +69,11 @@ type KeycloakConfig struct {
 
 type DiscordConfig struct {
 	WebhookURL string
+}
+
+type RateLimitingConfig struct {
+	MaxCallsPerToken     int64
+	TokenValidityMinutes int
 }
 
 type FirebaseConfig struct {
@@ -170,6 +177,10 @@ func LoadConfig() *Config {
 		Discord: DiscordConfig{
 			WebhookURL: getEnv("DISCORD_WEBHOOK_URL", ""),
 		},
+		RateLimiting: RateLimitingConfig{
+			MaxCallsPerToken:     getEnvInt("RATE_LIMIT_MAX_CALLS", 500),
+			TokenValidityMinutes: getEnvInt("RATE_LIMIT_VALIDITY_MINUTES", 10),
+		},
 	}
 }
 
@@ -180,6 +191,20 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// Helper function to get integer environment variables with defaults
+func getEnvInt(key string, defaultValue int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	intVal, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		log.Printf("⚠️  Invalid integer for %s: %v, using default: %d", key, err, defaultValue)
+		return defaultValue
+	}
+	return intVal
 }
 
 // GetMySQLDSN returns MySQL DSN

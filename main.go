@@ -62,10 +62,13 @@ func main() {
 	})
 
 	// Add API Metrics tracking middleware
-	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware
 	apiMetricsTracker := handlers.NewAPIMetricsTracker(conns.Valkey)
 	router.Use(handlers.MetricsMiddleware(apiMetricsTracker))
+
+	// Initialize Rate Limiter
+	// Max calls and token validity from config (.env)
+	rateLimiter := auth.NewRateLimiter(cfg.RateLimiting.MaxCallsPerToken, cfg.RateLimiting.TokenValidityMinutes)
 
 	// Initialize Query Logger with Valkey/Redis
 	queryLogger := handlers.NewQueryLogger(conns.Valkey, "/data/query_logs")
@@ -106,16 +109,21 @@ func main() {
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
 
-	// Authentication endpoints (no auth required)
+	// Authentication endpoints (no auth required for login/refresh)
 	authHandler := handlers.NewAuthHandler()
+	authHandler.SetRateLimiter(rateLimiter)
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)
 
+	// Token status endpoints (auth required)
+	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
+	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
+
 	// Apply auth middleware to protected routes
 	var authMiddleware gin.HandlerFunc
 	if tokenValidator != nil {
-		authMiddleware = auth.Middleware(tokenValidator)
+		authMiddleware = auth.CombinedAuthMiddleware(tokenValidator, rateLimiter)
 	} else {
 		authMiddleware = func(c *gin.Context) { c.Next() }
 	}

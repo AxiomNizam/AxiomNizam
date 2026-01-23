@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 )
@@ -21,6 +22,7 @@ type AuthHandler struct {
 	keycloakRealm  string
 	keycloakClient string
 	clientSecret   string
+	rateLimiter    *auth.RateLimiter
 }
 
 // NewAuthHandler creates a new auth handler
@@ -30,7 +32,13 @@ func NewAuthHandler() *AuthHandler {
 		keycloakRealm:  getEnv("KEYCLOAK_REALM", "axiomnizam"),
 		keycloakClient: getEnv("KEYCLOAK_CLIENT", "axiomnizam-backend"),
 		clientSecret:   getEnv("KEYCLOAK_CLIENT_SECRET", "6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72"),
+		rateLimiter:    nil, // Will be set via SetRateLimiter
 	}
+}
+
+// SetRateLimiter sets the rate limiter for the auth handler
+func (h *AuthHandler) SetRateLimiter(limiter *auth.RateLimiter) {
+	h.rateLimiter = limiter
 }
 
 // getEnv gets environment variable with fallback
@@ -150,7 +158,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	log.Printf("✅ Login successful for user: %s\n", req.Username)
 
-	// Success - return token info
+	// Register token in rate limiter
+	if h.rateLimiter != nil {
+		h.rateLimiter.RegisterToken(tokenResp.AccessToken, req.Username)
+		log.Printf("✅ Token registered in rate limiter for user: %s (500 calls available)", req.Username)
+	}
+
+	// Success - return token info with rate limit info
 	c.JSON(http.StatusOK, gin.H{
 		"status":        "ok",
 		"access_token":  tokenResp.AccessToken,
@@ -158,6 +172,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"refresh_token": tokenResp.RefreshToken,
 		"token_type":    tokenResp.TokenType,
 		"username":      req.Username,
+		"rate_limit": gin.H{
+			"max_calls":    500,
+			"validity_min": 10,
+			"expires_at":   time.Now().Add(10 * time.Minute).Format("2006-01-02 15:04:05"),
+			"message":      "You have 500 API calls available with this token. Token expires in 10 minutes.",
+		},
 	})
 }
 
@@ -268,5 +288,71 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
 		Message: "Token is valid",
+	})
+}
+
+// GetTokenStatus handles GET /auth/token-status
+// Returns the current rate limit status and token validity information
+func (h *AuthHandler) GetTokenStatus(c *gin.Context) {
+	if h.rateLimiter == nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Rate limiter not initialized",
+		})
+		return
+	}
+
+	// Get token from header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, models.Response{
+			Status: "error",
+			Error:  "missing authorization header",
+		})
+		return
+	}
+
+	// Extract Bearer token
+	token, err := auth.ExtractBearerToken(authHeader)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, models.Response{
+			Status: "error",
+			Error:  "invalid authorization header",
+		})
+		return
+	}
+
+	// Get token stats
+	stats, err := h.rateLimiter.GetTokenStats(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"status": "error",
+			"error":  "token not found or invalid",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"data":   stats,
+	})
+}
+
+// GetAllTokensStatus handles GET /auth/admin/tokens-status (admin only)
+// Returns stats for all active tokens
+func (h *AuthHandler) GetAllTokensStatus(c *gin.Context) {
+	if h.rateLimiter == nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Rate limiter not initialized",
+		})
+		return
+	}
+
+	stats := h.rateLimiter.GetAllTokenStats()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"data":   stats,
 	})
 }
