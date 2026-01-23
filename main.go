@@ -105,6 +105,14 @@ func main() {
 	discordWebhookURL := cfg.Discord.WebhookURL
 	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
 
+	// Apply auth middleware to protected routes
+	var authMiddleware gin.HandlerFunc
+	if tokenValidator != nil {
+		authMiddleware = auth.CombinedAuthMiddleware(tokenValidator, rateLimiter)
+	} else {
+		authMiddleware = func(c *gin.Context) { c.Next() }
+	}
+
 	// Health check endpoints (no auth required)
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
@@ -119,14 +127,6 @@ func main() {
 	// Token status endpoints (auth required)
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
 	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
-
-	// Apply auth middleware to protected routes
-	var authMiddleware gin.HandlerFunc
-	if tokenValidator != nil {
-		authMiddleware = auth.CombinedAuthMiddleware(tokenValidator, rateLimiter)
-	} else {
-		authMiddleware = func(c *gin.Context) { c.Next() }
-	}
 
 	// Context enrichment middleware - populates database name and user info for logging
 	contextEnrichmentMiddleware := func(c *gin.Context) {

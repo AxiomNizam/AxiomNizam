@@ -50,7 +50,11 @@ FROM alpine:latest
 
 WORKDIR /root/
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache \
+    ca-certificates \
+    libc6-compat \
+    libpq \
+    libstdc++
 
 COPY --from=builder /app/axiomnizam .
 COPY --from=builder /app/.env* ./
