@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -50,43 +51,43 @@ func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode in
 	durationMs := duration.Milliseconds()
 
 	// Increment total calls
-	t.redisClient.Incr(t.redisClient.Context(), fmt.Sprintf("%s:calls", key))
+	t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:calls", key))
 
 	// Track status code
-	t.redisClient.Incr(t.redisClient.Context(), fmt.Sprintf("%s:status:%d", key, statusCode))
+	t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:status:%d", key, statusCode))
 
 	// Track duration
-	t.redisClient.Incr(t.redisClient.Context(), fmt.Sprintf("%s:total_duration", key))
-	t.redisClient.Set(t.redisClient.Context(), fmt.Sprintf("%s:duration", key), durationMs, 0)
+	t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:total_duration", key))
+	t.redisClient.Set(context.Background(), fmt.Sprintf("%s:duration", key), durationMs, 0)
 
 	// Update max duration
 	maxKey := fmt.Sprintf("%s:max_duration", key)
-	currentMax := t.redisClient.Get(t.redisClient.Context(), maxKey).Val()
+	currentMax := t.redisClient.Get(context.Background(), maxKey).Val()
 	if currentMax == "" {
-		t.redisClient.Set(t.redisClient.Context(), maxKey, durationMs, 0)
+		t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
 	} else {
 		var currentMaxMs int64
 		fmt.Sscanf(currentMax, "%d", &currentMaxMs)
 		if durationMs > currentMaxMs {
-			t.redisClient.Set(t.redisClient.Context(), maxKey, durationMs, 0)
+			t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
 		}
 	}
 
 	// Update min duration
 	minKey := fmt.Sprintf("%s:min_duration", key)
-	currentMin := t.redisClient.Get(t.redisClient.Context(), minKey).Val()
+	currentMin := t.redisClient.Get(context.Background(), minKey).Val()
 	if currentMin == "" {
-		t.redisClient.Set(t.redisClient.Context(), minKey, durationMs, 0)
+		t.redisClient.Set(context.Background(), minKey, durationMs, 0)
 	} else {
 		var currentMinMs int64
 		fmt.Sscanf(currentMin, "%d", &currentMinMs)
 		if durationMs < currentMinMs {
-			t.redisClient.Set(t.redisClient.Context(), minKey, durationMs, 0)
+			t.redisClient.Set(context.Background(), minKey, durationMs, 0)
 		}
 	}
 
 	// Update last called timestamp
-	t.redisClient.Set(t.redisClient.Context(), fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
+	t.redisClient.Set(context.Background(), fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
 
 	// Track in local cache for quick access
 	t.mu.Lock()
@@ -139,7 +140,7 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 	}
 
 	// Get all API metric keys from Redis
-	ctx := t.redisClient.Context()
+	ctx := context.Background()
 	keys, err := t.redisClient.Keys(ctx, "api_metric:*:calls").Result()
 	if err != nil {
 		return nil, err

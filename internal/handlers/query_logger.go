@@ -165,7 +165,6 @@ func (ql *QueryLogger) GetQueryLogs(database string, limit int) ([]QueryLog, err
 
 	// Get the full logs from Redis
 	for _, id := range ids {
-		key := fmt.Sprintf("query_logs:%s:*:%s", database, id)
 		// We need to use pattern matching, but we'll retrieve the most recent one
 		pattern := fmt.Sprintf("query_logs:%s:*:%s", database, id)
 		keys, err := ql.redisClient.Keys(ctx, pattern).Result()
@@ -191,7 +190,7 @@ func (ql *QueryLogger) GetQueryLogs(database string, limit int) ([]QueryLog, err
 func (ql *QueryLogger) getLogsFromDisk(limit int) ([]QueryLog, error) {
 	var logs []QueryLog
 
-	data, err := os.ReadFile(ql.logFile)
+	_, err := os.ReadFile(ql.logFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return logs, nil // File doesn't exist yet
@@ -200,8 +199,7 @@ func (ql *QueryLogger) getLogsFromDisk(limit int) ([]QueryLog, error) {
 	}
 
 	// Parse JSONL format (one JSON per line, in reverse order for latest first)
-	lines := string(data)
-	// We'll read from the end to get latest logs
+	// TODO: Implement parsing of JSONL format from disk
 
 	return logs, nil
 }
