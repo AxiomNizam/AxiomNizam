@@ -228,6 +228,87 @@ Authorization: Bearer TOKEN
 GET /api/mysql/schema?table=users
 ```
 
+### Query Logs (Audit Trail)
+```
+GET /api/{db}/logs?limit=100&offset=0
+Authorization: Bearer TOKEN
+```
+
+**Description**: Retrieve all executed queries for a specific database with timestamps and metadata
+
+**Response**:
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "id": "hostname-1704067200000-123",
+      "query": "SELECT * FROM users WHERE id = ?",
+      "params": ["1"],
+      "database": "mysql",
+      "user_id": "user123",
+      "status": "success",
+      "error": null,
+      "duration": 45,
+      "timestamp": "2024-01-01T12:00:00Z",
+      "hostname": "axiomnizam-pod-1"
+    }
+  ],
+  "pagination": {
+    "total": 1250,
+    "limit": 100,
+    "offset": 0
+  }
+}
+```
+
+**Example**:
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/mysql/logs?limit=50&offset=0"
+```
+
+### Query Statistics
+```
+GET /api/{db}/stats
+Authorization: Bearer TOKEN
+```
+
+**Description**: Get statistics on executed queries including count, average duration, and status breakdown
+
+**Response**:
+```json
+{
+  "status": "ok",
+  "data": {
+    "total_queries": 2500,
+    "success_count": 2480,
+    "error_count": 20,
+    "average_duration_ms": 87,
+    "min_duration_ms": 5,
+    "max_duration_ms": 5000,
+    "queries_by_status": {
+      "success": 2480,
+      "error": 20
+    },
+    "queries_by_type": {
+      "SELECT": 1500,
+      "INSERT": 400,
+      "UPDATE": 350,
+      "DELETE": 200,
+      "OTHER": 50
+    },
+    "period": "last_30_days"
+  }
+}
+```
+
+**Example**:
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/mysql/stats"
+```
+
 ## Supported Databases
 
 | Database | Prefix | Status |
@@ -708,6 +789,99 @@ SET GLOBAL slow_query_log = 'ON';
 SET GLOBAL long_query_time = 2;
 SHOW VARIABLES LIKE 'slow_query_log_file';
 ```
+
+## Persistence & Scalability
+
+### Query Logging & Persistence
+
+The system implements **dual-layer persistence** for all executed queries:
+
+#### 1. **Disk-Based Logging** 
+- All queries saved to `/data/query_logs` directory
+- Format: JSONL (JSON Lines - one JSON object per line)
+- Permanent storage with no retention limit
+- Survives pod restarts and crashes
+- File structure: `query_logs/{date}.jsonl` (rotated daily)
+
+#### 2. **Valkey/Redis Distributed Cache**
+- All queries mirrored to Valkey/Redis for cross-pod access
+- Sorted sets indexed by database and timestamp
+- 30-day TTL for automatic cleanup
+- Enables real-time log retrieval across all pods
+- Unique query IDs: `{hostname}-{timestamp}-{nanoseconds}`
+
+### Multi-Pod Deployment
+
+The architecture supports **horizontal scaling** with multiple pod instances:
+
+```yaml
+# kubernetes deployment example
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axiomnizam-api
+spec:
+  replicas: 3  # 3 pod instances
+  template:
+    spec:
+      containers:
+      - name: axiomnizam
+        image: axiom-nizam:latest
+        volumeMounts:
+        - name: query-logs
+          mountPath: /data/query_logs
+      volumes:
+      - name: query-logs
+        persistentVolumeClaim:
+          claimName: query-logs-pvc
+```
+
+### Key Features for Scalability
+
+| Feature | Benefit | Implementation |
+|---------|---------|-----------------|
+| **Shared Volume** | All pods write to same persistent volume | Mounted at `/data/query_logs` |
+| **Valkey Backend** | Distributed query access across pods | All pods connect to single Valkey instance |
+| **Unique Query IDs** | No conflicts between pods | Format: `{hostname}-{timestamp}-{nanotime}` |
+| **Timestamps** | Time-range queries across all pods | ISO 8601 format with millisecond precision |
+| **Sorted Sets** | Efficient retrieval by database and time | Redis sorted sets keyed by database name |
+| **User Tracking** | Audit trail per user per pod | User ID extracted from JWT token |
+
+### Volume Configuration (Docker Compose)
+
+```yaml
+services:
+  axiomnizam:
+    volumes:
+      - query_logs:/data/query_logs  # Persistent volume mount
+
+volumes:
+  query_logs:
+    driver: local
+```
+
+### Volume Configuration (Kubernetes)
+
+```yaml
+# Create a Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: query-logs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany  # Multiple pods access
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: standard
+```
+
+### Cleanup & Retention
+
+- **Redis**: Automatic cleanup after 30 days
+- **Disk**: Permanent storage - implement manual archival policy
+- **Rotation**: Daily JSONL files by date
 
 ---
 

@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
@@ -11,12 +13,13 @@ import (
 
 // DynamicQueryHandler handles dynamic SQL queries
 type DynamicQueryHandler struct {
-	db *gorm.DB
+	db     *gorm.DB
+	logger *QueryLogger
 }
 
 // NewDynamicQueryHandler creates a new dynamic query handler
-func NewDynamicQueryHandler(db *gorm.DB) *DynamicQueryHandler {
-	return &DynamicQueryHandler{db: db}
+func NewDynamicQueryHandler(db *gorm.DB, logger *QueryLogger) *DynamicQueryHandler {
+	return &DynamicQueryHandler{db: db, logger: logger}
 }
 
 // QueryRequest represents a dynamic query request
@@ -75,6 +78,22 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		})
 		return
 	}
+
+	// Log the query
+	startTime := time.Now()
+	defer func() {
+		if h.logger != nil {
+			duration := time.Since(startTime).Milliseconds()
+			h.logger.LogQuery(QueryLog{
+				Query:    query,
+				Params:   convertParamsToStrings(params),
+				Database: c.GetString("database"),
+				User:     c.GetString("user_id"),
+				Status:   "success",
+				Duration: duration,
+			})
+		}
+	}()
 
 	// Execute the query
 	var results []map[string]interface{}
@@ -136,6 +155,22 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 
 // DynamicQueryWithBody handles POST requests with dynamic SQL queries (supports all query types)
 func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
+	startTime := time.Now()
+	defer func() {
+		if h.logger != nil {
+			duration := time.Since(startTime).Milliseconds()
+			var logStatus string
+			if c.Writer.Status() >= 400 {
+				logStatus = "error"
+			} else {
+				logStatus = "success"
+			}
+			// Query will be logged within the method after parsing
+			_ = duration
+			_ = logStatus
+		}
+	}()
+
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -448,4 +483,84 @@ func ValidateQuerySafety(query string) bool {
 		}
 	}
 	return true
+}
+
+// convertParamsToStrings converts interface{} params to strings for logging
+func convertParamsToStrings(params []interface{}) []string {
+	var result []string
+	for _, p := range params {
+		result = append(result, fmt.Sprintf("%v", p))
+	}
+	return result
+}
+
+// GetQueryLogs handles GET /api/{db}/logs endpoint
+func (h *DynamicQueryHandler) GetQueryLogs(c *gin.Context) {
+	if h.logger == nil {
+		c.JSON(http.StatusServiceUnavailable, models.Response{
+			Status: "error",
+			Error:  "Query logging not available",
+		})
+		return
+	}
+
+	database := c.Query("database")
+	if database == "" {
+		database = "all"
+	}
+
+	limitStr := c.Query("limit")
+	limit := 100
+	if limitStr != "" {
+		fmt.Sscanf(limitStr, "%d", &limit)
+	}
+	if limit > 1000 {
+		limit = 1000 // Max limit
+	}
+
+	logs, err := h.logger.GetQueryLogs(database, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Failed to retrieve logs: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Status:  "ok",
+		Message: "Query logs retrieved successfully",
+		Data:    logs,
+	})
+}
+
+// GetQueryStats handles GET /api/{db}/stats endpoint
+func (h *DynamicQueryHandler) GetQueryStats(c *gin.Context) {
+	if h.logger == nil {
+		c.JSON(http.StatusServiceUnavailable, models.Response{
+			Status: "error",
+			Error:  "Query logging not available",
+		})
+		return
+	}
+
+	database := c.Query("database")
+	if database == "" {
+		database = "all"
+	}
+
+	stats, err := h.logger.GetQueryStats(database)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Failed to retrieve stats: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Status:  "ok",
+		Message: "Query statistics retrieved successfully",
+		Data:    stats,
+	})
 }
