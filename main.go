@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/config"
@@ -10,6 +11,7 @@ import (
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 )
@@ -59,6 +61,18 @@ func main() {
 		c.Next()
 	})
 
+	// Add API Metrics tracking middleware
+	// Initialize first before adding middleware
+	apiMetricsTracker := handlers.NewAPIMetricsTracker(conns.Valkey)
+	router.Use(handlers.MetricsMiddleware(apiMetricsTracker))
+
+	// Initialize Rate Limiter
+	// Max calls and token validity from config (.env)
+	rateLimiter := auth.NewRateLimiter(cfg.RateLimiting.MaxCallsPerToken, cfg.RateLimiting.TokenValidityMinutes)
+
+	// Initialize Query Logger with Valkey/Redis
+	queryLogger := handlers.NewQueryLogger(conns.Valkey, "/data/query_logs")
+
 	// Initialize all handlers
 	healthHandler := handlers.NewHealthHandler(conns)
 	userHandler := handlers.NewUserHandler(conns.MySQL)
@@ -80,26 +94,71 @@ func main() {
 	}
 	adminHandler := handlers.NewAdminHandler(dbConnections)
 
+	// Dynamic Query handlers for each database
+	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL, queryLogger)
+	mariadbDynamicHandler := handlers.NewDynamicQueryHandler(conns.MariaDB, queryLogger)
+	postgresDynamicHandler := handlers.NewDynamicQueryHandler(conns.PostgreSQL, queryLogger)
+	perconaDynamicHandler := handlers.NewDynamicQueryHandler(conns.Percona, queryLogger)
+	oracleDynamicHandler := handlers.NewDynamicQueryHandler(conns.Oracle, queryLogger)
+
 	// Notification handler
 	discordWebhookURL := cfg.Discord.WebhookURL
 	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
+
+	// Apply auth middleware to protected routes
+	var authMiddleware gin.HandlerFunc
+	if tokenValidator != nil {
+		authMiddleware = auth.CombinedAuthMiddleware(tokenValidator, rateLimiter)
+	} else {
+		authMiddleware = func(c *gin.Context) { c.Next() }
+	}
 
 	// Health check endpoints (no auth required)
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
 
-	// Authentication endpoints (no auth required)
+	// Authentication endpoints (no auth required for login/refresh)
 	authHandler := handlers.NewAuthHandler()
+	authHandler.SetRateLimiter(rateLimiter)
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)
 
-	// Apply auth middleware to protected routes
-	var authMiddleware gin.HandlerFunc
-	if tokenValidator != nil {
-		authMiddleware = auth.Middleware(tokenValidator)
-	} else {
-		authMiddleware = func(c *gin.Context) { c.Next() }
+	// Token status endpoints (auth required)
+	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
+	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
+
+	// Context enrichment middleware - populates database name and user info for logging
+	contextEnrichmentMiddleware := func(c *gin.Context) {
+		// Extract database name from URL path (e.g., /api/mysql/query -> mysql)
+		pathParts := strings.Split(c.Request.URL.Path, "/")
+		if len(pathParts) >= 3 {
+			dbName := pathParts[2]
+			switch dbName {
+			case "mysql", "mariadb", "postgres", "percona", "oracle":
+				c.Set("database", dbName)
+			}
+		}
+
+		// Extract user info from token claims if available
+		if claims, exists := c.Get("claims"); exists {
+			if tokenClaims, ok := claims.(jwt.MapClaims); ok {
+				if userID, ok := tokenClaims["sub"]; ok {
+					c.Set("user_id", userID)
+				}
+			}
+		}
+
+		c.Next()
+	}
+
+	// Apply context enrichment to auth middleware
+	originalAuthMiddleware := authMiddleware
+	authMiddleware = func(c *gin.Context) {
+		originalAuthMiddleware(c)
+		if !c.IsAborted() {
+			contextEnrichmentMiddleware(c)
+		}
 	}
 
 	// Get admin middleware (requires admin role)
@@ -179,6 +238,67 @@ func main() {
 	router.DELETE("/api/oracle/users/:id", adminMiddleware, oracleHandler.DeleteUser)
 
 	// ====================================
+	// DYNAMIC QUERY ENDPOINTS (Auth Required)
+	// ====================================
+	// These endpoints allow dynamic SQL queries via Postman or any HTTP client
+	// GET requests only support SELECT queries
+	// POST requests support all query types (SELECT, INSERT, UPDATE, DELETE, CREATE, etc.)
+
+	// MySQL Dynamic Queries
+	router.GET("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQuery)
+	router.POST("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mysql/query/batch", authMiddleware, mysqlDynamicHandler.BatchQueries)
+	router.GET("/api/mysql/schema", authMiddleware, mysqlDynamicHandler.TableSchema)
+
+	// MariaDB Dynamic Queries
+	router.GET("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQuery)
+	router.POST("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mariadb/query/batch", authMiddleware, mariadbDynamicHandler.BatchQueries)
+	router.GET("/api/mariadb/schema", authMiddleware, mariadbDynamicHandler.TableSchema)
+
+	// PostgreSQL Dynamic Queries
+	router.GET("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQuery)
+	router.POST("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/postgres/query/batch", authMiddleware, postgresDynamicHandler.BatchQueries)
+	router.GET("/api/postgres/schema", authMiddleware, postgresDynamicHandler.TableSchema)
+
+	// Percona Dynamic Queries
+	router.GET("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQuery)
+	router.POST("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/percona/query/batch", authMiddleware, perconaDynamicHandler.BatchQueries)
+	router.GET("/api/percona/schema", authMiddleware, perconaDynamicHandler.TableSchema)
+
+	// Oracle Dynamic Queries
+	router.GET("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQuery)
+	router.POST("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/oracle/query/batch", authMiddleware, oracleDynamicHandler.BatchQueries)
+	router.GET("/api/oracle/schema", authMiddleware, oracleDynamicHandler.TableSchema)
+
+	// ====================================
+	// QUERY LOGGING & STATISTICS
+	// ====================================
+
+	// MySQL Logging
+	router.GET("/api/mysql/logs", authMiddleware, mysqlDynamicHandler.GetQueryLogs)
+	router.GET("/api/mysql/stats", authMiddleware, mysqlDynamicHandler.GetQueryStats)
+
+	// MariaDB Logging
+	router.GET("/api/mariadb/logs", authMiddleware, mariadbDynamicHandler.GetQueryLogs)
+	router.GET("/api/mariadb/stats", authMiddleware, mariadbDynamicHandler.GetQueryStats)
+
+	// PostgreSQL Logging
+	router.GET("/api/postgres/logs", authMiddleware, postgresDynamicHandler.GetQueryLogs)
+	router.GET("/api/postgres/stats", authMiddleware, postgresDynamicHandler.GetQueryStats)
+
+	// Percona Logging
+	router.GET("/api/percona/logs", authMiddleware, perconaDynamicHandler.GetQueryLogs)
+	router.GET("/api/percona/stats", authMiddleware, perconaDynamicHandler.GetQueryStats)
+
+	// Oracle Logging
+	router.GET("/api/oracle/logs", authMiddleware, oracleDynamicHandler.GetQueryLogs)
+	router.GET("/api/oracle/stats", authMiddleware, oracleDynamicHandler.GetQueryStats)
+
+	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
 
@@ -189,6 +309,11 @@ func main() {
 	// Table management endpoints (admin only)
 	router.POST("/api/admin/table/create", adminMiddleware, adminHandler.CreateTable)
 	router.GET("/api/admin/table/list", adminMiddleware, adminHandler.ListTables)
+
+	// API Metrics endpoints (admin only)
+	router.GET("/api/admin/metrics/all", adminMiddleware, apiMetricsTracker.GetAllAPIMetrics)
+	router.GET("/api/admin/metrics/count", adminMiddleware, apiMetricsTracker.GetAPICount)
+	router.GET("/api/admin/metrics/stats", adminMiddleware, apiMetricsTracker.GetAPIStats)
 
 	// ====================================
 	// NOTIFICATION ENDPOINTS (Auth Required)
@@ -265,6 +390,17 @@ func main() {
 	fmt.Println("  GET  /api/admin/database/list   - List all databases")
 	fmt.Println("  POST /api/admin/table/create    - Create a new table")
 	fmt.Println("  GET  /api/admin/table/list      - List all tables")
+	fmt.Println()
+	fmt.Println("Dynamic Query endpoints (authenticated users):")
+	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")
+	fmt.Println("       Example: /api/mysql/query?q=SELECT * FROM users&params=1")
+	fmt.Println("  POST /api/{db}/query            - Execute any query (SELECT/INSERT/UPDATE/DELETE/CREATE)")
+	fmt.Println("       Body: {\"query\": \"SQL_QUERY\", \"params\": [\"value1\", \"value2\"]}")
+	fmt.Println("  POST /api/{db}/query/batch      - Execute multiple queries at once")
+	fmt.Println("       Body: [{\"query\": \"SQL_QUERY\", \"params\": []}]")
+	fmt.Println("  GET  /api/{db}/schema           - Get table schema")
+	fmt.Println("       Example: /api/mysql/schema?table=users")
+	fmt.Println("  Available databases: mysql, mariadb, postgres, percona, oracle")
 	fmt.Println()
 	fmt.Println("Notification endpoints (authenticated users):")
 	fmt.Println("  POST /api/notifications/send    - Send custom notification to Discord")

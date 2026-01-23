@@ -19,6 +19,8 @@ services:
       - firebase
       - oracle
       - elasticsearch
+    volumes:
+      - query_logs:/data/query_logs
     networks:
       - app-network
 
@@ -264,3 +266,4 @@ volumes:
   keycloak-data:
   valkey-data:
   etcd-data:
+  query_logs:

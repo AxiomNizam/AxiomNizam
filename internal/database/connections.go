@@ -13,6 +13,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
 	elastic "github.com/elastic/go-elasticsearch/v8"
 	etcdclient "go.etcd.io/etcd/client/v3"
 )
@@ -141,15 +142,15 @@ func (c *Connections) Close() {
 // IsConnected returns connection status for all databases
 func (c *Connections) IsConnected() map[string]bool {
 	status := map[string]bool{
-		"mysql":        c.MySQL != nil,
-		"mariadb":      c.MariaDB != nil,
-		"percona":      c.Percona != nil,
-		"postgres":     c.PostgreSQL != nil,
-		"mongodb":      c.MongoDB != nil,
-		"valkey":       c.Valkey != nil,
+		"mysql":         c.MySQL != nil,
+		"mariadb":       c.MariaDB != nil,
+		"percona":       c.Percona != nil,
+		"postgres":      c.PostgreSQL != nil,
+		"mongodb":       c.MongoDB != nil,
+		"valkey":        c.Valkey != nil,
 		"elasticsearch": c.Elasticsearch != nil,
-		"etcd":         c.Etcd != nil,
-		"oracle":       c.Oracle != nil,
+		"etcd":          c.Etcd != nil,
+		"oracle":        c.Oracle != nil,
 	}
 	return status
 }

@@ -1,0 +1,321 @@
+{
+  "info": {
+    "name": "AxiomNizam API Metrics",
+    "description": "API Metrics & Analytics - Track all API endpoints and their usage",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["auth", "login"]
+            },
+            "description": "Login to get admin JWT token. Use the access_token for subsequent requests."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API Metrics - Count",
+      "item": [
+        {
+          "name": "Get Total API Count & Usage",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/count",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "count"]
+            },
+            "description": "Get count of unique API endpoints and total calls across all endpoints.\n\n**Response includes:**\n- total_unique_endpoints: Number of unique API endpoints\n- total_api_calls: Total number of calls across all endpoints\n- endpoint_usage: Map of each endpoint with its call count"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "http://localhost:8000/api/admin/metrics/count",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8000",
+                  "path": ["api", "admin", "metrics", "count"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"status\": \"ok\",\n  \"data\": {\n    \"total_unique_endpoints\": 42,\n    \"total_api_calls\": 5230,\n    \"endpoint_usage\": {\n      \"/api/mysql/users\": 245,\n      \"/api/mysql/query\": 312,\n      \"/api/postgres/users\": 189,\n      \"/health\": 777\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "API Metrics - All Detailed",
+      "item": [
+        {
+          "name": "Get All Endpoint Metrics (Detailed)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/all",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "all"]
+            },
+            "description": "Get comprehensive metrics for all API endpoints.\n\n**Response includes per endpoint:**\n- endpoint: API path\n- method: HTTP method (GET, POST, PUT, DELETE)\n- total_calls: Total times called\n- success_calls: Successful calls (2xx)\n- error_calls: Failed calls (4xx, 5xx)\n- average_duration_ms: Average execution time\n- max_duration_ms: Slowest execution\n- min_duration_ms: Fastest execution\n- last_called: Timestamp of most recent call\n- status_codes: Distribution of HTTP response codes"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "http://localhost:8000/api/admin/metrics/all",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8000",
+                  "path": ["api", "admin", "metrics", "all"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"status\": \"ok\",\n  \"data\": {\n    \"total_unique_endpoints\": 42,\n    \"total_calls\": 5230,\n    \"endpoints\": [\n      {\n        \"endpoint\": \"/api/mysql/users\",\n        \"method\": \"GET\",\n        \"total_calls\": 156,\n        \"success_calls\": 150,\n        \"error_calls\": 6,\n        \"average_duration_ms\": 45,\n        \"max_duration_ms\": 120,\n        \"min_duration_ms\": 15,\n        \"last_called\": \"2024-01-01T12:34:56Z\",\n        \"status_codes\": {\n          \"200\": 150,\n          \"400\": 4,\n          \"401\": 2\n        }\n      }\n    ],\n    \"endpoint_usage\": {\n      \"/api/mysql/users\": 245,\n      \"/api/mysql/query\": 312,\n      \"/health\": 777\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "API Metrics - Statistics",
+      "item": [
+        {
+          "name": "Get API Statistics (All Endpoints)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/stats",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "stats"]
+            },
+            "description": "Get aggregated statistics for all endpoints.\n\n**Response includes:**\n- total_calls: Total calls across all endpoints\n- success_calls: Total successful calls\n- error_calls: Total failed calls\n- average_duration_ms: Average duration across all endpoints\n- metrics: Detailed metrics for each endpoint method"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Stats for Specific Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/stats?endpoint=/api/mysql/users",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "stats"],
+              "query": [
+                {
+                  "key": "endpoint",
+                  "value": "/api/mysql/users",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Get statistics filtered to a specific endpoint.\n\n**Query Parameters:**\n- endpoint: The API endpoint path to filter by (e.g., /api/mysql/users)\n\n**Use cases:**\n- Analyze performance of a specific endpoint\n- Monitor error rate for a particular API\n- Track usage of a single endpoint over time"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Common Queries",
+      "item": [
+        {
+          "name": "1. What's the total number of APIs?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/count",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "count"]
+            },
+            "description": "Check total_unique_endpoints in response"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Which API is called the most?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/all",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "all"]
+            },
+            "description": "Look at endpoints array and sort by total_calls (highest first)"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Which API is the slowest?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/all",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "all"]
+            },
+            "description": "Look at endpoints array and sort by max_duration_ms (highest first)"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Which API has the most errors?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/all",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "all"]
+            },
+            "description": "Look at endpoints array and sort by error_calls (highest first)"
+          },
+          "response": []
+        },
+        {
+          "name": "5. What's the total API usage count?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8000/api/admin/metrics/count",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "admin", "metrics", "count"]
+            },
+            "description": "Check total_api_calls in response"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "admin_token",
+      "value": "your_admin_jwt_token_here",
+      "type": "string"
+    }
+  ]
+}

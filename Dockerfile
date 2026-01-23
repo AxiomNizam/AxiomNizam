@@ -1,15 +1,28 @@
 # Build stage
-FROM golang:1.21 AS builder
+FROM golang:1.23 AS builder
 
 WORKDIR /app
+
+# Install build dependencies for CGO (required for MySQL/PostgreSQL drivers)
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set Go environment variables with better fallback options
 ENV GOFLAGS=-mod=mod
 ENV GOPROXY=https://proxy.golang.org,https://goproxy.io,direct
 ENV GOSUMDB=off
+ENV GO111MODULE=on
+ENV CGO_ENABLED=1
 
-# Copy go.mod file
-COPY go.mod ./
+# Copy both go.mod and source for early tidy
+COPY go.mod .
+COPY . .
+
+# Tidy modules first with source code present
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod tidy
 
 # Remove go.sum if it exists to regenerate it with correct checksums
 RUN rm -f go.sum
@@ -25,19 +38,23 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod verify 2>&1 || echo "Module verification completed"
 
-# Copy source code
-COPY . .
+# Clean build cache before building
+RUN go clean -cache
 
 # Build the application with verbose output
 RUN --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux go build -v -a -installsuffix cgo -o axiomnizam .
+    GOOS=linux GOARCH=amd64 go build -v -o axiomnizam .
 
 # Runtime stage
 FROM alpine:latest
 
 WORKDIR /root/
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache \
+    ca-certificates \
+    libc6-compat \
+    libpq \
+    libstdc++
 
 COPY --from=builder /app/axiomnizam .
 COPY --from=builder /app/.env* ./
