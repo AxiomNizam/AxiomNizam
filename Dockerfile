@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21 AS builder
+FROM golang:1.23 AS builder
 
 WORKDIR /app
 
@@ -7,9 +7,15 @@ WORKDIR /app
 ENV GOFLAGS=-mod=mod
 ENV GOPROXY=https://proxy.golang.org,https://goproxy.io,direct
 ENV GOSUMDB=off
+ENV GO111MODULE=on
 
-# Copy go.mod file
-COPY go.mod ./
+# Copy both go.mod and source for early tidy
+COPY go.mod .
+COPY . .
+
+# Tidy modules first with source code present
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod tidy
 
 # Remove go.sum if it exists to regenerate it with correct checksums
 RUN rm -f go.sum
@@ -25,12 +31,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod verify 2>&1 || echo "Module verification completed"
 
-# Copy source code
-COPY . .
+# Clean build cache before building
+RUN go clean -cache
 
 # Build the application with verbose output
 RUN --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux go build -v -a -installsuffix cgo -o axiomnizam .
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o axiomnizam .
 
 # Runtime stage
 FROM alpine:latest
