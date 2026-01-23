@@ -14,7 +14,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	// elastic "github.com/elastic/go-elasticsearch/v8" // Temporarily disabled
+	elastic "github.com/elastic/go-elasticsearch/v8"
 	etcdclient "go.etcd.io/etcd/client/v3"
 )
 
@@ -26,7 +26,7 @@ type Connections struct {
 	PostgreSQL    *gorm.DB
 	MongoDB       *mongo.Client
 	Valkey        *redis.Client
-	Elasticsearch interface{} // Temporarily disabled elasticsearch
+	Elasticsearch *elastic.Client
 	Etcd          *etcdclient.Client
 	Oracle        *gorm.DB
 	Firebase      interface{} // Placeholder for Firebase connection
@@ -92,15 +92,14 @@ func InitConnections(cfg *config.Config) *Connections {
 	}
 
 	// Elasticsearch
-	// Temporarily disabled - build issue with elasticsearch module
-	// if client, err := elastic.NewClient(elastic.Config{
-	// 	Addresses: []string{cfg.GetElasticsearchURL()},
-	// }); err == nil {
-	// 	conns.Elasticsearch = client
-	// 	log.Println("✅ Elasticsearch connected")
-	// } else {
-	// 	log.Printf("❌ Elasticsearch connection failed: %v", err)
-	// }
+	if client, err := elastic.NewClient(elastic.Config{
+		Addresses: []string{cfg.GetElasticsearchURL()},
+	}); err == nil {
+		conns.Elasticsearch = client
+		log.Println("✅ Elasticsearch connected")
+	} else {
+		log.Printf("❌ Elasticsearch connection failed: %v", err)
+	}
 
 	// etcd
 	if client, err := etcdclient.New(etcdclient.Config{

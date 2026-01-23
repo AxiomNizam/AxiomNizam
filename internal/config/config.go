@@ -168,7 +168,7 @@ func LoadConfig() *Config {
 			Port: getEnv("ETCD_PORT", "2379"),
 		},
 		Keycloak: KeycloakConfig{
-			Host:         getEnv("KEYCLOAK_HOST", "localhost"),
+			Host:         getEnv("KEYCLOAK_HOST", "keycloak"),
 			Port:         getEnv("KEYCLOAK_PORT", "8080"),
 			Realm:        getEnv("KEYCLOAK_REALM", "master"),
 			ClientID:     getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam"),
