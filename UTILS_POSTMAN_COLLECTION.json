@@ -1,0 +1,1116 @@
+{
+  "info": {
+    "name": "AxiomNizam Utils Testing",
+    "description": "Comprehensive Postman collection for testing all utility functions",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "String Utilities",
+      "description": "Test string manipulation functions",
+      "item": [
+        {
+          "name": "Trim Spaces",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/trim",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "trim"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"   hello world   \"\n}"
+            }
+          }
+        },
+        {
+          "name": "To Lowercase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/lowercase",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "lowercase"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"HELLO WORLD\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reverse String",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/reverse",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "reverse"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"hello\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Contains Substring",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/contains",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "contains"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"hello world\",\n  \"substring\": \"world\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Truncate String",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/truncate",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "truncate"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This is a long string that needs truncation\",\n  \"maxLength\": 20\n}"
+            }
+          }
+        },
+        {
+          "name": "Remove Special Characters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/remove-special",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "remove-special"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"h@llo-w0rld!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Pad Left",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/string/pad-left",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "string", "pad-left"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"5\",\n  \"length\": 5,\n  \"padChar\": \"0\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Validators",
+      "description": "Test input validation functions",
+      "item": [
+        {
+          "name": "Validate Email - Valid",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/email",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "email"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Email - Invalid",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/email",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "email"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"invalid.email\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Phone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/phone",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "phone"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+12125551234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/url",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "url"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate IP Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/ip",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "ip"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ip\": \"192.168.1.1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate UUID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/uuid",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "uuid"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uuid\": \"550e8400-e29b-41d4-a716-446655440000\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Password - Strong",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/password",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"MyP@ssw0rd\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/username",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "username"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"john_doe\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Credit Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/credit-card",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "credit-card"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cardNumber\": \"4532015112830366\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/validate/json",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "validate", "json"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"json\": \"{\\\"key\\\": \\\"value\\\"}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Handling",
+      "description": "Test custom error types",
+      "item": [
+        {
+          "name": "Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/error/validation",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "error", "validation"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": \"email\",\n  \"message\": \"Email is invalid\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Not Found Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/error/not-found",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "error", "not-found"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"User not found\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Unauthorized Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/error/unauthorized",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "error", "unauthorized"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Invalid credentials\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Forbidden Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/error/forbidden",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "error", "forbidden"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Access denied\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Conflict Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/error/conflict",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "error", "conflict"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"User already exists\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Internal Server Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/error/internal",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "error", "internal"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Database error\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Formatters",
+      "description": "Test data formatting functions",
+      "item": [
+        {
+          "name": "Format Bytes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/bytes",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "bytes"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bytes\": 1048576\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Duration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/duration",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "duration"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"milliseconds\": 45000\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Time",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/time",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "time"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timestamp\": \"2026-01-23T14:30:45Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Currency",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/currency",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "currency"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 99.99,\n  \"currency\": \"USD\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Phone Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/phone",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "phone"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"1234567890\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Credit Card (Mask)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/credit-card",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "credit-card"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cardNumber\": \"4532015112830366\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Email (Mask)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/email",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "email"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Case - Camel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/case/camel",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "case", "camel"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"hello world\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Case - Pascal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/case/pascal",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "case", "pascal"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"hello world\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Format Case - Snake",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/format/case/snake",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "format", "case", "snake"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"hello world\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Encryption & Hashing",
+      "description": "Test encryption and password hashing",
+      "item": [
+        {
+          "name": "Hash Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/crypto/hash-password",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "crypto", "hash-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"MyP@ssw0rd\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/crypto/verify-password",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "crypto", "verify-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"MyP@ssw0rd\",\n  \"hash\": \"$2a$10$N9qo8uLOickgx2ZMRZoMye...\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Generate Random Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/crypto/generate-token",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "crypto", "generate-token"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"length\": 32\n}"
+            }
+          }
+        },
+        {
+          "name": "Encrypt String",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/crypto/encrypt",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "crypto", "encrypt"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plaintext\": \"secret data\",\n  \"key\": \"base64_encoded_key\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Decrypt String",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/crypto/decrypt",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "crypto", "decrypt"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ciphertext\": \"base64_encrypted_data\",\n  \"key\": \"base64_encoded_key\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bot Protection",
+      "description": "Test bot detection and protection",
+      "item": [
+        {
+          "name": "Detect Bot - User Agent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "curl/7.64.1"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/detect",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "detect"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"testBot\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect Bot - Known Bot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "Mozilla/5.0 (compatible; Googlebot/2.1)"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/detect",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "detect"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"testBot\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Check Rate Limit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/rate-limit",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "rate-limit"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientIP\": \"192.168.1.100\",\n  \"maxRequests\": 100,\n  \"blockDuration\": 300\n}"
+            }
+          }
+        },
+        {
+          "name": "Blacklist IP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/blacklist",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "blacklist"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientIP\": \"192.168.1.100\",\n  \"action\": \"add\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Check IP Blacklist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/blacklist-check",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "blacklist-check"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientIP\": \"192.168.1.100\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Analyze Behavior",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/behavior",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "behavior"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientIP\": \"192.168.1.100\",\n  \"endpoint\": \"/api/users\",\n  \"isError\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect SQL Injection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/sql-injection-check",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "sql-injection-check"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"1' OR '1'='1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect XSS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/bot/xss-check",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "bot", "xss-check"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"<script>alert('xss')</script>\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Database Utilities",
+      "description": "Test database query builders",
+      "item": [
+        {
+          "name": "Build SELECT Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/db/select",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "db", "select"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"columns\": [\"id\", \"name\", \"email\"],\n  \"from\": \"users\",\n  \"where\": {\"age\": {\"operator\": \">\", \"value\": 18}},\n  \"orderBy\": \"name ASC\",\n  \"limit\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Build INSERT Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/db/insert",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "db", "insert"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"table\": \"users\",\n  \"columns\": [\"name\", \"email\", \"age\"],\n  \"values\": [\"John Doe\", \"john@example.com\", 28]\n}"
+            }
+          }
+        },
+        {
+          "name": "Build UPDATE Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/db/update",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "db", "update"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"table\": \"users\",\n  \"updates\": {\"name\": \"Jane Doe\", \"age\": 29},\n  \"where\": {\"id\": 123}\n}"
+            }
+          }
+        },
+        {
+          "name": "Build DELETE Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/utils/db/delete",
+              "host": ["{{base_url}}"],
+              "path": ["utils", "db", "delete"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"table\": \"users\",\n  \"where\": {\"age\": {\"operator\": \"<\", \"value\": 18}}\n}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ]
+}
