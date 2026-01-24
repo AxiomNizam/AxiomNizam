@@ -73,10 +73,17 @@ func main() {
 
 	// Add CORS middleware
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-API-KEY")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+
+		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -473,29 +480,6 @@ func main() {
 			cancel()
 		}
 	}()
-
-	// Setup health check endpoints
-	router.GET("/health", func(c *gin.Context) {
-		probe := runtime.NewLivenessProbe(rt)
-		if err := probe.Check(c.Request.Context()); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "alive"})
-	})
-
-	router.GET("/ready", func(c *gin.Context) {
-		probe := runtime.NewReadinessProbe(rt)
-		if err := probe.Check(c.Request.Context()); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not-ready", "error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
-
-	router.GET("/status", func(c *gin.Context) {
-		c.JSON(http.StatusOK, rt.Status())
-	})
 
 	// Start API server with graceful shutdown
 	srv := &http.Server{
