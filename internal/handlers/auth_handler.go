@@ -27,10 +27,15 @@ type AuthHandler struct {
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler() *AuthHandler {
+	// Build Keycloak URL from host and port environment variables
+	keycloakHost := getEnv("KEYCLOAK_HOST", "keycloak")
+	keycloakPort := getEnv("KEYCLOAK_PORT", "8080")
+	keycloakURL := fmt.Sprintf("http://%s:%s", keycloakHost, keycloakPort)
+
 	return &AuthHandler{
-		keycloakURL:    getEnv("KEYCLOAK_URL", "http://keycloak:8080"),
+		keycloakURL:    keycloakURL,
 		keycloakRealm:  getEnv("KEYCLOAK_REALM", "axiomnizam"),
-		keycloakClient: getEnv("KEYCLOAK_CLIENT", "axiomnizam-backend"),
+		keycloakClient: getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam-backend"),
 		clientSecret:   getEnv("KEYCLOAK_CLIENT_SECRET", "6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72"),
 		rateLimiter:    nil, // Will be set via SetRateLimiter
 	}
