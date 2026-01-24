@@ -15,7 +15,7 @@ type TransformationRule struct {
 	FieldMappings    map[string]string      `json:"field_mappings,omitempty"`    // source -> target field names
 	TypeConversions  map[string]string      `json:"type_conversions,omitempty"`  // field -> target type
 	FlattenConfig    *FlattenConfig         `json:"flatten_config,omitempty"`    // JSON flattening config
-	Filters          []FilterRule           `json:"filters,omitempty"`           // Filter data before transformation
+	Filters          []*FilterRule          `json:"filters,omitempty"`           // Filter data before transformation
 	AggregationRules map[string]string      `json:"aggregation_rules,omitempty"` // field -> aggregation type
 	CustomTransforms map[string]interface{} `json:"custom_transforms,omitempty"` // Custom transformation functions
 }
@@ -30,12 +30,7 @@ type FlattenConfig struct {
 	SkipNullValue bool   `json:"skip_null_value,omitempty"` // Skip null/empty values
 }
 
-// FilterRule defines filtering conditions
-type FilterRule struct {
-	Field    string      `json:"field"`
-	Operator string      `json:"operator"` // eq, ne, gt, lt, gte, lte, in, nin, contains, regex
-	Value    interface{} `json:"value"`
-}
+// Note: FilterRule is defined in query_builder.go to support advanced query building
 
 // TransformedData holds the result of transformation
 type TransformedData struct {

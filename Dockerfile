@@ -30,9 +30,9 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod tidy
 
-# Build the application
+# Build the application with static linking
 RUN --mount=type=cache,target=/go/pkg/mod \
-    go build -v -o axiomnizam .
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o axiomnizam .
 
 # Runtime stage
 FROM alpine:latest

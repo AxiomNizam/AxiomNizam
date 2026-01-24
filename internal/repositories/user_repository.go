@@ -62,7 +62,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		return ErrInvalidInput
 	}
 
-	if user.Email == "" || user.Username == "" {
+	if user.Email == "" || user.Name == "" {
 		return ErrInvalidInput
 	}
 
@@ -75,21 +75,13 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		return ErrDuplicateEntry
 	}
 
-	existsByUsername, err := r.ExistsByUsername(ctx, user.Username)
-	if err != nil {
-		return err
-	}
-	if existsByUsername {
-		return ErrDuplicateEntry
-	}
-
 	result := r.GetDB().WithContext(ctx).Create(user)
 	return result.Error
 }
 
 // GetByID retrieves a user by ID
-func (r *userRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
-	if id == "" {
+func (r *userRepository) GetByID(ctx context.Context, id uint) (*models.User, error) {
+	if id == 0 {
 		return nil, ErrInvalidInput
 	}
 
@@ -127,29 +119,9 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 	return &user, nil
 }
 
-// GetByUsername retrieves a user by username
-func (r *userRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
-	if username == "" {
-		return nil, ErrInvalidInput
-	}
-
-	var user models.User
-	result := r.GetDB().WithContext(ctx).Where("username = ?", username).First(&user)
-
-	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
-	}
-
-	if result.Error != nil {
-		return nil, result.Error
-	}
-
-	return &user, nil
-}
-
 // Update updates an existing user
 func (r *userRepository) Update(ctx context.Context, user *models.User) error {
-	if user == nil || user.ID == "" {
+	if user == nil || user.ID == 0 {
 		return ErrInvalidInput
 	}
 
