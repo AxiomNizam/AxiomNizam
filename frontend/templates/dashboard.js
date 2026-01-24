@@ -18,6 +18,12 @@ const BACKEND_URL = (() => {
             }
         }
     }
+    
+    // If contains Docker hostname, replace with localhost
+    if (url.includes('axiomnizam:8000')) {
+        url = url.replace('axiomnizam:8000', 'localhost:8000');
+    }
+    
     return url;
 })();
 

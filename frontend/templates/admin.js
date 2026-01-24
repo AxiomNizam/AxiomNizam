@@ -1,10 +1,17 @@
 // Admin Dashboard JS
 const BACKEND_URL = (() => {
+    // Try to get from DOM element first (injected by template)
     const elem = document.getElementById('backendURL');
     if (elem && elem.textContent) {
-        return elem.textContent.trim();
+        let url = elem.textContent.trim();
+        // If it contains Docker container name, replace with localhost
+        if (url.includes('axiomnizam:8000')) {
+            url = url.replace('axiomnizam:8000', 'localhost:8000');
+        }
+        return url;
     }
-    return 'http://localhost:8000';
+    // Fallback: use window.location hostname but with port 8000
+    return 'http://' + window.location.hostname + ':8000';
 })();
 
 let filteredMethod = 'ALL';
