@@ -5,8 +5,7 @@ WORKDIR /app
 
 # Install build dependencies for CGO
 RUN apk add --no-cache \
-    gcc \
-    musl-dev \
+    build-base \
     pkgconf \
     postgresql-dev
 
@@ -33,7 +32,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Build the application
 RUN --mount=type=cache,target=/go/pkg/mod \
-    GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -v -ldflags="-s -w" -o axiomnizam .
+    go build -v -o axiomnizam .
 
 # Runtime stage
 FROM alpine:latest
