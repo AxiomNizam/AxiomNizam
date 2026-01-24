@@ -33,6 +33,12 @@ type ReconcileRequest struct {
 
 	// Generation the resource was at when queued
 	Generation int64
+
+	// Reconciler to execute reconciliation
+	Reconciler Reconciler
+
+	// Resource the actual resource object
+	Resource resources.Resource
 }
 
 // ReconcileResult is the result of reconciliation

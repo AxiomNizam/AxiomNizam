@@ -1,0 +1,15 @@
+apiVersion: axiom-nizam.io/v1
+kind: DataSource
+metadata:
+  name: postgres-prod
+  namespace: default
+spec:
+  type: "postgres"
+  description: "Production PostgreSQL database"
+  config:
+    host: "db.example.com"
+    port: 5432
+    database: "production"
+    ssl: true
+    connectionPoolSize: 20
+    connectionTimeout: 30s

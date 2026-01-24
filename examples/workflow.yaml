@@ -1,0 +1,40 @@
+apiVersion: axiom-nizam.io/v1
+kind: Workflow
+metadata:
+  name: etl-daily
+  namespace: default
+spec:
+  description: "Daily ETL workflow"
+  schedule:
+    cronExpression: "0 2 * * *"  # 2 AM daily
+    timezone: "UTC"
+    enabled: true
+  steps:
+    - name: "extract"
+      type: "query"
+      target: "postgres-prod"
+      query: "SELECT * FROM raw_data WHERE created_at > NOW() - INTERVAL 1 DAY"
+      timeout: "30m"
+    - name: "transform"
+      type: "transform"
+      input: "extract"
+      rules:
+        - name: "normalize_names"
+          type: "lowercase"
+          fields: ["first_name", "last_name"]
+        - name: "parse_dates"
+          type: "date_parse"
+          format: "2006-01-02"
+    - name: "load"
+      type: "load"
+      target: "postgres-prod"
+      table: "processed_data"
+      mode: "append"
+  retryPolicy:
+    maxRetries: 3
+    backoffMultiplier: 2
+    initialDelay: "1m"
+  notifications:
+    - type: "email"
+      on: ["failure", "success"]
+      recipients: ["data-team@company.com"]

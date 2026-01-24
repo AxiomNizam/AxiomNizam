@@ -1,0 +1,40 @@
+apiVersion: axiom-nizam.io/v1
+kind: API
+metadata:
+  name: users-api
+  namespace: default
+  labels:
+    app: user-service
+    version: v1
+spec:
+  description: "User management API"
+  type: "CRUD"
+  owner: "data-team"
+  database: "postgres"
+  table: "users"
+  rateLimit:
+    enabled: true
+    requests_per_second: 100
+    burst: 10
+    windowSize: "1m"
+    key: "user_id"
+  cache:
+    enabled: true
+    ttl: "1h"
+    maxSize: 10000
+    strategy: "lru"
+  permissions:
+    - read
+    - write
+    - update
+    - delete
+  validationRules:
+    - name: "email_format"
+      type: "regex"
+      pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+      required: true
+    - name: "username_length"
+      type: "length"
+      minLength: 3
+      maxLength: 50
+      required: true

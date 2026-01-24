@@ -1,0 +1,30 @@
+apiVersion: axiom-nizam.io/v1
+kind: Policy
+metadata:
+  name: rbac-policy
+  namespace: default
+spec:
+  type: "RBAC"
+  description: "Role-based access control policy"
+  rules:
+    - role: "admin"
+      permissions:
+        - "api:read"
+        - "api:write"
+        - "api:delete"
+        - "policy:read"
+        - "policy:write"
+    - role: "developer"
+      permissions:
+        - "api:read"
+        - "api:write"
+        - "workflow:run"
+    - role: "viewer"
+      permissions:
+        - "api:read"
+        - "workflow:list"
+  conditions:
+    - type: "time_based"
+      value: "09:00-17:00"
+    - type: "ip_based"
+      value: "192.168.0.0/16"
