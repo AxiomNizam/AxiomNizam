@@ -299,6 +299,32 @@ func main() {
 	router.GET("/api/oracle/stats", authMiddleware, oracleDynamicHandler.GetQueryStats)
 
 	// ====================================
+	// DATA TRANSFORMATION ENDPOINTS (Auth Required)
+	// ====================================
+
+	transformHandler := handlers.NewTransformationHandler()
+
+	// Rule Management endpoints
+	router.POST("/api/transform/rules", authMiddleware, transformHandler.RegisterRule)
+	router.GET("/api/transform/rules", authMiddleware, transformHandler.ListRules)
+	router.GET("/api/transform/rules/:name", authMiddleware, transformHandler.GetRule)
+	router.DELETE("/api/transform/rules/:name", adminMiddleware, transformHandler.DeleteRule)
+
+	// Transformation endpoints
+	router.POST("/api/transform/apply", authMiddleware, transformHandler.Transform)
+	router.POST("/api/transform/batch", authMiddleware, transformHandler.TransformBatch)
+	router.POST("/api/transform/preview", authMiddleware, transformHandler.PreviewTransformation)
+
+	// Feature Testing endpoints
+	router.POST("/api/transform/test/rename", authMiddleware, transformHandler.TestFieldRename)
+	router.POST("/api/transform/test/types", authMiddleware, transformHandler.TestTypeConversion)
+	router.POST("/api/transform/test/flatten", authMiddleware, transformHandler.TestFlattening)
+
+	// Import/Export endpoints
+	router.GET("/api/transform/rules/export", authMiddleware, transformHandler.ExportRules)
+	router.POST("/api/transform/rules/import", adminMiddleware, transformHandler.ImportRules)
+
+	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
 

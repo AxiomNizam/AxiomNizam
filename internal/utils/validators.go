@@ -247,3 +247,231 @@ func ValidateURL(value interface{}) error {
 	}
 	return nil
 }
+
+// SanitizeInput removes potentially dangerous characters from user input
+func SanitizeInput(input string) string {
+	// Trim whitespace
+	input = strings.TrimSpace(input)
+
+	// Remove null bytes
+	input = strings.ReplaceAll(input, "\x00", "")
+
+	// Remove control characters (except newlines in some cases)
+	for i := 0; i < 32; i++ {
+		if i != 9 && i != 10 && i != 13 { // Keep tab, newline, carriage return
+			input = strings.ReplaceAll(input, string(rune(i)), "")
+		}
+	}
+
+	return input
+}
+
+// SanitizeHTMLInput removes HTML/JavaScript that could cause XSS
+func SanitizeHTMLInput(input string) string {
+	// Remove potentially dangerous HTML tags
+	dangerous := []string{
+		"<script", "</script>",
+		"<iframe", "</iframe>",
+		"<object", "</object>",
+		"<embed", "</embed>",
+		"<link", "</link>",
+		"<meta", "</meta>",
+		"<style", "</style>",
+		"<form", "</form>",
+	}
+
+	result := input
+	for _, tag := range dangerous {
+		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(tag))
+		result = pattern.ReplaceAllString(result, "")
+	}
+
+	// Remove dangerous event handlers
+	eventHandlers := []string{
+		"onclick", "onload", "onerror", "onmouseover",
+		"onmouseout", "onkeydown", "onkeyup", "onfocus",
+		"onblur", "onchange", "onsubmit",
+	}
+
+	for _, handler := range eventHandlers {
+		pattern := regexp.MustCompile(`(?i)` + handler + `\s*=`)
+		result = pattern.ReplaceAllString(result, "")
+	}
+
+	return result
+}
+
+// ValidateJSONInput validates if input is valid JSON
+func ValidateJSONInput(value interface{}) error {
+	if s, ok := value.(string); ok {
+		if !IsValidJSON(s) {
+			return fmt.Errorf("invalid JSON format")
+		}
+	}
+	return nil
+}
+
+// ValidateIPInput validates IP address input
+func ValidateIPInput(value interface{}) error {
+	if s, ok := value.(string); ok {
+		if !IsValidIPAddress(s) {
+			return fmt.Errorf("invalid IP address format")
+		}
+	}
+	return nil
+}
+
+// ValidateUUIDInput validates UUID format
+func ValidateUUIDInput(value interface{}) error {
+	if s, ok := value.(string); ok {
+		if !IsValidUUID(s) {
+			return fmt.Errorf("invalid UUID format")
+		}
+	}
+	return nil
+}
+
+// ValidateDomainInput validates domain name
+func ValidateDomainInput(value interface{}) error {
+	if s, ok := value.(string); ok {
+		if !IsValidDomain(s) {
+			return fmt.Errorf("invalid domain format")
+		}
+	}
+	return nil
+}
+
+// ValidateNumericInput validates numeric string
+func ValidateNumericInput(value interface{}) error {
+	if s, ok := value.(string); ok {
+		if !IsValidNumeric(s) {
+			return fmt.Errorf("input must contain only digits")
+		}
+	}
+	return nil
+}
+
+// ValidateAlphaNumericInput validates alphanumeric input
+func ValidateAlphaNumericInput(value interface{}) error {
+	if s, ok := value.(string); ok {
+		if !IsValidAlphaNumeric(s) {
+			return fmt.Errorf("input must be alphanumeric only")
+		}
+	}
+	return nil
+}
+
+// ValidateNoSpecialChars validates that input has no special characters
+func ValidateNoSpecialChars(value interface{}) error {
+	if s, ok := value.(string); ok {
+		pattern := `[^a-zA-Z0-9\s_-]`
+		matched, _ := regexp.MatchString(pattern, s)
+		if matched {
+			return fmt.Errorf("input contains invalid special characters")
+		}
+	}
+	return nil
+}
+
+// ValidateFileNameInput validates filename format
+func ValidateFileNameInput(filename string) error {
+	if IsEmpty(filename) {
+		return fmt.Errorf("filename cannot be empty")
+	}
+
+	// Disallow directory traversal attempts
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return fmt.Errorf("invalid filename - directory traversal detected")
+	}
+
+	// Allow alphanumeric, dots, hyphens, underscores
+	pattern := `^[a-zA-Z0-9._-]+$`
+	matched, _ := regexp.MatchString(pattern, filename)
+	if !matched {
+		return fmt.Errorf("filename contains invalid characters")
+	}
+
+	return nil
+}
+
+// ValidateDatabaseIdentifier validates table/column names
+func ValidateDatabaseIdentifier(identifier string) error {
+	if IsEmpty(identifier) {
+		return fmt.Errorf("identifier cannot be empty")
+	}
+
+	// Only allow alphanumeric and underscores, must start with letter or underscore
+	pattern := `^[a-zA-Z_][a-zA-Z0-9_]*$`
+	matched, _ := regexp.MatchString(pattern, identifier)
+	if !matched {
+		return fmt.Errorf("invalid database identifier format")
+	}
+
+	return nil
+}
+
+// ValidatePath validates file path for security
+func ValidatePath(path string) error {
+	if IsEmpty(path) {
+		return fmt.Errorf("path cannot be empty")
+	}
+
+	// Prevent directory traversal
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path traversal detected")
+	}
+
+	// Check for null bytes
+	if strings.Contains(path, "\x00") {
+		return fmt.Errorf("path contains null bytes")
+	}
+
+	return nil
+}
+
+// ValidateAPIKey validates API key format
+func ValidateAPIKey(key string) error {
+	if IsEmpty(key) {
+		return fmt.Errorf("API key cannot be empty")
+	}
+
+	// API keys are typically alphanumeric with some special chars like -_
+	pattern := `^[a-zA-Z0-9_-]{20,}$`
+	matched, _ := regexp.MatchString(pattern, key)
+	if !matched {
+		return fmt.Errorf("invalid API key format")
+	}
+
+	return nil
+}
+
+// ValidateURLPath validates URL path component
+func ValidateURLPath(path string) error {
+	if IsEmpty(path) {
+		return fmt.Errorf("URL path cannot be empty")
+	}
+
+	// Allow alphanumeric, forward slashes, hyphens, underscores, dots
+	pattern := `^[a-zA-Z0-9/_\-\.]*$`
+	matched, _ := regexp.MatchString(pattern, path)
+	if !matched {
+		return fmt.Errorf("invalid URL path format")
+	}
+
+	return nil
+}
+
+// SanitizeAndValidate performs both sanitization and validation
+func SanitizeAndValidate(input string, validators ...ValidatorFunc) error {
+	// First sanitize the input
+	sanitized := SanitizeInput(input)
+
+	// Then run validation functions
+	for _, validator := range validators {
+		if err := validator(sanitized); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
