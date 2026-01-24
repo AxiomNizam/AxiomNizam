@@ -1,0 +1,2056 @@
+{
+  "info": {
+    "_postman_id": "axiom-nizam-complete",
+    "name": "AxiomNizam - Complete API Collection",
+    "description": "Complete and comprehensive API testing collection for AxiomNizam - covering all endpoints including health, auth, CRUD, dynamic queries, transformations, admin, and notifications",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            },
+            "description": "Check if the service is healthy (no auth required)"
+          },
+          "response": []
+        },
+        {
+          "name": "Status - All Connections",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/status",
+              "host": ["{{BASE_URL}}"],
+              "path": ["status"]
+            },
+            "description": "Check status of all database connections (no auth required)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var jsonData = pm.response.json();",
+                  "  if (jsonData.token) {",
+                  "    pm.environment.set('token', jsonData.token);",
+                  "    console.log('Token saved successfully');",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/login",
+              "host": ["{{BASE_URL}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with username and password to get JWT token"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/refresh",
+              "host": ["{{BASE_URL}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Refresh an existing JWT token"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/auth/validate",
+              "host": ["{{BASE_URL}}"],
+              "path": ["auth", "validate"]
+            },
+            "description": "Validate if current token is valid"
+          },
+          "response": []
+        },
+        {
+          "name": "Token Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/auth/token-status",
+              "host": ["{{BASE_URL}}"],
+              "path": ["auth", "token-status"]
+            },
+            "description": "Get current token status (auth required)"
+          },
+          "response": []
+        },
+        {
+          "name": "All Tokens Status (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/auth/admin/tokens-status",
+              "host": ["{{BASE_URL}}"],
+              "path": ["auth", "admin", "tokens-status"]
+            },
+            "description": "Get status of all tokens (admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MySQL CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "users"]
+            },
+            "description": "List all users from MySQL"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "users", "1"]
+            },
+            "description": "Get a specific user from MySQL by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"username\": \"johndoe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 30\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "users"]
+            },
+            "description": "Create a new user in MySQL (admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"username\": \"janedoe\",\n  \"email\": \"jane@example.com\",\n  \"age\": 28\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "users", "1"]
+            },
+            "description": "Update an existing user in MySQL (admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "users", "1"]
+            },
+            "description": "Delete a user from MySQL (admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "PostgreSQL CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Smith\",\n  \"username\": \"janesmith\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 25\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Smith Updated\",\n  \"email\": \"jane.updated@example.com\",\n  \"age\": 26\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MariaDB CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bob Johnson\",\n  \"username\": \"bobjohnson\",\n  \"email\": \"bob@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 35\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bob Johnson Updated\",\n  \"email\": \"bob.updated@example.com\",\n  \"age\": 36\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Percona CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice Williams\",\n  \"username\": \"alicew\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 28\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice Williams Updated\",\n  \"email\": \"alice.updated@example.com\",\n  \"age\": 29\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MongoDB CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mongodb/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mongodb", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mongodb/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mongodb", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Charlie Brown\",\n  \"username\": \"charlieb\",\n  \"email\": \"charlie@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 32\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mongodb/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mongodb", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Charlie Brown Updated\",\n  \"email\": \"charlie.updated@example.com\",\n  \"age\": 33\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mongodb/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mongodb", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mongodb/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mongodb", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Firebase CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/firebase/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "firebase", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/firebase/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "firebase", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Diana Davis\",\n  \"username\": \"dianad\",\n  \"email\": \"diana@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 27\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/firebase/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "firebase", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Diana Davis Updated\",\n  \"email\": \"diana.updated@example.com\",\n  \"age\": 28\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/firebase/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "firebase", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/firebase/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "firebase", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Oracle CRUD",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Eve Miller\",\n  \"username\": \"evem\",\n  \"email\": \"eve@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 31\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Eve Miller Updated\",\n  \"email\": \"eve.updated@example.com\",\n  \"age\": 32\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "users", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/users/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "users", "1"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dynamic Queries - MySQL",
+      "item": [
+        {
+          "name": "GET - Select All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/query?q=SELECT * FROM users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "query"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "SELECT * FROM users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET - Select with Parameters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/query?q=SELECT * FROM users WHERE age > ?&params=25",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "query"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "SELECT * FROM users WHERE age > ?"
+                },
+                {
+                  "key": "params",
+                  "value": "25"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Execute Query with Body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE name LIKE ?\",\n  \"params\": [\"%John%\"]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/query",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Batch Queries",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"query\": \"SELECT COUNT(*) as total FROM users\",\n    \"params\": []\n  },\n  {\n    \"query\": \"SELECT * FROM users WHERE age > ?\",\n    \"params\": [25]\n  }\n]"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/query/batch",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "query", "batch"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Table Schema",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/schema?table=users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "schema"],
+              "query": [
+                {
+                  "key": "table",
+                  "value": "users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/logs",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "logs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mysql/stats",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mysql", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dynamic Queries - PostgreSQL",
+      "item": [
+        {
+          "name": "GET - Select All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/query?q=SELECT * FROM users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "query"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "SELECT * FROM users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Execute Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"INSERT INTO users (name, email, age) VALUES ($1, $2, $3)\",\n  \"params\": [\"Frank Wilson\", \"frank@example.com\", 40]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/query",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Table Schema",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/schema?table=users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "schema"],
+              "query": [
+                {
+                  "key": "table",
+                  "value": "users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/logs",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "logs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/postgres/stats",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "postgres", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dynamic Queries - MariaDB",
+      "item": [
+        {
+          "name": "GET - Select All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/query?q=SELECT * FROM users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "query"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "SELECT * FROM users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Execute Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age BETWEEN ? AND ?\",\n  \"params\": [25, 35]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/query",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/logs",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "logs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/mariadb/stats",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "mariadb", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dynamic Queries - Percona",
+      "item": [
+        {
+          "name": "GET - Select All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/query?q=SELECT * FROM users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "query"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "SELECT * FROM users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Execute Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"SELECT name, email FROM users ORDER BY name\",\n  \"params\": []\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/query",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/logs",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "logs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/percona/stats",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "percona", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dynamic Queries - Oracle",
+      "item": [
+        {
+          "name": "GET - Select All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/query?q=SELECT * FROM users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "query"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "SELECT * FROM users"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST - Execute Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE email LIKE :email\",\n  \"params\": [\"%@example.com\"]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/query",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "query"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/logs",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "logs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Query Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/oracle/stats",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "oracle", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Data Transformation",
+      "item": [
+        {
+          "name": "Register Transformation Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"user_to_profile\",\n  \"description\": \"Convert user data to profile format\",\n  \"field_mappings\": {\n    \"id\": \"user_id\",\n    \"name\": \"full_name\",\n    \"email\": \"contact_email\"\n  },\n  \"type_conversions\": {\n    \"id\": \"string\",\n    \"age\": \"string\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/rules",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "rules"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Transformation Rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/rules",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "rules"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Rule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/rules/user_to_profile",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "rules", "user_to_profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply Transformation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rule_name\": \"user_to_profile\",\n  \"data\": {\n    \"id\": 123,\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"age\": 30\n  }\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/apply",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "apply"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Transformations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rule_name\": \"user_to_profile\",\n  \"data\": [\n    {\"id\": 1, \"name\": \"User1\", \"email\": \"user1@example.com\", \"age\": 25},\n    {\"id\": 2, \"name\": \"User2\", \"email\": \"user2@example.com\", \"age\": 30}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/batch",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "batch"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Transformation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\"id\": 123, \"name\": \"John Doe\", \"email\": \"john@example.com\"},\n  \"field_mappings\": {\"id\": \"user_id\", \"name\": \"full_name\"},\n  \"type_conversions\": {\"id\": \"string\"}\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/preview",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "preview"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Field Rename",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\"firstName\": \"John\", \"lastName\": \"Doe\", \"userEmail\": \"john@example.com\"},\n  \"mappings\": {\"firstName\": \"first_name\", \"lastName\": \"last_name\", \"userEmail\": \"email\"}\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/test/rename",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "test", "rename"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Type Conversion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\"id\": 123, \"age\": \"30\", \"active\": \"true\", \"price\": \"99.99\"},\n  \"conversions\": {\"id\": \"string\", \"age\": \"int\", \"active\": \"bool\", \"price\": \"float\"}\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/test/types",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "test", "types"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test JSON Flatten",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"user\": {\n      \"name\": \"John\",\n      \"contact\": {\n        \"email\": \"john@example.com\",\n        \"phone\": \"555-1234\"\n      }\n    },\n    \"settings\": {\n      \"theme\": \"dark\"\n    }\n  },\n  \"config\": {\n    \"enabled\": true,\n    \"separator\": \".\",\n    \"prefix\": \"\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/test/flatten",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "test", "flatten"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Transformation Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/rules/user_to_profile",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "rules", "user_to_profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Transformation Rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/rules/export",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "rules", "export"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Import Transformation Rules",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"name\": \"imported_rule\",\n    \"description\": \"Imported transformation rule\",\n    \"field_mappings\": {\"source\": \"destination\"},\n    \"type_conversions\": {}\n  }\n]"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/transform/rules/import",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "transform", "rules", "import"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Operations",
+      "item": [
+        {
+          "name": "Create Database",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"database_name\": \"test_db\",\n  \"db_type\": \"mysql\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/database/create",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "database", "create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Databases",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/database/list",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "database", "list"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Table",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"database\": \"test_db\",\n  \"table_name\": \"products\",\n  \"db_type\": \"mysql\",\n  \"columns\": [\n    {\"name\": \"id\", \"type\": \"INT\", \"primary_key\": true},\n    {\"name\": \"name\", \"type\": \"VARCHAR(255)\"},\n    {\"name\": \"price\", \"type\": \"DECIMAL(10,2)\"}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/table/create",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "table", "create"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Tables",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/table/list",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "table", "list"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All API Metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/metrics/all",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "metrics", "all"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get API Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/metrics/count",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "metrics", "count"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get API Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/admin/metrics/stats",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "admin", "metrics", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Send Custom Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Notification\",\n  \"message\": \"This is a test notification from AxiomNizam\",\n  \"severity\": \"info\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/notifications/send",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "notifications", "send"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Health Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/notifications/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "notifications", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Status Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/notifications/status",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "notifications", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notification Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/notifications/status",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "notifications", "status"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
