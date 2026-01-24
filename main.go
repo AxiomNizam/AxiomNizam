@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/database"
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/models"
+	"example.com/axiomnizam/internal/runtime"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
@@ -22,7 +27,23 @@ func main() {
 	if err != nil {
 		log.Println("⚠️  No .env file found, using system environment variables")
 	}
-	fmt.Println("🚀 Starting AxiomNizam API Server...\n")
+	fmt.Println("🚀 Starting AxiomNizam with Kubernetes-style Runtime...\n")
+
+	// Create context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Initialize Runtime
+	log.Println("📦 Initializing Kubernetes-style runtime...")
+	rt := runtime.NewRuntime("1.0.0")
+
+	if err := rt.Initialize(ctx); err != nil {
+		log.Fatalf("Failed to initialize runtime: %v", err)
+	}
 
 	// Load configuration
 	cfg := config.LoadConfig()
@@ -434,8 +455,78 @@ func main() {
 	fmt.Println("  POST /api/notifications/status  - Send status report notification")
 	fmt.Println("  GET  /api/notifications/status  - Get notification service status (no auth)")
 	fmt.Println()
+	fmt.Println("Kubernetes-style API endpoints:")
+	fmt.Println("  POST /api/v1/{namespace}/{kind}              - Create resource")
+	fmt.Println("  GET  /api/v1/{namespace}/{kind}/{name}       - Get resource")
+	fmt.Println("  PUT  /api/v1/{namespace}/{kind}/{name}       - Update resource")
+	fmt.Println("  DELETE /api/v1/{namespace}/{kind}/{name}     - Delete resource")
+	fmt.Println("  GET  /api/v1/{namespace}/{kind}              - List resources")
+	fmt.Println("  Supported kinds: workloads, pipelines, schedules")
+	fmt.Println()
 
-	router.Run(fmt.Sprintf("%s:%s", apiHost, apiPort))
+	// Start runtime in background
+	go func() {
+		if err := rt.Start(ctx, fmt.Sprintf("%s:%s", apiHost, apiPort)); err != nil {
+			log.Printf("Failed to start runtime: %v", err)
+			cancel()
+		}
+	}()
+
+	// Setup health check endpoints
+	router.GET("/health", func(c *gin.Context) {
+		probe := runtime.NewLivenessProbe(rt)
+		if err := probe.Check(c.Request.Context()); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "alive"})
+	})
+
+	router.GET("/ready", func(c *gin.Context) {
+		probe := runtime.NewReadinessProbe(rt)
+		if err := probe.Check(c.Request.Context()); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not-ready", "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+	})
+
+	router.GET("/status", func(c *gin.Context) {
+		c.JSON(http.StatusOK, rt.Status())
+	})
+
+	// Start API server with graceful shutdown
+	srv := &http.Server{
+		Addr:    fmt.Sprintf("%s:%s", apiHost, apiPort),
+		Handler: router,
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-sigChan
+	log.Println("🛑 Shutting down gracefully...")
+
+	// Give handlers 10 seconds to finish
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	// Stop runtime
+	if err := rt.Stop(); err != nil {
+		log.Printf("Runtime stop error: %v", err)
+	}
+
+	cancel()
+	log.Println("✅ AxiomNizam stopped")
+}
 }
 
 // Create tables on all databases
