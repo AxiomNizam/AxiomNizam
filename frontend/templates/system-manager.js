@@ -1,10 +1,21 @@
 // System Manager JS
 const BACKEND_URL = (() => {
     const elem = document.getElementById('backendURL');
+    let url = 'http://localhost:8000'; // Default fallback
+    
     if (elem && elem.textContent) {
-        return elem.textContent.trim();
+        const text = elem.textContent.trim();
+        if (text && text.length > 0) {
+            url = text;
+        }
     }
-    return 'http://localhost:8000';
+    
+    // If contains Docker hostname, replace with localhost
+    if (url.includes('axiomnizam:8000')) {
+        url = url.replace('axiomnizam:8000', 'localhost:8000');
+    }
+    
+    return url;
 })();
 
 console.log('System Manager - Backend URL:', BACKEND_URL);
