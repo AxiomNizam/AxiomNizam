@@ -14,13 +14,10 @@ type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
 
 	// GetByID retrieves a user by ID
-	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetByID(ctx context.Context, id uint) (*models.User, error)
 
 	// GetByEmail retrieves a user by email
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
-
-	// GetByUsername retrieves a user by username
-	GetByUsername(ctx context.Context, username string) (*models.User, error)
 
 	// Update updates an existing user
 	Update(ctx context.Context, user *models.User) error

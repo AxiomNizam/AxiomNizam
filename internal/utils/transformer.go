@@ -186,8 +186,8 @@ func (dt *DataTransformer) applyFilters(data map[string]interface{}, filters []F
 }
 
 // evaluateFilter checks a single filter condition
-func (dt *DataTransformer) evaluateFilter(data map[string]interface{}, filter FilterRule) (bool, error) {
-	value, exists := data[filter.Field]
+func (dt *DataTransformer) evaluateFilter(data map[string]interface{}, filter *FilterRule) (bool, error) {
+	value, exists := data[filter.Column]
 	if !exists {
 		return filter.Operator == "ne", nil
 	}
