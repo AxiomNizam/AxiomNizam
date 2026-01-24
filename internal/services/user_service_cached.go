@@ -187,7 +187,7 @@ func (s *userServiceWithCache) UpdateUser(ctx context.Context, user *models.User
 	}
 
 	// Invalidate all related caches
-	s.InvalidateUserCache(ctx, user.ID)
+	s.InvalidateUserCache(ctx, fmt.Sprintf("%d", user.ID))
 	if user.Email != "" {
 		s.InvalidateUserByEmailCache(ctx, user.Email)
 	}

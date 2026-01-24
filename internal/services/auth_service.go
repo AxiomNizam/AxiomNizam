@@ -65,15 +65,15 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 		return nil, "", ErrValidationFailed
 	}
 
-	// Get user by username
-	user, err := s.userRepo.GetByUsername(ctx, username)
+	// Get user by email (username is treated as email)
+	user, err := s.userRepo.GetByEmail(ctx, username)
 	if err != nil {
 		if err == repositories.ErrNotFound {
-			s.logger.Printf("LOGIN_ATTEMPT_FAILED: username=%s, reason=not_found", username)
+			s.logger.Printf("LOGIN_ATTEMPT_FAILED: email=%s, reason=not_found", username)
 			// Don't reveal if user exists
 			return nil, "", ErrUnauthorized
 		}
-		s.LogError("GetByUsername", err)
+		s.LogError("GetByEmail", err)
 		return nil, "", ErrInternalServer
 	}
 
@@ -98,8 +98,8 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrInvalidInput
 	}
 
-	if user.Email == "" || user.Username == "" {
-		s.LogError("Register", fmt.Errorf("email or username is empty"))
+	if user.Email == "" {
+		s.LogError("Register", fmt.Errorf("email is empty"))
 		return nil, ErrInvalidInput
 	}
 
@@ -112,7 +112,7 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 	// Validate input
 	batch := s.GetValidator().NewValidationBatch().
 		AddEmailValidation("email", user.Email).
-		AddStringValidation("username", user.Username, utils.WithMinLength(3), utils.WithMaxLength(20)).
+		AddStringValidation("name", user.Name, utils.WithMinLength(1), utils.WithMaxLength(100)).
 		AddStringValidation("password", password, utils.WithMinLength(8))
 
 	if batch.HasErrors() {
@@ -131,17 +131,6 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrDuplicateEntry
 	}
 
-	// Check if username already exists
-	existsByUsername, err := s.userRepo.ExistsByUsername(ctx, user.Username)
-	if err != nil {
-		s.LogError("Register ExistsByUsername", err)
-		return nil, ErrInternalServer
-	}
-	if existsByUsername {
-		s.logger.Printf("REGISTER_FAILED: username=%s, reason=already_exists", user.Username)
-		return nil, ErrDuplicateEntry
-	}
-
 	// TODO: Hash password using bcrypt
 	// hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	// if err != nil {
@@ -156,7 +145,7 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrInternalServer
 	}
 
-	s.logger.Printf("REGISTER_SUCCESS: email=%s, username=%s, user_id=%s", user.Email, user.Username, user.ID)
+	s.logger.Printf("REGISTER_SUCCESS: email=%s, name=%s, user_id=%d", user.Email, user.Name, user.ID)
 	return user, nil
 }
 
@@ -198,7 +187,7 @@ func (s *authService) Logout(ctx context.Context, token string) error {
 func (s *authService) Health() error {
 	// Try to get a user to check if repository is accessible
 	ctx := context.Background()
-	_, err := s.userRepo.GetByUsername(ctx, "test-user")
+	_, err := s.userRepo.GetByEmail(ctx, "test@example.com")
 	// We don't care if the user exists, just if we can query
 	if err != nil && err != repositories.ErrNotFound {
 		return err

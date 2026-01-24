@@ -21,12 +21,6 @@ func NewRefactoredAuthHandler(authService services.AuthService) *RefactoredAuthH
 	}
 }
 
-// LoginRequest represents the login request payload
-type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
 // LoginResponse represents the login response
 type LoginResponse struct {
 	User  *models.User `json:"user"`

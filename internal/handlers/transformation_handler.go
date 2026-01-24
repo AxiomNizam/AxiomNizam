@@ -284,7 +284,7 @@ func (th *TransformationHandler) TestFieldRename(c *gin.Context) {
 		return
 	}
 
-	result := th.transformer.applyFieldMappings(request.Data, request.Mappings)
+	result := th.ApplyFieldMappings(request.Data, request.Mappings)
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
@@ -312,7 +312,7 @@ func (th *TransformationHandler) TestTypeConversion(c *gin.Context) {
 		return
 	}
 
-	result, errs := th.transformer.applyTypeConversions(request.Data, request.Conversions)
+	result, errs := th.ApplyTypeConversions(request.Data, request.Conversions)
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
@@ -348,7 +348,7 @@ func (th *TransformationHandler) TestFlattening(c *gin.Context) {
 		}
 	}
 
-	result, errs := th.transformer.flattenJSON(request.Data, request.Config)
+	result, errs := th.ApplyFlattenJSON(request.Data, request.Config)
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
@@ -375,15 +375,20 @@ func countSuccessful(results []*utils.TransformedData) int {
 
 // Make applyFieldMappings public
 func (th *TransformationHandler) ApplyFieldMappings(data map[string]interface{}, mappings map[string]string) map[string]interface{} {
-	return th.transformer.applyFieldMappings(data, mappings)
+	return th.transformer.ApplyFieldMappings(data, mappings)
 }
 
 // Make applyTypeConversions public
 func (th *TransformationHandler) ApplyTypeConversions(data map[string]interface{}, conversions map[string]string) (map[string]interface{}, []string) {
-	return th.transformer.applyTypeConversions(data, conversions)
+	return th.transformer.ApplyTypeConversions(data, conversions)
+}
+
+// Make flattenJSON public
+func (th *TransformationHandler) ApplyFlattenJSON(data interface{}, config *utils.FlattenConfig) (map[string]interface{}, []string) {
+	return th.transformer.ApplyFlattenJSON(data, config)
 }
 
 // Make flattenJSON public
 func (th *TransformationHandler) FlattenJSON(data interface{}, config *utils.FlattenConfig) (map[string]interface{}, []string) {
-	return th.transformer.flattenJSON(data, config)
+	return th.transformer.ApplyFlattenJSON(data, config)
 }

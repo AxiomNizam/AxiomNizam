@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -620,8 +621,9 @@ func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 		}
 
 		// Parse JSONL format
-		for _, line := range string(content) {
-			if line != 0 {
+		lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+		for _, line := range lines {
+			if line != "" {
 				var log QueryLog
 				if err := json.Unmarshal([]byte(line), &log); err == nil {
 					logs = append(logs, log)
@@ -671,15 +673,15 @@ func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 		pattern = fmt.Sprintf("query_logs:%s:*", database)
 	}
 
-	iter := ql.client.Scan(ctx, 0, pattern, 0).Iterator()
+	iter := ql.redisClient.Scan(ctx, 0, pattern, 0).Iterator()
 	for iter.Next(ctx) {
 		key := iter.Val()
-		logStr, err := ql.client.Get(ctx, key).Result()
+		logStr, err := ql.redisClient.Get(ctx, key).Result()
 		if err == nil {
 			var log QueryLog
 			if err := json.Unmarshal([]byte(logStr), &log); err == nil {
 				if log.Timestamp.Before(cutoffTime) {
-					_ = ql.client.Del(ctx, key)
+					_ = ql.redisClient.Del(ctx, key)
 				}
 			}
 		}

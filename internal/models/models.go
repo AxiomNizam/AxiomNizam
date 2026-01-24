@@ -2,10 +2,12 @@ package models
 
 // User model for database operations
 type User struct {
-	ID    uint   `json:"id" gorm:"primaryKey"`
-	Name  string `json:"name"`
-	Email string `json:"email" gorm:"uniqueIndex"`
-	Age   int    `json:"age"`
+	ID       uint   `json:"id" gorm:"primaryKey"`
+	Name     string `json:"name"`
+	Username string `json:"username" gorm:"uniqueIndex"`
+	Email    string `json:"email" gorm:"uniqueIndex"`
+	Password string `json:"password"`
+	Age      int    `json:"age"`
 }
 
 // Response structure for API responses
@@ -24,13 +26,13 @@ type HealthResponse struct {
 
 // DatabaseStatus for status check
 type DatabaseStatus struct {
-	MySQL        string `json:"mysql"`
-	MariaDB      string `json:"mariadb"`
-	PostgreSQL   string `json:"postgres"`
-	MongoDB      string `json:"mongodb"`
-	Valkey       string `json:"valkey"`
+	MySQL         string `json:"mysql"`
+	MariaDB       string `json:"mariadb"`
+	PostgreSQL    string `json:"postgres"`
+	MongoDB       string `json:"mongodb"`
+	Valkey        string `json:"valkey"`
 	Elasticsearch string `json:"elasticsearch"`
-	Etcd         string `json:"etcd"`
-	Oracle       string `json:"oracle"`
-	Firebase     string `json:"firebase"`
+	Etcd          string `json:"etcd"`
+	Oracle        string `json:"oracle"`
+	Firebase      string `json:"firebase"`
 }

@@ -1,13 +1,15 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.23 AS builder
 
 WORKDIR /app
 
-# Install build dependencies for CGO
-RUN apk add --no-cache \
-    build-base \
-    pkgconf \
-    postgresql-dev
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    postgresql-client \
+    libpq-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set Go environment variables
 ENV GOFLAGS=-mod=mod
@@ -30,18 +32,19 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod tidy
 
-# Build the application with static linking
+# Build the application - no verbose to reduce output
 RUN --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o axiomnizam .
+    go build -o axiomnizam . 2>&1 || (echo "Build failed with exit code $?" && exit 1)
 
 # Runtime stage
-FROM alpine:latest
+FROM debian:bookworm-slim
 
 WORKDIR /root/
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    postgresql-libs
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
 COPY --from=builder /app/axiomnizam .

@@ -293,8 +293,8 @@ func (as *APIServer) UpdateResource(c *gin.Context) {
 	name := c.Param("name")
 	kind := c.Param("kind")
 
-	// Get existing resource
-	existing, err := as.store.Get(namespace, name)
+	// Get existing resource (just to verify it exists)
+	_, err := as.store.Get(namespace, name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return

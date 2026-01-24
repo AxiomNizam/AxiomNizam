@@ -109,7 +109,14 @@ func (dt *DataTransformer) Transform(ruleName string, data interface{}) (*Transf
 
 	// Step 1: Apply filters
 	if len(rule.Filters) > 0 {
-		filtered, err := dt.applyFilters(dataMap, rule.Filters)
+		// Convert []FilterRule pointers to values for applyFilters
+		filterValues := make([]FilterRule, len(rule.Filters))
+		for i, f := range rule.Filters {
+			if f != nil {
+				filterValues[i] = *f
+			}
+		}
+		filtered, err := dt.applyFilters(dataMap, filterValues)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("filter error: %v", err))
 		} else if !filtered {
@@ -126,7 +133,8 @@ func (dt *DataTransformer) Transform(ruleName string, data interface{}) (*Transf
 
 	// Step 3: Apply type conversions
 	if rule.TypeConversions != nil && len(rule.TypeConversions) > 0 {
-		dataMap, errs := dt.applyTypeConversions(dataMap, rule.TypeConversions)
+		var errs []string
+		dataMap, errs = dt.applyTypeConversions(dataMap, rule.TypeConversions)
 		if len(errs) > 0 {
 			result.Errors = append(result.Errors, errs...)
 		}
@@ -143,7 +151,8 @@ func (dt *DataTransformer) Transform(ruleName string, data interface{}) (*Transf
 
 	// Step 5: Apply aggregation rules
 	if rule.AggregationRules != nil && len(rule.AggregationRules) > 0 {
-		dataMap, errs := dt.applyAggregations(dataMap, rule.AggregationRules)
+		var errs []string
+		dataMap, errs = dt.applyAggregations(dataMap, rule.AggregationRules)
 		if len(errs) > 0 {
 			result.Errors = append(result.Errors, errs...)
 		}
@@ -173,7 +182,8 @@ func (dt *DataTransformer) TransformBatch(ruleName string, dataList []interface{
 
 // applyFilters checks if data matches all filter conditions
 func (dt *DataTransformer) applyFilters(data map[string]interface{}, filters []FilterRule) (bool, error) {
-	for _, filter := range filters {
+	for i := range filters {
+		filter := &filters[i]
 		match, err := dt.evaluateFilter(data, filter)
 		if err != nil {
 			return false, err
@@ -564,4 +574,19 @@ func (dt *DataTransformer) ImportRules(jsonData []byte) error {
 	}
 
 	return nil
+}
+
+// ApplyFieldMappings is the public version of applyFieldMappings
+func (dt *DataTransformer) ApplyFieldMappings(data map[string]interface{}, mappings map[string]string) map[string]interface{} {
+	return dt.applyFieldMappings(data, mappings)
+}
+
+// ApplyTypeConversions is the public version of applyTypeConversions
+func (dt *DataTransformer) ApplyTypeConversions(data map[string]interface{}, conversions map[string]string) (map[string]interface{}, []string) {
+	return dt.applyTypeConversions(data, conversions)
+}
+
+// ApplyFlattenJSON is the public version of flattenJSON
+func (dt *DataTransformer) ApplyFlattenJSON(data interface{}, config *FlattenConfig) (map[string]interface{}, []string) {
+	return dt.flattenJSON(data, config)
 }

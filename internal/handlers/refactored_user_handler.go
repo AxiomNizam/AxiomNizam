@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"example.com/axiomnizam/internal/models"
@@ -176,7 +177,15 @@ func (h *RefactoredUserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user.ID = id
+	var userID uint
+	if _, err := fmt.Sscanf(id, "%d", &userID); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Invalid user ID format",
+		})
+		return
+	}
+	user.ID = userID
 
 	ctx := context.Background()
 	updatedUser, err := h.userService.UpdateUser(ctx, &user)

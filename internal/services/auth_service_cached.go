@@ -62,14 +62,14 @@ func NewAuthServiceWithCache(
 }
 
 // Login handles user authentication with session caching
-func (s *authServiceWithCache) Login(ctx context.Context, username, password string) (*models.User, error) {
+func (s *authServiceWithCache) Login(ctx context.Context, username, password string) (*models.User, string, error) {
 	// Login validation is never cached for security
 	return s.authService.Login(ctx, username, password)
 }
 
 // Register handles user registration and invalidates caches
-func (s *authServiceWithCache) Register(ctx context.Context, user *models.User) (*models.User, error) {
-	registered, err := s.authService.Register(ctx, user)
+func (s *authServiceWithCache) Register(ctx context.Context, user *models.User, password string) (*models.User, error) {
+	registered, err := s.authService.Register(ctx, user, password)
 	if err != nil {
 		return nil, err
 	}
@@ -81,33 +81,33 @@ func (s *authServiceWithCache) Register(ctx context.Context, user *models.User) 
 }
 
 // ValidateToken validates a token with optional caching
-func (s *authServiceWithCache) ValidateToken(ctx context.Context, token string) (*models.User, error) {
+func (s *authServiceWithCache) ValidateToken(ctx context.Context, token string) (bool, error) {
 	if token == "" {
-		return nil, ErrInvalidInput
+		return false, ErrInvalidInput
 	}
 
 	if s.cacheEnabled {
 		cacheKey := s.cacheKeyBuilder.TokenKey(token)
 
 		// Try to get cached validation result
-		var cachedUser models.User
-		if err := s.cache.GetJSON(ctx, cacheKey, &cachedUser); err == nil {
+		var cachedResult bool
+		if err := s.cache.GetJSON(ctx, cacheKey, &cachedResult); err == nil {
 			s.LogInfo("Cache HIT for token validation")
-			return &cachedUser, nil
+			return cachedResult, nil
 		}
 
 		// Cache miss - validate with base service
-		user, err := s.authService.ValidateToken(ctx, token)
+		isValid, err := s.authService.ValidateToken(ctx, token)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 
 		// Cache the validation result
-		if err := s.cache.SetJSON(ctx, cacheKey, user, s.cacheTTL); err != nil {
+		if err := s.cache.SetJSON(ctx, cacheKey, isValid, s.cacheTTL); err != nil {
 			s.LogError("ValidateToken caching", err)
 		}
 
-		return user, nil
+		return isValid, nil
 	}
 
 	return s.authService.ValidateToken(ctx, token)

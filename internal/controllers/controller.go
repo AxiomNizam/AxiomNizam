@@ -6,9 +6,13 @@ import (
 	"log"
 	"time"
 
+	"example.com/axiomnizam/internal/apiserver"
 	"example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/workqueue"
 )
+
+// ResourceWatcher is an alias to apiserver.ResourceWatcher for watching resource changes
+type ResourceWatcher = apiserver.ResourceWatcher
 
 // Reconciler performs reconciliation for a resource
 type Reconciler interface {
@@ -56,7 +60,7 @@ type ResourceController struct {
 type ResourceStore interface {
 	Get(namespace, name string) (resources.Resource, error)
 	Update(resource resources.Resource) error
-	Watch(namespace string, watcher workqueue.ResourceWatcher)
+	Watch(namespace string, watcher ResourceWatcher)
 }
 
 // NewResourceController creates a new resource controller

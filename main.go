@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/config"
@@ -526,7 +528,6 @@ func main() {
 
 	cancel()
 	log.Println("✅ AxiomNizam stopped")
-}
 }
 
 // Create tables on all databases

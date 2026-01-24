@@ -808,6 +808,7 @@ func (qb *QueryBuilder) ScanTableSchema(tableName string) (*TableSchema, error) 
 		Columns:   make([]*ColumnInfo, 0),
 		Indexes:   make([]*IndexInfo, 0),
 	}
+	_ = schema // Keep for future schema processing
 
 	switch dbType {
 	case "mysql":

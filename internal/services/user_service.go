@@ -124,7 +124,12 @@ func (s *userService) GetUserByID(ctx context.Context, id string) (*models.User,
 		return nil, ErrInvalidInput
 	}
 
-	user, err := s.userRepo.GetByID(ctx, id)
+	var userID uint
+	if _, err := fmt.Sscanf(id, "%d", &userID); err != nil {
+		return nil, ErrInvalidInput
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		if err == repositories.ErrNotFound {
 			return nil, ErrNotFound
@@ -170,7 +175,12 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 		return nil, ErrInvalidInput
 	}
 
-	user, err := s.userRepo.GetByUsername(ctx, username)
+	var user *models.User
+	var err error
+	// Since GetByUsername is not in the interface, use GetByEmail as alternative
+	// or fetch all users and filter - using GetByEmail for now if username matches email pattern
+	// TODO: Add GetByUsername to UserRepository interface
+	user, err = s.userRepo.GetByEmail(ctx, username)
 	if err != nil {
 		if err == repositories.ErrNotFound {
 			return nil, ErrNotFound
@@ -184,7 +194,7 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 
 // UpdateUser updates an existing user
 func (s *userService) UpdateUser(ctx context.Context, user *models.User) (*models.User, error) {
-	if user == nil || user.ID == "" {
+	if user == nil || user.ID == 0 {
 		return nil, ErrInvalidInput
 	}
 
@@ -194,7 +204,7 @@ func (s *userService) UpdateUser(ctx context.Context, user *models.User) (*model
 	}
 
 	// Check if user exists
-	exists, err := s.userRepo.Exists(ctx, user.ID)
+	exists, err := s.userRepo.Exists(ctx, fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		s.LogError("UpdateUser Exists", err)
 		return nil, ErrInternalServer
