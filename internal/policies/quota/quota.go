@@ -8,17 +8,17 @@ import (
 
 // QuotaPolicy defines resource quota policies
 type QuotaPolicy struct {
-	ID              string
-	Name            string
-	Type            string
-	Version         string
-	Enabled         bool
-	Namespace       string
-	ResourceQuotas  []ResourceQuota
-	ScopeSelector   map[string]string
-	Description     string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID             string
+	Name           string
+	Type           string
+	Version        string
+	Enabled        bool
+	Namespace      string
+	ResourceQuotas []ResourceQuota
+	ScopeSelector  map[string]string
+	Description    string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // ResourceQuota defines a quota for a specific resource
@@ -71,10 +71,10 @@ func (qp *QuotaPolicy) Validate() error {
 
 // QuotaManager manages resource quotas
 type QuotaManager struct {
-	mu              sync.RWMutex
-	quotaPolicies   map[string]*QuotaPolicy
-	usage           map[string]ResourceUsage
-	reservations    map[string]Reservation
+	mu               sync.RWMutex
+	quotaPolicies    map[string]*QuotaPolicy
+	usage            map[string]ResourceUsage
+	reservations     map[string]Reservation
 	maxRetryAttempts int
 }
 
@@ -92,13 +92,13 @@ type ResourceUsage struct {
 
 // Reservation represents a resource reservation
 type Reservation struct {
-	ID            string
-	Namespace     string
-	Resource      string
-	Amount        int64
-	Duration      time.Duration
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
+	ID        string
+	Namespace string
+	Resource  string
+	Amount    int64
+	Duration  time.Duration
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 // NewQuotaManager creates a new quota manager
@@ -267,10 +267,10 @@ func (qm *QuotaManager) CleanupExpiredReservations() {
 
 // NamespaceQuotaScope defines quota scope for a namespace
 type NamespaceQuotaScope struct {
-	Namespace     string
-	SoftQuotas    map[string]int64
-	HardQuotas    map[string]int64
-	TimeWindow    time.Duration
+	Namespace      string
+	SoftQuotas     map[string]int64
+	HardQuotas     map[string]int64
+	TimeWindow     time.Duration
 	AlertThreshold float64 // e.g., 0.8 for 80%
 }
 
@@ -297,26 +297,26 @@ func (nqs *NamespaceQuotaScope) SetHardQuota(resource string, limit int64) {
 
 // PriorityBasedQuota assigns different quotas based on priority
 type PriorityBasedQuota struct {
-	Priority      int // Higher number = higher priority
+	Priority       int // Higher number = higher priority
 	ResourceLimits map[string]int64
-	Description   string
+	Description    string
 }
 
 // QuotaScheduler schedules quota assignments
 type QuotaScheduler struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	schedules map[string]QuotaSchedule
 }
 
 // QuotaSchedule defines a scheduled quota change
 type QuotaSchedule struct {
-	ID        string
-	Namespace string
-	Resource  string
-	NewQuota  int64
-	StartTime time.Time
-	EndTime   time.Time
-	Recurring string // "daily", "weekly", "monthly"
+	ID          string
+	Namespace   string
+	Resource    string
+	NewQuota    int64
+	StartTime   time.Time
+	EndTime     time.Time
+	Recurring   string // "daily", "weekly", "monthly"
 	Description string
 }
 

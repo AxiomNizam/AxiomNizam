@@ -1,0 +1,472 @@
+## AxiomNizam Integration Layer - Quick Reference
+
+### Package Overview
+
+The integration package (`internal/integration/`) ties together all platform subsystems:
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `data_platform.go` | 280 | Data mesh + API banks integration |
+| `compliance.go` | 320 | Audit, compliance, access control |
+| `monitoring.go` | 380 | Health checks, metrics, alerts |
+| `demo.go` | 400 | System demonstration & examples |
+| `integration_test.go` | 500 | Comprehensive test suite |
+
+---
+
+### Global Access Points
+
+```go
+// Data mesh and APIs
+mesh.GlobalDataMesh
+apibanks.GlobalAPIBankManager
+
+// Integration components
+integration.GlobalDataPlatformIntegration
+integration.GlobalCatalogIntegration
+integration.GlobalDataQualityMonitor
+integration.GlobalDataLineageAnalyzer
+integration.GlobalComplianceAuditor
+integration.GlobalDataAccessControl
+
+// Monitoring
+integration.GlobalHealthMonitor
+integration.GlobalPlatformMetricsCollector
+integration.GlobalAlertManager
+```
+
+---
+
+### Common Operations
+
+#### Create Domain
+```go
+domain := &mesh.DataDomain{
+    Name: "Finance",
+    Owner: "finance-team",
+}
+mesh.GlobalDataMesh.CreateDomain(ctx, domain)
+```
+
+#### Create Data Product
+```go
+product := &mesh.DataProduct{
+    Name: "Transactions",
+    Owner: "finance-team",
+    Schema: map[string]interface{}{
+        "id": "string",
+        "amount": "float64",
+    },
+    SLA: mesh.SLA{
+        Availability: "99.9%",
+    },
+}
+mesh.GlobalDataMesh.CreateDataProduct(ctx, "Finance", product)
+```
+
+#### Subscribe to Product
+```go
+subscription, err := mesh.GlobalDataMesh.Subscribe(ctx, 
+    "Finance", "Transactions", "analytics-team", &mesh.DataPort{})
+```
+
+#### Create API Bank
+```go
+bank := &apibanks.APIBank{
+    Name: "CorporateAPIs",
+    Owner: "api-team",
+    Tags: []string{"production"},
+}
+apibanks.GlobalAPIBankManager.CreateBank(ctx, bank)
+```
+
+#### Add API to Bank
+```go
+api := &apibanks.APIReference{
+    Name: "TransactionAPI",
+    Endpoint: "https://api.example.com/v1/transactions",
+    DataClasses: []string{"financial"},
+}
+apibanks.GlobalAPIBankManager.AddAPIToBank(ctx, "CorporateAPIs", api)
+```
+
+#### Record Audit Entry
+```go
+err := integration.GlobalComplianceAuditor.RecordOperation(ctx, 
+    integration.Operation{
+        Operation: "DataAccess",
+        User: "user1",
+        Resource: "Finance/Transactions",
+        ResourceType: "DataProduct",
+        Action: "read",
+        Status: "success",
+    })
+```
+
+#### Check System Health
+```go
+health := integration.GlobalHealthMonitor.CheckHealth(ctx)
+// health.Status: Healthy | Degraded | Unhealthy
+// health.Components: []ComponentHealth
+// health.Uptime: duration since start
+```
+
+#### Generate Compliance Report
+```go
+report := integration.GlobalComplianceAuditor.GenerateReport(
+    integration.AuditFilter{
+        User: "user1",
+        Since: time.Now().Add(-24 * time.Hour),
+    })
+// report.TotalOperations
+// report.SuccessfulOps
+// report.DeniedOps
+// report.RiskAssessment
+```
+
+#### Check Data Quality
+```go
+quality := integration.GlobalDataQualityMonitor.CheckProductQuality(
+    "Finance", "Transactions")
+// quality["qualityScore"]: 0-100
+// quality["subscriptions"]: count
+// quality["hasSLA"]: bool
+// quality["hasPorts"]: bool
+```
+
+#### Analyze Data Lineage
+```go
+analysis := integration.GlobalDataLineageAnalyzer.AnalyzeDataFlow(
+    "Finance", "Transactions")
+// analysis["downstream"]: consumers
+// analysis["upstream"]: sources
+// analysis["relatedProducts"]: related data
+```
+
+#### Search Unified Catalog
+```go
+results := integration.GlobalCatalogIntegration.UnifiedSearch("financial")
+// results["apiBanks"]: []APIReference
+// results["dataProducts"]: []DataProduct
+```
+
+#### Collect Platform Metrics
+```go
+metrics := integration.GlobalPlatformMetricsCollector.CollectMetrics(ctx)
+// metrics.DataMeshMetrics["domainCount"]
+// metrics.APIBankMetrics["bankCount"]
+// metrics.ComplianceMetrics["totalOperations"]
+// metrics.PerformanceMetrics
+```
+
+---
+
+### CLI Command Examples
+
+```bash
+# Data mesh operations
+axiomnizamctl mesh domain create --name Finance --owner team1
+axiomnizamctl mesh product create --domain Finance --name Transactions
+axiomnizamctl mesh subscribe --domain Finance --product Transactions --subscriber team2
+axiomnizamctl mesh lineage trace --domain Finance --product Transactions
+
+# API bank operations
+axiomnizamctl apibank create --name CorporateAPIs --owner team1
+axiomnizamctl apibank add-api --bank CorporateAPIs --name TransactionAPI --endpoint https://api.example.com
+axiomnizamctl apibank search --tag financial
+
+# Health and monitoring
+axiomnizamctl health check
+axiomnizamctl alerts list
+axiomnizamctl metrics collect
+
+# Compliance and quality
+axiomnizamctl compliance report
+axiomnizamctl compliance audit --user user1
+axiomnizamctl quality check --domain Finance
+axiomnizamctl catalog search --tag financial
+axiomnizamctl lineage trace --domain Finance --product Transactions
+```
+
+---
+
+### Workflow Patterns
+
+#### Pattern 1: Create & Audit
+```go
+// Operation with automatic auditing
+domain := &mesh.DataDomain{Name: "Finance", Owner: "team"}
+mesh.GlobalDataMesh.CreateDomain(ctx, domain)
+
+// Automatically recorded in audit
+integration.GlobalComplianceAuditor.RecordOperation(ctx, 
+    integration.Operation{
+        Operation: "DomainCreation",
+        User: "admin",
+        Resource: "Finance",
+        Status: "success",
+    })
+```
+
+#### Pattern 2: Search & Discover
+```go
+// Unified discovery across platforms
+results := integration.GlobalCatalogIntegration.UnifiedSearch("financial")
+
+// Contains both:
+// - APIs from banks with "financial" tag
+// - Data products with "financial" tag
+```
+
+#### Pattern 3: Quality & Compliance
+```go
+// Quality check
+quality := integration.GlobalDataQualityMonitor.GetQualityReport("Finance")
+
+// Generates compliance report
+report := integration.GlobalComplianceAuditor.GenerateReport(
+    integration.AuditFilter{})
+```
+
+#### Pattern 4: Lineage & Impact
+```go
+// Analyze data flow
+analysis := integration.GlobalDataLineageAnalyzer.AnalyzeDataFlow(
+    "Finance", "Transactions")
+
+// Shows downstream consumers, upstream sources, related products
+```
+
+#### Pattern 5: Health & Alerts
+```go
+// Check health
+health := integration.GlobalHealthMonitor.CheckHealth(ctx)
+
+// Generate alerts if unhealthy
+alerts := integration.GlobalAlertManager.GenerateAlerts(ctx)
+
+// Get metrics
+metrics := integration.GlobalPlatformMetricsCollector.CollectMetrics(ctx)
+```
+
+---
+
+### Type Definitions
+
+#### DataDomain
+```go
+type DataDomain struct {
+    Name          string
+    Owner         string
+    Namespace     string
+    Tags          []string
+    DataProducts  []*DataProduct
+    CreatedAt     time.Time
+}
+```
+
+#### DataProduct
+```go
+type DataProduct struct {
+    Name          string
+    Owner         string
+    Namespace     string
+    Schema        map[string]interface{}
+    SLA           SLA
+    Ports         []*DataPort
+    Subscriptions []*Subscription
+    Tags          []string
+    CreatedAt     time.Time
+}
+```
+
+#### APIBank
+```go
+type APIBank struct {
+    Name      string
+    Owner     string
+    Namespace string
+    Tags      []string
+    APIs      []*APIReference
+    CreatedAt time.Time
+}
+```
+
+#### Operation (Audit)
+```go
+type Operation struct {
+    Operation    string                 // Action type
+    User         string                 // Who performed
+    Resource     string                 // What resource
+    ResourceType string                 // Resource kind
+    Action       string                 // Specific action
+    Status       string                 // success|denied|failed
+    Details      map[string]interface{} // Additional info
+}
+```
+
+#### AuditFilter
+```go
+type AuditFilter struct {
+    User         string
+    ResourceType string
+    Operation    string
+    Status       string
+    Since        time.Time
+    Until        time.Time
+}
+```
+
+---
+
+### Error Handling
+
+```go
+// Domain operations
+if err := mesh.GlobalDataMesh.CreateDomain(ctx, domain); err != nil {
+    log.Printf("Failed to create domain: %v", err)
+}
+
+// API bank operations
+if err := apibanks.GlobalAPIBankManager.CreateBank(ctx, bank); err != nil {
+    log.Printf("Failed to create bank: %v", err)
+}
+
+// Compliance recording
+if err := integration.GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+    log.Printf("Failed to record audit: %v", err)
+}
+
+// Subscription
+sub, err := mesh.GlobalDataMesh.Subscribe(ctx, domain, product, subscriber, port)
+if err != nil {
+    log.Printf("Failed to subscribe: %v", err)
+}
+```
+
+---
+
+### Testing
+
+#### Run All Integration Tests
+```bash
+go test ./internal/integration/... -v
+```
+
+#### Run Specific Test
+```bash
+go test ./internal/integration/... -v -run TestDataMeshIntegration
+```
+
+#### Run Benchmarks
+```bash
+go test ./internal/integration/... -bench=. -benchmem
+```
+
+#### Coverage
+```bash
+go test ./internal/integration/... -cover
+```
+
+---
+
+### Performance Tips
+
+1. **Use Context**: Always pass context with timeout
+2. **Batch Operations**: Group multiple operations together
+3. **Cache Results**: Cache domain/product lookups
+4. **Async Auditing**: Non-blocking audit recording
+5. **Monitor Health**: Regular health checks
+6. **Track Metrics**: Use metrics for observability
+
+---
+
+### Debugging
+
+```go
+// Enable verbose logging
+if verbose {
+    fmt.Printf("Creating domain: %+v\n", domain)
+}
+
+// Check current state
+domains := mesh.GlobalDataMesh.ListDomains()
+banks := apibanks.GlobalAPIBankManager.ListBanks()
+
+// Health diagnostics
+health := integration.GlobalHealthMonitor.CheckHealth(ctx)
+fmt.Printf("System status: %s\n", health.Status)
+
+// Audit trail
+records := integration.GlobalComplianceAuditor.GetAuditLog(filter)
+for _, r := range records {
+    fmt.Printf("%s: %s by %s\n", r.Timestamp, r.Operation, r.User)
+}
+```
+
+---
+
+### Best Practices
+
+1. **Always audit operations** - Record everything for compliance
+2. **Monitor quality** - Regular quality checks prevent issues
+3. **Track lineage** - Understand data dependencies
+4. **Check health** - Proactive monitoring catches problems
+5. **Use unified search** - Single interface for discovery
+6. **Policy enforcement** - Use access control consistently
+7. **Error handling** - Check errors from all operations
+8. **Context usage** - Always use context with timeout
+9. **Test integration** - Run tests before deployment
+10. **Document changes** - Keep team informed of new resources
+
+---
+
+### Troubleshooting
+
+**Domain not found**
+```go
+domain := mesh.GlobalDataMesh.GetDomain("DomainName")
+if domain == nil {
+    // Create it first
+}
+```
+
+**Quality score low**
+```go
+quality := integration.GlobalDataQualityMonitor.CheckProductQuality(domain, product)
+// Missing: SLA, schema, ports, or owner
+// Add missing items to improve score
+```
+
+**Audit not recording**
+```go
+// Ensure operation recorded
+err := integration.GlobalComplianceAuditor.RecordOperation(ctx, op)
+// Check error and handle accordingly
+```
+
+**Health check degraded**
+```go
+health := integration.GlobalHealthMonitor.CheckHealth(ctx)
+for _, comp := range health.Components {
+    if comp.Status != integration.Healthy {
+        fmt.Printf("Component %s: %s\n", comp.Component, comp.Error)
+    }
+}
+```
+
+---
+
+### Useful Constants
+
+```go
+// Health status values
+integration.Healthy   // "healthy"
+integration.Degraded  // "degraded"
+integration.Unhealthy // "unhealthy"
+
+// Alert severity values
+"info"     // Informational
+"warning"  // Warning
+"critical" // Critical
+```

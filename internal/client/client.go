@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,10 +14,11 @@ import (
 
 // Client represents the AxiomNizam API client
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	token      string
-	userAgent  string
+	baseURL       string
+	httpClient    *http.Client
+	token         string
+	userAgent     string
+	skipTLSVerify bool
 }
 
 // NewClient creates a new API client
@@ -38,6 +40,18 @@ func (c *Client) SetToken(token string) {
 // SetBaseURL changes the base URL
 func (c *Client) SetBaseURL(baseURL string) {
 	c.baseURL = baseURL
+}
+
+// SetSkipTLSVerify skips TLS certificate verification
+func (c *Client) SetSkipTLSVerify(skip bool) {
+	c.skipTLSVerify = skip
+	if skip {
+		c.httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+	}
 }
 
 // Request represents an API request
@@ -135,8 +149,8 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 
 // ErrorResponse represents an error from the API
 type ErrorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
 	Details map[string]interface{} `json:"details,omitempty"`
 }
 
@@ -180,6 +194,11 @@ func (resp *Response) ParseJSON(v interface{}) error {
 	return json.Unmarshal(resp.Body, v)
 }
 
+// JSON parses the response body into a struct (alias for ParseJSON)
+func (resp *Response) JSON(v interface{}) error {
+	return resp.ParseJSON(v)
+}
+
 // String returns the response body as string
 func (resp *Response) String() string {
 	return string(resp.Body)
@@ -197,4 +216,21 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// Convenience methods that use background context for simple calls
+func (c *Client) GetSimple(path string) (*Response, error) {
+	return c.Get(context.Background(), path, nil)
+}
+
+func (c *Client) PostSimple(path string, body interface{}) (*Response, error) {
+	return c.Post(context.Background(), path, body)
+}
+
+func (c *Client) PutSimple(path string, body interface{}) (*Response, error) {
+	return c.Put(context.Background(), path, body)
+}
+
+func (c *Client) DeleteSimple(path string) (*Response, error) {
+	return c.Delete(context.Background(), path)
 }

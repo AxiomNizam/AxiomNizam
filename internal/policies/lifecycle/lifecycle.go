@@ -7,36 +7,36 @@ import (
 
 // LifecyclePolicy defines resource lifecycle policies
 type LifecyclePolicy struct {
-	ID            string
-	Name          string
-	Type          string
-	Version       string
-	Enabled       bool
-	Rules         []LifecycleRule
-	DeletePolicy  DeletePolicy
+	ID               string
+	Name             string
+	Type             string
+	Version          string
+	Enabled          bool
+	Rules            []LifecycleRule
+	DeletePolicy     DeletePolicy
 	TransitionPolicy TransitionPolicy
-	Description   string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	Description      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // LifecycleRule defines a lifecycle rule
 type LifecycleRule struct {
-	ID            string
-	Filter        LifecycleFilter
-	Transitions   []Transition
-	Expiration    *Expiration
+	ID                           string
+	Filter                       LifecycleFilter
+	Transitions                  []Transition
+	Expiration                   *Expiration
 	NoncurrentVersionTransitions []Transition
 	NoncurrentVersionExpiration  *Expiration
-	AbortIncompleteMultipart *AbortIncompleteMultipart
+	AbortIncompleteMultipart     *AbortIncompleteMultipart
 }
 
 // LifecycleFilter filters objects for lifecycle rules
 type LifecycleFilter struct {
-	Prefix       string
-	Tags         map[string]string
-	ObjectSize   *SizeRange
-	CreatedTime  *TimeRange
+	Prefix      string
+	Tags        map[string]string
+	ObjectSize  *SizeRange
+	CreatedTime *TimeRange
 }
 
 // SizeRange defines a size range filter
@@ -126,9 +126,9 @@ func (lp *LifecyclePolicy) Validate() error {
 
 // LifecycleManager manages resource lifecycles
 type LifecycleManager struct {
-	policies     []*LifecyclePolicy
-	transitions  map[string]TransitionState
-	expirations  map[string]ExpirationState
+	policies    []*LifecyclePolicy
+	transitions map[string]TransitionState
+	expirations map[string]ExpirationState
 }
 
 // TransitionState tracks transition progress
@@ -256,13 +256,13 @@ func (lm *LifecycleManager) shouldExpire(resourceMeta map[string]interface{}, ex
 
 // LifecycleAction represents an action to perform
 type LifecycleAction struct {
-	Type        string // "transition", "expire", "delete", "tag"
-	ResourceID  string
-	TargetClass string
+	Type         string // "transition", "expire", "delete", "tag"
+	ResourceID   string
+	TargetClass  string
 	ScheduledFor time.Time
-	Executed    bool
-	ExecutedAt  time.Time
-	Error       string
+	Executed     bool
+	ExecutedAt   time.Time
+	Error        string
 }
 
 // ExecuteAction executes a lifecycle action
@@ -314,11 +314,11 @@ type ResourceVersionControl struct {
 
 // DataLifecycleStage represents a stage in data lifecycle
 type DataLifecycleStage struct {
-	Name            string
-	Duration        time.Duration
-	Action          string // "retain", "transition", "delete", "archive"
-	TargetLocation  string
-	Retention       time.Duration
+	Name           string
+	Duration       time.Duration
+	Action         string // "retain", "transition", "delete", "archive"
+	TargetLocation string
+	Retention      time.Duration
 }
 
 // DataLifecycleFlow defines the complete lifecycle flow

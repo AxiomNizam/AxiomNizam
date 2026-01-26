@@ -219,6 +219,9 @@ func (as *APIServer) RegisterRoutes() {
 	api.DELETE("/:namespace/:kind/:name", as.DeleteResource)
 	api.GET("/:namespace/:kind", as.ListResources)
 
+	// Apply endpoint (CLI applies resources here)
+	api.POST("/:namespace/:kind/apply", as.ApplyResource)
+
 	// Status subresource
 	api.GET("/:namespace/:kind/:name/status", as.GetResourceStatus)
 	api.PUT("/:namespace/:kind/:name/status", as.UpdateResourceStatus)
@@ -378,6 +381,95 @@ func (as *APIServer) GetResourceStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resource.GetStatus())
+}
+
+// ApplyResource applies a resource (create or update + enqueue for reconciliation)
+func (as *APIServer) ApplyResource(c *gin.Context) {
+	kind := c.Param("kind")
+	namespace := c.Param("namespace")
+
+	var resource resources.Resource
+
+	// Unmarshal based on kind
+	switch kind {
+	case "workloads":
+		var wr resources.WorkloadResource
+		if err := c.ShouldBindJSON(&wr); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		wr.ObjectMeta.Namespace = namespace
+		resource = &wr
+
+	case "pipelines":
+		var pr resources.PipelineResource
+		if err := c.ShouldBindJSON(&pr); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		pr.ObjectMeta.Namespace = namespace
+		resource = &pr
+
+	case "schedules":
+		var sr resources.ScheduleResource
+		if err := c.ShouldBindJSON(&sr); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		sr.ObjectMeta.Namespace = namespace
+		resource = &sr
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown resource kind: %s", kind)})
+		return
+	}
+
+	// Check if it already exists
+	meta := resource.GetObjectMeta()
+	existing, err := as.store.Get(namespace, meta.Name)
+
+	if err != nil {
+		// Create new resource
+		resource.GetObjectMeta().Generation = 1
+		resource.GetObjectMeta().CreatedAt = time.Now()
+		resource.GetObjectMeta().UpdatedAt = time.Now()
+
+		if err := as.store.Create(resource); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		// Update existing resource
+		if existing.GetObjectMeta().Generation != meta.Generation {
+			// Generation mismatch - conflict
+			c.JSON(http.StatusConflict, gin.H{"error": "Generation mismatch"})
+			return
+		}
+
+		resource.GetObjectMeta().Generation = existing.GetObjectMeta().Generation + 1
+		resource.GetObjectMeta().CreatedAt = existing.GetObjectMeta().CreatedAt
+		resource.GetObjectMeta().UpdatedAt = time.Now()
+
+		if err := as.store.Update(resource); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	// Return with status=Pending to indicate reconciliation will run
+	status := resource.GetStatus()
+	if status == nil {
+		status = &resources.ObjectStatus{}
+	}
+	status.Phase = "Pending"
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"kind":       kind,
+		"name":       meta.Name,
+		"namespace":  namespace,
+		"generation": resource.GetObjectMeta().Generation,
+		"status":     status,
+	})
 }
 
 // UpdateResourceStatus updates resource status

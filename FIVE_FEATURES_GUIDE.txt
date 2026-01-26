@@ -1,0 +1,592 @@
+AXIOM NIZAM - 5 KEY FEATURES IMPLEMENTATION GUIDE
+================================================
+
+This document describes the 5 core architectural features implemented in the AxiomNizam platform.
+All features follow Kubernetes design patterns and enterprise standards.
+
+
+1. ADMISSION CONTROLLER FLOW
+=============================
+
+PURPOSE:
+The admission controller enforces policies and validations BEFORE resources are persisted.
+It provides a gating mechanism for resource creation/update/delete operations.
+
+FLOW DIAGRAM:
+Request → Validation → Mutation → Authorization → Policy Enforcement → Quota Check → Admit/Deny
+
+FILE: internal/controllers/admission_controller.go (460 lines)
+
+PHASES:
+1. Validation (PhaseValidation)
+   - Schema validation
+   - Required fields check
+   - Registered webhook validators
+   - Output: Allowed or Denied with reason
+
+2. Mutation (PhaseMutation)
+   - Apply default values
+   - Add system fields (timestamps, generation)
+   - Custom mutations via registered mutators
+   - Output: List of mutations to apply
+
+3. Authorization (PhaseAuthorization)
+   - RBAC checks
+   - User role verification
+   - Namespace scoping
+   - Output: Allowed based on user permissions
+
+4. Policy Enforcement (PhasePolicyEnforce)
+   - OPA-style policy evaluation
+   - Custom policy rules
+   - Compliance checks
+   - Output: Allowed or Denied with policy reason
+
+5. Resource Quota (PhaseResourceQuota)
+   - Namespace quota checks
+   - Resource limit enforcement
+   - Output: Allowed based on quota availability
+
+KEY TYPES:
+- AdmissionRequest: Incoming request to create/update/delete
+- AdmissionResponse: Decision with allowed/denied/warning
+- AdmissionController: Main orchestrator with all phases
+- WebhookValidator: Custom validation hooks
+- WebhookMutator: Custom mutation hooks
+- AdmissionMetrics: Performance and decision tracking
+
+USAGE PATTERN:
+```go
+admCtrl := NewAdmissionController(eventBus, admissionPolicy, rbacEngine, quotaMgr)
+admCtrl.RegisterValidator(myValidator)
+resp, err := admCtrl.Admit(ctx, request)
+if !resp.Allowed {
+    // Deny resource creation
+    return fmt.Errorf("admission denied: %s", resp.Reason)
+}
+```
+
+AUDIT:
+All admission decisions are logged with:
+- Request ID and correlation ID
+- Decision (Allowed/Denied/Warned)
+- User ID and role
+- Policies enforced
+- Processing time per phase
+- Returned via GetAuditLog(kind, namespace, limit)
+
+
+2. RBAC ENGINE
+==============
+
+PURPOSE:
+Role-Based Access Control following Kubernetes patterns. Supports role hierarchy,
+subject binding, and resource-level permissions with verbs.
+
+FILE: internal/controllers/rbac_engine.go (580 lines)
+
+CORE CONCEPTS:
+
+Role: Namespace-scoped permissions
+  - Contains PolicyRules
+  - Bound to subjects via RoleBinding
+
+ClusterRole: Cluster-wide permissions
+  - Contains PolicyRules
+  - Bound to subjects via ClusterRoleBinding
+
+PolicyRule: Resource + Verb + Optional Conditions
+  - Verbs: create, read, update, delete, list, watch, patch, *
+  - Resources: pods, deployments, services, * (wildcard supported)
+  - Conditions: fine-grained control (ownership, labels, etc.)
+
+Subject: User, Group, or ServiceAccount
+  - Type: "User", "Group", "ServiceAccount"
+  - Name: subject identifier
+  - Namespace: optional (for ServiceAccounts)
+
+RBAC CHECK FLOW:
+1. Find all ClusterRoles + RoleBindings for subject
+2. Find all Roles + RoleBindings in namespace
+3. Collect matching PolicyRules
+4. Check verbs and resources
+5. Return: Allowed or Denied
+
+RESOURCE QUOTA MANAGER:
+Integrated resource quota enforcement
+- Per-namespace quota limits
+- Resource kind limits (maxCount, maxCPU, maxMemory)
+- Usage tracking
+- CanAllocate checks before admission
+
+USAGE PATTERN:
+```go
+rbacEngine := NewRBACEngine()
+role := &Role{Name: "editor", Namespace: "ns1", Rules: [...]PolicyRule}
+rbacEngine.CreateRole(ctx, role)
+
+allowed, reason := rbacEngine.CanPerform(ctx, "user-id", "Pod", "create", "ns1")
+if !allowed {
+    return fmt.Errorf("forbidden: %s", reason)
+}
+
+auditLog := rbacEngine.GetAuditLog(ctx, "user-id", nil, 100)
+```
+
+AUDIT:
+RBACAuditLog tracks:
+- User ID
+- Subject details
+- Action and resource
+- Decision (Allowed/Denied)
+- Matching rules
+- Timestamp for compliance
+
+
+3. EVENT MODEL & LIFECYCLE
+===========================
+
+PURPOSE:
+Resource lifecycle events with pub/sub, filtering, watching, and aggregation.
+Events track resource state changes, policy violations, errors, health status.
+
+FILE: internal/events/resource_events.go (520 lines)
+
+EVENT TYPES:
+Resource Lifecycle:
+  - EventResourceCreated: resource created
+  - EventResourceUpdated: resource updated
+  - EventResourceDeleted: resource deleted
+  - EventResourceReconciled: reconciliation completed
+  - EventResourceStatusChange: status changed
+
+Health:
+  - EventResourceHealthy: resource healthy
+  - EventResourceUnhealthy: resource unhealthy
+  - EventResourceError: error occurred
+  - EventResourceWarning: warning occurred
+
+Policy:
+  - EventPolicyEnforced: policy applied
+  - EventPolicyViolation: policy violated
+  - EventPolicyMutated: resource mutated by policy
+
+Admission:
+  - EventAdmissionAccepted: admission passed
+  - EventAdmissionRejected: admission rejected
+
+Backup:
+  - EventBackupStarted, EventBackupCompleted, EventBackupFailed
+
+RESOURCEEVENT STRUCTURE:
+```go
+ResourceEvent {
+    ID: string                      // unique event ID
+    Type: ResourceEventType         // event type
+    Kind: string                    // resource kind (Pod, Deployment, etc)
+    Name: string                    // resource name
+    Namespace: string               // namespace
+    Timestamp: time.Time            // when event occurred
+    Count: int                       // aggregation count
+    Severity: string                // info, warning, error, critical
+    Reason: string                  // reason code
+    Message: string                 // human-readable message
+    Source: string                  // who published (controller, admission, etc)
+    Data: map[string]interface{}   // additional context
+    CorrelationID: string          // trace across related events
+}
+```
+
+PUB/SUB PATTERNS:
+
+1. Subscribe to specific event types:
+```go
+eventBus.SubscribeToResourceEvents(
+    []ResourceEventType{EventResourceCreated, EventResourceUpdated},
+    handler,
+)
+```
+
+2. Watch with filters:
+```go
+filter := &EventFilter{
+    Kind: "Pod",
+    Namespace: "production",
+    Types: []ResourceEventType{EventResourceError},
+}
+watcher, _ := eventBus.WatchResourceEvents(ctx, filter)
+for event := range watcher.Channel {
+    log.Printf("Event: %s", event.Message)
+}
+```
+
+3. Query event history:
+```go
+history := eventBus.GetEventHistory(ctx, "Pod", "default", "my-pod", 50)
+for _, event := range history {
+    fmt.Printf("%s: %s\n", event.Timestamp, event.Message)
+}
+```
+
+AGGREGATION:
+Similar events are aggregated by EventAggregator:
+- Counts repeated occurrences
+- Tracks state (ongoing vs completed)
+- Reduces event spam
+
+RETENTION:
+RetentionPolicy controls:
+- MaxAge: delete events older than 7 days
+- MaxCount: keep max 100k events
+- ArchiveAfter: archive to external storage after 30 days
+
+
+4. CONTROLLER RECONCILIATION TEMPLATE
+======================================
+
+PURPOSE:
+Unified reconciliation pattern for all controllers. Handles full lifecycle:
+initialization → admission → observation → reconciliation → finalization.
+
+FILE: internal/controllers/controller_reconciler.go (540 lines)
+
+RECONCILIATION PHASES:
+
+1. Initialize (PhaseInitialize)
+   - Fetch resource from store
+   - Detect deletion (DeletionTimestamp set)
+   - Parse key into resource reference
+   - Output: ReconciliationState with resource
+
+2. Admit (PhaseAdmit)
+   - Check admission policies
+   - Reject if policy violations
+   - Output: Allowed or error
+
+3. Observe (PhaseObserve)
+   - Run registered observers
+   - Collect current state
+   - Feed into StatusCollector
+   - Output: Observed state captured
+
+4. Reconcile (PhaseReconcile)
+   - Perform domain-specific logic
+   - Update resource to desired state
+   - Add conditions tracking
+   - Output: Success or error
+
+5. Finalize (PhaseFinalize)
+   - Handle resource deletion
+   - Run cleanup finalizers
+   - Remove finalizer to allow GC
+   - Output: Resource deleted or ready
+
+6. Complete (PhaseComplete)
+   - Update status
+   - Emit success event
+   - Calculate metrics
+   - Output: Reconciliation done
+
+RETRY POLICY:
+```go
+RetryPolicy {
+    MaxRetries: 5
+    InitialBackoff: 1s
+    MaxBackoff: 1m
+    BackoffMultiplier: 2.0  // exponential: 1s, 2s, 4s, 8s, 16s
+}
+```
+
+RECONCILIATION STATE TRACKING:
+```go
+ReconciliationState {
+    Key: string                    // namespace/name
+    Status: StatusPending|Processing|Success|Requeue|Failed
+    Phase: current phase
+    RetryCount: int
+    Conditions: []Condition        // detailed state tracking
+    Events: []ResourceEvent        // emitted events
+    ProcessingTime: duration
+    Error: error                   // last error
+}
+```
+
+FINALIZERS & CLEANUP:
+Finalizers prevent accidental deletion:
+```go
+// Added on create
+finalizer := "finalizer.controller.io/cleanup"
+metadata.Finalizers = [finalizer]
+
+// On delete (DeletionTimestamp set):
+1. Run cleanup logic
+2. Remove finalizer
+3. Update resource (removes from API server)
+```
+
+OBSERVERS:
+Custom observers report resource state:
+```go
+type ResourceObserver interface {
+    Name() string
+    Observe(ctx, res) (map[string]interface{}, error)
+    GetInterval() time.Duration
+}
+
+reconciler.RegisterObserver(&MyObserver{})
+```
+
+INTEGRATION:
+All controllers inherit from this template:
+```go
+reconciler := NewControllerReconciler(
+    "pod-controller",
+    "Pod",
+    eventBus,
+    admissionCtrl,
+    rbacEngine,
+    resourceMgr,
+    workQueue,
+)
+
+// Implement per-controller logic
+reconciler.performReconciliationLogic = func(ctx, state) error {
+    // Update pod to desired state
+}
+```
+
+
+5. APIRESOURCE & CRD SPECIFICATION
+===================================
+
+PURPOSE:
+Kubernetes-compatible custom resource definitions with schema validation,
+API versioning, subresources, and conversion webhooks.
+
+FILE: internal/models/apiresource.go (650 lines)
+
+APIRESOURCE STRUCTURE:
+```yaml
+apiVersion: example.com/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+  namespace: default
+  labels:
+    app: myapp
+  annotations:
+    description: "Example deployment"
+  generation: 1
+  resourceVersion: "12345"
+spec:
+  replicas: 3
+  image: "nginx:latest"
+status:
+  phase: Running
+  observedGeneration: 1
+  conditions:
+  - type: Ready
+    status: "True"
+    reason: "AllPodsReady"
+    message: "All 3 pods are running"
+    lastUpdateTime: 2024-01-26T10:00:00Z
+```
+
+CUSTOM RESOURCE DEFINITION (CRD):
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: deployments.example.com
+spec:
+  group: example.com
+  scope: Namespaced
+  names:
+    plural: deployments
+    singular: deployment
+    kind: Deployment
+    shortNames: [dep]
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              replicas:
+                type: integer
+                minimum: 1
+                maximum: 100
+              image:
+                type: string
+                pattern: "^[a-z0-9]+/[a-z0-9:.-]+$"
+            required: [replicas, image]
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Replicas
+      type: integer
+      jsonPath: .spec.replicas
+    - name: Status
+      type: string
+      jsonPath: .status.phase
+```
+
+VALIDATION SCHEMA:
+JSONSchema with OpenAPI v3 validation:
+- Type checking: string, integer, object, array, boolean
+- String: pattern, minLength, maxLength, enum
+- Numeric: minimum, maximum
+- Array: minItems, maxItems
+- Object: required fields, properties
+- Custom: x-kubernetes-validations with CEL expressions
+
+VALIDATION RULES:
+```go
+schema := &ValidationSchema{
+    OpenAPIV3Schema: &JSONSchema{
+        Type: "object",
+        Properties: map[string]*JSONSchema{
+            "spec": {
+                Type: "object",
+                Properties: map[string]*JSONSchema{
+                    "replicas": {
+                        Type: "integer",
+                        Minimum: ptrFloat(1),
+                        Maximum: ptrFloat(100),
+                    },
+                },
+                Required: []string{"replicas"},
+            },
+        },
+    },
+}
+
+validator := NewAPIResourceValidator(schema)
+if err := validator.Validate(resource); err != nil {
+    return fmt.Errorf("validation failed: %w", err)
+}
+```
+
+API VERSIONING:
+```go
+Versions: []CRDVersion{
+    {Name: "v1alpha1", Served: true, Storage: false},
+    {Name: "v1beta1", Served: true, Storage: false},
+    {Name: "v1", Served: true, Storage: true}, // Current storage version
+}
+```
+
+CONVERSION:
+```go
+Conversion: &ConversionStrategy{
+    Strategy: "Webhook",
+    Webhook: &WebhookConversion{
+        URL: "https://converter.example.com/convert",
+        ClientConfig: &ClientConfig{
+            Service: &ServiceReference{
+                Namespace: "default",
+                Name: "converter",
+                Path: "/convert",
+                Port: 8443,
+            },
+        },
+    },
+}
+```
+
+SUBRESOURCES:
+```go
+Subresources: &Subresources{
+    Status: &StatusSubresource{},  // /deployments/{name}/status
+    Scale: &ScaleSubresource{      // /deployments/{name}/scale
+        SpecReplicasPath: ".spec.replicas",
+        StatusReplicasPath: ".status.replicas",
+        LabelSelectorPath: ".spec.selector",
+    },
+}
+```
+
+ADDITIONAL PRINTER COLUMNS:
+```go
+AdditionalPrinterColumns: []PrinterColumn{
+    {Name: "Replicas", Type: "integer", JSONPath: ".spec.replicas"},
+    {Name: "Status", Type: "string", JSONPath: ".status.phase"},
+    {Name: "Age", Type: "date", JSONPath: ".metadata.createdAt"},
+}
+```
+
+RESOURCE FACTORY:
+```go
+factory := NewAPIResourceFactory("Deployment", "example.com/v1", schema)
+resource := factory.Create("my-deployment", "default", spec)
+
+jsonData, err := resource.AsJSON()
+// Convert to YAML for storage
+```
+
+
+INTEGRATION PATTERNS
+====================
+
+All 5 features work together in a cohesive pipeline:
+
+REQUEST PROCESSING:
+1. Request arrives
+2. AdmissionController processes through all phases
+   - RBAC engine checks permissions (phase 3)
+   - AdmissionPolicy evaluation (phase 4)
+   - Quota manager checks limits (phase 5)
+3. If approved, controller reconciliation starts
+4. ControllerReconciler runs through phases
+   - Re-checks admission (phaseAdmit)
+   - Observers report state (phaseObserve)
+   - Domain logic reconciles (phaseReconcile)
+5. Events published to EventBus
+6. Audit logs recorded in RBAC + Admission engines
+
+DATA FLOW:
+User Request
+  ↓
+Admission Controller (validates, mutates, checks RBAC/policy/quota)
+  ↓
+Resource Storage
+  ↓
+Controller Reconciler (observe, reconcile, finalize)
+  ↓
+Event Bus (publish resource events)
+  ↓
+Audit Logs (RBAC decisions + Admission decisions)
+
+ERROR HANDLING:
+- Admission denials prevent resource creation
+- Reconciliation errors trigger retry with exponential backoff
+- Policy violations logged and emitted as events
+- All decisions recorded in audit logs for compliance
+
+METRICS:
+- AdmissionMetrics: requests, decisions, policy violations, processing times
+- RBACMetrics: roles, bindings, decision counts
+- EventMetrics: total events, by type, watchers, dropped events
+- ReconciliationMetrics: total, successful, failed, requeued, avg time
+
+
+USAGE EXAMPLES
+==============
+
+See internal/controllers/INTEGRATION_EXAMPLES.go for:
+1. ExampleAdmissionControllerFlow()
+2. ExampleRBACEngine()
+3. ExampleEventModel()
+4. ExampleControllerReconciliation()
+5. ExampleAPIResource()
+
+Each example demonstrates:
+- How to create instances
+- How to configure
+- How to use
+- What output to expect

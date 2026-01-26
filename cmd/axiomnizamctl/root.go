@@ -13,29 +13,47 @@ var (
 	apiClient     *client.Client
 	outputFormat  string
 	namespace     string
+	verbose       bool
+	kubeconfig    string
+	contextName   string
+	dry           bool
 )
 
 var RootCmd = &cobra.Command{
 	Use:   "axiomnizamctl",
 	Short: "AxiomNizam CLI - Control plane for data APIs",
-	Long: `AxiomNizam is a Kubernetes-style control plane for managing APIs, policies, workflows, and data sources.
+	Long: `AxiomNizam CLI - Kubernetes-style control plane for APIs, policies, workflows, and data sources.
 
-Usage:
-  axiomnizamctl [command] [flags]
+AxiomNizam provides a kubectl-like interface for managing cloud-native data infrastructure.
+It supports declarative configuration management, policy enforcement, and automated workflows.
 
-Examples:
-  axiomnizamctl login
-  axiomnizamctl api apply -f api.yaml
-  axiomnizamctl policy list
-  axiomnizamctl workflow run daily-etl`,
+Website: https://axiom-nizam.io
+Docs: https://docs.axiom-nizam.io`,
+	Version: "1.0.0",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		var err error
 
-		// Initialize config manager
-		configManager, err = client.NewConfigManager()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to load config: %v\n", err)
+		// Skip config initialization for commands that don't need it
+		if skipConfigInit(cmd.Name()) {
 			return
+		}
+
+		// Initialize config manager
+		configPath := kubeconfig
+		if configPath == "" {
+			configPath = client.DefaultConfigPath()
+		}
+
+		configManager, err = client.NewConfigManagerWithPath(configPath)
+		if err != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "⚠️  Config initialization: %v\n", err)
+			}
+			configManager, _ = client.NewConfigManager()
+		}
+
+		if err := configManager.Load(); err != nil && verbose {
+			fmt.Fprintf(os.Stderr, "⚠️  Failed to load config: %v\n", err)
 		}
 
 		// Initialize API client
@@ -46,8 +64,35 @@ Examples:
 			if token != "" {
 				apiClient.SetToken(token)
 			}
+
+			// Override context if specified
+			if contextName != "" && contextName != config.Name {
+				if err := configManager.SetCurrentContext(contextName); err != nil && verbose {
+					fmt.Fprintf(os.Stderr, "⚠️  Failed to switch context: %v\n", err)
+				}
+				config = configManager.GetCurrentContext()
+				if config != nil {
+					apiClient.SetBaseURL(config.Cluster.Server)
+				}
+			}
+		} else if verbose {
+			fmt.Fprintf(os.Stderr, "⚠️  No context configured\n")
 		}
 	},
+}
+
+// skipConfigInit returns true for commands that don't need config initialization
+func skipConfigInit(cmdName string) bool {
+	noConfigCmds := map[string]bool{
+		"login":   true,
+		"logout":  true,
+		"version": true,
+		"config":  true,
+		"help":    true,
+		"--help":  true,
+		"-h":      true,
+	}
+	return noConfigCmds[cmdName]
 }
 
 var loginCmd = &cobra.Command{
@@ -134,23 +179,46 @@ func handleLogout() {
 }
 
 func init() {
+	// Global persistent flags
 	RootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "Output format: table, json, yaml, wide")
 	RootCmd.PersistentFlags().StringVar(&namespace, "namespace", "default", "Kubernetes namespace")
+	RootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: ~/.axiomnizam/config)")
+	RootCmd.PersistentFlags().StringVar(&contextName, "context", "", "Context to use (overrides current context)")
+	RootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
+	RootCmd.PersistentFlags().BoolVar(&dry, "dry-run", false, "Show what would be done without making changes")
 
+	// Auth commands
 	RootCmd.AddCommand(loginCmd)
 	RootCmd.AddCommand(logoutCmd)
-	RootCmd.AddCommand(versionCmd)
+	RootCmd.AddCommand(currentUserCmd)
+
+	// Resource commands
 	RootCmd.AddCommand(APICmd)
 	RootCmd.AddCommand(PolicyCmd)
 	RootCmd.AddCommand(WorkflowCmd)
 	RootCmd.AddCommand(DataSourceCmd)
 	RootCmd.AddCommand(JobCmd)
-	RootCmd.AddCommand(ConfigCmd)
-}
 
-func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	// Data platform commands
+	RootCmd.AddCommand(ApiBankCmd)
+	RootCmd.AddCommand(MeshCmd)
+
+	// Integration & monitoring commands
+	RootCmd.AddCommand(healthCmd)
+	RootCmd.AddCommand(alertsCmd)
+	RootCmd.AddCommand(metricsCmd)
+	RootCmd.AddCommand(catalogCmd)
+	RootCmd.AddCommand(complianceCmd)
+	RootCmd.AddCommand(qualityCmd)
+	RootCmd.AddCommand(lineageCmd)
+
+	// Admin commands
+	RootCmd.AddCommand(ConfigCmd)
+	RootCmd.AddCommand(StatusCmd)
+	RootCmd.AddCommand(EventsCmd)
+	RootCmd.AddCommand(DiffCmd)
+
+	// Utility commands
+	RootCmd.AddCommand(versionCmd)
+	RootCmd.AddCommand(completionCmd)
 }

@@ -14,9 +14,9 @@ import (
 type Format string
 
 const (
-	FormatJSON Format = "json"
-	FormatYAML Format = "yaml"
-	FormatWide Format = "wide"
+	FormatJSON  Format = "json"
+	FormatYAML  Format = "yaml"
+	FormatWide  Format = "wide"
 	FormatTable Format = "table"
 )
 

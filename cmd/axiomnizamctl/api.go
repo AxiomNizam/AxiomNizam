@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"example.com/axiomnizam/internal/output"
 
@@ -66,15 +67,43 @@ var APIDeleteCmd = &cobra.Command{
 
 var APIApplyCmd = &cobra.Command{
 	Use:   "apply -f [file]",
-	Short: "Apply API from YAML",
-	Long:  "Create or update API resource from YAML file",
-	Run: func(cmd *cobra.Command, args []string) {
-		file, _ := cmd.Flags().GetString("filename")
-		if file == "" {
-			fmt.Println("❌ filename flag is required")
-			return
+	Short: "Apply API from YAML (triggers controller reconciliation)",
+	Long: `Create or update an API resource from YAML file.
+
+This command uses Kubernetes-style reconciliation:
+1. Parses and validates the YAML file
+2. Sends to API server with metadata
+3. Controller detects change and queues reconciliation
+4. Reconciler applies desired state
+5. Status is updated with reconciliation result
+
+Examples:
+  axiomnizamctl api apply -f api.yaml
+  axiomnizamctl api apply -f api.yaml --dry-run
+  axiomnizamctl api apply -f api.yaml --namespace prod`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		filename, _ := cmd.Flags().GetString("filename")
+		if filename == "" {
+			return fmt.Errorf("filename flag (-f) is required")
 		}
-		handleAPIApply(file)
+
+		opts := ApplyOptions{
+			Filename:  filename,
+			DryRun:    dry,
+			Force:     false,
+			Namespace: namespace,
+			Timeout:   30 * time.Second,
+		}
+
+		if force, _ := cmd.Flags().GetBool("force"); force {
+			opts.Force = force
+		}
+
+		if t, _ := cmd.Flags().GetDuration("timeout"); t > 0 {
+			opts.Timeout = t
+		}
+
+		return handleApply(opts)
 	},
 }
 
@@ -127,7 +156,7 @@ func handleAPICreate() {
 	}
 
 	// Send to server
-	response, err := apiClient.Post("/api/v1/apis", apiResource)
+	response, err := apiClient.PostSimple("/api/v1/apis", apiResource)
 	if err != nil {
 		fmt.Printf("❌ Failed to create API: %v\n", err)
 		return
@@ -143,7 +172,7 @@ func handleAPICreate() {
 func handleAPIList() {
 	fmt.Println("📋 APIs")
 
-	response, err := apiClient.Get("/api/v1/apis")
+	response, err := apiClient.GetSimple("/api/v1/apis")
 	if err != nil {
 		fmt.Printf("❌ Failed to list APIs: %v\n", err)
 		return
@@ -165,7 +194,7 @@ func handleAPIList() {
 }
 
 func handleAPIGet(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
+	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
 	if err != nil {
 		fmt.Printf("❌ Failed to get API: %v\n", err)
 		return
@@ -194,7 +223,7 @@ func handleAPIUpdate(name string) {
 		field: value,
 	}
 
-	response, err := apiClient.Put(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name), updatePayload)
+	response, err := apiClient.PutSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name), updatePayload)
 	if err != nil {
 		fmt.Printf("❌ Failed to update API: %v\n", err)
 		return
@@ -213,7 +242,7 @@ func handleAPIDelete(name string) {
 		return
 	}
 
-	response, err := apiClient.Delete(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
+	response, err := apiClient.DeleteSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
 	if err != nil {
 		fmt.Printf("❌ Failed to delete API: %v\n", err)
 		return
@@ -255,7 +284,7 @@ func handleAPIApply(filename string) {
 	}
 
 	// Send to server
-	response, err := apiClient.Post("/api/v1/apis", resource)
+	response, err := apiClient.PostSimple("/api/v1/apis", resource)
 	if err != nil {
 		fmt.Printf("❌ Failed to apply API: %v\n", err)
 		return
@@ -269,7 +298,7 @@ func handleAPIApply(filename string) {
 }
 
 func handleAPIDescribe(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
+	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return
@@ -397,6 +426,13 @@ func init() {
 	APICmd.AddCommand(APIDescribeCmd)
 	APICmd.AddCommand(APIDiffCmd)
 
-	APIApplyCmd.Flags().StringP("filename", "f", "", "YAML file path")
-	APIDiffCmd.Flags().StringP("filename", "f", "", "YAML file path")
+	// Apply command flags
+	APIApplyCmd.Flags().StringP("filename", "f", "", "YAML file path (required)")
+	APIApplyCmd.Flags().BoolP("force", "", false, "Skip waiting for reconciliation")
+	APIApplyCmd.Flags().Duration("timeout", 30*time.Second, "Timeout for reconciliation")
+	APIApplyCmd.MarkFlagRequired("filename")
+
+	// Diff command flags
+	APIDiffCmd.Flags().StringP("filename", "f", "", "YAML file path (required)")
+	APIDiffCmd.MarkFlagRequired("filename")
 }

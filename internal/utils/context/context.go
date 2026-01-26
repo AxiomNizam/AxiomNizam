@@ -10,61 +10,61 @@ type ContextKey string
 
 const (
 	// User context keys
-	UserIDKey       ContextKey = "user_id"
-	UsernameKey     ContextKey = "username"
-	UserRoleKey     ContextKey = "user_role"
-	UserEmailKey    ContextKey = "user_email"
+	UserIDKey          ContextKey = "user_id"
+	UsernameKey        ContextKey = "username"
+	UserRoleKey        ContextKey = "user_role"
+	UserEmailKey       ContextKey = "user_email"
 	UserPermissionsKey ContextKey = "user_permissions"
 
 	// Request context keys
-	RequestIDKey      ContextKey = "request_id"
-	CorrelationIDKey  ContextKey = "correlation_id"
-	TraceIDKey        ContextKey = "trace_id"
-	SpanIDKey         ContextKey = "span_id"
-	RequestPathKey    ContextKey = "request_path"
-	RequestMethodKey  ContextKey = "request_method"
+	RequestIDKey     ContextKey = "request_id"
+	CorrelationIDKey ContextKey = "correlation_id"
+	TraceIDKey       ContextKey = "trace_id"
+	SpanIDKey        ContextKey = "span_id"
+	RequestPathKey   ContextKey = "request_path"
+	RequestMethodKey ContextKey = "request_method"
 
 	// Metadata keys
-	StartTimeKey      ContextKey = "start_time"
-	DeadlineKey       ContextKey = "deadline"
-	TimeoutKey        ContextKey = "timeout"
-	ClientIPKey       ContextKey = "client_ip"
-	UserAgentKey      ContextKey = "user_agent"
+	StartTimeKey ContextKey = "start_time"
+	DeadlineKey  ContextKey = "deadline"
+	TimeoutKey   ContextKey = "timeout"
+	ClientIPKey  ContextKey = "client_ip"
+	UserAgentKey ContextKey = "user_agent"
 
 	// Authorization keys
-	AuthTokenKey      ContextKey = "auth_token"
-	AuthTypeKey       ContextKey = "auth_type"
-	AuthExpiresKey    ContextKey = "auth_expires"
+	AuthTokenKey   ContextKey = "auth_token"
+	AuthTypeKey    ContextKey = "auth_type"
+	AuthExpiresKey ContextKey = "auth_expires"
 
 	// Application keys
-	AppVersionKey     ContextKey = "app_version"
-	EnvironmentKey    ContextKey = "environment"
-	TenantIDKey       ContextKey = "tenant_id"
+	AppVersionKey  ContextKey = "app_version"
+	EnvironmentKey ContextKey = "environment"
+	TenantIDKey    ContextKey = "tenant_id"
 )
 
 // RequestMetadata holds request-level metadata
 type RequestMetadata struct {
-	RequestID      string
-	CorrelationID  string
-	TraceID        string
-	SpanID         string
-	Method         string
-	Path           string
-	ClientIP       string
-	UserAgent      string
-	StartTime      time.Time
-	UserID         string
-	Username       string
-	UserRole       string
-	TenantID       string
-	AuthToken      string
-	AuthType       string
+	RequestID     string
+	CorrelationID string
+	TraceID       string
+	SpanID        string
+	Method        string
+	Path          string
+	ClientIP      string
+	UserAgent     string
+	StartTime     time.Time
+	UserID        string
+	Username      string
+	UserRole      string
+	TenantID      string
+	AuthToken     string
+	AuthType      string
 }
 
 // NewContext creates a new context with metadata
 func NewContext(parent context.Context, metadata RequestMetadata) context.Context {
 	ctx := parent
-	
+
 	// Add request IDs
 	if metadata.RequestID != "" {
 		ctx = context.WithValue(ctx, RequestIDKey, metadata.RequestID)

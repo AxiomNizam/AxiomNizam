@@ -10,18 +10,18 @@ import (
 
 // Config represents the AxiomNizam CLI configuration
 type Config struct {
-	CurrentContext string       `yaml:"current-context"`
-	Contexts       []Context    `yaml:"contexts"`
-	APIVersion     string       `yaml:"apiVersion,omitempty"`
-	Kind           string       `yaml:"kind,omitempty"`
+	CurrentContext string    `yaml:"current-context"`
+	Contexts       []Context `yaml:"contexts"`
+	APIVersion     string    `yaml:"apiVersion,omitempty"`
+	Kind           string    `yaml:"kind,omitempty"`
 }
 
 // Context represents a context configuration
 type Context struct {
-	Name    string           `yaml:"name"`
-	Cluster *ClusterInfo     `yaml:"cluster"`
-	User    string           `yaml:"user"`
-	Namespace string         `yaml:"namespace,omitempty"`
+	Name      string       `yaml:"name"`
+	Cluster   *ClusterInfo `yaml:"cluster"`
+	User      string       `yaml:"user"`
+	Namespace string       `yaml:"namespace,omitempty"`
 }
 
 // ClusterInfo contains cluster details
@@ -58,8 +58,8 @@ func (cm *ConfigManager) Load() error {
 	if _, err := os.Stat(cm.configPath); os.IsNotExist(err) {
 		// Create default config if not exists
 		cm.config = &Config{
-			APIVersion: "axiom-nizam/v1",
-			Kind:       "Config",
+			APIVersion:     "axiom-nizam/v1",
+			Kind:           "Config",
 			CurrentContext: "default",
 			Contexts: []Context{
 				{
@@ -67,7 +67,7 @@ func (cm *ConfigManager) Load() error {
 					Cluster: &ClusterInfo{
 						Server: "http://localhost:8000",
 					},
-					User: "default",
+					User:      "default",
 					Namespace: "default",
 				},
 			},
@@ -174,20 +174,31 @@ func (cm *ConfigManager) GetNamespace() string {
 	return ctx.Namespace
 }
 
+// NewConfigManagerWithPath creates a new config manager with custom path
+func NewConfigManagerWithPath(path string) (*ConfigManager, error) {
+	cm := &ConfigManager{
+		configPath: path,
+	}
+	if err := cm.Load(); err != nil {
+		return cm, err // Return manager even if load fails, caller can handle
+	}
+	return cm, nil
+}
+
 // GetToken returns the auth token from file
-func (cm *ConfigManager) GetToken() (string, error) {
+func (cm *ConfigManager) GetToken() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return ""
 	}
 
 	tokenPath := filepath.Join(home, ".axiomnizam", "token")
 	data, err := os.ReadFile(tokenPath)
 	if err != nil {
-		return "", nil // Token file doesn't exist yet
+		return "" // Token file doesn't exist yet
 	}
 
-	return string(data), nil
+	return string(data)
 }
 
 // SetToken saves the auth token to file
@@ -226,20 +237,59 @@ func (cm *ConfigManager) DeleteToken() error {
 }
 
 // AddContext adds a new context
-func (cm *ConfigManager) AddContext(context Context) error {
+func (cm *ConfigManager) AddContext(context *Context) error {
 	if cm.config == nil {
 		return fmt.Errorf("config not loaded")
 	}
 
-	// Check if context already exists
+	// Check if context already exists and update or append
 	for i, ctx := range cm.config.Contexts {
 		if ctx.Name == context.Name {
-			cm.config.Contexts[i] = context
+			cm.config.Contexts[i] = *context
 			return cm.Save()
 		}
 	}
 
-	cm.config.Contexts = append(cm.config.Contexts, context)
+	cm.config.Contexts = append(cm.config.Contexts, *context)
+	return cm.Save()
+}
+
+// AddOrUpdateContext adds or updates a context
+func (cm *ConfigManager) AddOrUpdateContext(context *Context) error {
+	return cm.AddContext(context)
+}
+
+// DeleteContext removes a context from config
+func (cm *ConfigManager) DeleteContext(contextName string) error {
+	if cm.config == nil {
+		return fmt.Errorf("config not loaded")
+	}
+
+	filtered := make([]Context, 0)
+	found := false
+	for _, ctx := range cm.config.Contexts {
+		if ctx.Name != contextName {
+			filtered = append(filtered, ctx)
+		} else {
+			found = true
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("context not found: %s", contextName)
+	}
+
+	cm.config.Contexts = filtered
+
+	// If deleted context was current, switch to first available
+	if cm.config.CurrentContext == contextName {
+		if len(cm.config.Contexts) > 0 {
+			cm.config.CurrentContext = cm.config.Contexts[0].Name
+		} else {
+			cm.config.CurrentContext = ""
+		}
+	}
+
 	return cm.Save()
 }
 

@@ -1,0 +1,350 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"axiom-nizam/internal/policies"
+	"axiom-nizam/internal/utils"
+)
+
+// ExampleAdmissionPolicies demonstrates OPA-like admission policies
+func ExampleAdmissionPolicies() {
+	ctx := context.Background()
+
+	// Create admission policy engine
+	admPolicy := policies.NewAdmissionPolicy(1000)
+
+	// Register PII protection policy
+	piiPolicy := policies.NewCommonPolicies().CreatePIIProtectionPolicy()
+	admPolicy.RegisterPolicy(ctx, piiPolicy)
+
+	// Register encryption requirement policy
+	encPolicy := policies.NewCommonPolicies().CreateEncryptionPolicy()
+	admPolicy.RegisterPolicy(ctx, encPolicy)
+
+	// Register ownership policy
+	ownerPolicy := policies.NewCommonPolicies().CreateOwnershipPolicy()
+	admPolicy.RegisterPolicy(ctx, ownerPolicy)
+
+	// Example: Check if resource can be admitted
+	resource := map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "API",
+		"metadata": map[string]interface{}{
+			"name":      "user-api",
+			"namespace": "production",
+			"labels": map[string]string{
+				"owner": "alice",
+				"team":  "backend",
+			},
+		},
+		"spec": map[string]interface{}{
+			"encryption": map[string]interface{}{
+				"atRest": map[string]interface{}{
+					"enabled": true,
+				},
+			},
+			"tls": map[string]interface{}{
+				"enabled": true,
+			},
+		},
+	}
+
+	// Admit resource
+	decision, err := admPolicy.AdmitResource(ctx, "API", "user-api", "production", "CREATE", resource)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Admission Decision: Allowed=%v\n", decision.Allowed)
+	fmt.Printf("Matched Rules: %d\n", len(decision.MatchedRules))
+	if !decision.Allowed {
+		fmt.Printf("Denied: %s\n", decision.Reason)
+	}
+
+	// Query audit log
+	auditLog := admPolicy.GetAuditLog(ctx, map[string]interface{}{
+		"decision": "Allowed",
+	})
+	fmt.Printf("Audit entries: %d\n", len(auditLog))
+}
+
+// ExampleBackupRestore demonstrates backup and restore functionality
+func ExampleBackupRestore() {
+	ctx := context.Background()
+
+	// Create control plane with backup support
+	cp := utils.NewControlPlane("instance-1")
+	backupMgr := cp.GetBackupManager()
+
+	// Create some resources first
+	api := &utils.ManagedResource{
+		APIVersion: "v1",
+		Kind:       "API",
+		Metadata: utils.ResourceMetadata{
+			Name:      "production-api",
+			Namespace: "production",
+			Labels: map[string]string{
+				"env": "prod",
+			},
+		},
+		Spec: map[string]interface{}{
+			"database": "prod_db",
+			"table":    "users",
+		},
+	}
+
+	cp.CreateResource(ctx, api)
+
+	// Create a backup
+	fmt.Println("Creating backup...")
+	backup, err := backupMgr.CreateBackup(ctx, "daily-backup", "Daily production backup")
+	if err != nil {
+		fmt.Printf("Error creating backup: %v\n", err)
+		return
+	}
+
+	// Wait for backup to complete
+	time.Sleep(500 * time.Millisecond)
+
+	// Get backup info
+	backup = backupMgr.GetBackup(backup.ID)
+	fmt.Printf("Backup Status: %s\n", backup.Status)
+	fmt.Printf("Components: %v\n", backup.Components)
+	fmt.Printf("Checksum: %s\n", backup.Checksum)
+
+	// Export backup
+	fmt.Println("Exporting backup...")
+	archiveData, err := backupMgr.ExportBackup(ctx, backup.ID)
+	if err != nil {
+		fmt.Printf("Error exporting: %v\n", err)
+		return
+	}
+	fmt.Printf("Exported %d bytes\n", len(archiveData))
+
+	// Import backup
+	fmt.Println("Importing backup...")
+	importedBackup, err := backupMgr.ImportBackup(ctx, archiveData)
+	if err != nil {
+		fmt.Printf("Error importing: %v\n", err)
+		return
+	}
+	fmt.Printf("Imported backup: %s\n", importedBackup.ID)
+
+	// Restore from backup
+	fmt.Println("Restoring from backup...")
+	restoreOptions := &utils.RestoreOptions{
+		RestoreResources:   true,
+		RestorePolicies:    true,
+		RestoreConfigs:     true,
+		ValidationMode:     "strict",
+		ConflictResolution: "overwrite",
+		DryRun:             false,
+	}
+
+	restoreResult, err := backupMgr.RestoreBackup(ctx, importedBackup.ID, restoreOptions)
+	if err != nil {
+		fmt.Printf("Error restoring: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Restore Status: %s\n", restoreResult.Status)
+	fmt.Printf("Resources Created: %d\n", restoreResult.ResourcesCreated)
+	fmt.Printf("Resources Updated: %d\n", restoreResult.ResourcesUpdated)
+	if len(restoreResult.Errors) > 0 {
+		fmt.Printf("Errors: %v\n", restoreResult.Errors)
+	}
+
+	// Verify backup integrity
+	fmt.Println("Verifying backup integrity...")
+	valid, err := backupMgr.VerifyBackup(backup.ID)
+	fmt.Printf("Backup valid: %v\n", valid)
+
+	// List all backups
+	backups := backupMgr.ListBackups(ctx)
+	fmt.Printf("Total backups: %d\n", len(backups))
+}
+
+// ExampleCompleteDataPipeline demonstrates full pipeline with admission policies and backups
+func ExampleCompleteDataPipeline() {
+	ctx := context.Background()
+
+	// Initialize control plane
+	cp := utils.NewControlPlane("instance-1")
+
+	// Setup admission policies
+	admPolicy := policies.NewAdmissionPolicy(1000)
+
+	// Register all policies
+	commonPolicies := policies.NewCommonPolicies()
+	admPolicy.RegisterPolicy(ctx, commonPolicies.CreatePIIProtectionPolicy())
+	admPolicy.RegisterPolicy(ctx, commonPolicies.CreateEncryptionPolicy())
+	admPolicy.RegisterPolicy(ctx, commonPolicies.CreateOwnershipPolicy())
+	admPolicy.RegisterPolicy(ctx, commonPolicies.CreateNetworkPolicyDefaults())
+	admPolicy.RegisterPolicy(ctx, commonPolicies.CreateResourceLimitPolicy())
+
+	cp.SetAdmissionPolicy(admPolicy)
+
+	// Create a resource that passes admission
+	goodResource := &utils.ManagedResource{
+		APIVersion: "v1",
+		Kind:       "API",
+		Metadata: utils.ResourceMetadata{
+			Name:      "customer-api",
+			Namespace: "production",
+			Labels: map[string]string{
+				"owner":       "alice@example.com",
+				"team":        "backend",
+				"environment": "production",
+			},
+		},
+		Spec: map[string]interface{}{
+			"database": "customer_db",
+			"table":    "customers",
+			"encryption": map[string]interface{}{
+				"atRest": map[string]interface{}{
+					"enabled": true,
+					"type":    "AES-256",
+				},
+			},
+			"tls": map[string]interface{}{
+				"enabled":    true,
+				"minVersion": "1.3",
+			},
+			"public": false,
+			"resources": map[string]interface{}{
+				"limits": map[string]interface{}{
+					"cpu":    8,
+					"memory": 32000000000, // 32GB
+				},
+			},
+		},
+	}
+
+	// Create resource
+	fmt.Println("Creating resource with admission policies...")
+	resource, err := cp.CreateResource(ctx, goodResource)
+	if err != nil {
+		fmt.Printf("Error creating resource: %v\n", err)
+		return
+	}
+	fmt.Printf("Resource created: %s/%s\n", resource.Kind, resource.Metadata.Name)
+
+	// Create automated backup schedule
+	backupMgr := cp.GetBackupManager()
+	schedule := &utils.BackupSchedule{
+		Name:      "daily-backup",
+		Enabled:   true,
+		Cron:      "0 2 * * *", // 2 AM daily
+		Retention: 30,
+		Owner:     "system",
+	}
+	backupMgr.CreateBackupSchedule(ctx, schedule)
+	fmt.Println("Backup schedule created")
+
+	// Create and immediately restore backup (disaster recovery test)
+	fmt.Println("Testing disaster recovery...")
+	backup, _ := backupMgr.CreateBackup(ctx, "dr-test", "Disaster recovery test")
+	time.Sleep(500 * time.Millisecond)
+
+	// Export for off-site storage
+	archiveData, _ := backupMgr.ExportBackup(ctx, backup.ID)
+	fmt.Printf("Backup exported for off-site storage: %d bytes\n", len(archiveData))
+
+	// Simulate restore
+	importedBackup, _ := backupMgr.ImportBackup(ctx, archiveData)
+
+	restoreResult, _ := backupMgr.RestoreBackup(ctx, importedBackup.ID, &utils.RestoreOptions{
+		RestoreResources:   true,
+		RestorePolicies:    true,
+		RestoreConfigs:     true,
+		ConflictResolution: "overwrite",
+		DryRun:             false,
+	})
+
+	fmt.Printf("Disaster recovery test complete: %s\n", restoreResult.Status)
+
+	// Get control plane status
+	status := cp.GetControlPlaneStatus(ctx)
+	fmt.Printf("Control plane status: %v\n", status)
+}
+
+// ExampleAdmissionPolicyCustomRules shows how to create custom admission rules
+func ExampleAdmissionPolicyCustomRules() {
+	ctx := context.Background()
+
+	admPolicy := policies.NewAdmissionPolicy(1000)
+
+	// Create custom policy with business logic
+	customPolicy := &policies.PolicyDefinition{
+		Name:        "custom-validation",
+		Description: "Custom business validation rules",
+		Version:     "1.0",
+		Enabled:     true,
+		Scope:       "API",
+		Rules: []*policies.AdmissionRule{
+			{
+				ID:          "api-naming-convention",
+				Name:        "API Naming Convention",
+				Description: "APIs must follow naming convention",
+				Effect:      "Deny",
+				Priority:    10,
+				Conditions: []*policies.PolicyCondition{
+					{
+						Path:     "metadata.name",
+						Operator: "matches",
+						Value:    "^[a-z][a-z0-9-]*$", // Must start with lowercase, contain only alphanumeric and hyphens
+					},
+				},
+				Action: func(ctx context.Context, resource map[string]interface{}) (bool, string) {
+					// Custom action logic
+					return true, "Naming convention valid"
+				},
+			},
+			{
+				ID:          "api-documentation-required",
+				Name:        "API Documentation Required",
+				Description: "APIs must have documentation",
+				Effect:      "Warn",
+				Priority:    5,
+				Conditions: []*policies.PolicyCondition{
+					{
+						Path:     "spec.documentation",
+						Operator: "notExists",
+					},
+				},
+				Action: func(ctx context.Context, resource map[string]interface{}) (bool, string) {
+					return false, "API should have documentation"
+				},
+			},
+		},
+	}
+
+	admPolicy.RegisterPolicy(ctx, customPolicy)
+
+	// Test with compliant resource
+	resource := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name": "customer-api",
+		},
+		"spec": map[string]interface{}{
+			"documentation": "See docs/api/customer-api.md",
+		},
+	}
+
+	decision, _ := admPolicy.AdmitResource(ctx, "API", "customer-api", "default", "CREATE", resource)
+	fmt.Printf("Compliant API: Allowed=%v, Warnings=%d\n", decision.Allowed, len(decision.Warnings))
+
+	// Test with non-compliant resource
+	badResource := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name": "BADAPI", // Violates naming convention
+		},
+	}
+
+	decision, _ = admPolicy.AdmitResource(ctx, "API", "BADAPI", "default", "CREATE", badResource)
+	fmt.Printf("Non-compliant API: Allowed=%v, Reason=%s\n", decision.Allowed, decision.Reason)
+}
