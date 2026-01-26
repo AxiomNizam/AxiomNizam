@@ -1,24 +1,26 @@
 package jobs
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-// JobHandler handles job endpoints
-type JobHandler struct {
+// HTTPJobHandler handles job HTTP endpoints
+type HTTPJobHandler struct {
 	manager JobManager
 }
 
 // NewJobHandler creates handler
-func NewJobHandler(manager JobManager) *JobHandler {
-	return &JobHandler{manager: manager}
+func NewJobHandler(manager JobManager) *HTTPJobHandler {
+	return &HTTPJobHandler{manager: manager}
 }
 
 // SubmitJob handles POST /api/v1/jobs
-func (h *JobHandler) SubmitJob(c *gin.Context) {
+func (h *HTTPJobHandler) SubmitJob(c *gin.Context) {
 	var req struct {
 		TenantID    string                 `json:"tenantId" binding:"required"`
 		Type        JobType                `json:"type" binding:"required"`
@@ -33,13 +35,11 @@ func (h *JobHandler) SubmitJob(c *gin.Context) {
 	}
 
 	job := &Job{
-		TenantID:    req.TenantID,
-		Type:        req.Type,
-		Status:      "Pending",
-		Parameters:  req.Params,
-		Priority:    req.Priority,
-		SubmittedBy: req.SubmittedBy,
-		CreatedAt:   time.Now(),
+		ID:        "job-" + uuid.New().String()[:8],
+		Type:      JobType(req.Type),
+		Status:    JobStatus("Pending"),
+		Data:      req.Params,
+		CreatedAt: time.Now(),
 	}
 
 	created, err := h.manager.SubmitJob(job)
@@ -52,7 +52,7 @@ func (h *JobHandler) SubmitJob(c *gin.Context) {
 }
 
 // GetJob handles GET /api/v1/jobs/:id
-func (h *JobHandler) GetJob(c *gin.Context) {
+func (h *HTTPJobHandler) GetJob(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetJob(id)
 	if err != nil {
@@ -64,15 +64,15 @@ func (h *JobHandler) GetJob(c *gin.Context) {
 }
 
 // ListJobs handles GET /api/v1/jobs
-func (h *JobHandler) ListJobs(c *gin.Context) {
+func (h *HTTPJobHandler) ListJobs(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	status := c.Query("status")
 	jobType := c.Query("type")
 
 	filter := &JobFilter{
 		TenantID: tenantID,
-		Status:   status,
-		Type:     jobType,
+		Status:   JobStatus(status),
+		Type:     JobType(jobType),
 		Limit:    100,
 	}
 
@@ -86,7 +86,7 @@ func (h *JobHandler) ListJobs(c *gin.Context) {
 }
 
 // CancelJob handles DELETE /api/v1/jobs/:id
-func (h *JobHandler) CancelJob(c *gin.Context) {
+func (h *HTTPJobHandler) CancelJob(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.CancelJob(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -97,7 +97,7 @@ func (h *JobHandler) CancelJob(c *gin.Context) {
 }
 
 // GetJobProgress handles GET /api/v1/jobs/:id/progress
-func (h *JobHandler) GetJobProgress(c *gin.Context) {
+func (h *HTTPJobHandler) GetJobProgress(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetJob(id)
 	if err != nil {
@@ -106,16 +106,14 @@ func (h *JobHandler) GetJobProgress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":       job.ID,
-		"status":   job.Status,
-		"progress": job.Progress,
-		"processed": job.ProcessedRecords,
-		"total":    job.TotalRecords,
+		"id":     job.ID,
+		"status": job.Status,
+		"data":   job.Data,
 	})
 }
 
 // RetryJob handles POST /api/v1/jobs/:id/retry
-func (h *JobHandler) RetryJob(c *gin.Context) {
+func (h *HTTPJobHandler) RetryJob(c *gin.Context) {
 	id := c.Param("id")
 	retried, err := h.manager.RetryJob(id)
 	if err != nil {
@@ -127,7 +125,7 @@ func (h *JobHandler) RetryJob(c *gin.Context) {
 }
 
 // GetJobLogs handles GET /api/v1/jobs/:id/logs
-func (h *JobHandler) GetJobLogs(c *gin.Context) {
+func (h *HTTPJobHandler) GetJobLogs(c *gin.Context) {
 	id := c.Param("id")
 	logs, err := h.manager.GetJobLogs(id)
 	if err != nil {
@@ -141,7 +139,7 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 // RegisterJobRoutes registers all job routes
 func RegisterJobRoutes(router *gin.Engine, manager JobManager) {
 	handler := NewJobHandler(manager)
-	
+
 	group := router.Group("/api/v1/jobs")
 	{
 		group.POST("", handler.SubmitJob)
@@ -162,4 +160,8 @@ type JobManager interface {
 	CancelJob(id string) error
 	RetryJob(id string) (*Job, error)
 	GetJobLogs(id string) ([]*JobLog, error)
+	ScheduleJob(jobType JobType, interval string, data map[string]interface{}) error
+	GetJobStats(ctx context.Context) (*QueueStats, error)
+	GetProcessorStats() *ProcessorStats
+	Health() error
 }

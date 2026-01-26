@@ -47,7 +47,7 @@ type EnhancedResource interface {
 
 // ReconcileError represents a typed error from reconciliation
 type ReconcileError struct {
-	Phase   string        // "observe", "validate", "diff", "act", "status"
+	Phase   string // "observe", "validate", "diff", "act", "status"
 	Err     error
 	Retry   bool
 	Retries int
@@ -60,12 +60,12 @@ func (e *ReconcileError) Error() string {
 // EnhancedReconcileResult extends ReconcileResult with additional fields
 type EnhancedReconcileResult struct {
 	ReconcileResult
-	RateLimited   bool
-	BackoffDelay  time.Duration
-	Duration      time.Duration
-	ChangesCount  int
-	PhaseErrors   map[string]error // Map of phase -> error
-	ReconcileID   string            // Trace ID
+	RateLimited  bool
+	BackoffDelay time.Duration
+	Duration     time.Duration
+	ChangesCount int
+	PhaseErrors  map[string]error // Map of phase -> error
+	ReconcileID  string           // Trace ID
 }
 
 // ========== VALIDATION INTERFACE ==========
@@ -269,7 +269,7 @@ func (ser *StandardEventRecorder) RecordReconcileStart(resource Resource) {
 // RecordReconcileSuccess records success
 func (ser *StandardEventRecorder) RecordReconcileSuccess(resource Resource, changes int) {
 	if ser.recorder != nil {
-		msg := fmt.Sprintf("Reconciliation succeeded, %d changes applied", changes)
+		_ = fmt.Sprintf("Reconciliation succeeded, %d changes applied", changes)
 		// Would call ser.recorder.RecordEvent(resource, events.EventTypeReconcileSuccess, msg)
 	}
 }
@@ -277,7 +277,7 @@ func (ser *StandardEventRecorder) RecordReconcileSuccess(resource Resource, chan
 // RecordReconcileError records error
 func (ser *StandardEventRecorder) RecordReconcileError(resource Resource, phase string, err error) {
 	if ser.recorder != nil {
-		msg := fmt.Sprintf("Reconciliation failed in %s phase: %v", phase, err)
+		_ = fmt.Sprintf("Reconciliation failed in %s phase: %v", phase, err)
 		// Would call ser.recorder.RecordEvent(resource, events.EventTypeReconcileFailed, msg)
 	}
 }
@@ -285,7 +285,7 @@ func (ser *StandardEventRecorder) RecordReconcileError(resource Resource, phase 
 // RecordChangesApplied records changes
 func (ser *StandardEventRecorder) RecordChangesApplied(resource Resource, changes []string) {
 	if ser.recorder != nil {
-		msg := fmt.Sprintf("Applied changes: %v", changes)
+		_ = fmt.Sprintf("Applied changes: %v", changes)
 		// Would call ser.recorder.RecordEvent(resource, "ChangesApplied", msg)
 	}
 }
@@ -293,7 +293,7 @@ func (ser *StandardEventRecorder) RecordChangesApplied(resource Resource, change
 // RecordValidationError records validation error
 func (ser *StandardEventRecorder) RecordValidationError(resource Resource, errs []error) {
 	if ser.recorder != nil {
-		msg := fmt.Sprintf("Validation errors: %v", errs)
+		_ = fmt.Sprintf("Validation errors: %v", errs)
 		// Would call ser.recorder.RecordEvent(resource, "ValidationError", msg)
 	}
 }
@@ -327,17 +327,17 @@ type ReconciliationMetrics interface {
 
 // ReconciliationContext captures full context of a reconciliation
 type ReconciliationContext struct {
-	StartTime              time.Time
-	DesiredResource        Resource
-	ActualState            map[string]interface{}
-	Changes                []string
-	Error                  error
-	Phase                  string
-	ID                     string // Trace ID
-	Duration               time.Duration
-	ValidationErrors       []error
-	Retries                int
-	LastError              *ReconcileError
+	StartTime        time.Time
+	DesiredResource  Resource
+	ActualState      map[string]interface{}
+	Changes          []string
+	Error            error
+	Phase            string
+	ID               string // Trace ID
+	Duration         time.Duration
+	ValidationErrors []error
+	Retries          int
+	LastError        *ReconcileError
 }
 
 // ========== ENHANCED STANDARD RECONCILER ==========

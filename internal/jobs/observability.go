@@ -11,7 +11,7 @@ import (
 
 // ObservabilityHandler provides HTTP endpoints for job and event observability
 type ObservabilityHandler struct {
-	manager          *JobManager
+	manager          JobManager
 	metricsCollector *MetricsCollector
 	healthMetrics    *HealthMetrics
 	logger           *log.Logger
@@ -19,7 +19,7 @@ type ObservabilityHandler struct {
 
 // NewObservabilityHandler creates a new observability handler
 func NewObservabilityHandler(
-	manager *JobManager,
+	manager JobManager,
 	metricsCollector *MetricsCollector,
 ) *ObservabilityHandler {
 	return &ObservabilityHandler{

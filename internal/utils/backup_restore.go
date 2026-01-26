@@ -265,12 +265,24 @@ func (bm *BackupManager) backupResources(ctx context.Context) *ResourceBackupDat
 			// Backup finalizers
 			resourceID := namespace + "/" + resource.Kind + "/" + resource.Metadata.Name
 			if fm, exists := bm.resourceMgr.finalizers[resourceID]; exists {
-				data.Finalizers[resourceID] = fm.finalizers
+				data.Finalizers[resourceID] = fm.GetFinalizers(resourceID)
 			}
 
 			// Backup conditions
 			if cm, exists := bm.resourceMgr.conditions[resourceID]; exists {
-				data.Conditions[resourceID] = cm.GetConditions()
+				statusConds := cm.GetConditions(resourceID)
+				resourceConds := make([]ResourceCondition, len(statusConds))
+				for i, sc := range statusConds {
+					resourceConds[i] = ResourceCondition{
+						Type:               sc.Type,
+						Status:             sc.Status,
+						Reason:             sc.Reason,
+						Message:            sc.Message,
+						ObservedGeneration: sc.ObservedGeneration,
+						LastTransition:     sc.LastTransitionTime,
+					}
+				}
+				data.Conditions[resourceID] = resourceConds
 			}
 		}
 

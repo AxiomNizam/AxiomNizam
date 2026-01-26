@@ -10,20 +10,20 @@ import (
 // ResourceManager provides comprehensive resource lifecycle management with reconciliation support
 // Implements Kubernetes-style resource management patterns
 type ResourceManager struct {
-	mu          sync.RWMutex
-	resources   map[string]map[string]*ManagedResource // namespace -> kind -> resources
-	finalizers  map[string]*FinalizerManager
-	conditions  map[string]*ConditionManager
-	events      map[string]*EventTracker
-	generation  map[string]int64
-	observers   []ResourceChangeObserver
+	mu         sync.RWMutex
+	resources  map[string]map[string]*ManagedResource // namespace -> kind -> resources
+	finalizers map[string]*FinalizerManager
+	conditions map[string]*ConditionManager
+	events     map[string]*EventTracker
+	generation map[string]int64
+	observers  []ResourceChangeObserver
 }
 
 // ManagedResource represents a resource with full lifecycle management
 type ManagedResource struct {
 	APIVersion  string                 `json:"apiVersion"`
 	Kind        string                 `json:"kind"`
-	Metadata    ResourceMetadata        `json:"metadata"`
+	Metadata    ResourceMetadata       `json:"metadata"`
 	Spec        map[string]interface{} `json:"spec"`
 	Status      ResourceStatus         `json:"status"`
 	CreatedAt   time.Time              `json:"createdAt"`
@@ -38,21 +38,21 @@ type ManagedResource struct {
 
 // ResourceMetadata contains metadata about a resource
 type ResourceMetadata struct {
-	Name       string            `json:"name"`
-	Namespace  string            `json:"namespace"`
-	UID        string            `json:"uid"`
-	Labels     map[string]string `json:"labels"`
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace"`
+	UID         string            `json:"uid"`
+	Labels      map[string]string `json:"labels"`
 	Annotations map[string]string `json:"annotations"`
-	Finalizers []string          `json:"finalizers"`
+	Finalizers  []string          `json:"finalizers"`
 }
 
 // ResourceStatus represents resource status with conditions
 type ResourceStatus struct {
-	Phase      string                  `json:"phase"` // Pending, Active, Terminating, Failed
-	Conditions []ResourceCondition     `json:"conditions"`
-	LastUpdate time.Time               `json:"lastUpdate"`
-	Message    string                  `json:"message,omitempty"`
-	Details    map[string]interface{}  `json:"details,omitempty"`
+	Phase      string                 `json:"phase"` // Pending, Active, Terminating, Failed
+	Conditions []ResourceCondition    `json:"conditions"`
+	LastUpdate time.Time              `json:"lastUpdate"`
+	Message    string                 `json:"message,omitempty"`
+	Details    map[string]interface{} `json:"details,omitempty"`
 }
 
 // ResourceCondition represents a condition on a resource
@@ -65,15 +65,7 @@ type ResourceCondition struct {
 	LastTransition     time.Time `json:"lastTransitionTime"`
 }
 
-// OwnerReference represents an ownership relationship
-type OwnerReference struct {
-	APIVersion         string `json:"apiVersion"`
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	UID                string `json:"uid"`
-	BlockOwnerDeletion bool   `json:"blockOwnerDeletion,omitempty"`
-}
-
+// OwnerReference is defined in lifecycle.go
 // ResourceChangeObserver observes resource changes
 type ResourceChangeObserver interface {
 	OnCreated(ctx context.Context, resource *ManagedResource)
@@ -90,7 +82,7 @@ type EventTracker struct {
 
 // ResourceEvent represents an event
 type ResourceEvent struct {
-	Type    string    // Normal, Warning
+	Type    string // Normal, Warning
 	Reason  string
 	Message string
 	Time    time.Time
@@ -278,7 +270,7 @@ func (rm *ResourceManager) Delete(ctx context.Context, namespace, kind, name str
 	// Run finalizers
 	resourceID := namespace + "/" + kind + "/" + name
 	if fm, exists := rm.finalizers[resourceID]; exists {
-		_ = fm.RunFinalizers(ctx, resource)
+		_ = fm.RunFinalizers(ctx, resourceID, resource)
 	}
 
 	// Clean up
@@ -439,8 +431,13 @@ func (rm *ResourceManager) AddFinalizer(ctx context.Context, namespace, kind, na
 	}
 
 	fm.AddFinalizer(name, Finalizer{
-		Name:    finalizerName,
-		Handler: handler,
+		Name: finalizerName,
+		Handler: func(ctx context.Context, obj interface{}) error {
+			if res, ok := obj.(*ManagedResource); ok {
+				return handler(ctx, res)
+			}
+			return fmt.Errorf("expected *ManagedResource, got %T", obj)
+		},
 	})
 
 	return nil
@@ -465,67 +462,5 @@ func (rm *ResourceManager) getUnsafe(namespace, kind, name string) (*ManagedReso
 	return resource, nil
 }
 
-// ConditionManager manages conditions on a resource
-type ConditionManager struct {
-	mu         sync.RWMutex
-	conditions map[string]*ResourceCondition
-}
-
-// NewConditionManager creates a new condition manager
-func NewConditionManager() *ConditionManager {
-	return &ConditionManager{
-		conditions: make(map[string]*ResourceCondition),
-	}
-}
-
-// SetCondition sets a condition
-func (cm *ConditionManager) SetCondition(condType, status, reason, message string, generation int64) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	cm.conditions[condType] = &ResourceCondition{
-		Type:               condType,
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: generation,
-		LastTransition:     time.Now(),
-	}
-}
-
-// GetCondition gets a condition
-func (cm *ConditionManager) GetCondition(condType string) *ResourceCondition {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	return cm.conditions[condType]
-}
-
-// GetConditions returns all conditions
-func (cm *ConditionManager) GetConditions() []ResourceCondition {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	conditions := make([]ResourceCondition, 0, len(cm.conditions))
-	for _, cond := range cm.conditions {
-		conditions = append(conditions, *cond)
-	}
-	return conditions
-}
-
-// IsReady returns true if all required conditions are met
-func (cm *ConditionManager) IsReady() bool {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	if len(cm.conditions) == 0 {
-		return false
-	}
-
-	for _, cond := range cm.conditions {
-		if cond.Status != "True" {
-			return false
-		}
-	}
-	return true
-}
+// ConditionManager and its methods are defined in lifecycle.go
+// The following code references lifecycle.go for condition management

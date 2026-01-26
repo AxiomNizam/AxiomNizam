@@ -9,15 +9,15 @@ import (
 
 // TenantModel GORM model for tenants
 type TenantModel struct {
-	ID          string             `gorm:"primaryKey;type:varchar(255)"`
-	Name        string             `gorm:"index;type:varchar(255);not null"`
-	Owner       string             `gorm:"type:varchar(255)"`
-	Description string             `gorm:"type:text"`
-	Metadata    datatypes.JSONType `gorm:"type:jsonb"`
-	Status      string             `gorm:"index;type:varchar(50)"`
-	CreatedAt   time.Time          `gorm:"index;autoCreateTime;type:timestamp"`
-	UpdatedAt   time.Time          `gorm:"autoUpdateTime;type:timestamp"`
-	DeletedAt   gorm.DeletedAt     `gorm:"index;type:timestamp"`
+	ID          string         `gorm:"primaryKey;type:varchar(255)"`
+	Name        string         `gorm:"index;type:varchar(255);not null"`
+	Owner       string         `gorm:"type:varchar(255)"`
+	Description string         `gorm:"type:text"`
+	Metadata    datatypes.JSON `gorm:"type:jsonb"`
+	Status      string         `gorm:"index;type:varchar(50)"`
+	CreatedAt   time.Time      `gorm:"index;autoCreateTime;type:timestamp"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime;type:timestamp"`
+	DeletedAt   gorm.DeletedAt `gorm:"index;type:timestamp"`
 
 	// Relations
 	Members []*TenantMemberModel `gorm:"foreignKey:TenantID;references:ID"`

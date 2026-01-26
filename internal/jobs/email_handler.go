@@ -38,7 +38,7 @@ func DefaultEmailConfig() *EmailConfig {
 type EmailService struct {
 	config  *EmailConfig
 	logger  *log.Logger
-	manager *JobManager
+	manager JobManager
 }
 
 // NewEmailService creates a new email service
@@ -300,12 +300,12 @@ type BulkEmailJob struct {
 	Recipients []string
 	Subject    string
 	Body       string
-	Manager    *JobManager
+	Manager    JobManager
 	Logger     *log.Logger
 }
 
 // NewBulkEmailJob creates a new bulk email job
-func NewBulkEmailJob(recipients []string, subject string, body string, manager *JobManager) *BulkEmailJob {
+func NewBulkEmailJob(recipients []string, subject string, body string, manager JobManager) *BulkEmailJob {
 	return &BulkEmailJob{
 		Recipients: recipients,
 		Subject:    subject,
@@ -330,9 +330,11 @@ func (bej *BulkEmailJob) Submit(ctx context.Context) ([]string, error) {
 			PriorityNormal,
 		)
 
-		if err := bej.Manager.Submit(ctx, job); err != nil {
-			bej.Logger.Printf("Error submitting email to %s: %v", recipient, err)
-			continue
+		if bej.Manager != nil {
+			if _, err := bej.Manager.SubmitJob(job); err != nil {
+				bej.Logger.Printf("Error submitting email to %s: %v", recipient, err)
+				continue
+			}
 		}
 
 		jobIDs = append(jobIDs, job.ID)

@@ -9,56 +9,57 @@ import (
 
 // DistributedCoordinator manages multi-instance coordination
 type DistributedCoordinator struct {
-	mu              sync.RWMutex
-	instanceID      string
-	leaderElection  *LeaderElection
-	locks           map[string]*DistributedLock
-	watches         map[string][]WatchCallback
-	heartbeats      map[string]time.Time
-	generation      int64
+	mu             sync.RWMutex
+	instanceID     string
+	leaderElection *LeaderElection
+	locks          map[string]*DistributedLock
+	watches        map[string][]WatchCallback
+	heartbeats     map[string]time.Time
+	generation     int64
 }
 
 // LeaderElection manages leader election
 type LeaderElection struct {
-	mu              sync.RWMutex
-	leaderName      string
-	candidates      map[string]*Candidate
-	leaseDuration   time.Duration
-	renewDeadline   time.Duration
-	retryPeriod     time.Duration
-	transitionTime  time.Time
+	mu             sync.RWMutex
+	leaderName     string
+	candidates     map[string]*Candidate
+	leaseDuration  time.Duration
+	renewDeadline  time.Duration
+	retryPeriod    time.Duration
+	transitionTime time.Time
 }
 
 // Candidate represents a leader candidate
 type Candidate struct {
-	Name              string
-	LastHeartbeat     time.Time
-	LeaseExpiration   time.Time
-	ObservedRecord    int64
+	Name            string
+	LastHeartbeat   time.Time
+	LeaseExpiration time.Time
+	ObservedRecord  int64
+	RenewalCount    int64
 }
 
 // DistributedLock manages distributed locks
 type DistributedLock struct {
-	mu              sync.RWMutex
-	lockName        string
-	holders         map[string]*LockHolder
-	waiters         []LockWaiter
-	lastModified    time.Time
+	mu           sync.RWMutex
+	lockName     string
+	holders      map[string]*LockHolder
+	waiters      []LockWaiter
+	lastModified time.Time
 }
 
 // LockHolder represents a lock holder
 type LockHolder struct {
-	InstanceID      string
-	AcquiredAt      time.Time
-	ExpiresAt       time.Time
-	RenewalCount    int
+	InstanceID   string
+	AcquiredAt   time.Time
+	ExpiresAt    time.Time
+	RenewalCount int
 }
 
 // LockWaiter represents a lock waiter
 type LockWaiter struct {
-	InstanceID      string
-	WaitTime        time.Time
-	Priority        int
+	InstanceID string
+	WaitTime   time.Time
+	Priority   int
 }
 
 // WatchCallback is called on watched resource changes

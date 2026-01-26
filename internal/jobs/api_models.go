@@ -2,62 +2,10 @@ package jobs
 
 import "time"
 
-// Job represents an async long-running operation
-type Job struct {
-	ID            string                 `json:"id" db:"id"`
-	TenantID      string                 `json:"tenantId" db:"tenant_id"`
-	UserID        string                 `json:"userId" db:"user_id"`
-	Type          JobType                `json:"type" db:"type"`         // Export, Import, Transform, etc
-	Status        JobStatus              `json:"status" db:"status"`     // Pending, Running, Succeeded, Failed
-	Priority      int                    `json:"priority" db:"priority"` // 1-10, higher runs first
-	Progress      int                    `json:"progress" db:"progress"` // 0-100
-	Input         map[string]interface{} `json:"input" db:"-"`           // Job parameters
-	Output        map[string]interface{} `json:"output" db:"-"`          // Job results
-	Error         *JobError              `json:"error" db:"-"`           // Error details if failed
-	StartedAt     *time.Time             `json:"startedAt" db:"started_at"`
-	CompletedAt   *time.Time             `json:"completedAt" db:"completed_at"`
-	CreatedAt     time.Time              `json:"createdAt" db:"created_at"`
-	UpdatedAt     time.Time              `json:"updatedAt" db:"updated_at"`
-	Timeout       int                    `json:"timeout" db:"timeout"` // Seconds
-	RetryCount    int                    `json:"retryCount" db:"retry_count"`
-	MaxRetries    int                    `json:"maxRetries" db:"max_retries"`
-	ParentJobID   *string                `json:"parentJobId" db:"parent_job_id"` // For dependent jobs
-	DependsOn     []string               `json:"dependsOn" db:"-"`               // Job IDs this depends on
-	ResultURL     string                 `json:"resultUrl" db:"result_url"`      // S3/blob URL for large results
-	Tags          map[string]string      `json:"tags" db:"-"`                    // Custom labels
-	ResourceQuota JobResourceQuota       `json:"resourceQuota" db:"-"`           // CPU/Memory limits
-	Notifications []JobNotification      `json:"notifications" db:"-"`           // Webhooks/events on completion
-}
+// JobStatus and JobType are defined in job.go
+// Job struct and related models below
 
-// JobType represents type of job
-type JobType string
-
-const (
-	JobTypeExport      JobType = "EXPORT"      // Data export
-	JobTypeImport      JobType = "IMPORT"      // Data import
-	JobTypeTransform   JobType = "TRANSFORM"   // Data transformation
-	JobTypeQuery       JobType = "QUERY"       // Long-running query
-	JobTypeBackup      JobType = "BACKUP"      // Database backup
-	JobTypeRestore     JobType = "RESTORE"     // Database restore
-	JobTypeAnalytics   JobType = "ANALYTICS"   // Analytics processing
-	JobTypeMigration   JobType = "MIGRATION"   // Data migration
-	JobTypeBulkDelete  JobType = "BULK_DELETE" // Bulk deletion
-	JobTypeMaintenance JobType = "MAINTENANCE" // Maintenance task
-)
-
-// JobStatus represents job lifecycle status
-type JobStatus string
-
-const (
-	JobStatusPending   JobStatus = "PENDING"
-	JobStatusQueued    JobStatus = "QUEUED"
-	JobStatusRunning   JobStatus = "RUNNING"
-	JobStatusSucceeded JobStatus = "SUCCEEDED"
-	JobStatusFailed    JobStatus = "FAILED"
-	JobStatusCancelled JobStatus = "CANCELLED"
-	JobStatusPaused    JobStatus = "PAUSED"
-	JobStatusRetrying  JobStatus = "RETRYING"
-)
+// Note: Job struct is defined in job.go, this file contains additional API models
 
 // JobError represents error details
 type JobError struct {

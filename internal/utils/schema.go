@@ -32,7 +32,7 @@ type FieldSchema struct {
 	Enum        []string
 	Default     interface{}
 	Description string
-	Items       *FieldSchema // for arrays
+	Items       *FieldSchema            // for arrays
 	Properties  map[string]*FieldSchema // for objects
 }
 
@@ -193,13 +193,18 @@ type ValidationError struct {
 
 // ValidationResult contains validation results
 type ValidationResult struct {
-	Valid  bool
-	Errors []ValidationError
+	Valid    bool
+	Errors   map[string][]string
+	Warnings []string
 }
 
 // ValidateResourceWithDetails validates and returns detailed errors
 func (sv *SchemaValidator) ValidateResourceWithDetails(kind, version string, resource map[string]interface{}) *ValidationResult {
-	result := &ValidationResult{Valid: true}
+	result := &ValidationResult{
+		Valid:    true,
+		Errors:   make(map[string][]string),
+		Warnings: []string{},
+	}
 
 	sv.mu.RLock()
 	key := fmt.Sprintf("%s/%s", kind, version)
@@ -208,9 +213,7 @@ func (sv *SchemaValidator) ValidateResourceWithDetails(kind, version string, res
 
 	if schema == nil {
 		result.Valid = false
-		result.Errors = append(result.Errors, ValidationError{
-			Message: fmt.Sprintf("schema not found for %s/%s", kind, version),
-		})
+		result.Errors["_schema"] = []string{fmt.Sprintf("schema not found for %s/%s", kind, version)}
 		return result
 	}
 
@@ -218,10 +221,7 @@ func (sv *SchemaValidator) ValidateResourceWithDetails(kind, version string, res
 	for _, field := range schema.Required {
 		if _, ok := resource[field]; !ok {
 			result.Valid = false
-			result.Errors = append(result.Errors, ValidationError{
-				Field:   field,
-				Message: "required field missing",
-			})
+			result.Errors[field] = append(result.Errors[field], "required field missing")
 		}
 	}
 
@@ -230,11 +230,7 @@ func (sv *SchemaValidator) ValidateResourceWithDetails(kind, version string, res
 		if fieldSchema, ok := schema.Fields[field]; ok {
 			if err := sv.validateField(fieldSchema, value); err != nil {
 				result.Valid = false
-				result.Errors = append(result.Errors, ValidationError{
-					Field:   field,
-					Message: err.Error(),
-					Value:   value,
-				})
+				result.Errors[field] = append(result.Errors[field], err.Error())
 			}
 		}
 	}

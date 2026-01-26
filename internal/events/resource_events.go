@@ -121,6 +121,7 @@ type EventWatcher struct {
 	Channel chan *ResourceEvent
 	Done    chan struct{}
 	Closed  bool
+	mu      sync.RWMutex
 }
 
 // EventFilter allows filtering events
@@ -513,9 +514,4 @@ func (w *EventWatcher) Close() error {
 	return nil
 }
 
-// AddMutex for concurrent access
-var wm sync.RWMutex
-
-func (w *EventWatcher) mu() sync.RWMutex {
-	return wm
-}
+// AddMutex for concurrent access - REMOVED (EventWatcher has mu field)

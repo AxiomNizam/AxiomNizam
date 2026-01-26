@@ -104,11 +104,11 @@ func convertConditions(oldConds []Condition) []apiv1.Condition {
 	for i, oldCond := range oldConds {
 		v1Conds[i] = apiv1.Condition{
 			Type:               oldCond.Type,
-			Status:             convertConditionStatus(oldCond.Status),
+			Status:             apiv1.ConditionStatus(oldCond.Status),
 			Reason:             oldCond.Type,
 			Message:            oldCond.Message,
-			FirstObservedTime:  oldCond.Timestamp,
-			LastTransitionTime: oldCond.Timestamp,
+			FirstObservedTime:  time.Now(),
+			LastTransitionTime: time.Now(),
 		}
 	}
 
@@ -134,10 +134,9 @@ func convertV1ConditionsToOld(v1Conds []apiv1.Condition) []Condition {
 	oldConds := make([]Condition, len(v1Conds))
 	for i, v1Cond := range v1Conds {
 		oldConds[i] = Condition{
-			Type:      v1Cond.Type,
-			Status:    string(v1Cond.Status),
-			Message:   v1Cond.Message,
-			Timestamp: v1Cond.LastTransitionTime,
+			Type:    v1Cond.Type,
+			Status:  ConditionStatus(v1Cond.Status),
+			Message: v1Cond.Message,
 		}
 	}
 

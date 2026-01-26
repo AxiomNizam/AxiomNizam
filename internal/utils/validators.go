@@ -8,15 +8,8 @@ import (
 	"strings"
 )
 
-// ValidationError represents a validation error with field and message
-type ValidationError struct {
-	Field   string
-	Message string
-}
-
-func (e *ValidationError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Field, e.Message)
-}
+// ValidationError is defined in schema.go
+// Validators module contains validation functions
 
 // IsValidEmail validates email format
 func IsValidEmail(email string) bool {

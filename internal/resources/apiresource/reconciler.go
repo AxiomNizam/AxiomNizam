@@ -206,7 +206,7 @@ func (r *APIResourceReconciler) Reconcile(ctx context.Context, key string) recon
 				err := r.runtime.Create(ctx, namespace, name, desired.Spec)
 				if err != nil {
 					desired.MarkFailed("RecreationFailed", fmt.Sprintf("Failed to recreate API: %v", err))
-					r.store.Update(ctx, desired)
+					r.storeBackend.Update(ctx, desired)
 					return reconciler.ReconcileResult{
 						Requeue:      true,
 						RequeueAfter: 10 * time.Second,
@@ -219,7 +219,7 @@ func (r *APIResourceReconciler) Reconcile(ctx context.Context, key string) recon
 				err := r.runtime.Delete(ctx, namespace, name)
 				if err != nil {
 					desired.MarkFailed("DeletionFailed", fmt.Sprintf("Failed to delete API: %v", err))
-					r.store.Update(ctx, desired)
+					r.storeBackend.Update(ctx, desired)
 					return reconciler.ReconcileResult{
 						Requeue:      true,
 						RequeueAfter: 10 * time.Second,
@@ -238,7 +238,7 @@ func (r *APIResourceReconciler) Reconcile(ctx context.Context, key string) recon
 	}
 
 	// Update status in storage
-	err = r.store.Update(ctx, desired)
+	err = r.storeBackend.Update(ctx, desired)
 	if err != nil {
 		return reconciler.ReconcileResult{
 			Requeue:      true,

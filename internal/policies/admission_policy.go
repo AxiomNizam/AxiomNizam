@@ -246,6 +246,20 @@ func (ap *AdmissionPolicy) evaluateConditions(resource map[string]interface{}, c
 	return true
 }
 
+// toNum converts a value to a number for comparison
+func toNum(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	default:
+		return 0
+	}
+}
+
 // getPolicyByRule finds the policy that owns a rule
 func (ap *AdmissionPolicy) getPolicyByRule(rule *AdmissionRule) *PolicyDefinition {
 	ap.mu.RLock()
@@ -627,17 +641,4 @@ func matchesAuditFilters(entry *AdmissionAudit, filters map[string]interface{}) 
 	}
 
 	return true
-}
-
-func toNum(v interface{}) float64 {
-	switch val := v.(type) {
-	case float64:
-		return val
-	case int:
-		return float64(val)
-	case int64:
-		return float64(val)
-	default:
-		return 0
-	}
 }

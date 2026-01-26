@@ -240,13 +240,13 @@ func (dlq *DeadLetterQueue) cleanupExpired() {
 type DLQProcessor struct {
 	dlq     *DeadLetterQueue
 	queue   Queue
-	manager *JobManager
+	manager JobManager
 	logger  *log.Logger
 	handler func(ctx context.Context, dlqJob *DeadLetterJob) error
 }
 
 // NewDLQProcessor creates a new DLQ processor
-func NewDLQProcessor(dlq *DeadLetterQueue, queue Queue, manager *JobManager) *DLQProcessor {
+func NewDLQProcessor(dlq *DeadLetterQueue, queue Queue, manager JobManager) *DLQProcessor {
 	return &DLQProcessor{
 		dlq:     dlq,
 		queue:   queue,

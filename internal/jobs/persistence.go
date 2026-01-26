@@ -207,6 +207,39 @@ func (pq *PersistentQueue) CleanupOldJobs(ctx context.Context, retentionDays int
 	return nil
 }
 
+// Event represents a job event for tracking
+type Event struct {
+	ID        string                 `json:"id" gorm:"primaryKey"`
+	JobID     string                 `json:"jobId" gorm:"index"`
+	Type      EventType              `json:"type" gorm:"index"`
+	Message   string                 `json:"message"`
+	Context   map[string]interface{} `json:"context" gorm:"serializer:json"`
+	Timestamp time.Time              `json:"timestamp" gorm:"index"`
+}
+
+// EventType represents the type of job event
+type EventType string
+
+// Job event types
+const (
+	EventTypeJobCreated   EventType = "job.created"
+	EventTypeJobStarted   EventType = "job.started"
+	EventTypeJobCompleted EventType = "job.completed"
+	EventTypeJobFailed    EventType = "job.failed"
+	EventTypeJobCanceled  EventType = "job.canceled"
+	EventTypeJobRetried   EventType = "job.retried"
+)
+
+// EventFilter filters job events
+type EventFilter struct {
+	JobID     string
+	Type      EventType
+	StartTime time.Time
+	EndTime   time.Time
+	Limit     int
+	Offset    int
+}
+
 // EventRepository defines the interface for event persistence
 type EventRepository interface {
 	// StoreEvent saves an event to database

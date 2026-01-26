@@ -9,15 +9,15 @@ import (
 
 // StreamModel GORM model for streams
 type StreamModel struct {
-	ID          string             `gorm:"primaryKey;type:varchar(255)"`
-	TenantID    string             `gorm:"index;type:varchar(255);not null"`
-	Name        string             `gorm:"type:varchar(255)"`
-	Description string             `gorm:"type:text"`
-	Config      datatypes.JSONType `gorm:"type:jsonb"`
-	Status      string             `gorm:"index;type:varchar(50)"`
-	CreatedAt   time.Time          `gorm:"index;autoCreateTime;type:timestamp"`
-	UpdatedAt   time.Time          `gorm:"autoUpdateTime;type:timestamp"`
-	DeletedAt   gorm.DeletedAt     `gorm:"index;type:timestamp"`
+	ID          string         `gorm:"primaryKey;type:varchar(255)"`
+	TenantID    string         `gorm:"index;type:varchar(255);not null"`
+	Name        string         `gorm:"type:varchar(255)"`
+	Description string         `gorm:"type:text"`
+	Config      datatypes.JSON `gorm:"type:jsonb"`
+	Status      string         `gorm:"index;type:varchar(50)"`
+	CreatedAt   time.Time      `gorm:"index;autoCreateTime;type:timestamp"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime;type:timestamp"`
+	DeletedAt   gorm.DeletedAt `gorm:"index;type:timestamp"`
 
 	// Relations
 	Subscriptions []*StreamSubscriptionModel `gorm:"foreignKey:StreamID;references:ID"`

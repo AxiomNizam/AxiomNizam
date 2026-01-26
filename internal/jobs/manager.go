@@ -167,8 +167,8 @@ func (ss *SimpleScheduler) ListScheduled() []ScheduledJob {
 	return result
 }
 
-// JobManager manages all job operations
-type JobManager struct {
+// JobManagerImpl manages all job operations (implements JobManager interface)
+type JobManagerImpl struct {
 	queue      Queue
 	processor  Processor
 	scheduler  Scheduler
@@ -179,12 +179,12 @@ type JobManager struct {
 }
 
 // NewJobManager creates a new job manager
-func NewJobManager(config *JobConfig) *JobManager {
+func NewJobManager(config *JobConfig) *JobManagerImpl {
 	if config == nil {
 		config = DefaultJobConfig()
 	}
 
-	return &JobManager{
+	return &JobManagerImpl{
 		queue:      NewMemoryQueue(config.MaxQueueSize),
 		processor:  NewMemoryProcessor(NewMemoryQueue(config.MaxQueueSize)),
 		scheduler:  NewSimpleScheduler(),
@@ -196,12 +196,12 @@ func NewJobManager(config *JobConfig) *JobManager {
 }
 
 // Submit submits a job to the queue
-func (jm *JobManager) Submit(ctx context.Context, job *Job) error {
+func (jm *JobManagerImpl) Submit(ctx context.Context, job *Job) error {
 	return jm.queue.Submit(ctx, job)
 }
 
 // SubmitEmail submits an email job
-func (jm *JobManager) SubmitEmail(ctx context.Context, to string, subject string, body string) error {
+func (jm *JobManagerImpl) SubmitEmail(ctx context.Context, to string, subject string, body string) error {
 	job := CreateJobWithPriority(JobTypeEmail, map[string]interface{}{
 		"to":      to,
 		"subject": subject,
@@ -212,17 +212,17 @@ func (jm *JobManager) SubmitEmail(ctx context.Context, to string, subject string
 }
 
 // GetJob retrieves a job by ID
-func (jm *JobManager) GetJob(ctx context.Context, jobID string) (*Job, error) {
+func (jm *JobManagerImpl) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	return jm.queue.Get(ctx, jobID)
 }
 
 // GetJobStats retrieves job statistics
-func (jm *JobManager) GetJobStats(ctx context.Context) (*QueueStats, error) {
+func (jm *JobManagerImpl) GetJobStats(ctx context.Context) (*QueueStats, error) {
 	return jm.queue.GetStats(ctx)
 }
 
 // StartWorkers starts job processing
-func (jm *JobManager) StartWorkers(ctx context.Context, numWorkers int) error {
+func (jm *JobManagerImpl) StartWorkers(ctx context.Context, numWorkers int) error {
 	if numWorkers <= 0 {
 		numWorkers = jm.config.NumWorkers
 	}
@@ -231,37 +231,37 @@ func (jm *JobManager) StartWorkers(ctx context.Context, numWorkers int) error {
 }
 
 // StopWorkers stops job processing
-func (jm *JobManager) StopWorkers() error {
+func (jm *JobManagerImpl) StopWorkers() error {
 	return jm.processor.Stop()
 }
 
 // RegisterHandler registers a job handler
-func (jm *JobManager) RegisterHandler(jobType JobType, handler JobHandler) {
+func (jm *JobManagerImpl) RegisterHandler(jobType JobType, handler JobHandler) {
 	jm.processor.Register(jobType, handler)
 }
 
 // ScheduleJob schedules a recurring job
-func (jm *JobManager) ScheduleJob(jobType JobType, interval string, data map[string]interface{}) error {
+func (jm *JobManagerImpl) ScheduleJob(jobType JobType, interval string, data map[string]interface{}) error {
 	return jm.scheduler.Schedule(jobType, interval, data)
 }
 
 // StartScheduler starts the job scheduler
-func (jm *JobManager) StartScheduler(ctx context.Context) error {
+func (jm *JobManagerImpl) StartScheduler(ctx context.Context) error {
 	return jm.scheduler.Start(ctx, jm.queue)
 }
 
 // StopScheduler stops the job scheduler
-func (jm *JobManager) StopScheduler() error {
+func (jm *JobManagerImpl) StopScheduler() error {
 	return jm.scheduler.Stop()
 }
 
 // GetProcessorStats returns processor statistics
-func (jm *JobManager) GetProcessorStats() *ProcessorStats {
+func (jm *JobManagerImpl) GetProcessorStats() *ProcessorStats {
 	return jm.processor.GetStats()
 }
 
 // Health checks the health of job system
-func (jm *JobManager) Health() error {
+func (jm *JobManagerImpl) Health() error {
 	stats, err := jm.queue.GetStats(context.Background())
 	if err != nil {
 		return err
@@ -275,7 +275,7 @@ func (jm *JobManager) Health() error {
 }
 
 // GetResults returns a channel for job results
-func (jm *JobManager) GetResults() <-chan *JobResult {
+func (jm *JobManagerImpl) GetResults() <-chan *JobResult {
 	if mp, ok := jm.processor.(*MemoryProcessor); ok {
 		return mp.GetResults()
 	}

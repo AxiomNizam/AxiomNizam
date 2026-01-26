@@ -119,6 +119,21 @@ func (fm *FinalizerManager) ListFinalizers(resourceID string) []string {
 	return names
 }
 
+// GetFinalizers returns all finalizers for a resource
+func (fm *FinalizerManager) GetFinalizers(resourceID string) []Finalizer {
+	fm.mu.RLock()
+	defer fm.mu.RUnlock()
+
+	finalizers := fm.finalizers[resourceID]
+	if finalizers == nil {
+		return []Finalizer{}
+	}
+	// Return a copy to prevent external modification
+	result := make([]Finalizer, len(finalizers))
+	copy(result, finalizers)
+	return result
+}
+
 // OwnerReference represents a resource ownership relationship
 type OwnerReference struct {
 	Kind       string

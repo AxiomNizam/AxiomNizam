@@ -11,17 +11,17 @@ import (
 
 // AuditLogModel GORM model for audit logs
 type AuditLogModel struct {
-	ID           string                 `gorm:"primaryKey;type:varchar(255)"`
-	TenantID     string                 `gorm:"index;type:varchar(255)"`
-	UserID       string                 `gorm:"index;type:varchar(255)"`
-	ActionType   string                 `gorm:"index;type:varchar(100)"`
-	ResourceType string                 `gorm:"index;type:varchar(100)"`
-	ResourceID   string                 `gorm:"index;type:varchar(255)"`
-	Details      datatypes.JSONType     `gorm:"type:jsonb"`
-	Hash         string                 `gorm:"index;type:varchar(256)"`
-	CreatedAt    time.Time              `gorm:"index;autoCreateTime;type:timestamp"`
-	UpdatedAt    time.Time              `gorm:"autoUpdateTime;type:timestamp"`
-	DeletedAt    gorm.DeletedAt         `gorm:"index;type:timestamp"`
+	ID           string         `gorm:"primaryKey;type:varchar(255)"`
+	TenantID     string         `gorm:"index;type:varchar(255)"`
+	UserID       string         `gorm:"index;type:varchar(255)"`
+	ActionType   string         `gorm:"index;type:varchar(100)"`
+	ResourceType string         `gorm:"index;type:varchar(100)"`
+	ResourceID   string         `gorm:"index;type:varchar(255)"`
+	Details      datatypes.JSON `gorm:"type:jsonb"`
+	Hash         string         `gorm:"index;type:varchar(256)"`
+	CreatedAt    time.Time      `gorm:"index;autoCreateTime;type:timestamp"`
+	UpdatedAt    time.Time      `gorm:"autoUpdateTime;type:timestamp"`
+	DeletedAt    gorm.DeletedAt `gorm:"index;type:timestamp"`
 }
 
 // TableName specifies table name

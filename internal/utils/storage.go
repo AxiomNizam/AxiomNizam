@@ -26,12 +26,12 @@ type StorageEvent struct {
 
 // ResourceSyncManager manages resource synchronization (like etcd sync)
 type ResourceSyncManager struct {
-	mu                sync.RWMutex
-	backends          map[string]StorageBackend
-	resourceVersions  map[string]int64 // resource -> version
-	lastSyncTime      time.Time
-	resyncPeriod      time.Duration
-	conflictResolver  func(local, remote interface{}) interface{}
+	mu               sync.RWMutex
+	backends         map[string]StorageBackend
+	resourceVersions map[string]int64 // resource -> version
+	lastSyncTime     time.Time
+	resyncPeriod     time.Duration
+	conflictResolver func(local, remote interface{}) interface{}
 }
 
 // NewResourceSyncManager creates a new sync manager
@@ -74,7 +74,7 @@ func (rsm *ResourceSyncManager) Sync(ctx context.Context) error {
 			return fmt.Errorf("failed to sync %s: %w", name, err)
 		}
 
-		for key, value := range resources {
+		for key := range resources {
 			rsm.resourceVersions[key]++
 		}
 	}
@@ -101,7 +101,7 @@ func (rsm *ResourceSyncManager) NeedsResync() bool {
 
 // TransactionManager manages atomic transactions (ACID-like guarantees)
 type Transaction struct {
-	ID        string
+	ID         string
 	Operations []TransactionOp
 	Status     string // pending, committed, aborted
 	StartTime  time.Time

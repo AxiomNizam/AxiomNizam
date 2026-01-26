@@ -15,11 +15,11 @@ type IndexKey struct {
 
 // Index provides fast lookups by indexed fields
 type Index struct {
-	mu         sync.RWMutex
-	name       string
-	indexedBy  string
-	values     map[string][]string // indexed value -> resource IDs
-	resources  map[string]interface{}
+	mu        sync.RWMutex
+	name      string
+	indexedBy string
+	values    map[string][]string // indexed value -> resource IDs
+	resources map[string]interface{}
 }
 
 // NewIndex creates a new index
@@ -112,7 +112,7 @@ func (p *Projection) Get(resourceID string) map[string]interface{} {
 
 // ResourceLabelSelector matches resources by labels
 type LabelSelector struct {
-	MatchLabels map[string]string
+	MatchLabels      map[string]string
 	MatchExpressions []LabelSelectorRequirement
 }
 
@@ -125,7 +125,7 @@ type LabelSelectorRequirement struct {
 
 // LabelMatcher matches labels against selectors
 type LabelMatcher struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	resources map[string]map[string]string // resourceID -> labels
 }
 
@@ -209,11 +209,11 @@ func (fm *FieldMatcher) SelectByFields(selector *FieldSelector) []string {
 	return results
 }
 
-// Aggregation performs aggregation on resources
-type Aggregation struct {
-	Type     string // count, sum, avg, min, max, group
-	Field    string // field to aggregate
-	GroupBy  []string // fields to group by
+// AggregationRequest is a projection-specific aggregation request
+type AggregationRequest struct {
+	Type    string   // count, sum, avg, min, max, group
+	Field   string   // field to aggregate
+	GroupBy []string // fields to group by
 }
 
 // Aggregator performs aggregations
@@ -238,7 +238,8 @@ func (agg *Aggregator) Add(resourceID string, fields map[string]interface{}) {
 }
 
 // Aggregate performs aggregation
-func (agg *Aggregator) Aggregate(aggregation *Aggregation) interface{} {
+// Aggregate performs aggregation on resources
+func (agg *Aggregator) Aggregate(aggregation *AggregationRequest) interface{} {
 	agg.mu.RLock()
 	defer agg.mu.RUnlock()
 
@@ -278,26 +279,19 @@ func (agg *Aggregator) getGroupKey(fields map[string]interface{}, groupBy []stri
 	return strings.Join(parts, ":")
 }
 
-// Watch watches for resource changes
+// Watch watches for resource changes (WatchEvent defined in distributed_coordinator.go)
 type Watch struct {
-	ResourceType string
-	Selector     *LabelSelector
+	ResourceType  string
+	Selector      *LabelSelector
 	FieldSelector *FieldSelector
-	Channel      chan WatchEvent
-}
-
-// WatchEvent represents a change event
-type WatchEvent struct {
-	Type      string // ADDED, MODIFIED, DELETED
-	Object    interface{}
-	Timestamp time.Time
+	Channel       chan WatchEvent
 }
 
 // WatchManager manages resource watchers
 type WatchManager struct {
-	mu       sync.RWMutex
-	watches  map[string]*Watch // watchID -> watch
-	nextID   int
+	mu      sync.RWMutex
+	watches map[string]*Watch // watchID -> watch
+	nextID  int
 }
 
 // NewWatchManager creates a new watch manager
@@ -336,7 +330,7 @@ func (wm *WatchManager) NotifyChange(resourceType string, eventType string, obje
 			select {
 			case watch.Channel <- WatchEvent{
 				Type:      eventType,
-				Object:    object,
+				Resource:  nil, // Resource handling could be enhanced
 				Timestamp: time.Now(),
 			}:
 			default:

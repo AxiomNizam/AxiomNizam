@@ -278,7 +278,7 @@ func (ce *ComplianceEngine) ExecuteRemediationPlan(ctx context.Context, planID s
 	}
 
 	// Execute steps
-	for i, step := range plan.Steps {
+	for _, step := range plan.Steps {
 		if step.Status == "Completed" {
 			continue
 		}

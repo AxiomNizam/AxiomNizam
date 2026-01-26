@@ -9,20 +9,20 @@ import (
 
 // JobModel GORM model for jobs
 type JobModel struct {
-	ID          string             `gorm:"primaryKey;type:varchar(255)"`
-	TenantID    string             `gorm:"index;type:varchar(255);not null"`
-	UserID      string             `gorm:"type:varchar(255)"`
-	JobType     string             `gorm:"index;type:varchar(100)"`
-	Status      string             `gorm:"index;type:varchar(50)"`
-	Parameters  datatypes.JSONType `gorm:"type:jsonb"`
-	Result      datatypes.JSONType `gorm:"type:jsonb"`
-	ErrorMsg    string             `gorm:"type:text"`
-	Progress    int                `gorm:"type:int"`
-	StartedAt   *time.Time         `gorm:"type:timestamp"`
-	CompletedAt *time.Time         `gorm:"type:timestamp"`
-	CreatedAt   time.Time          `gorm:"index;autoCreateTime;type:timestamp"`
-	UpdatedAt   time.Time          `gorm:"autoUpdateTime;type:timestamp"`
-	DeletedAt   gorm.DeletedAt     `gorm:"index;type:timestamp"`
+	ID          string         `gorm:"primaryKey;type:varchar(255)"`
+	TenantID    string         `gorm:"index;type:varchar(255);not null"`
+	UserID      string         `gorm:"type:varchar(255)"`
+	JobType     string         `gorm:"index;type:varchar(100)"`
+	Status      string         `gorm:"index;type:varchar(50)"`
+	Parameters  datatypes.JSON `gorm:"type:jsonb"`
+	Result      datatypes.JSON `gorm:"type:jsonb"`
+	ErrorMsg    string         `gorm:"type:text"`
+	Progress    int            `gorm:"type:int"`
+	StartedAt   *time.Time     `gorm:"type:timestamp"`
+	CompletedAt *time.Time     `gorm:"type:timestamp"`
+	CreatedAt   time.Time      `gorm:"index;autoCreateTime;type:timestamp"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime;type:timestamp"`
+	DeletedAt   gorm.DeletedAt `gorm:"index;type:timestamp"`
 
 	// Relations
 	Logs []*JobLogModel `gorm:"foreignKey:JobID;references:ID"`

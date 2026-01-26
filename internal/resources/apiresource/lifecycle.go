@@ -69,10 +69,9 @@ func (api *APIResource) SetMessage(message string) {
 // AddCondition adds a condition to track status
 func (api *APIResource) AddCondition(condType, status, message string) {
 	api.Status.Conditions = append(api.Status.Conditions, Condition{
-		Type:      condType,
-		Status:    status,
-		Message:   message,
-		Timestamp: time.Now(),
+		Type:    condType,
+		Status:  ConditionStatus(status),
+		Message: message,
 	})
 }
 

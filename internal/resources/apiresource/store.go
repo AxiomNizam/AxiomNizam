@@ -71,7 +71,7 @@ func (s *Store) List(ctx context.Context, namespace string) ([]*APIResource, err
 	defer s.mu.RUnlock()
 
 	result := make([]*APIResource, 0)
-	for key, api := range s.resources {
+	for _, api := range s.resources {
 		if api.Metadata.Namespace == namespace {
 			result = append(result, api)
 		}

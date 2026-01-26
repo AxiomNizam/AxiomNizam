@@ -8,9 +8,9 @@ import (
 
 // InMemoryJobManager in-memory job implementation
 type InMemoryJobManager struct {
-	mu    sync.RWMutex
-	jobs  map[string]*Job
-	logs  map[string][]*JobLog
+	mu   sync.RWMutex
+	jobs map[string]*Job
+	logs map[string][]*JobLog
 }
 
 // NewInMemoryJobManager creates manager
@@ -56,10 +56,8 @@ func (m *InMemoryJobManager) ListJobs(filter *JobFilter) ([]*Job, error) {
 
 	var result []*Job
 	for _, job := range m.jobs {
-		if filter.TenantID != "" && job.TenantID != filter.TenantID {
-			continue
-		}
-		if filter.Status != "" && job.Status != filter.Status {
+		// Note: Job doesn't have TenantID, filtering by other fields
+		if filter.Status != "" && JobStatus(filter.Status) != job.Status {
 			continue
 		}
 		if filter.Type != "" && job.Type != JobType(filter.Type) {
@@ -95,8 +93,8 @@ func (m *InMemoryJobManager) RetryJob(id string) (*Job, error) {
 		return nil, fmt.Errorf("job not found")
 	}
 
-	job.Status = "Queued"
-	job.RetryCount++
+	job.Status = JobStatus("Queued")
+	job.Retries++
 	return job, nil
 }
 

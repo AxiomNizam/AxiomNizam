@@ -9,16 +9,16 @@ import (
 
 // WebhookModel GORM model for webhooks
 type WebhookModel struct {
-	ID          string             `gorm:"primaryKey;type:varchar(255)"`
-	TenantID    string             `gorm:"index;type:varchar(255);not null"`
-	URL         string             `gorm:"type:varchar(1024)"`
-	EventTypes  datatypes.JSONType `gorm:"type:jsonb"`
-	Headers     datatypes.JSONType `gorm:"type:jsonb"`
-	Active      bool               `gorm:"type:boolean;default:true"`
-	Description string             `gorm:"type:text"`
-	CreatedAt   time.Time          `gorm:"index;autoCreateTime;type:timestamp"`
-	UpdatedAt   time.Time          `gorm:"autoUpdateTime;type:timestamp"`
-	DeletedAt   gorm.DeletedAt     `gorm:"index;type:timestamp"`
+	ID          string         `gorm:"primaryKey;type:varchar(255)"`
+	TenantID    string         `gorm:"index;type:varchar(255);not null"`
+	URL         string         `gorm:"type:varchar(1024)"`
+	EventTypes  datatypes.JSON `gorm:"type:jsonb"`
+	Headers     datatypes.JSON `gorm:"type:jsonb"`
+	Active      bool           `gorm:"type:boolean;default:true"`
+	Description string         `gorm:"type:text"`
+	CreatedAt   time.Time      `gorm:"index;autoCreateTime;type:timestamp"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime;type:timestamp"`
+	DeletedAt   gorm.DeletedAt `gorm:"index;type:timestamp"`
 
 	// Relations
 	DeliveryLogs []*WebhookDeliveryLogModel `gorm:"foreignKey:WebhookID;references:ID"`

@@ -17,15 +17,15 @@ type ValidationEngine struct {
 
 // ValidationRule defines validation for a resource type
 type ValidationRule struct {
-	Kind          string
-	Version       string
-	Required      []string
-	Rules         map[string]*FieldValidation
-	CustomRules   []CustomValidationFn
-	BeforeCreate  []TransformFn
-	BeforeUpdate  []TransformFn
-	AfterCreate   []PostProcessFn
-	AfterUpdate   []PostProcessFn
+	Kind         string
+	Version      string
+	Required     []string
+	Rules        map[string]*FieldValidation
+	CustomRules  []CustomValidationFn
+	BeforeCreate []TransformFn
+	BeforeUpdate []TransformFn
+	AfterCreate  []PostProcessFn
+	AfterUpdate  []PostProcessFn
 }
 
 // FieldValidation defines field-level validation
@@ -34,7 +34,7 @@ type FieldValidation struct {
 	Required   bool
 	MinLength  int
 	MaxLength  int
-	Pattern    string  // regex
+	Pattern    string // regex
 	Enum       []string
 	Minimum    *float64
 	Maximum    *float64
@@ -44,7 +44,7 @@ type FieldValidation struct {
 	ReadOnly   bool
 	WriteOnly  bool
 	Immutable  bool
-	Format     string // email, uri, uuid, date-time, etc.
+	Format     string                      // email, uri, uuid, date-time, etc.
 	Properties map[string]*FieldValidation // for objects
 }
 
@@ -67,13 +67,7 @@ type TransformFn func(context.Context, *ManagedResource) error
 // PostProcessFn is a post-process function
 type PostProcessFn func(context.Context, *ManagedResource) error
 
-// ValidationResult contains validation results
-type ValidationResult struct {
-	Valid   bool
-	Errors  map[string][]string // field -> errors
-	Warnings []string
-}
-
+// ValidationResult is defined in schema.go
 // NewValidationEngine creates a new validation engine
 func NewValidationEngine() *ValidationEngine {
 	return &ValidationEngine{
