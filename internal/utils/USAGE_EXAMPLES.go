@@ -1,12 +1,12 @@
-package main
+package utils
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"axiom-nizam/internal/policies"
-	"axiom-nizam/internal/utils"
+	"example.com/axiomnizam/internal/policies"
+	"example.com/axiomnizam/internal/utils"
 )
 
 // ExampleAdmissionPolicies demonstrates OPA-like admission policies

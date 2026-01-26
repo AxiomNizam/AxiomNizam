@@ -3,7 +3,7 @@ package repositories
 import (
 	"fmt"
 
-	"AxiomNizam/internal/models"
+	"example.com/axiomnizam/internal/models"
 
 	"gorm.io/gorm"
 )
