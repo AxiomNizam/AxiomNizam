@@ -180,7 +180,7 @@ func (we *WorkflowEngine) Execute(ctx context.Context, workflowName string, trig
 				stepCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
 			}
 
-			output, execErr := handler(stepCtx, step, stepInput)
+			output, execErr := handler(stepCtx, &step, stepInput)
 			cancel()
 
 			if execErr != nil {
@@ -196,7 +196,7 @@ func (we *WorkflowEngine) Execute(ctx context.Context, workflowName string, trig
 							stepCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
 						}
 
-						output, execErr = handler(stepCtx, step, stepInput)
+						output, execErr = handler(stepCtx, &step, stepInput)
 						cancel()
 						if execErr == nil {
 							stepExec.Status = "success"

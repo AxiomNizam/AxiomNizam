@@ -212,7 +212,12 @@ func (cm *ContextManager) ListContexts() []*Context {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	return cm.configMgr.config.Contexts
+	// Convert []Context to []*Context
+	result := make([]*Context, len(cm.configMgr.config.Contexts))
+	for i := range cm.configMgr.config.Contexts {
+		result[i] = &cm.configMgr.config.Contexts[i]
+	}
+	return result
 }
 
 // CreateContext creates new context

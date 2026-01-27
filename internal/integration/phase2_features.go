@@ -8,11 +8,11 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"AxiomNizam/internal/cdc"
-	"AxiomNizam/internal/handlers"
-	"AxiomNizam/internal/quality"
-	"AxiomNizam/internal/security"
-	"AxiomNizam/internal/versioning"
+	"example.com/axiomnizam/internal/cdc"
+	"example.com/axiomnizam/internal/handlers"
+	"example.com/axiomnizam/internal/quality"
+	"example.com/axiomnizam/internal/security"
+	"example.com/axiomnizam/internal/versioning"
 )
 
 // Phase2Features orchestrates all Phase 2 features

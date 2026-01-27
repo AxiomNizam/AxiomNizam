@@ -145,26 +145,6 @@ func (f *Formatter) printInterfaceSlice(w *tabwriter.Writer, data []interface{})
 	return json.NewEncoder(f.out).Encode(data)
 }
 
-// PrintSuccess prints a success message
-func PrintSuccess(out io.Writer, message string, args ...interface{}) {
-	fmt.Fprintf(out, "✅ %s\n", fmt.Sprintf(message, args...))
-}
-
-// PrintError prints an error message
-func PrintError(out io.Writer, message string, args ...interface{}) {
-	fmt.Fprintf(out, "❌ %s\n", fmt.Sprintf(message, args...))
-}
-
-// PrintWarning prints a warning message
-func PrintWarning(out io.Writer, message string, args ...interface{}) {
-	fmt.Fprintf(out, "⚠️  %s\n", fmt.Sprintf(message, args...))
-}
-
-// PrintInfo prints an info message
-func PrintInfo(out io.Writer, message string, args ...interface{}) {
-	fmt.Fprintf(out, "ℹ️  %s\n", fmt.Sprintf(message, args...))
-}
-
 // TableWriter helps write tabular data
 type TableWriter struct {
 	w       *tabwriter.Writer

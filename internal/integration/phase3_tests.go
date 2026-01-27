@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"axiom/internal/audit"
-	"axiom/internal/encryption"
-	"axiom/internal/lineage"
-	"axiom/internal/workflow"
+	"example.com/axiomnizam/internal/audit"
+	"example.com/axiomnizam/internal/encryption"
+	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/workflow"
 )
 
 // TestEncryptionRegistration tests key registration
@@ -232,10 +232,10 @@ func TestViolationRecording(t *testing.T) {
 	mgr.RegisterComplianceRule(rule)
 
 	violation := &audit.ComplianceViolation{
-		RuleID:     "test-rule-1",
+		RuleID:      "test-rule-1",
 		Description: "Test violation",
-		Severity:   "high",
-		DetectedAt: time.Now(),
+		Severity:    "high",
+		DetectedAt:  time.Now(),
 	}
 
 	err := mgr.RecordViolation(violation)

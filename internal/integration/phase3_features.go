@@ -5,24 +5,24 @@ import (
 	"sync"
 	"time"
 
-	"axiom/internal/audit"
-	"axiom/internal/encryption"
-	"axiom/internal/handlers"
-	"axiom/internal/lineage"
-	"axiom/internal/workflow"
+	"example.com/axiomnizam/internal/audit"
+	"example.com/axiomnizam/internal/encryption"
+	"example.com/axiomnizam/internal/handlers"
+	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/workflow"
 
 	"github.com/gin-gonic/gin"
 )
 
 // Phase3Integration orchestrates all Phase 3 features
 type Phase3Integration struct {
-	encryptionMgr *encryption.FieldLevelEncryption
-	lineageMgr    *lineage.DataLineageTracker
-	auditMgr      *audit.AuditComplianceManager
-	workflowMgr   *workflow.MultiVersionWorkflowManager
-	handlers      *handlers.Phase3Handlers
-	mu            sync.RWMutex
-	initialized   bool
+	encryptionMgr  *encryption.FieldLevelEncryption
+	lineageMgr     *lineage.DataLineageTracker
+	auditMgr       *audit.AuditComplianceManager
+	workflowMgr    *workflow.MultiVersionWorkflowManager
+	handlers       *handlers.Phase3Handlers
+	mu             sync.RWMutex
+	initialized    bool
 	initialized_at time.Time
 }
 
@@ -122,13 +122,13 @@ func (pi *Phase3Integration) GetStatus() map[string]interface{} {
 	defer pi.mu.RUnlock()
 
 	return map[string]interface{}{
-		"initialized":      pi.initialized,
-		"initialized_at":   pi.initialized_at,
-		"encryption":       pi.encryptionMgr.GetEncryptionStatus(),
-		"lineage":          pi.lineageMgr.GetLineageStats(),
-		"audit":            pi.auditMgr.GetAuditMetrics(),
-		"workflow":         pi.workflowMgr.GetWorkflowStatus(),
-		"total_endpoints":  25,
+		"initialized":     pi.initialized,
+		"initialized_at":  pi.initialized_at,
+		"encryption":      pi.encryptionMgr.GetEncryptionStatus(),
+		"lineage":         pi.lineageMgr.GetLineageStats(),
+		"audit":           pi.auditMgr.GetAuditMetrics(),
+		"workflow":        pi.workflowMgr.GetWorkflowStatus(),
+		"total_endpoints": 25,
 	}
 }
 
@@ -241,9 +241,9 @@ func (pi *Phase3Integration) GetFeatureStatus() map[string]map[string]interface{
 			"metrics": pi.encryptionMgr.GetEncryptionMetrics(),
 		},
 		"data_lineage": {
-			"name":    "Data Lineage Tracking",
-			"status":  "active",
-			"stats":   pi.lineageMgr.GetLineageStats(),
+			"name":   "Data Lineage Tracking",
+			"status": "active",
+			"stats":  pi.lineageMgr.GetLineageStats(),
 		},
 		"audit_compliance": {
 			"name":    "Audit & Compliance Reports",
@@ -251,8 +251,8 @@ func (pi *Phase3Integration) GetFeatureStatus() map[string]map[string]interface{
 			"metrics": pi.auditMgr.GetAuditMetrics(),
 		},
 		"workflow_versioning": {
-			"name":   "Multi-Version Workflow Support",
-			"status": "active",
+			"name":        "Multi-Version Workflow Support",
+			"status":      "active",
 			"status_info": pi.workflowMgr.GetWorkflowStatus(),
 		},
 	}

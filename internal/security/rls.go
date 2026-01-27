@@ -9,18 +9,18 @@ import (
 
 // RLSPolicy defines row-level security policy
 type RLSPolicy struct {
-	ID           string
-	TableName    string
-	PolicyName   string
-	Description  string
-	UserID       string
-	RoleID       string
-	Attributes   map[string]string
-	Predicate    string // SQL WHERE clause predicate
-	PolicyType   string // SELECT, INSERT, UPDATE, DELETE
-	IsActive     bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID          string
+	TableName   string
+	PolicyName  string
+	Description string
+	UserID      string
+	RoleID      string
+	Attributes  map[string]string
+	Predicate   string // SQL WHERE clause predicate
+	PolicyType  string // SELECT, INSERT, UPDATE, DELETE
+	IsActive    bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // UserContext contains user information for policy evaluation
@@ -36,7 +36,7 @@ type UserContext struct {
 type RowLevelSecurityManager struct {
 	mu              sync.RWMutex
 	policies        map[string][]*RLSPolicy // table -> policies
-	userContexts    map[string]*UserContext  // user_id -> context
+	userContexts    map[string]*UserContext // user_id -> context
 	policyCache     map[string]*PolicyCache
 	attributeRules  map[string]func(*UserContext, map[string]interface{}) bool
 	deniedRows      map[string]bool // cache of denied rows
@@ -56,15 +56,15 @@ type PolicyCache struct {
 
 // RLSAuditLog tracks RLS decisions
 type RLSAuditLog struct {
-	ID           string
-	Timestamp    time.Time
-	UserID       string
-	TableName    string
-	Operation    string
-	RowID        interface{}
-	Result       string // allowed, denied
-	PolicyID     string
-	Reason       string
+	ID        string
+	Timestamp time.Time
+	UserID    string
+	TableName string
+	Operation string
+	RowID     interface{}
+	Result    string // allowed, denied
+	PolicyID  string
+	Reason    string
 }
 
 // NewRowLevelSecurityManager creates a new RLS manager
@@ -250,7 +250,7 @@ func (rlsm *RowLevelSecurityManager) evaluatePredicate(userCtx *UserContext, row
 // FilterRows filters rows based on RLS policies
 func (rlsm *RowLevelSecurityManager) FilterRows(ctx context.Context, userID, tableID string, rows []map[string]interface{}) ([]map[string]interface{}, error) {
 	rlsm.mu.RLock()
-	userCtx, exists := rlsm.userContexts[userID]
+	_, exists := rlsm.userContexts[userID]
 	rlsm.mu.RUnlock()
 
 	if !exists {
@@ -359,12 +359,12 @@ func (rlsm *RowLevelSecurityManager) GetSecurityStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_policies":       len(rlsm.policies),
-		"active_users":         len(rlsm.userContexts),
-		"audit_log_entries":    len(rlsm.auditLog),
-		"cache_entries":        len(rlsm.policyCache),
-		"access_allowed":       allowedCount,
-		"access_denied":        deniedCount,
-		"denial_rate":          float64(deniedCount) / float64(deniedCount+allowedCount),
+		"total_policies":    len(rlsm.policies),
+		"active_users":      len(rlsm.userContexts),
+		"audit_log_entries": len(rlsm.auditLog),
+		"cache_entries":     len(rlsm.policyCache),
+		"access_allowed":    allowedCount,
+		"access_denied":     deniedCount,
+		"denial_rate":       float64(deniedCount) / float64(deniedCount+allowedCount),
 	}
 }

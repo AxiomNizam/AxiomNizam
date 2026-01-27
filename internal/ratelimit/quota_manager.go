@@ -110,7 +110,7 @@ func (qm *QuotaManager) CheckQuota(userID string, endpoint string, requestSize i
 	}
 
 	// Check concurrent requests
-	if quota.ConcurrentRequests >= int64(limit.MaxConcurrent) {
+	if int64(quota.ConcurrentRequests) >= int64(limit.MaxConcurrent) {
 		return false, 0, fmt.Errorf("max concurrent requests exceeded: %d", limit.MaxConcurrent)
 	}
 

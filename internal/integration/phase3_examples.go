@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"axiom/internal/audit"
-	"axiom/internal/encryption"
-	"axiom/internal/lineage"
-	"axiom/internal/workflow"
+	"example.com/axiomnizam/internal/audit"
+	"example.com/axiomnizam/internal/encryption"
+	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/workflow"
 )
 
 // Phase3ExamplesUsage provides comprehensive usage examples

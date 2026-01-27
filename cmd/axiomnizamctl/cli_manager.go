@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/yaml"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"text/tabwriter"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"example.com/axiomnizam/internal/controllers"
 	"example.com/axiomnizam/internal/resources/apiresource"
 )

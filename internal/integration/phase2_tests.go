@@ -3,12 +3,11 @@ package integration
 import (
 	"context"
 	"testing"
-	"time"
 
-	"AxiomNizam/internal/cdc"
-	"AxiomNizam/internal/quality"
-	"AxiomNizam/internal/security"
-	"AxiomNizam/internal/versioning"
+	"example.com/axiomnizam/internal/cdc"
+	"example.com/axiomnizam/internal/quality"
+	"example.com/axiomnizam/internal/security"
+	"example.com/axiomnizam/internal/versioning"
 	"go.uber.org/zap"
 )
 
@@ -269,10 +268,10 @@ func TestDeprecationWarnings(t *testing.T) {
 	versionMgr := versioning.NewAPIVersionManager("v1")
 
 	v1 := &versioning.APIVersion{
-		Version:     "v1",
-		Title:       "API v1",
-		Endpoints:   make(map[string]*versioning.VersionedEndpoint),
-		Status:      "active",
+		Version:   "v1",
+		Title:     "API v1",
+		Endpoints: make(map[string]*versioning.VersionedEndpoint),
+		Status:    "active",
 	}
 	versionMgr.RegisterVersion(v1)
 
@@ -295,10 +294,10 @@ func TestAPIVersionUsage(t *testing.T) {
 	versionMgr := versioning.NewAPIVersionManager("v1")
 
 	v1 := &versioning.APIVersion{
-		Version:     "v1",
-		Title:       "API v1",
-		Endpoints:   make(map[string]*versioning.VersionedEndpoint),
-		Status:      "active",
+		Version:   "v1",
+		Title:     "API v1",
+		Endpoints: make(map[string]*versioning.VersionedEndpoint),
+		Status:    "active",
 	}
 	versionMgr.RegisterVersion(v1)
 
@@ -388,7 +387,7 @@ func BenchmarkCDCCapture(b *testing.B) {
 
 func TestPhase2Integration(t *testing.T) {
 	logger, _ := zap.NewProduction()
-	
+
 	// Create Phase 2 features (requires DB mock, so simplified test)
 	analyzer := quality.NewDataQualityAnalyzer()
 	rlsMgr := security.NewRowLevelSecurityManager()
