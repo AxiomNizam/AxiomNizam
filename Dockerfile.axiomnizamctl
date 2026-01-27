@@ -7,15 +7,17 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o cli cmd/axiomnizamctl/test_cli.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o axiomnizamctl cmd/axiomnizamctl/main.go
 
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates bash curl
 
 WORKDIR /app
 
-COPY --from=builder /build/cli .
+COPY --from=builder /build/axiomnizamctl /usr/local/bin/axiomnizamctl
 
-ENTRYPOINT ["./cli"]
-CMD ["-cmd", "help"]
+RUN chmod +x /usr/local/bin/axiomnizamctl
+
+ENTRYPOINT ["axiomnizamctl"]
+CMD ["--help"]
