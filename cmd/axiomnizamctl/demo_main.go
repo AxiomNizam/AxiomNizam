@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -46,8 +45,6 @@ func DemoMain() {
 
 	// Step 3: Get resource status
 	fmt.Println("[STEP 3] Checking final resource status...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	// Wait a moment for metrics to update
 	time.Sleep(500 * time.Millisecond)
@@ -84,8 +81,4 @@ func DemoMain() {
 	fmt.Println("This demonstrates the complete Kubernetes-style reconciliation pattern:")
 	fmt.Println("  Desired State (YAML) → Store → Work Queue → Worker → Actual State → Status Updated")
 	fmt.Println()
-}
-
-func main() {
-	DemoMain()
 }

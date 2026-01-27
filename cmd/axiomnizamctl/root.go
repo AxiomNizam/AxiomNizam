@@ -31,8 +31,6 @@ Website: https://axiom-nizam.io
 Docs: https://docs.axiom-nizam.io`,
 	Version: "1.0.0",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		var err error
-
 		// Skip config initialization for commands that don't need it
 		if skipConfigInit(cmd.Name()) {
 			return
@@ -44,12 +42,13 @@ Docs: https://docs.axiom-nizam.io`,
 			configPath = client.DefaultConfigPath()
 		}
 
+		var err error
 		configManager, err = client.NewConfigManagerWithPath(configPath)
-		if err != nil {
+		if err != nil || configManager == nil {
 			if verbose {
-				fmt.Fprintf(os.Stderr, "⚠️  Config initialization: %v\n", err)
+				fmt.Fprintf(os.Stderr, "⚠️  Config initialization failed\n")
 			}
-			configManager, _ = client.NewConfigManager()
+			configManager = client.NewConfigManager()
 		}
 
 		if err := configManager.Load(); err != nil && verbose {
@@ -95,87 +94,12 @@ func skipConfigInit(cmdName string) bool {
 	return noConfigCmds[cmdName]
 }
 
-var loginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "Login to AxiomNizam",
-	Long:  "Authenticate with username and password, save token to ~/.axiomnizam/token",
-	Run: func(cmd *cobra.Command, args []string) {
-		handleLogin()
-	},
-}
-
-var logoutCmd = &cobra.Command{
-	Use:   "logout",
-	Short: "Logout from AxiomNizam",
-	Long:  "Delete authentication token",
-	Run: func(cmd *cobra.Command, args []string) {
-		handleLogout()
-	},
-}
-
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("AxiomNizam CLI v1.0.0")
 	},
-}
-
-func handleLogin() {
-	fmt.Println("🔐 AxiomNizam Login")
-	username := promptInput("Username")
-	password := promptPassword("Password")
-
-	if apiClient == nil {
-		fmt.Println("❌ API server not configured")
-		return
-	}
-
-	// Make login request
-	loginPayload := map[string]string{
-		"username": username,
-		"password": password,
-	}
-
-	response, err := apiClient.Post("/api/v1/auth/login", loginPayload)
-	if err != nil {
-		fmt.Printf("❌ Login failed: %v\n", err)
-		return
-	}
-
-	if response.StatusCode != 200 {
-		fmt.Printf("❌ Login failed: %s\n", response.Status)
-		return
-	}
-
-	// Extract token from response
-	var result map[string]interface{}
-	if err := response.JSON(&result); err != nil {
-		fmt.Printf("❌ Failed to parse response: %v\n", err)
-		return
-	}
-
-	token, ok := result["token"].(string)
-	if !ok {
-		fmt.Println("❌ No token in response")
-		return
-	}
-
-	// Save token
-	if err := configManager.SetToken(token); err != nil {
-		fmt.Printf("❌ Failed to save token: %v\n", err)
-		return
-	}
-
-	fmt.Printf("✅ Successfully logged in as %s\n", username)
-}
-
-func handleLogout() {
-	if err := configManager.DeleteToken(); err != nil {
-		fmt.Printf("❌ Failed to logout: %v\n", err)
-		return
-	}
-	fmt.Println("✅ Successfully logged out")
 }
 
 func init() {

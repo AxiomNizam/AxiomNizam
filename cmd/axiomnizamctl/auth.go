@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	ctx "context"
 	"fmt"
 	"strings"
 
@@ -127,7 +129,7 @@ func loginWithPassword(serverURL string) error {
 		"password": password,
 	}
 
-	response, err := tempClient.Post("/api/v1/auth/login", loginReq)
+	response, err := tempClient.Post(context.Background(), "/api/v1/auth/login", loginReq)
 	if err != nil {
 		return fmt.Errorf("login request failed: %w", err)
 	}
@@ -172,7 +174,7 @@ func loginWithAPIKey(serverURL string) error {
 	tempClient.SetToken(apiKey)
 
 	// Verify API key
-	response, err := tempClient.Get("/api/v1/auth/verify")
+	response, err := tempClient.Get(context.Background(), "/api/v1/auth/verify", nil)
 	if err != nil {
 		return fmt.Errorf("API key verification failed: %w", err)
 	}
@@ -195,11 +197,7 @@ func loginWithAPIKey(serverURL string) error {
 
 func saveLoginContext(serverURL, token, user string) error {
 	if configManager == nil {
-		var err error
-		configManager, err = client.NewConfigManager()
-		if err != nil {
-			return fmt.Errorf("failed to initialize config manager: %w", err)
-		}
+		configManager = client.NewConfigManager()
 	}
 
 	// Determine context name
@@ -245,11 +243,7 @@ func saveLoginContext(serverURL, token, user string) error {
 
 func handleLogout() error {
 	if configManager == nil {
-		var err error
-		configManager, err = client.NewConfigManager()
-		if err != nil {
-			return fmt.Errorf("failed to initialize config manager: %w", err)
-		}
+		configManager = client.NewConfigManager()
 	}
 
 	if err := configManager.DeleteToken(); err != nil {
@@ -284,7 +278,7 @@ func handleCurrentUser() error {
 
 	// Try to fetch user info from server
 	if apiClient != nil {
-		response, err := apiClient.Get("/api/v1/auth/whoami")
+		response, err := apiClient.Get(ctx.Background(), "/api/v1/auth/whoami", nil)
 		if err == nil && response.StatusCode == 200 {
 			var userInfo struct {
 				ID    string `json:"id"`

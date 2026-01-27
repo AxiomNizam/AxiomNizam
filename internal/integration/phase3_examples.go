@@ -2,12 +2,6 @@ package integration
 
 import (
 	"fmt"
-	"time"
-
-	"example.com/axiomnizam/internal/audit"
-	"example.com/axiomnizam/internal/encryption"
-	"example.com/axiomnizam/internal/lineage"
-	"example.com/axiomnizam/internal/workflow"
 )
 
 // Phase3ExamplesUsage provides comprehensive usage examples

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -189,7 +190,7 @@ func handleAPIList() {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(apis)
 }
 
@@ -211,7 +212,7 @@ func handleAPIGet(name string) {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(api)
 }
 
@@ -334,7 +335,7 @@ func handleAPIDescribe(name string) {
 	fmt.Println()
 
 	// Try to get events
-	eventsResp, _ := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s/events", namespace, name))
+	eventsResp, _ := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/apis/%s/events", namespace, name), nil)
 	if eventsResp != nil && eventsResp.StatusCode == 200 {
 		var events []map[string]interface{}
 		if err := eventsResp.JSON(&events); err == nil && len(events) > 0 {
@@ -374,7 +375,7 @@ func handleAPIDiff(filename string) {
 	name := metadata["name"].(string)
 
 	// Get current from server
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name), nil)
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return

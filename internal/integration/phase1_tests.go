@@ -17,7 +17,7 @@ func TestQuotaManager(t *testing.T) {
 	qm.SetUserDailyQuota("user1", 1000000)
 
 	// Test: Check quota
-	allowed, remaining, err := qm.CheckQuota("user1", "/api/users", 100000)
+	allowed, _, err := qm.CheckQuota("user1", "/api/users", 100000)
 	if !allowed || err != nil {
 		t.Fatalf("Expected quota to be allowed, got: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestQuotaReset(t *testing.T) {
 
 	// Check usage before reset
 	status1 := qm.GetQuotaStatus("user1")
-	dailyUsed1 := status1["daily_used"]
+	_ = status1["daily_used"] // daily usage
 
 	// Reset
 	qm.ResetUserQuota("user1")

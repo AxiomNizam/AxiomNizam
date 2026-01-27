@@ -15,9 +15,11 @@ func TestEncryptionRegistration(t *testing.T) {
 	mgr := encryption.NewFieldLevelEncryption()
 
 	key := &encryption.EncryptionKey{
-		KeyID:     "test-key-1",
-		Key:       "32-byte-encryption-key-value-12345",
-		CreatedAt: time.Now(),
+		ID:          "test-key-1",
+		KeyMaterial: "32-byte-encryption-key-value-12345",
+		Algorithm:   "AES-256",
+		KeyLength:   256,
+		CreatedAt:   time.Now(),
 	}
 
 	err := mgr.RegisterKey(key)
@@ -31,15 +33,15 @@ func TestEncryptionPolicy(t *testing.T) {
 	mgr := encryption.NewFieldLevelEncryption()
 
 	key := &encryption.EncryptionKey{
-		KeyID: "test-key-1",
-		Key:   "32-byte-encryption-key-value-12345",
+		ID:          "test-key-1",
+		KeyMaterial: "32-byte-encryption-key-value-12345",
 	}
 	mgr.RegisterKey(key)
 
 	policy := &encryption.FieldEncryptionPolicy{
-		TableName:  "test_table",
-		ColumnName: "email",
-		KeyID:      "test-key-1",
+		Name:         "email_policy",
+		ResourceType: "users",
+		KeyID:        "test-key-1",
 	}
 
 	err := mgr.AddEncryptionPolicy(policy)
@@ -53,13 +55,13 @@ func TestEncryptDecrypt(t *testing.T) {
 	mgr := encryption.NewFieldLevelEncryption()
 
 	key := &encryption.EncryptionKey{
-		KeyID: "test-key-1",
-		Key:   "32-byte-encryption-key-value-12345",
+		ID:          "test-key-1",
+		KeyMaterial: "32-byte-encryption-key-value-12345",
 	}
 	mgr.RegisterKey(key)
 
-	testData := []byte("test@example.com")
-	encrypted, err := mgr.EncryptField("users", "email", testData)
+	testData := "test@example.com"
+	encrypted, err := mgr.EncryptField("users.email", testData, "test-key-1")
 	if err != nil {
 		t.Errorf("Encryption failed: %v", err)
 		return
@@ -71,8 +73,14 @@ func TestEncryptDecrypt(t *testing.T) {
 		return
 	}
 
-	if string(decrypted) != string(testData) {
-		t.Errorf("Decrypted data mismatch: got %s, want %s", string(decrypted), string(testData))
+	decryptedStr, ok := decrypted.(string)
+	if !ok {
+		t.Errorf("Decryption returned non-string type")
+		return
+	}
+
+	if decryptedStr != testData {
+		t.Errorf("Decrypted data mismatch: got %s, want %s", decryptedStr, testData)
 	}
 }
 
@@ -81,13 +89,16 @@ func TestKeyRotation(t *testing.T) {
 	mgr := encryption.NewFieldLevelEncryption()
 
 	key := &encryption.EncryptionKey{
-		KeyID: "test-key-1",
-		Key:   "32-byte-encryption-key-value-12345",
+		ID:          "test-key-1",
+		KeyMaterial: "32-byte-encryption-key-value-12345",
 	}
 	mgr.RegisterKey(key)
 
-	newKey := "new-32-byte-encryption-key-value-123"
-	err := mgr.RotateKey("test-key-1", newKey)
+	newKey := &encryption.EncryptionKey{
+		ID:          "test-key-2",
+		KeyMaterial: "new-32-byte-encryption-key-value-123",
+	}
+	_, err := mgr.RotateKey("test-key-1", newKey)
 	if err != nil {
 		t.Errorf("Key rotation failed: %v", err)
 	}
@@ -98,10 +109,10 @@ func TestLineageNodeRegistration(t *testing.T) {
 	mgr := lineage.NewDataLineageTracker()
 
 	node := &lineage.DataLineageNode{
-		NodeID:   "tbl_test",
-		NodeName: "Test Table",
-		NodeType: "table",
-		Schema:   "public",
+		ID:     "tbl_test",
+		Name:   "Test Table",
+		Type:   "table",
+		Schema: "public",
 	}
 
 	err := mgr.RegisterDataNode(node)
@@ -115,27 +126,21 @@ func TestLineageEdgeCreation(t *testing.T) {
 	mgr := lineage.NewDataLineageTracker()
 
 	node1 := &lineage.DataLineageNode{
-		NodeID:   "tbl_source",
-		NodeName: "Source Table",
-		NodeType: "table",
+		ID:   "tbl_source",
+		Name: "Source Table",
+		Type: "table",
 	}
 	mgr.RegisterDataNode(node1)
 
 	node2 := &lineage.DataLineageNode{
-		NodeID:   "tbl_target",
-		NodeName: "Target Table",
-		NodeType: "table",
+		ID:   "tbl_target",
+		Name: "Target Table",
+		Type: "table",
 	}
 	mgr.RegisterDataNode(node2)
 
-	edge := &lineage.DataLineageEdge{
-		SourceNodeID: "tbl_source",
-		TargetNodeID: "tbl_target",
-		RelationType: "reads",
-		CreatedAt:    time.Now(),
-	}
-
-	err := mgr.CreateLineageEdge(edge)
+	// Create lineage edge
+	_, err := mgr.CreateLineageEdge("tbl_source", "tbl_target", "reads")
 	if err != nil {
 		t.Errorf("Failed to create edge: %v", err)
 	}
@@ -148,9 +153,9 @@ func TestLineageTrace(t *testing.T) {
 	// Create nodes
 	for i := 1; i <= 3; i++ {
 		node := &lineage.DataLineageNode{
-			NodeID:   "node_" + string(rune(i)),
-			NodeName: "Node " + string(rune(i)),
-			NodeType: "table",
+			ID:   "node_" + string(rune(i)),
+			Name: "Node " + string(rune(i)),
+			Type: "table",
 		}
 		mgr.RegisterDataNode(node)
 	}
@@ -158,26 +163,29 @@ func TestLineageTrace(t *testing.T) {
 	// Create edges
 	edges := []*lineage.DataLineageEdge{
 		{
-			SourceNodeID: "node_1",
-			TargetNodeID: "node_2",
+			SourceID:     "node_1",
+			TargetID:     "node_2",
 			RelationType: "reads",
 			CreatedAt:    time.Now(),
 		},
 		{
-			SourceNodeID: "node_2",
-			TargetNodeID: "node_3",
+			SourceID:     "node_2",
+			TargetID:     "node_3",
 			RelationType: "writes",
 			CreatedAt:    time.Now(),
 		},
 	}
 
-	for _, edge := range edges {
-		mgr.CreateLineageEdge(edge)
+	for i, edge := range edges {
+		_, err := mgr.CreateLineageEdge(edge.SourceID, edge.TargetID, edge.RelationType)
+		if err != nil {
+			t.Errorf("Failed to create edge %d: %v", i, err)
+		}
 	}
 
-	_, err := mgr.GetUpstreamLineage("node_3")
-	if err != nil {
-		t.Errorf("Failed to get upstream lineage: %v", err)
+	upstream := mgr.GetUpstreamLineage("node_3")
+	if len(upstream) == 0 {
+		t.Errorf("Expected upstream nodes, got none")
 	}
 }
 
@@ -190,9 +198,9 @@ func TestAuditLogging(t *testing.T) {
 		Action:       "UPDATE",
 		ResourceType: "customer",
 		ResourceID:   "cust_123",
-		IPAddress:    "192.168.1.1",
+		SourceIP:     "192.168.1.1",
 		Timestamp:    time.Now(),
-		Status:       "success",
+		Result:       "SUCCESS",
 	}
 
 	err := mgr.LogAuditEvent(auditLog)
@@ -206,11 +214,11 @@ func TestComplianceRuleRegistration(t *testing.T) {
 	mgr := audit.NewAuditComplianceManager()
 
 	rule := &audit.ComplianceRule{
-		RuleID:      "test-rule-1",
-		RuleName:    "Test Rule",
+		ID:          "test-rule-1",
 		Framework:   "GDPR",
+		Requirement: "Test Rule",
 		Description: "Test compliance rule",
-		Severity:    "high",
+		IsActive:    true,
 		CreatedAt:   time.Now(),
 	}
 
@@ -225,17 +233,17 @@ func TestViolationRecording(t *testing.T) {
 	mgr := audit.NewAuditComplianceManager()
 
 	rule := &audit.ComplianceRule{
-		RuleID:    "test-rule-1",
-		RuleName:  "Test Rule",
+		ID:        "test-rule-1",
 		Framework: "GDPR",
 	}
 	mgr.RegisterComplianceRule(rule)
 
 	violation := &audit.ComplianceViolation{
-		RuleID:      "test-rule-1",
-		Description: "Test violation",
-		Severity:    "high",
-		DetectedAt:  time.Now(),
+		RuleID:           "test-rule-1",
+		Description:      "Test violation",
+		Severity:         "high",
+		Timestamp:        time.Now(),
+		AffectedResource: "resource_1",
 	}
 
 	err := mgr.RecordViolation(violation)
@@ -249,21 +257,27 @@ func TestComplianceReport(t *testing.T) {
 	mgr := audit.NewAuditComplianceManager()
 
 	rule := &audit.ComplianceRule{
-		RuleID:      "gdpr-rule-1",
-		RuleName:    "GDPR Rule",
+		ID:          "gdpr-rule-1",
 		Framework:   "GDPR",
+		Requirement: "GDPR Compliance",
 		Description: "Test GDPR rule",
+		IsActive:    true,
+		CreatedAt:   time.Now(),
 	}
 	mgr.RegisterComplianceRule(rule)
 
-	report, err := mgr.GenerateComplianceReport("GDPR")
+	now := time.Now()
+	startDate := now.AddDate(0, -1, 0)
+	endDate := now
+
+	report, err := mgr.GenerateComplianceReport("GDPR", startDate, endDate)
 	if err != nil {
 		t.Errorf("Failed to generate compliance report: %v", err)
 		return
 	}
 
-	if report.Framework != "GDPR" {
-		t.Errorf("Report framework mismatch: got %s, want GDPR", report.Framework)
+	if report.ReportType != "GDPR" {
+		t.Errorf("Report type mismatch: got %s, want GDPR", report.ReportType)
 	}
 }
 
@@ -339,16 +353,16 @@ func TestWorkflowVersioning(t *testing.T) {
 func BenchmarkEncryption(b *testing.B) {
 	mgr := encryption.NewFieldLevelEncryption()
 	key := &encryption.EncryptionKey{
-		KeyID: "bench-key",
-		Key:   "32-byte-encryption-key-value-12345",
+		ID:        "bench-key",
+		Algorithm: "AES-256",
 	}
 	mgr.RegisterKey(key)
 
-	testData := []byte("test@example.com")
+	testData := "test@example.com"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mgr.EncryptField("users", "email", testData)
+		mgr.EncryptField("users|email", testData, "bench-key")
 	}
 }
 
@@ -358,22 +372,16 @@ func BenchmarkLineageEdgeCreation(b *testing.B) {
 
 	for i := 0; i < 100; i++ {
 		node := &lineage.DataLineageNode{
-			NodeID:   "node_" + string(rune(i)),
-			NodeName: "Node " + string(rune(i)),
-			NodeType: "table",
+			ID:   "node_" + string(rune(i)),
+			Name: "Node " + string(rune(i)),
+			Type: "table",
 		}
 		mgr.RegisterDataNode(node)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		edge := &lineage.DataLineageEdge{
-			SourceNodeID: "node_1",
-			TargetNodeID: "node_2",
-			RelationType: "reads",
-			CreatedAt:    time.Now(),
-		}
-		mgr.CreateLineageEdge(edge)
+		mgr.CreateLineageEdge("node_1", "node_2", "reads")
 	}
 }
 
@@ -389,7 +397,6 @@ func BenchmarkAuditLogging(b *testing.B) {
 			ResourceType: "customer",
 			ResourceID:   "cust_123",
 			Timestamp:    time.Now(),
-			Status:       "success",
 		}
 		mgr.LogAuditEvent(auditLog)
 	}

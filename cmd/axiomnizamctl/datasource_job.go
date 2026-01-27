@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -184,7 +185,7 @@ func handleDataSourceCreate() {
 		},
 	}
 
-	response, err := apiClient.Post("/api/v1/datasources", resource)
+	response, err := apiClient.Post(context.Background(), "/api/v1/datasources", resource)
 	if err != nil {
 		fmt.Printf("❌ Failed to create datasource: %v\n", err)
 		return
@@ -198,7 +199,7 @@ func handleDataSourceCreate() {
 }
 
 func handleDataSourceList() {
-	response, err := apiClient.Get("/api/v1/datasources")
+	response, err := apiClient.Get(context.Background(), "/api/v1/datasources", nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to list datasources: %v\n", err)
 		return
@@ -210,14 +211,14 @@ func handleDataSourceList() {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(datasources)
 }
 
 func handleDataSourceTest(name string) {
 	fmt.Printf("🧪 Testing connection to '%s'...\n", name)
 
-	response, err := apiClient.Post(fmt.Sprintf("/api/v1/datasources/%s/test", name), nil)
+	response, err := apiClient.Post(context.Background(), fmt.Sprintf("/api/v1/datasources/%s/test", name), nil)
 	if err != nil {
 		fmt.Printf("❌ Connection test failed: %v\n", err)
 		return
@@ -255,7 +256,7 @@ func handleDataSourceApply(filename string) {
 		return
 	}
 
-	response, err := apiClient.Post("/api/v1/datasources", resource)
+	response, err := apiClient.Post(context.Background(), "/api/v1/datasources", resource)
 	if err != nil {
 		fmt.Printf("❌ Failed to apply datasource: %v\n", err)
 		return
@@ -274,7 +275,7 @@ func handleDataSourceDelete(name string) {
 		return
 	}
 
-	response, err := apiClient.Delete(fmt.Sprintf("/api/v1/datasources/%s", name))
+	response, err := apiClient.Delete(context.Background(), fmt.Sprintf("/api/v1/datasources/%s", name))
 	if err != nil {
 		fmt.Printf("❌ Failed to delete datasource: %v\n", err)
 		return
@@ -288,7 +289,7 @@ func handleDataSourceDelete(name string) {
 }
 
 func handleDataSourceDescribe(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/datasources/%s", name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/datasources/%s", name), nil)
 	if err != nil {
 		output.PrintError(output.ErrNotFound, fmt.Sprintf("DataSource '%s' not found", name))
 		return
@@ -354,7 +355,7 @@ func handleDataSourceDiff(filename string) {
 		return
 	}
 
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/datasources/%s", name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/datasources/%s", name), nil)
 	if err != nil {
 		output.PrintError(output.ErrNotFound, fmt.Sprintf("DataSource '%s' not found on server", name))
 		return
@@ -384,7 +385,7 @@ func handleDataSourceDiff(filename string) {
 
 // Job handlers
 func handleJobList() {
-	response, err := apiClient.Get("/api/v1/jobs")
+	response, err := apiClient.Get(context.Background(), "/api/v1/jobs", nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to list jobs: %v\n", err)
 		return
@@ -396,12 +397,12 @@ func handleJobList() {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(jobs)
 }
 
 func handleJobGet(jobID string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/jobs/%s", jobID))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/jobs/%s", jobID), nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to get job: %v\n", err)
 		return
@@ -413,12 +414,12 @@ func handleJobGet(jobID string) {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(job)
 }
 
 func handleJobLogs(jobID string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/jobs/%s/logs", jobID))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/jobs/%s/logs", jobID), nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to get logs: %v\n", err)
 		return
@@ -430,7 +431,7 @@ func handleJobLogs(jobID string) {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(logs)
 }
 
@@ -440,7 +441,7 @@ func handleJobCancel(jobID string) {
 		return
 	}
 
-	response, err := apiClient.Post(fmt.Sprintf("/api/v1/jobs/%s/cancel", jobID), nil)
+	response, err := apiClient.Post(context.Background(), fmt.Sprintf("/api/v1/jobs/%s/cancel", jobID), nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to cancel job: %v\n", err)
 		return
@@ -454,7 +455,7 @@ func handleJobCancel(jobID string) {
 }
 
 func handleJobDescribe(jobID string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/jobs/%s", jobID))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/jobs/%s", jobID), nil)
 	if err != nil {
 		output.PrintError(output.ErrNotFound, fmt.Sprintf("Job '%s' not found", jobID))
 		return
@@ -521,7 +522,7 @@ func handleJobDiff(filename string) {
 		return
 	}
 
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/jobs/%s", jobID))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/jobs/%s", jobID), nil)
 	if err != nil {
 		output.PrintError(output.ErrNotFound, fmt.Sprintf("Job '%s' not found on server", jobID))
 		return
@@ -550,7 +551,7 @@ func handleJobDiff(filename string) {
 }
 
 func handleJobStatus(jobID string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/jobs/%s", jobID))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/jobs/%s", jobID), nil)
 	if err != nil {
 		output.PrintError(output.ErrNotFound, fmt.Sprintf("Job '%s' not found", jobID))
 		return

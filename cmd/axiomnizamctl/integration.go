@@ -152,7 +152,6 @@ var catalogSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search unified catalog",
 	Long:  "Search across API banks and data mesh by tag",
-	Flags: cobra.Flag{},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tag, _ := cmd.Flags().GetString("tag")
 		if tag == "" {
@@ -352,35 +351,35 @@ var lineageTraceCmd = &cobra.Command{
 func init() {
 	// Health command
 	healthCmd.AddCommand(healthCheckCmd)
-	rootCmd.AddCommand(healthCmd)
+	RootCmd.AddCommand(healthCmd)
 
 	// Alerts command
 	alertsCmd.AddCommand(alertsCheckCmd, alertsListCmd)
-	rootCmd.AddCommand(alertsCmd)
+	RootCmd.AddCommand(alertsCmd)
 
 	// Metrics command
 	metricsCmd.AddCommand(metricsCollectCmd)
-	rootCmd.AddCommand(metricsCmd)
+	RootCmd.AddCommand(metricsCmd)
 
 	// Catalog command
 	catalogSearchCmd.Flags().String("tag", "", "Tag to search for")
 	catalogCmd.AddCommand(catalogSearchCmd, catalogListCmd)
-	rootCmd.AddCommand(catalogCmd)
+	RootCmd.AddCommand(catalogCmd)
 
 	// Compliance command
 	complianceAuditCmd.Flags().String("user", "", "Filter by user")
 	complianceAuditCmd.Flags().String("operation", "", "Filter by operation")
 	complianceCmd.AddCommand(complianceReportCmd, complianceAuditCmd)
-	rootCmd.AddCommand(complianceCmd)
+	RootCmd.AddCommand(complianceCmd)
 
 	// Quality command
 	qualityCheckCmd.Flags().String("domain", "", "Domain name")
 	qualityCmd.AddCommand(qualityCheckCmd)
-	rootCmd.AddCommand(qualityCmd)
+	RootCmd.AddCommand(qualityCmd)
 
 	// Lineage command
 	lineageTraceCmd.Flags().String("domain", "", "Domain name")
 	lineageTraceCmd.Flags().String("product", "", "Product name")
 	lineageCmd.AddCommand(lineageTraceCmd)
-	rootCmd.AddCommand(lineageCmd)
+	RootCmd.AddCommand(lineageCmd)
 }

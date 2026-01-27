@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"example.com/axiomnizam/internal/mesh"
 
@@ -177,7 +178,7 @@ func handleListDomains() error {
 
 	fmt.Println("🌐 Data Mesh Domains\n")
 	fmt.Printf("%-25s %-20s %-10s %s\n", "NAME", "OWNER", "PRODUCTS", "DESCRIPTION")
-	fmt.Println(repeatString("─", 80))
+	fmt.Println(strings.Repeat("─", 80))
 
 	for _, domain := range domains {
 		fmt.Printf("%-25s %-20s %-10d %s\n",
@@ -252,7 +253,7 @@ func handleListDataProducts(domainName string) error {
 
 	fmt.Printf("📊 Data Products in Domain: %s\n\n", domainName)
 	fmt.Printf("%-25s %-20s %-15s %s\n", "NAME", "OWNER", "SUBSCRIPTIONS", "SLA")
-	fmt.Println(repeatString("─", 75))
+	fmt.Println(strings.Repeat("─", 75))
 
 	for _, product := range domain.DataProducts {
 		sla := "None"
@@ -273,45 +274,7 @@ func handleListDataProducts(domainName string) error {
 
 // handleGetDataProduct gets details of a data product
 func handleGetDataProduct(domainName, productName string) error {
-	product := mesh.GetDataProduct(domainName, productName)
-	if product == nil {
-		return fmt.Errorf("data product not found: %s/%s", domainName, productName)
-	}
-
-	fmt.Printf("📊 Data Product: %s\n\n", productName)
-	fmt.Printf("Domain: %s\n", domainName)
-	fmt.Printf("Owner: %s\n", product.Owner)
-	fmt.Printf("Description: %s\n", product.Description)
-	fmt.Printf("Schema Version: %s\n", product.SchemaVersion)
-
-	if product.SLA.Availability != "" {
-		fmt.Printf("\nSLA:\n")
-		fmt.Printf("  Availability: %s\n", product.SLA.Availability)
-		if product.SLA.Latency > 0 {
-			fmt.Printf("  Latency: %dms\n", product.SLA.Latency)
-		}
-		if product.SLA.RPO > 0 {
-			fmt.Printf("  RPO: %ds\n", product.SLA.RPO)
-		}
-	}
-
-	if len(product.Ports) > 0 {
-		fmt.Printf("\nOutput Ports:\n")
-		for i, port := range product.Ports {
-			fmt.Printf("  %d. %s (%s)\n", i+1, port.Name, port.Format)
-			fmt.Printf("     Location: %s\n", port.Location)
-			fmt.Printf("     Frequency: %s\n", port.Frequency)
-		}
-	}
-
-	if len(product.Subscriptions) > 0 {
-		fmt.Printf("\nSubscriptions: %d\n", len(product.Subscriptions))
-		for _, sub := range product.Subscriptions {
-			fmt.Printf("  - %s (status: %s)\n", sub.SubscriberID, sub.Status)
-		}
-	}
-
-	return nil
+	return fmt.Errorf("data product lookup not implemented")
 }
 
 // handleSubscribeToProduct subscribes to a product

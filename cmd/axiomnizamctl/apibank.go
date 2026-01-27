@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"example.com/axiomnizam/internal/apibanks"
 
@@ -110,7 +111,7 @@ func handleListAPIBanks() error {
 
 	fmt.Println("📦 API Banks\n")
 	fmt.Printf("%-30s %-20s %-10s %s\n", "NAME", "OWNER", "APIS", "DESCRIPTION")
-	fmt.Println(repeatString("─", 85))
+	fmt.Println(strings.Repeat("─", 85))
 
 	for _, bank := range banks {
 		fmt.Printf("%-30s %-20s %-10d %s\n",

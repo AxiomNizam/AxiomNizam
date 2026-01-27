@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -49,7 +50,7 @@ func handleGetEvents(kind, name string) error {
 	}
 
 	fmt.Printf("%-27s %-25s %-10s %-5s %s\n", "TIME", "REASON", "TYPE", "COUNT", "MESSAGE")
-	fmt.Println(repeatString("─", 80))
+	fmt.Println(strings.Repeat("─", 80))
 
 	for _, e := range events {
 		fmt.Printf("%-27s %-25s %-10s %-5d %s\n", e.Time, e.Reason, e.Type, e.Count, e.Message)
@@ -75,7 +76,7 @@ func handleListEvents(kind string) error {
 	}
 
 	fmt.Printf("%-20s %-27s %-25s %-10s %s\n", "RESOURCE", "TIME", "REASON", "TYPE", "MESSAGE")
-	fmt.Println(repeatString("─", 85))
+	fmt.Println(strings.Repeat("─", 85))
 
 	for _, e := range events {
 		fmt.Printf("%-20s %-27s %-25s %-10s %s\n", e.Resource, e.Time, e.Reason, e.Type, e.Message)

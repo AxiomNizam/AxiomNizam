@@ -2,7 +2,6 @@ package integration
 
 import (
 	"fmt"
-	"time"
 )
 
 // Phase3Verification provides verification checklist

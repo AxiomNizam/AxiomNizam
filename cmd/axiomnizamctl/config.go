@@ -301,7 +301,7 @@ func handleConfigRenameContext(oldName, newName string) error {
 	var found *client.Context
 	for _, ctx := range contexts {
 		if ctx.Name == oldName {
-			found = ctx
+			found = &ctx
 			break
 		}
 	}

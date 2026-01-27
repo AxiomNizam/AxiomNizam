@@ -51,7 +51,15 @@ func (ai *ApplyIntegration) Apply(ctx context.Context, kind, namespace string, r
 	}
 
 	// Step 1: Apply resource via API (this enqueues controller work)
-	applied, err := ai.resourceClient.Apply(ctx, kind, resource)
+	_, err := ai.resourceClient.Apply(ctx, &client.Resource{
+		APIVersion: "v1",
+		Kind:       kind,
+		Metadata: client.ResourceMetadata{
+			Name:      resource["name"].(string),
+			Namespace: namespace,
+		},
+		Spec: resource,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply: %v", err)
 	}
