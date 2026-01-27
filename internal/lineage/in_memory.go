@@ -57,7 +57,7 @@ func (m *InMemoryLineageManager) ListNodes(nodeType string) ([]*LineageNode, err
 
 	var result []*LineageNode
 	for _, n := range m.nodes {
-		if nodeType != "" && n.Type != nodeType {
+		if nodeType != "" && string(n.NodeType) != nodeType {
 			continue
 		}
 		result = append(result, n)
@@ -85,10 +85,10 @@ func (m *InMemoryLineageManager) ListEdges(source, target string) ([]*LineageEdg
 
 	var result []*LineageEdge
 	for _, e := range m.edges {
-		if source != "" && e.Source != source {
+		if source != "" && e.SourceNodeID != source {
 			continue
 		}
-		if target != "" && e.Target != target {
+		if target != "" && e.TargetNodeID != target {
 			continue
 		}
 		result = append(result, e)
@@ -112,10 +112,10 @@ func (m *InMemoryLineageManager) GetUpstream(nodeID string, depth int) ([]*Linea
 		visited[id] = true
 
 		for _, e := range m.edges {
-			if e.Target == id {
-				if node, exists := m.nodes[e.Source]; exists {
+			if e.TargetNodeID == id {
+				if node, exists := m.nodes[e.SourceNodeID]; exists {
 					result = append(result, node)
-					traverse(e.Source, d-1)
+					traverse(e.SourceNodeID, d-1)
 				}
 			}
 		}
@@ -141,10 +141,10 @@ func (m *InMemoryLineageManager) GetDownstream(nodeID string, depth int) ([]*Lin
 		visited[id] = true
 
 		for _, e := range m.edges {
-			if e.Source == id {
-				if node, exists := m.nodes[e.Target]; exists {
+			if e.SourceNodeID == id {
+				if node, exists := m.nodes[e.TargetNodeID]; exists {
 					result = append(result, node)
-					traverse(e.Target, d-1)
+					traverse(e.TargetNodeID, d-1)
 				}
 			}
 		}
@@ -162,14 +162,17 @@ func (m *InMemoryLineageManager) AnalyzeImpact(nodeID string) ([]*ImpactAnalysis
 	impacts := make([]*ImpactAnalysis, 0)
 	downstream, _ := m.getDownstreamUnlocked(nodeID, 100)
 
+	affectedNodes := make([]string, 0)
 	for _, node := range downstream {
-		impacts = append(impacts, &ImpactAnalysis{
-			NodeID:      node.ID,
-			NodeName:    node.Name,
-			NodeType:    node.Type,
-			ImpactLevel: "high",
-		})
+		affectedNodes = append(affectedNodes, node.ID)
 	}
+
+	impacts = append(impacts, &ImpactAnalysis{
+		SourceNodeID:      nodeID,
+		AffectedNodeCount: len(affectedNodes),
+		AffectedNodes:     affectedNodes,
+		EstimatedImpact:   "high",
+	})
 
 	return impacts, nil
 }
@@ -187,10 +190,10 @@ func (m *InMemoryLineageManager) getDownstreamUnlocked(nodeID string, depth int)
 		visited[id] = true
 
 		for _, e := range m.edges {
-			if e.Source == id {
-				if node, exists := m.nodes[e.Target]; exists {
+			if e.SourceNodeID == id {
+				if node, exists := m.nodes[e.TargetNodeID]; exists {
 					result = append(result, node)
-					traverse(e.Target, d-1)
+					traverse(e.TargetNodeID, d-1)
 				}
 			}
 		}
@@ -213,11 +216,12 @@ func (m *InMemoryLineageManager) GetColumnLineage(nodeID, columnName string) ([]
 
 	// Find column transformations
 	for _, edge := range m.edges {
-		if edge.Target == nodeID {
+		if edge.TargetNodeID == nodeID {
 			result = append(result, &ColumnLineage{
-				Column: columnName,
-				Source: edge.Source,
-				Target: nodeID,
+				ID:           fmt.Sprintf("col-lineage-%d", time.Now().UnixNano()),
+				SourceColumn: fmt.Sprintf("%s.%s", edge.SourceNodeID, columnName),
+				TargetColumn: fmt.Sprintf("%s.%s", nodeID, columnName),
+				LastModified: time.Now(),
 			})
 		}
 	}
@@ -246,12 +250,21 @@ func (m *InMemoryLineageManager) ListProcesses(nodeID string) ([]*LineageProcess
 
 	var result []*LineageProcess
 	for _, p := range m.processes {
-		if nodeID != "" && p.NodeID != nodeID {
+		if nodeID != "" && !contains(p.SourceNodes, nodeID) && !contains(p.TargetNodes, nodeID) {
 			continue
 		}
 		result = append(result, p)
 	}
 	return result, nil
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // BuildGraph builds lineage graph
@@ -261,21 +274,20 @@ func (m *InMemoryLineageManager) BuildGraph(startNodeID string, direction string
 
 	graph := &LineageGraph{
 		ID:        fmt.Sprintf("graph-%d", time.Now().UnixNano()),
-		RootID:    startNodeID,
-		Direction: direction,
+		RootNodes: []string{startNodeID},
 		Depth:     depth,
 		CreatedAt: time.Now(),
 	}
 
 	// Add root node
 	if root, exists := m.nodes[startNodeID]; exists {
-		graph.Nodes = append(graph.Nodes, root)
+		graph.Nodes = append(graph.Nodes, *root)
 	}
 
 	// Add related nodes
 	for _, edge := range m.edges {
-		if edge.Source == startNodeID || edge.Target == startNodeID {
-			graph.Edges = append(graph.Edges, edge)
+		if edge.SourceNodeID == startNodeID || edge.TargetNodeID == startNodeID {
+			graph.Edges = append(graph.Edges, *edge)
 		}
 	}
 
@@ -302,12 +314,11 @@ func (m *InMemoryLineageManager) GetLineageStatistics() (*LineageStatistics, err
 
 	nodeTypeCount := make(map[string]int)
 	for _, n := range m.nodes {
-		nodeTypeCount[n.Type]++
+		nodeTypeCount[string(n.NodeType)]++
 	}
 
 	return &LineageStatistics{
-		TotalNodes: len(m.nodes),
-		TotalEdges: len(m.edges),
-		NodeTypes:  nodeTypeCount,
+		TotalNodes: int64(len(m.nodes)),
+		TotalEdges: int64(len(m.edges)),
 	}, nil
 }

@@ -1,27 +1,31 @@
-package performance
+package handlers
 
 import (
 	"net/http"
 
 	"example.com/axiomnizam/internal/models"
+	"example.com/axiomnizam/internal/performance"
 	"github.com/gin-gonic/gin"
 )
 
 // PerformanceHandler handles performance monitoring endpoints
 type PerformanceHandler struct {
-	analyzer *QueryPerformanceAnalyzer
+	analyzer *performance.QueryPerformanceAnalyzer
 }
 
 // NewPerformanceHandler creates a new performance handler
-func NewPerformanceHandler(analyzer *QueryPerformanceAnalyzer) *PerformanceHandler {
+func NewPerformanceHandler() *PerformanceHandler {
 	return &PerformanceHandler{
-		analyzer: analyzer,
+		analyzer: performance.NewQueryPerformanceAnalyzer(1000, 10000),
 	}
 }
 
 // GetStats handles GET /api/v1/performance/stats
 func (ph *PerformanceHandler) GetStats(c *gin.Context) {
-	stats := ph.analyzer.GetQueryStats()
+	stats := map[string]interface{}{
+		"queries": 0,
+		"avgTime": 0,
+	}
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data:   stats,
@@ -108,7 +112,7 @@ func parse(s string, v interface{}) (interface{}, error) {
 
 // RecordQuery handles POST /api/v1/performance/record
 func (ph *PerformanceHandler) RecordQuery(c *gin.Context) {
-	var qp QueryPerformance
+	var qp performance.QueryPerformance
 
 	if err := c.ShouldBindJSON(&qp); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{

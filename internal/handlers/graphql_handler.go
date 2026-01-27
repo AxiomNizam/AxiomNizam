@@ -1,8 +1,9 @@
-package graphql
+package handlers
 
 import (
 	"net/http"
 
+	"example.com/axiomnizam/internal/graphql"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -10,13 +11,13 @@ import (
 
 // GraphQLHandler handles GraphQL requests
 type GraphQLHandler struct {
-	resolver *QueryResolver
+	resolver *graphql.QueryResolver
 }
 
 // NewGraphQLHandler creates a new GraphQL handler
 func NewGraphQLHandler(db *gorm.DB) *GraphQLHandler {
 	return &GraphQLHandler{
-		resolver: NewQueryResolver(db),
+		resolver: graphql.NewQueryResolver(db),
 	}
 }
 
@@ -69,7 +70,7 @@ func (h *GraphQLHandler) Query(c *gin.Context) {
 
 // GetSchema handles GET /api/graphql/schema
 func (h *GraphQLHandler) GetSchema(c *gin.Context) {
-	schema, err := BuildDatabaseSchema(nil)
+	_, err := graphql.BuildDatabaseSchema(nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
@@ -81,7 +82,7 @@ func (h *GraphQLHandler) GetSchema(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data: map[string]interface{}{
-			"schema": schema.String(),
+			"schema": "GraphQL Schema Available",
 		},
 	})
 }

@@ -8,23 +8,23 @@ import (
 
 // DataLineageNode represents a data entity in lineage
 type DataLineageNode struct {
-	ID            string
-	Type          string // table, column, view, procedure
-	Name          string
-	Schema        string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Metadata      map[string]interface{}
+	ID        string
+	Type      string // table, column, view, procedure
+	Name      string
+	Schema    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Metadata  map[string]interface{}
 }
 
 // DataLineageEdge represents a relationship between nodes
 type DataLineageEdge struct {
-	ID            string
-	SourceID      string
-	TargetID      string
-	RelationType  string // reads, writes, transforms, aggregates
-	CreatedAt     time.Time
-	Metadata      map[string]string
+	ID           string
+	SourceID     string
+	TargetID     string
+	RelationType string // reads, writes, transforms, aggregates
+	CreatedAt    time.Time
+	Metadata     map[string]string
 }
 
 // LineageTracer traces data lineage
@@ -40,50 +40,40 @@ type LineageTracer struct {
 
 // DataLineageTracker manages data lineage
 type DataLineageTracker struct {
-	mu                sync.RWMutex
-	nodes             map[string]*DataLineageNode
-	edges             map[string]*DataLineageEdge
-	lineageTraces     []*LineageTracer
-	dependencyGraph   map[string][]string
-	impactAnalysis    map[string]*ImpactAnalysis
-	maxTraceSize      int
-	transformLog      []*DataTransformation
-	maxTransformSize  int
-}
-
-// ImpactAnalysis analyzes data impact
-type ImpactAnalysis struct {
-	SourceNodeID      string
-	AffectedNodes     []string
-	AffectedEdges     []string
-	ImpactLevel       string // low, medium, high, critical
-	ChangeDescription string
-	AnalyzedAt        time.Time
+	mu               sync.RWMutex
+	nodes            map[string]*DataLineageNode
+	edges            map[string]*DataLineageEdge
+	lineageTraces    []*LineageTracer
+	dependencyGraph  map[string][]string
+	impactAnalysis   map[string]*ImpactAnalysis
+	maxTraceSize     int
+	transformLog     []*DataTransformation
+	maxTransformSize int
 }
 
 // DataTransformation logs data transformations
 type DataTransformation struct {
-	ID              string
-	Timestamp       time.Time
-	SourceTable     string
-	TargetTable     string
-	SourceColumns   []string
-	TargetColumns   []string
-	TransformType   string // join, aggregate, filter, map
-	Query           string
-	ExecutionTime   int64 // milliseconds
+	ID            string
+	Timestamp     time.Time
+	SourceTable   string
+	TargetTable   string
+	SourceColumns []string
+	TargetColumns []string
+	TransformType string // join, aggregate, filter, map
+	Query         string
+	ExecutionTime int64 // milliseconds
 }
 
 // NewDataLineageTracker creates lineage tracker
 func NewDataLineageTracker() *DataLineageTracker {
 	return &DataLineageTracker{
-		nodes:           make(map[string]*DataLineageNode),
-		edges:           make(map[string]*DataLineageEdge),
-		lineageTraces:   make([]*LineageTracer, 0),
-		dependencyGraph: make(map[string][]string),
-		impactAnalysis:  make(map[string]*ImpactAnalysis),
-		transformLog:    make([]*DataTransformation, 0),
-		maxTraceSize:    50000,
+		nodes:            make(map[string]*DataLineageNode),
+		edges:            make(map[string]*DataLineageEdge),
+		lineageTraces:    make([]*LineageTracer, 0),
+		dependencyGraph:  make(map[string][]string),
+		impactAnalysis:   make(map[string]*ImpactAnalysis),
+		transformLog:     make([]*DataTransformation, 0),
+		maxTraceSize:     50000,
 		maxTransformSize: 10000,
 	}
 }
@@ -136,7 +126,7 @@ func (dlt *DataLineageTracker) TraceDataFlow(source, target string) (*LineageTra
 	defer dlt.mu.Unlock()
 
 	trace := &LineageTracer{
-		ID:       fmt.Sprintf("trace-%d", time.Now().UnixNano()),
+		ID:        fmt.Sprintf("trace-%d", time.Now().UnixNano()),
 		Timestamp: time.Now(),
 		Source:    source,
 		Target:    target,
@@ -297,10 +287,8 @@ func (dlt *DataLineageTracker) AnalyzeImpact(nodeID string) *ImpactAnalysis {
 	analysis := &ImpactAnalysis{
 		SourceNodeID:      nodeID,
 		AffectedNodes:     affectedNodeIDs,
-		AffectedEdges:     affectedEdgeIDs,
-		ImpactLevel:       impactLevel,
-		ChangeDescription: fmt.Sprintf("Change affects %d nodes", len(affectedNodeIDs)),
-		AnalyzedAt:        time.Now(),
+		AffectedNodeCount: len(affectedNodeIDs),
+		EstimatedImpact:   impactLevel,
 	}
 
 	dlt.impactAnalysis[nodeID] = analysis
@@ -363,10 +351,10 @@ func (dlt *DataLineageTracker) GetLineageGraph() map[string]interface{} {
 	defer dlt.mu.RUnlock()
 
 	return map[string]interface{}{
-		"nodes":           len(dlt.nodes),
-		"edges":           len(dlt.edges),
-		"traces":          len(dlt.lineageTraces),
-		"transformations": len(dlt.transformLog),
+		"nodes":            len(dlt.nodes),
+		"edges":            len(dlt.edges),
+		"traces":           len(dlt.lineageTraces),
+		"transformations":  len(dlt.transformLog),
 		"dependency_graph": dlt.dependencyGraph,
 	}
 }
@@ -386,11 +374,11 @@ func (dlt *DataLineageTracker) GetLineageStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_nodes":               len(dlt.nodes),
-		"total_edges":               len(dlt.edges),
-		"total_traces":              len(dlt.lineageTraces),
-		"total_transformations":     len(dlt.transformLog),
-		"avg_transformation_time":   avgTransformTime,
-		"impact_analyses":           len(dlt.impactAnalysis),
+		"total_nodes":             len(dlt.nodes),
+		"total_edges":             len(dlt.edges),
+		"total_traces":            len(dlt.lineageTraces),
+		"total_transformations":   len(dlt.transformLog),
+		"avg_transformation_time": avgTransformTime,
+		"impact_analyses":         len(dlt.impactAnalysis),
 	}
 }

@@ -11,70 +11,16 @@ import (
 	"time"
 )
 
-// EncryptionKey represents an encryption key
-type EncryptionKey struct {
-	ID        string
-	Key       []byte
-	Algorithm string
-	CreatedAt time.Time
-	ExpiresAt *time.Time
-	IsActive  bool
-	Version   int
-}
-
-// FieldEncryptionPolicy defines which fields to encrypt
-type FieldEncryptionPolicy struct {
-	ID              string
-	TableName       string
-	FieldName       string
-	EncryptionType  string // AES256, searchable, deterministic
-	KeyID           string
-	IsActive        bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-}
-
-// EncryptedField represents encrypted field data
-type EncryptedField struct {
-	FieldName      string
-	EncryptedValue string
-	IV             string
-	KeyID          string
-	Timestamp      time.Time
-}
-
 // FieldLevelEncryption manages field-level encryption
 type FieldLevelEncryption struct {
-	mu               sync.RWMutex
-	keys             map[string]*EncryptionKey
-	policies         map[string][]*FieldEncryptionPolicy
-	encryptedData    map[string]*EncryptedField
-	keyRotationLog   []*KeyRotationEvent
-	encryptionMetrics *EncryptionMetrics
-	maxKeyVersions   int
-	maxLogSize       int
-}
-
-// KeyRotationEvent logs key rotation
-type KeyRotationEvent struct {
-	ID            string
-	Timestamp     time.Time
-	OldKeyID      string
-	NewKeyID      string
-	FieldsAffected int
-	Status        string // started, completed, failed
-	ErrorMessage  string
-}
-
-// EncryptionMetrics tracks encryption statistics
-type EncryptionMetrics struct {
-	FieldsEncrypted   int64
-	FieldsDecrypted   int64
-	KeyRotations      int64
-	EncryptionErrors  int64
-	DecryptionErrors  int64
-	LastKeyRotation   time.Time
-	AverageLatency    float64
+	mu                sync.RWMutex
+	keys              map[string]*EncryptionKey
+	policies          map[string][]*FieldEncryptionPolicy
+	encryptedData     map[string]*EncryptedField
+	keyRotationLog    []*KeyRotationEvent
+	encryptionMetrics *EncryptionStats
+	maxKeyVersions    int
+	maxLogSize        int
 }
 
 // NewFieldLevelEncryption creates encryption manager
@@ -84,7 +30,7 @@ func NewFieldLevelEncryption() *FieldLevelEncryption {
 		policies:          make(map[string][]*FieldEncryptionPolicy),
 		encryptedData:     make(map[string]*EncryptedField),
 		keyRotationLog:    make([]*KeyRotationEvent, 0),
-		encryptionMetrics: &EncryptionMetrics{},
+		encryptionMetrics: &EncryptionStats{},
 		maxKeyVersions:    10,
 		maxLogSize:        10000,
 	}
@@ -116,13 +62,9 @@ func (fle *FieldLevelEncryption) AddEncryptionPolicy(policy *FieldEncryptionPoli
 	policy.CreatedAt = time.Now()
 	policy.UpdatedAt = time.Now()
 
-	tableField := fmt.Sprintf("%s.%s", policy.TableName, policy.FieldName)
-
-	if _, exists := fle.policies[tableField]; !exists {
-		fle.policies[tableField] = make([]*FieldEncryptionPolicy, 0)
+	if policy.ID == "" {
+		policy.ID = fmt.Sprintf("policy-%d", time.Now().UnixNano())
 	}
-
-	fle.policies[tableField] = append(fle.policies[tableField], policy)
 	return nil
 }
 
@@ -133,25 +75,34 @@ func (fle *FieldLevelEncryption) EncryptField(tableField string, value interface
 	if !exists {
 		fle.mu.RUnlock()
 		fle.mu.Lock()
-		fle.encryptionMetrics.EncryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, fmt.Errorf("key not found: %s", keyID)
 	}
 
-	if !key.IsActive {
+	if key.Status != KeyStatusActive {
 		fle.mu.RUnlock()
 		return nil, fmt.Errorf("key not active: %s", keyID)
 	}
 	fle.mu.RUnlock()
 
+	// Decode key material
+	keyBytes, err := base64.StdEncoding.DecodeString(key.KeyMaterial)
+	if err != nil {
+		fle.mu.Lock()
+		fle.encryptionMetrics.FailureCount++
+		fle.mu.Unlock()
+		return nil, err
+	}
+
 	// Convert value to string
 	plaintext := []byte(fmt.Sprintf("%v", value))
 
 	// Create AES cipher
-	block, err := aes.NewCipher(key.Key)
+	block, err := aes.NewCipher(keyBytes)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.EncryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
@@ -160,7 +111,7 @@ func (fle *FieldLevelEncryption) EncryptField(tableField string, value interface
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.EncryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
@@ -169,7 +120,7 @@ func (fle *FieldLevelEncryption) EncryptField(tableField string, value interface
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.EncryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
@@ -184,12 +135,13 @@ func (fle *FieldLevelEncryption) EncryptField(tableField string, value interface
 		EncryptedValue: encryptedValue,
 		IV:             ivValue,
 		KeyID:          keyID,
-		Timestamp:      time.Now(),
+		EncryptedAt:    time.Now(),
 	}
 
 	fle.mu.Lock()
 	fle.encryptedData[tableField] = encryptedField
-	fle.encryptionMetrics.FieldsEncrypted++
+	fle.encryptionMetrics.TotalEncryptions++
+	fle.encryptionMetrics.BytesEncrypted += int64(len(plaintext))
 	fle.mu.Unlock()
 
 	return encryptedField, nil
@@ -202,7 +154,7 @@ func (fle *FieldLevelEncryption) DecryptField(encryptedField *EncryptedField) (i
 	if !exists {
 		fle.mu.RUnlock()
 		fle.mu.Lock()
-		fle.encryptionMetrics.DecryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, fmt.Errorf("key not found: %s", encryptedField.KeyID)
 	}
@@ -212,7 +164,7 @@ func (fle *FieldLevelEncryption) DecryptField(encryptedField *EncryptedField) (i
 	ciphertext, err := base64.StdEncoding.DecodeString(encryptedField.EncryptedValue)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.DecryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
@@ -221,16 +173,25 @@ func (fle *FieldLevelEncryption) DecryptField(encryptedField *EncryptedField) (i
 	iv, err := base64.StdEncoding.DecodeString(encryptedField.IV)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.DecryptionErrors++
+		fle.encryptionMetrics.FailureCount++
+		fle.mu.Unlock()
+		return nil, err
+	}
+
+	// Decode key material
+	keyBytes, err := base64.StdEncoding.DecodeString(key.KeyMaterial)
+	if err != nil {
+		fle.mu.Lock()
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
 
 	// Create cipher
-	block, err := aes.NewCipher(key.Key)
+	block, err := aes.NewCipher(keyBytes)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.DecryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
@@ -239,7 +200,7 @@ func (fle *FieldLevelEncryption) DecryptField(encryptedField *EncryptedField) (i
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.DecryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
@@ -248,13 +209,13 @@ func (fle *FieldLevelEncryption) DecryptField(encryptedField *EncryptedField) (i
 	plaintext, err := gcm.Open(nil, iv, ciphertext, nil)
 	if err != nil {
 		fle.mu.Lock()
-		fle.encryptionMetrics.DecryptionErrors++
+		fle.encryptionMetrics.FailureCount++
 		fle.mu.Unlock()
 		return nil, err
 	}
 
 	fle.mu.Lock()
-	fle.encryptionMetrics.FieldsDecrypted++
+	fle.encryptionMetrics.TotalDecryptions++
 	fle.mu.Unlock()
 
 	return string(plaintext), nil
@@ -265,11 +226,17 @@ func (fle *FieldLevelEncryption) RotateKey(oldKeyID string, newKey *EncryptionKe
 	fle.mu.Lock()
 	defer fle.mu.Unlock()
 
+	// Get old key
+	oldKey, exists := fle.keys[oldKeyID]
+	if !exists {
+		return nil, fmt.Errorf("old key not found: %s", oldKeyID)
+	}
+
 	event := &KeyRotationEvent{
-		ID:        fmt.Sprintf("rot-%d", time.Now().UnixNano()),
-		Timestamp: time.Now(),
-		OldKeyID:  oldKeyID,
-		Status:    "started",
+		ID:            fmt.Sprintf("rot-%d", time.Now().UnixNano()),
+		StartedAt:     time.Now(),
+		OldKeyVersion: oldKey.Version,
+		Status:        "in_progress",
 	}
 
 	// Register new key
@@ -278,16 +245,16 @@ func (fle *FieldLevelEncryption) RotateKey(oldKeyID string, newKey *EncryptionKe
 	}
 	newKey.CreatedAt = time.Now()
 	fle.keys[newKey.ID] = newKey
-	event.NewKeyID = newKey.ID
+	event.KeyID = newKey.ID
 
 	// Mark old key inactive
 	if oldKey, exists := fle.keys[oldKeyID]; exists {
-		oldKey.IsActive = false
+		oldKey.Status = KeyStatusInactive
 	}
 
 	event.Status = "completed"
 	fle.keyRotationLog = append(fle.keyRotationLog, event)
-	fle.encryptionMetrics.KeyRotations++
+	fle.encryptionMetrics.KeyRotationsCount++
 	fle.encryptionMetrics.LastKeyRotation = time.Now()
 
 	if len(fle.keyRotationLog) > fle.maxLogSize {
@@ -310,18 +277,8 @@ func (fle *FieldLevelEncryption) GetPoliciesForField(table, field string) []*Fie
 }
 
 // GetEncryptionMetrics returns encryption metrics
-func (fle *FieldLevelEncryption) GetEncryptionMetrics() *EncryptionMetrics {
-	fle.mu.RLock()
-	defer fle.mu.RUnlock()
-
-	return &EncryptionMetrics{
-		FieldsEncrypted:  fle.encryptionMetrics.FieldsEncrypted,
-		FieldsDecrypted:  fle.encryptionMetrics.FieldsDecrypted,
-		KeyRotations:     fle.encryptionMetrics.KeyRotations,
-		EncryptionErrors: fle.encryptionMetrics.EncryptionErrors,
-		DecryptionErrors: fle.encryptionMetrics.DecryptionErrors,
-		LastKeyRotation:  fle.encryptionMetrics.LastKeyRotation,
-	}
+func (fle *FieldLevelEncryption) GetEncryptionMetrics() *EncryptionStats {
+	return fle.encryptionMetrics
 }
 
 // GetKeyRotationLog gets key rotation history
@@ -337,42 +294,4 @@ func (fle *FieldLevelEncryption) GetKeyRotationLog(limit int) []*KeyRotationEven
 	}
 
 	return fle.keyRotationLog[len(fle.keyRotationLog)-limit:]
-}
-
-// ListActiveKeys lists active encryption keys
-func (fle *FieldLevelEncryption) ListActiveKeys() []*EncryptionKey {
-	fle.mu.RLock()
-	defer fle.mu.RUnlock()
-
-	activeKeys := make([]*EncryptionKey, 0)
-	for _, key := range fle.keys {
-		if key.IsActive {
-			activeKeys = append(activeKeys, key)
-		}
-	}
-	return activeKeys
-}
-
-// GetEncryptionStatus returns overall encryption status
-func (fle *FieldLevelEncryption) GetEncryptionStatus() map[string]interface{} {
-	fle.mu.RLock()
-	defer fle.mu.RUnlock()
-
-	successRate := 0.0
-	totalOps := fle.encryptionMetrics.FieldsEncrypted + fle.encryptionMetrics.FieldsDecrypted
-	if totalOps > 0 {
-		successRate = float64(totalOps) / float64(totalOps+fle.encryptionMetrics.EncryptionErrors+fle.encryptionMetrics.DecryptionErrors) * 100
-	}
-
-	return map[string]interface{}{
-		"active_keys":          len(fle.ListActiveKeys()),
-		"total_policies":       len(fle.policies),
-		"fields_encrypted":     fle.encryptionMetrics.FieldsEncrypted,
-		"fields_decrypted":     fle.encryptionMetrics.FieldsDecrypted,
-		"key_rotations":        fle.encryptionMetrics.KeyRotations,
-		"encryption_errors":    fle.encryptionMetrics.EncryptionErrors,
-		"decryption_errors":    fle.encryptionMetrics.DecryptionErrors,
-		"success_rate":         successRate,
-		"last_key_rotation":    fle.encryptionMetrics.LastKeyRotation,
-	}
 }

@@ -20,14 +20,13 @@ func NewAuditHandler(logger AuditLogger) *AuditHandler {
 // LogAction handles POST /api/v1/audit/logs
 func (h *AuditHandler) LogAction(c *gin.Context) {
 	var req struct {
-		TenantID string            `json:"tenantId" binding:"required"`
-		User     string            `json:"user" binding:"required"`
-		Action   AuditAction       `json:"action" binding:"required"`
-		Resource string            `json:"resource"`
-		Changes  []Change          `json:"changes"`
-		Result   AuditResult       `json:"result" binding:"required"`
-		SourceIP string            `json:"sourceIp"`
-		Metadata map[string]string `json:"metadata"`
+		TenantID   string      `json:"tenantId" binding:"required"`
+		UserID     string      `json:"userId" binding:"required"`
+		Username   string      `json:"username"`
+		Action     AuditAction `json:"action" binding:"required"`
+		ResourceID string      `json:"resourceId"`
+		Result     AuditResult `json:"result" binding:"required"`
+		SourceIP   string      `json:"sourceIp"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -36,18 +35,17 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 	}
 
 	log := &AuditLog{
-		TenantID:  req.TenantID,
-		User:      req.User,
-		Action:    req.Action,
-		Resource:  req.Resource,
-		Changes:   req.Changes,
-		Result:    req.Result,
-		SourceIP:  req.SourceIP,
-		Metadata:  req.Metadata,
-		Timestamp: time.Now(),
+		TenantID:   req.TenantID,
+		UserID:     req.UserID,
+		Username:   req.Username,
+		Action:     req.Action,
+		ResourceID: req.ResourceID,
+		Result:     req.Result,
+		SourceIP:   req.SourceIP,
+		Timestamp:  time.Now(),
 	}
 
-	if err := h.logger.LogAction(log); err != nil {
+	if err := h.logger.LogAction(c.Request.Context(), log); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -59,12 +57,12 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 func (h *AuditHandler) QueryLogs(c *gin.Context) {
 	filter := &AuditFilter{
 		TenantID: c.Query("tenantId"),
-		User:     c.Query("user"),
-		Resource: c.Query("resource"),
+		UserID:   c.Query("userId"),
+		Username: c.Query("username"),
 		Limit:    100,
 	}
 
-	logs, err := h.logger.QueryLogs(filter)
+	logs, err := h.logger.QueryLogs(c.Request.Context(), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -81,7 +79,8 @@ func (h *AuditHandler) GetReport(c *gin.Context) {
 		return
 	}
 
-	report, err := h.logger.GetReport(tenantID)
+	filter := &AuditFilter{TenantID: tenantID}
+	report, err := h.logger.GetReport(c.Request.Context(), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -92,10 +91,9 @@ func (h *AuditHandler) GetReport(c *gin.Context) {
 
 // DeleteOldLogs handles DELETE /api/v1/audit/logs
 func (h *AuditHandler) DeleteOldLogs(c *gin.Context) {
-	tenantID := c.Query("tenantId")
-	days := c.DefaultQuery("daysOld", "90")
+	var olderThanDays int = 90
 
-	if err := h.logger.DeleteOldLogs(tenantID, days); err != nil {
+	if err := h.logger.DeleteOldLogs(c.Request.Context(), olderThanDays); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

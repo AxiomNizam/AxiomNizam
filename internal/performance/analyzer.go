@@ -163,7 +163,12 @@ func (qpa *QueryPerformanceAnalyzer) GetQueryTypeStats() map[string]interface{} 
 		typeStats[queryType] = stats
 	}
 
-	return typeStats
+	// Convert to map[string]interface{}
+	result := make(map[string]interface{})
+	for k, v := range typeStats {
+		result[k] = v
+	}
+	return result
 }
 
 // GetUserStats returns stats by user
@@ -202,7 +207,12 @@ func (qpa *QueryPerformanceAnalyzer) GetUserStats() map[string]interface{} {
 		userStats[user] = stats
 	}
 
-	return userStats
+	// Convert to map[string]interface{}
+	result := make(map[string]interface{})
+	for k, v := range userStats {
+		result[k] = v
+	}
+	return result
 }
 
 // GetRecommendations returns optimization recommendations

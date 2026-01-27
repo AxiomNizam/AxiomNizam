@@ -15,8 +15,8 @@ import (
 type InMemorySecretsManager struct {
 	mu        sync.RWMutex
 	keys      map[string]*EncryptionKey
-	policies  map[string]*EncryptionPolicy
-	rotations map[string]*KeyRotation
+	policies  map[string]*FieldEncryptionPolicy
+	rotations map[string]*KeyRotationEvent
 	auditLogs []*EncryptionAuditLog
 }
 
@@ -24,8 +24,8 @@ type InMemorySecretsManager struct {
 func NewInMemorySecretsManager() *InMemorySecretsManager {
 	return &InMemorySecretsManager{
 		keys:      make(map[string]*EncryptionKey),
-		policies:  make(map[string]*EncryptionPolicy),
-		rotations: make(map[string]*KeyRotation),
+		policies:  make(map[string]*FieldEncryptionPolicy),
+		rotations: make(map[string]*KeyRotationEvent),
 		auditLogs: make([]*EncryptionAuditLog, 0),
 	}
 }
@@ -56,7 +56,7 @@ func (m *InMemorySecretsManager) CreateKey(key *EncryptionKey) (*EncryptionKey, 
 	m.auditLogs = append(m.auditLogs, &EncryptionAuditLog{
 		ID:        fmt.Sprintf("audit-%d", time.Now().UnixNano()),
 		KeyID:     key.ID,
-		Action:    "key_created",
+		Operation: "key_created",
 		Timestamp: time.Now(),
 	})
 
@@ -108,12 +108,13 @@ func (m *InMemorySecretsManager) RotateKey(id string) error {
 	}
 
 	// Record rotation
-	rotation := &KeyRotation{
-		ID:        fmt.Sprintf("rotation-%d", time.Now().UnixNano()),
-		KeyID:     id,
-		OldKeyID:  fmt.Sprintf("%s-v%d", id, key.Version),
-		NewKeyID:  fmt.Sprintf("%s-v%d", id, key.Version+1),
-		RotatedAt: time.Now(),
+	rotation := &KeyRotationEvent{
+		ID:            fmt.Sprintf("rotation-%d", time.Now().UnixNano()),
+		KeyID:         id,
+		OldKeyVersion: key.Version,
+		NewKeyVersion: key.Version + 1,
+		StartedAt:     time.Now(),
+		Status:        "completed",
 	}
 
 	m.rotations[rotation.ID] = rotation
@@ -127,7 +128,7 @@ func (m *InMemorySecretsManager) RotateKey(id string) error {
 	m.auditLogs = append(m.auditLogs, &EncryptionAuditLog{
 		ID:        fmt.Sprintf("audit-%d", time.Now().UnixNano()),
 		KeyID:     id,
-		Action:    "key_rotated",
+		Operation: "key_rotated",
 		Timestamp: time.Now(),
 	})
 
@@ -175,7 +176,7 @@ func (m *InMemorySecretsManager) Encrypt(keyID string, plaintext string) (string
 	m.auditLogs = append(m.auditLogs, &EncryptionAuditLog{
 		ID:        fmt.Sprintf("audit-%d", time.Now().UnixNano()),
 		KeyID:     keyID,
-		Action:    "data_encrypted",
+		Operation: "data_encrypted",
 		Timestamp: time.Now(),
 	})
 
@@ -226,7 +227,7 @@ func (m *InMemorySecretsManager) Decrypt(keyID string, ciphertext string) (strin
 	m.auditLogs = append(m.auditLogs, &EncryptionAuditLog{
 		ID:        fmt.Sprintf("audit-%d", time.Now().UnixNano()),
 		KeyID:     keyID,
-		Action:    "data_decrypted",
+		Operation: "data_decrypted",
 		Timestamp: time.Now(),
 	})
 
@@ -234,7 +235,7 @@ func (m *InMemorySecretsManager) Decrypt(keyID string, ciphertext string) (strin
 }
 
 // CreatePolicy creates encryption policy
-func (m *InMemorySecretsManager) CreatePolicy(policy *EncryptionPolicy) (*EncryptionPolicy, error) {
+func (m *InMemorySecretsManager) CreatePolicy(policy *FieldEncryptionPolicy) (*FieldEncryptionPolicy, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -247,7 +248,7 @@ func (m *InMemorySecretsManager) CreatePolicy(policy *EncryptionPolicy) (*Encryp
 }
 
 // GetPolicy retrieves policy
-func (m *InMemorySecretsManager) GetPolicy(id string) (*EncryptionPolicy, error) {
+func (m *InMemorySecretsManager) GetPolicy(id string) (*FieldEncryptionPolicy, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -259,11 +260,11 @@ func (m *InMemorySecretsManager) GetPolicy(id string) (*EncryptionPolicy, error)
 }
 
 // ListPolicies lists policies
-func (m *InMemorySecretsManager) ListPolicies(tenantID string) ([]*EncryptionPolicy, error) {
+func (m *InMemorySecretsManager) ListPolicies(tenantID string) ([]*FieldEncryptionPolicy, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*EncryptionPolicy
+	var result []*FieldEncryptionPolicy
 	for _, p := range m.policies {
 		if tenantID != "" && p.TenantID != tenantID {
 			continue

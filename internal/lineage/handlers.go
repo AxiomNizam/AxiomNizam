@@ -2,7 +2,6 @@ package lineage
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -143,7 +142,7 @@ func (h *LineageHandler) GetStatistics(c *gin.Context) {
 // RegisterLineageRoutes registers all lineage routes
 func RegisterLineageRoutes(router *gin.Engine, manager LineageManager) {
 	handler := NewLineageHandler(manager)
-	
+
 	group := router.Group("/api/v1/lineage")
 	{
 		group.GET("/nodes/:id", handler.GetNode)

@@ -212,7 +212,7 @@ type LineageGraph struct {
 }
 
 // LineagePath represents path through lineage
-type LineageePath struct {
+type LineagePath struct {
 	ID               string   `json:"id"`
 	SourceNodeID     string   `json:"sourceNodeId"`
 	TargetNodeID     string   `json:"targetNodeId"`

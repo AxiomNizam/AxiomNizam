@@ -154,10 +154,10 @@ func (h *EncryptionHandler) Decrypt(c *gin.Context) {
 // CreatePolicy handles POST /api/v1/encryption/policies
 func (h *EncryptionHandler) CreatePolicy(c *gin.Context) {
 	var req struct {
-		TenantID    string      `json:"tenantId" binding:"required"`
-		Name        string      `json:"name" binding:"required"`
-		ResourceType string     `json:"resourceType" binding:"required"`
-		FieldRules  []FieldRule `json:"fieldRules" binding:"required"`
+		TenantID     string      `json:"tenantId" binding:"required"`
+		Name         string      `json:"name" binding:"required"`
+		ResourceType string      `json:"resourceType" binding:"required"`
+		FieldRules   []FieldRule `json:"fieldRules" binding:"required"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -180,7 +180,6 @@ func (h *EncryptionHandler) CreatePolicy(c *gin.Context) {
 
 // ListPolicies handles GET /api/v1/encryption/policies
 func (h *EncryptionHandler) ListPolicies(c *gin.Context) {
-	tenantID := c.Query("tenantId")
 	// Retrieve policies (to be implemented)
 	c.JSON(http.StatusOK, gin.H{"policies": []interface{}{}, "count": 0})
 }
@@ -188,7 +187,7 @@ func (h *EncryptionHandler) ListPolicies(c *gin.Context) {
 // RegisterEncryptionRoutes registers all encryption routes
 func RegisterEncryptionRoutes(router *gin.Engine, manager SecretsManager) {
 	handler := NewEncryptionHandler(manager)
-	
+
 	group := router.Group("/api/v1/encryption")
 	{
 		group.POST("/keys", handler.CreateKey)

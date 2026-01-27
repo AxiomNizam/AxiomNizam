@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"axiom/internal/audit"
-	"axiom/internal/encryption"
-	"axiom/internal/lineage"
-	"axiom/internal/workflow"
+	"example.com/axiomnizam/internal/audit"
+	"example.com/axiomnizam/internal/encryption"
+	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/workflow"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +30,7 @@ func NewPhase3Handlers(
 ) *Phase3Handlers {
 	return &Phase3Handlers{
 		encryptionMgr: encMgr,
-		lineageMgr:    lineMgr,
+		lineageMgr:    linMgr,
 		auditMgr:      audMgr,
 		workflowMgr:   wfMgr,
 	}
@@ -41,10 +41,10 @@ func NewPhase3Handlers(
 // RegisterEncryptionKey registers new encryption key
 func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 	type Request struct {
-		KeyID      string    `json:"key_id" binding:"required"`
-		Key        string    `json:"key" binding:"required"`
-		ExpiresAt  time.Time `json:"expires_at"`
-		EncryptType string   `json:"encrypt_type"` // deterministic or searchable
+		KeyID       string    `json:"key_id" binding:"required"`
+		Key         string    `json:"key" binding:"required"`
+		ExpiresAt   time.Time `json:"expires_at"`
+		EncryptType string    `json:"encrypt_type"` // deterministic or searchable
 	}
 
 	var req Request
@@ -54,11 +54,13 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 	}
 
 	encKey := &encryption.EncryptionKey{
-		KeyID:      req.KeyID,
-		Key:        req.Key,
-		CreatedAt:  time.Now(),
-		ExpiresAt:  req.ExpiresAt,
-		EncryptType: req.EncryptType,
+		Name:        req.KeyID,
+		KeyType:     encryption.KeyTypeDEK,
+		Algorithm:   req.EncryptType, // deterministic or searchable
+		KeyMaterial: req.Key,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   req.ExpiresAt,
+		Status:      encryption.KeyStatusActive,
 	}
 
 	if err := h.encryptionMgr.RegisterKey(encKey); err != nil {
@@ -75,10 +77,10 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 // AddEncryptionPolicy adds field encryption policy
 func (h *Phase3Handlers) AddEncryptionPolicy(c *gin.Context) {
 	type Request struct {
-		TableName   string `json:"table_name" binding:"required"`
-		ColumnName  string `json:"column_name" binding:"required"`
-		KeyID       string `json:"key_id" binding:"required"`
-		Searchable  bool   `json:"searchable"`
+		TableName  string `json:"table_name" binding:"required"`
+		ColumnName string `json:"column_name" binding:"required"`
+		KeyID      string `json:"key_id" binding:"required"`
+		Searchable bool   `json:"searchable"`
 	}
 
 	var req Request
@@ -88,10 +90,17 @@ func (h *Phase3Handlers) AddEncryptionPolicy(c *gin.Context) {
 	}
 
 	policy := &encryption.FieldEncryptionPolicy{
-		TableName:  req.TableName,
-		ColumnName: req.ColumnName,
-		KeyID:      req.KeyID,
-		Searchable: req.Searchable,
+		Name:         req.ColumnName,
+		ResourceType: req.TableName,
+		KeyID:        req.KeyID,
+		Enabled:      true,
+		FieldRules: []encryption.FieldRule{
+			{
+				FieldName: req.ColumnName,
+				Encrypt:   true,
+				KeyID:     req.KeyID,
+			},
+		},
 	}
 
 	if err := h.encryptionMgr.AddEncryptionPolicy(policy); err != nil {
@@ -120,15 +129,15 @@ func (h *Phase3Handlers) EncryptFieldValue(c *gin.Context) {
 		return
 	}
 
-	encrypted, err := h.encryptionMgr.EncryptField(req.TableName, req.ColumnName, []byte(req.Value))
+	encrypted, err := h.encryptionMgr.EncryptField(req.TableName+"."+req.ColumnName, req.Value, "default")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"encrypted_data": fmt.Sprintf("%x", encrypted.CipherText),
-		"iv":             fmt.Sprintf("%x", encrypted.IV),
+		"encrypted_data": encrypted.EncryptedValue,
+		"iv":             encrypted.IV,
 		"key_id":         encrypted.KeyID,
 	})
 }
@@ -136,11 +145,11 @@ func (h *Phase3Handlers) EncryptFieldValue(c *gin.Context) {
 // DecryptFieldValue decrypts a field value
 func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 	type Request struct {
-		TableName    string `json:"table_name" binding:"required"`
-		ColumnName   string `json:"column_name" binding:"required"`
+		TableName     string `json:"table_name" binding:"required"`
+		ColumnName    string `json:"column_name" binding:"required"`
 		EncryptedData string `json:"encrypted_data" binding:"required"`
-		IV           string `json:"iv" binding:"required"`
-		KeyID        string `json:"key_id" binding:"required"`
+		IV            string `json:"iv" binding:"required"`
+		KeyID         string `json:"key_id" binding:"required"`
 	}
 
 	var req Request
@@ -150,11 +159,10 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 	}
 
 	encField := &encryption.EncryptedField{
-		TableName:  req.TableName,
-		ColumnName: req.ColumnName,
-		CipherText: []byte(req.EncryptedData),
-		IV:         []byte(req.IV),
-		KeyID:      req.KeyID,
+		FieldName:      req.ColumnName,
+		EncryptedValue: req.EncryptedData,
+		IV:             req.IV,
+		KeyID:          req.KeyID,
 	}
 
 	decrypted, err := h.encryptionMgr.DecryptField(encField)
@@ -164,7 +172,7 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"decrypted_value": string(decrypted),
+		"decrypted_value": decrypted,
 	})
 }
 
@@ -172,13 +180,20 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 func (h *Phase3Handlers) RotateEncryptionKey(c *gin.Context) {
 	keyID := c.Param("key_id")
 
-	newKey := c.PostForm("new_key")
-	if newKey == "" {
+	newKeyData := c.PostForm("new_key")
+	if newKeyData == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "new_key required"})
 		return
 	}
 
-	if err := h.encryptionMgr.RotateKey(keyID, newKey); err != nil {
+	newKey := &encryption.EncryptionKey{
+		Name:        "rotated-" + keyID,
+		KeyType:     encryption.KeyTypeDEK,
+		KeyMaterial: newKeyData,
+		Status:      encryption.KeyStatusActive,
+	}
+
+	if _, err := h.encryptionMgr.RotateKey(keyID, newKey); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -200,10 +215,10 @@ func (h *Phase3Handlers) GetEncryptionMetrics(c *gin.Context) {
 
 // GetEncryptionStatus gets encryption status
 func (h *Phase3Handlers) GetEncryptionStatus(c *gin.Context) {
-	status := h.encryptionMgr.GetEncryptionStatus()
+	metrics := h.encryptionMgr.GetEncryptionMetrics()
 
 	c.JSON(http.StatusOK, gin.H{
-		"status": status,
+		"metrics": metrics,
 	})
 }
 
@@ -212,11 +227,10 @@ func (h *Phase3Handlers) GetEncryptionStatus(c *gin.Context) {
 // RegisterDataNode registers a data node
 func (h *Phase3Handlers) RegisterDataNode(c *gin.Context) {
 	type Request struct {
-		NodeID      string `json:"node_id" binding:"required"`
-		NodeName    string `json:"node_name" binding:"required"`
-		NodeType    string `json:"node_type" binding:"required"` // table, column, view
-		Schema      string `json:"schema"`
-		Description string `json:"description"`
+		NodeID   string `json:"node_id" binding:"required"`
+		NodeName string `json:"node_name" binding:"required"`
+		NodeType string `json:"node_type" binding:"required"` // table, column, view
+		Schema   string `json:"schema"`
 	}
 
 	var req Request
@@ -226,11 +240,10 @@ func (h *Phase3Handlers) RegisterDataNode(c *gin.Context) {
 	}
 
 	node := &lineage.DataLineageNode{
-		NodeID:      req.NodeID,
-		NodeName:    req.NodeName,
-		NodeType:    req.NodeType,
-		Schema:      req.Schema,
-		Description: req.Description,
+		ID:     req.NodeID,
+		Name:   req.NodeName,
+		Type:   req.NodeType,
+		Schema: req.Schema,
 	}
 
 	if err := h.lineageMgr.RegisterDataNode(node); err != nil {
@@ -250,7 +263,6 @@ func (h *Phase3Handlers) CreateLineageEdge(c *gin.Context) {
 		SourceNodeID string `json:"source_node_id" binding:"required"`
 		TargetNodeID string `json:"target_node_id" binding:"required"`
 		RelationType string `json:"relation_type" binding:"required"` // reads, writes, transforms
-		Metadata     map[string]interface{} `json:"metadata"`
 	}
 
 	var req Request
@@ -259,23 +271,18 @@ func (h *Phase3Handlers) CreateLineageEdge(c *gin.Context) {
 		return
 	}
 
-	edge := &lineage.DataLineageEdge{
-		SourceNodeID: req.SourceNodeID,
-		TargetNodeID: req.TargetNodeID,
-		RelationType: req.RelationType,
-		CreatedAt:    time.Now(),
-		Metadata:     req.Metadata,
-	}
-
-	if err := h.lineageMgr.CreateLineageEdge(edge); err != nil {
+	edge, err := h.lineageMgr.CreateLineageEdge(req.SourceNodeID, req.TargetNodeID, req.RelationType)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "lineage edge created",
-		"source_node":  req.SourceNodeID,
-		"target_node":  req.TargetNodeID,
+		"message":  "lineage edge created",
+		"edge_id":  edge.ID,
+		"source":   req.SourceNodeID,
+		"target":   req.TargetNodeID,
+		"relation": req.RelationType,
 	})
 }
 
@@ -287,11 +294,7 @@ func (h *Phase3Handlers) GetUpstreamLineage(c *gin.Context) {
 		return
 	}
 
-	lineage, err := h.lineageMgr.GetUpstreamLineage(nodeID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	lineage := h.lineageMgr.GetUpstreamLineage(nodeID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"upstream_lineage": lineage,
@@ -306,11 +309,7 @@ func (h *Phase3Handlers) GetDownstreamLineage(c *gin.Context) {
 		return
 	}
 
-	lineage, err := h.lineageMgr.GetDownstreamLineage(nodeID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	lineage := h.lineageMgr.GetDownstreamLineage(nodeID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"downstream_lineage": lineage,
@@ -329,11 +328,7 @@ func (h *Phase3Handlers) AnalyzeImpact(c *gin.Context) {
 		return
 	}
 
-	impact, err := h.lineageMgr.AnalyzeImpact(req.SourceNodeID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	impact := h.lineageMgr.AnalyzeImpact(req.SourceNodeID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"impact_analysis": impact,
@@ -378,15 +373,23 @@ func (h *Phase3Handlers) LogAuditEvent(c *gin.Context) {
 		return
 	}
 
+	// Convert Changes map to audit.Change slice
+	changes := make([]audit.Change, 0)
+	for field, value := range req.Changes {
+		changes = append(changes, audit.Change{
+			Field:    field,
+			NewValue: value,
+		})
+	}
+
 	auditLog := &audit.AuditLog{
 		UserID:       req.UserID,
-		Action:       req.Action,
+		Action:       audit.AuditAction(req.Action),
 		ResourceType: req.ResourceType,
 		ResourceID:   req.ResourceID,
-		IPAddress:    req.IPAddress,
+		SourceIP:     req.IPAddress,
 		Timestamp:    time.Now(),
-		Changes:      req.Changes,
-		Status:       req.Status,
+		Changes:      changes,
 	}
 
 	if err := h.auditMgr.LogAuditEvent(auditLog); err != nil {
@@ -402,11 +405,11 @@ func (h *Phase3Handlers) LogAuditEvent(c *gin.Context) {
 // RegisterComplianceRule registers compliance rule
 func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 	type Request struct {
-		RuleID       string `json:"rule_id" binding:"required"`
-		RuleName     string `json:"rule_name" binding:"required"`
-		Framework    string `json:"framework" binding:"required"` // GDPR, HIPAA, SOC2, PCI-DSS
-		Description  string `json:"description"`
-		Severity     string `json:"severity"` // low, medium, high
+		RuleID      string `json:"rule_id" binding:"required"`
+		RuleName    string `json:"rule_name" binding:"required"`
+		Framework   string `json:"framework" binding:"required"` // GDPR, HIPAA, SOC2, PCI-DSS
+		Description string `json:"description"`
+		Severity    string `json:"severity"` // low, medium, high
 	}
 
 	var req Request
@@ -416,11 +419,11 @@ func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 	}
 
 	rule := &audit.ComplianceRule{
-		RuleID:      req.RuleID,
-		RuleName:    req.RuleName,
+		ID:          req.RuleID,
 		Framework:   req.Framework,
 		Description: req.Description,
-		Severity:    req.Severity,
+		Requirement: req.RuleName,
+		IsActive:    true,
 		CreatedAt:   time.Now(),
 	}
 
@@ -443,7 +446,7 @@ func (h *Phase3Handlers) GenerateComplianceReport(c *gin.Context) {
 		return
 	}
 
-	report, err := h.auditMgr.GenerateComplianceReport(framework)
+	report, err := h.auditMgr.GenerateComplianceReport(framework, time.Now().AddDate(-1, 0, 0), time.Now())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -490,10 +493,13 @@ func (h *Phase3Handlers) RecordViolation(c *gin.Context) {
 	}
 
 	violation := &audit.ComplianceViolation{
-		RuleID:      req.RuleID,
-		Description: req.Description,
-		Severity:    req.Severity,
-		DetectedAt:  time.Now(),
+		ID:            fmt.Sprintf("violation-%d", time.Now().UnixNano()),
+		RuleID:        req.RuleID,
+		Description:   req.Description,
+		Severity:      req.Severity,
+		Timestamp:     time.Now(),
+		ViolationType: "compliance",
+		Status:        "open",
 	}
 
 	if err := h.auditMgr.RecordViolation(violation); err != nil {
@@ -546,10 +552,10 @@ func (h *Phase3Handlers) CreateWorkflow(c *gin.Context) {
 // PublishWorkflowVersion publishes workflow version
 func (h *Phase3Handlers) PublishWorkflowVersion(c *gin.Context) {
 	type Request struct {
-		WorkflowID  string                   `json:"workflow_id" binding:"required"`
-		ChangeSummary string                 `json:"change_summary"`
-		Steps       []map[string]interface{} `json:"steps"`
-		CreatedBy   string                   `json:"created_by"`
+		WorkflowID    string                   `json:"workflow_id" binding:"required"`
+		ChangeSummary string                   `json:"change_summary"`
+		Steps         []map[string]interface{} `json:"steps"`
+		CreatedBy     string                   `json:"created_by"`
 	}
 
 	var req Request

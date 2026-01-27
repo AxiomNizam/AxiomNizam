@@ -6,22 +6,6 @@ import (
 	"time"
 )
 
-// AuditLog represents an audit log entry
-type AuditLog struct {
-	ID            string
-	Timestamp     time.Time
-	UserID        string
-	Action        string
-	Resource      string
-	ResourceType  string
-	ResourceID    string
-	Changes       map[string]interface{}
-	Status        string // success, failure
-	IpAddress     string
-	UserAgent     string
-	Metadata      map[string]interface{}
-}
-
 // ComplianceRule defines a compliance requirement
 type ComplianceRule struct {
 	ID          string
@@ -34,32 +18,32 @@ type ComplianceRule struct {
 
 // ComplianceViolation represents compliance violation
 type ComplianceViolation struct {
-	ID              string
-	Timestamp       time.Time
-	RuleID          string
-	Framework       string
-	ViolationType   string
-	Severity        string // low, medium, high, critical
+	ID               string
+	Timestamp        time.Time
+	RuleID           string
+	Framework        string
+	ViolationType    string
+	Severity         string // low, medium, high, critical
 	AffectedResource string
-	Description     string
+	Description      string
 	RemediationSteps string
-	Status          string // open, acknowledged, resolved
+	Status           string // open, acknowledged, resolved
 }
 
 // ComplianceReport represents generated compliance report
 type ComplianceReport struct {
-	ID                string
-	ReportType        string // GDPR, HIPAA, SOC2, etc
-	GeneratedAt       time.Time
-	StartDate         time.Time
-	EndDate           time.Time
-	TotalEvents       int64
-	ComplianceScore   float64 // 0-100
-	ViolationCount    int64
-	RemediatedCount   int64
-	Frameworks        []string
-	Findings          []*ComplianceFinding
-	RiskAssessment    *RiskAssessment
+	ID              string
+	ReportType      string // GDPR, HIPAA, SOC2, etc
+	GeneratedAt     time.Time
+	StartDate       time.Time
+	EndDate         time.Time
+	TotalEvents     int64
+	ComplianceScore float64 // 0-100
+	ViolationCount  int64
+	RemediatedCount int64
+	Frameworks      []string
+	Findings        []*ComplianceFinding
+	RiskAssessment  *RiskAssessment
 }
 
 // ComplianceFinding represents compliance finding
@@ -75,49 +59,49 @@ type ComplianceFinding struct {
 
 // RiskAssessment represents risk assessment
 type RiskAssessment struct {
-	OverallRisk      string // low, medium, high, critical
-	RiskScore        float64
-	TopRisks         []string
-	MitigationSteps  []string
+	OverallRisk        string // low, medium, high, critical
+	RiskScore          float64
+	TopRisks           []string
+	MitigationSteps    []string
 	RecommendedActions []string
 }
 
 // AuditComplianceManager manages audit and compliance
 type AuditComplianceManager struct {
-	mu                 sync.RWMutex
-	auditLogs          []*AuditLog
-	complianceRules    map[string]*ComplianceRule
-	violations         []*ComplianceViolation
-	reports            []*ComplianceReport
-	auditMetrics       *AuditMetrics
-	maxAuditLogSize    int
-	maxViolationSize   int
-	maxReportSize      int
-	retentionDays      int
+	mu               sync.RWMutex
+	auditLogs        []*AuditLog
+	complianceRules  map[string]*ComplianceRule
+	violations       []*ComplianceViolation
+	reports          []*ComplianceReport
+	auditMetrics     *AuditMetrics
+	maxAuditLogSize  int
+	maxViolationSize int
+	maxReportSize    int
+	retentionDays    int
 }
 
 // AuditMetrics tracks audit statistics
 type AuditMetrics struct {
-	TotalAuditLogs    int64
-	ActionsTracked    int64
-	ViolationsFound   int64
-	ReportsGenerated  int64
+	TotalAuditLogs      int64
+	ActionsTracked      int64
+	ViolationsFound     int64
+	ReportsGenerated    int64
 	AverageResponseTime float64
-	LastAuditTime     time.Time
+	LastAuditTime       time.Time
 }
 
 // NewAuditComplianceManager creates audit manager
 func NewAuditComplianceManager() *AuditComplianceManager {
 	return &AuditComplianceManager{
-		auditLogs:         make([]*AuditLog, 0),
-		complianceRules:   make(map[string]*ComplianceRule),
-		violations:        make([]*ComplianceViolation, 0),
-		reports:           make([]*ComplianceReport, 0),
-		auditMetrics:      &AuditMetrics{},
-		maxAuditLogSize:   100000,
-		maxViolationSize:  50000,
-		maxReportSize:     1000,
-		retentionDays:     365,
+		auditLogs:        make([]*AuditLog, 0),
+		complianceRules:  make(map[string]*ComplianceRule),
+		violations:       make([]*ComplianceViolation, 0),
+		reports:          make([]*ComplianceReport, 0),
+		auditMetrics:     &AuditMetrics{},
+		maxAuditLogSize:  100000,
+		maxViolationSize: 50000,
+		maxReportSize:    1000,
+		retentionDays:    365,
 	}
 }
 
@@ -190,13 +174,13 @@ func (acm *AuditComplianceManager) GenerateComplianceReport(reportType string, s
 	defer acm.mu.Unlock()
 
 	report := &ComplianceReport{
-		ID:         fmt.Sprintf("report-%s-%d", reportType, time.Now().UnixNano()),
-		ReportType: reportType,
+		ID:          fmt.Sprintf("report-%s-%d", reportType, time.Now().UnixNano()),
+		ReportType:  reportType,
 		GeneratedAt: time.Now(),
-		StartDate:  startDate,
-		EndDate:    endDate,
-		Findings:   make([]*ComplianceFinding, 0),
-		Frameworks: []string{reportType},
+		StartDate:   startDate,
+		EndDate:     endDate,
+		Findings:    make([]*ComplianceFinding, 0),
+		Frameworks:  []string{reportType},
 	}
 
 	// Count events in range
@@ -246,8 +230,8 @@ func (acm *AuditComplianceManager) GenerateComplianceReport(reportType string, s
 // assessRisk generates risk assessment
 func (acm *AuditComplianceManager) assessRisk(report *ComplianceReport) *RiskAssessment {
 	assessment := &RiskAssessment{
-		TopRisks:          make([]string, 0),
-		MitigationSteps:   make([]string, 0),
+		TopRisks:           make([]string, 0),
+		MitigationSteps:    make([]string, 0),
 		RecommendedActions: make([]string, 0),
 	}
 
@@ -368,11 +352,11 @@ func (acm *AuditComplianceManager) GetAuditMetrics() *AuditMetrics {
 	defer acm.mu.RUnlock()
 
 	return &AuditMetrics{
-		TotalAuditLogs:    acm.auditMetrics.TotalAuditLogs,
-		ActionsTracked:    acm.auditMetrics.ActionsTracked,
-		ViolationsFound:   acm.auditMetrics.ViolationsFound,
-		ReportsGenerated:  acm.auditMetrics.ReportsGenerated,
-		LastAuditTime:     acm.auditMetrics.LastAuditTime,
+		TotalAuditLogs:   acm.auditMetrics.TotalAuditLogs,
+		ActionsTracked:   acm.auditMetrics.ActionsTracked,
+		ViolationsFound:  acm.auditMetrics.ViolationsFound,
+		ReportsGenerated: acm.auditMetrics.ReportsGenerated,
+		LastAuditTime:    acm.auditMetrics.LastAuditTime,
 	}
 }
 
@@ -411,12 +395,12 @@ func (acm *AuditComplianceManager) GetComplianceStatus() map[string]interface{} 
 	}
 
 	return map[string]interface{}{
-		"total_audit_logs":    acm.auditMetrics.TotalAuditLogs,
-		"total_violations":    acm.auditMetrics.ViolationsFound,
-		"active_violations":   activeViolations,
-		"reports_generated":   acm.auditMetrics.ReportsGenerated,
-		"compliance_rules":    len(acm.complianceRules),
+		"total_audit_logs":        acm.auditMetrics.TotalAuditLogs,
+		"total_violations":        acm.auditMetrics.ViolationsFound,
+		"active_violations":       activeViolations,
+		"reports_generated":       acm.auditMetrics.ReportsGenerated,
+		"compliance_rules":        len(acm.complianceRules),
 		"latest_compliance_score": latestReport.ComplianceScore,
-		"last_audit_time":     acm.auditMetrics.LastAuditTime,
+		"last_audit_time":         acm.auditMetrics.LastAuditTime,
 	}
 }
