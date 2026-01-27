@@ -12,6 +12,7 @@ import (
 	"example.com/axiomnizam/internal/jobs"
 	"example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/utils/logger"
+	"go.uber.org/zap"
 )
 
 // ControllerReconciler handles the full reconciliation lifecycle
@@ -26,7 +27,7 @@ type ControllerReconciler struct {
 	RBACEngine            *RBACEngine
 	ResourceManager       *ResourceManager
 	Informer              cache.Informer
-	Queue                 jobs.WorkQueue
+	Queue                 jobs.Queue
 	RetryPolicy           *RetryPolicy
 	FinalizerName         string
 	StatusCollector       *StatusCollector
@@ -126,6 +127,7 @@ type ResourceObserver interface {
 
 // ReconciliationMetrics tracks reconciliation metrics
 type ReconciliationMetrics struct {
+	mu                   sync.RWMutex
 	TotalReconciliations int64
 	SuccessfulCount      int64
 	FailedCount          int64
@@ -133,6 +135,8 @@ type ReconciliationMetrics struct {
 	AverageProcessTime   float64
 	CurrentActive        int
 	ErrorsByKind         map[string]int64
+	LastReconcileTime    time.Time
+	AverageDuration      time.Duration
 }
 
 // NewControllerReconciler creates a new controller reconciler
@@ -143,7 +147,7 @@ func NewControllerReconciler(
 	admissionCtrl *AdmissionController,
 	rbacEngine *RBACEngine,
 	resourceMgr *ResourceManager,
-	queue jobs.WorkQueue,
+	queue jobs.Queue,
 ) *ControllerReconciler {
 	log, _ := logger.New("development")
 
@@ -300,7 +304,7 @@ func (cr *ControllerReconciler) phaseObserve(ctx context.Context, state *Reconci
 	for _, observer := range observers {
 		obs, err := observer.Observe(ctx, state.Resource)
 		if err != nil {
-			cr.Logger.Error("Observer error", "observer", observer.Name(), "error", err)
+			cr.Logger.Error("Observer error", zap.String("observer", observer.Name()), zap.Error(err))
 			continue
 		}
 
@@ -364,7 +368,7 @@ func (cr *ControllerReconciler) phaseFinalize(ctx context.Context, state *Reconc
 	objMeta := state.Resource.GetObjectMeta()
 
 	// Check if resource is being deleted
-	if objMeta.DeletionTimestamp != nil {
+	if objMeta.DeletedAt != nil {
 		// Run finalizers
 		if !cr.containsFinalizer(state, cr.FinalizerName) {
 			return nil // Already cleaned up
@@ -457,7 +461,7 @@ func (cr *ControllerReconciler) emitEvent(ctx context.Context, state *Reconcilia
 		Type:      eventType,
 		Kind:      cr.ResourceKind,
 		Timestamp: time.Now(),
-		Reason:    state.Phase,
+		Reason:    string(state.Phase),
 		Message:   message,
 		Severity:  severity,
 		Source:    cr.Name,
@@ -472,7 +476,7 @@ func (cr *ControllerReconciler) emitEvent(ctx context.Context, state *Reconcilia
 
 	if cr.EventBus != nil {
 		if err := cr.EventBus.PublishResourceEvent(ctx, event); err != nil {
-			cr.Logger.Error("Failed to emit event", "error", err)
+			cr.Logger.Error("Failed to emit event", zap.Error(err))
 		}
 	}
 

@@ -16,12 +16,6 @@ import (
 // ReconcilationStatus represents the status of a reconciliation
 type ReconcilationStatus string
 
-const (
-	StatusSuccess ReconcilationStatus = "success"
-	StatusRequeue ReconcilationStatus = "requeue"
-	StatusFailed  ReconcilationStatus = "failed"
-)
-
 // ReconcileEvent represents an event during reconciliation
 type ReconcileEvent struct {
 	Type       string    `json:"type"`
@@ -191,12 +185,12 @@ func (rf *ReconciliationFramework) handleReconcileRequest(ctx context.Context, r
 		reconcileCtx.RetryCount++
 
 		if reconcileCtx.RetryCount < reconcileCtx.MaxRetries {
-			reconcileCtx.Status = StatusRequeue
+			reconcileCtx.Status = ReconcilationStatus(StatusRequeue)
 			rf.logger.Warn("reconciliation failed, requeuing", zap.Error(err))
 			time.Sleep(time.Second * time.Duration(reconcileCtx.RetryCount))
 			rf.Enqueue(req)
 		} else {
-			reconcileCtx.Status = StatusFailed
+			reconcileCtx.Status = ReconcilationStatus(StatusFailed)
 			reconcileCtx.AddEvent("ReconciliationFailed", "MaxRetriesExceeded", "max retries exceeded")
 			rf.logger.Error("reconciliation failed after retries", zap.Error(err))
 		}
@@ -204,7 +198,7 @@ func (rf *ReconciliationFramework) handleReconcileRequest(ctx context.Context, r
 	}
 
 	reconcileCtx.LastSyncTime = time.Now()
-	reconcileCtx.Status = StatusSuccess
+	reconcileCtx.Status = ReconcilationStatus(StatusSuccess)
 	reconcileCtx.AddEvent("Reconciled", "Success", "reconciliation completed successfully")
 
 	rf.logger.Debug("reconciliation completed", zap.String("namespace", meta.Namespace), zap.String("name", meta.Name))
@@ -295,16 +289,6 @@ func (fm *FinalizerManager) HasFinalizer(resource resources.Resource, finalizerN
 		}
 	}
 	return false
-}
-
-// ReconciliationMetrics tracks reconciliation metrics
-type ReconciliationMetrics struct {
-	TotalReconciliations int64
-	SuccessfulCount      int64
-	FailedCount          int64
-	AverageDuration      time.Duration
-	LastReconcileTime    time.Time
-	mu                   sync.RWMutex
 }
 
 // RecordSuccess records a successful reconciliation

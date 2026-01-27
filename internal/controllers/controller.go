@@ -220,27 +220,6 @@ func (rc *ResourceController) Enqueue(namespace, name string) {
 	rc.workQueue.Add(key)
 }
 
-// Helper to parse namespace/name keys
-func parseKey(key string) []string {
-	// Simple split on /
-	var parts []string
-	current := ""
-	for i, c := range key {
-		if c == '/' {
-			parts = append(parts, current)
-			current = ""
-		} else if i == len(key)-1 {
-			parts = append(parts, current+string(c))
-		} else {
-			current += string(c)
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
-}
-
 // WorkloadReconciler reconciles WorkloadResource
 type WorkloadReconciler struct {
 	store ResourceStore
