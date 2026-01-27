@@ -95,6 +95,20 @@ services:
     volumes:
       - etcd-data:/etcd-data
 
+  # # Test CLI for Distributed State Store
+  # cli:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.axiomnizamctl
+  #   container_name: axiomnizamctl
+  #   networks:
+  #     - app-network
+  #   depends_on:
+  #     - etcd
+  #   environment:
+  #     ETCD_ENDPOINT: etcd:2379
+  #   command: -cmd all -store memory
+
   # MySQL
   mysql:
     image: mysql:8.0

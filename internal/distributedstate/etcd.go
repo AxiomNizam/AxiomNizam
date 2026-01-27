@@ -11,11 +11,11 @@ import (
 )
 
 type EtcdStateStore struct {
-	client       *clientv3.Client
-	mu           sync.RWMutex
-	watchers     map[string]context.CancelFunc
-	leases       map[int64]*clientv3.LeaseGrantResponse
-	sessionPool  map[string]*concurrency.Session
+	client      *clientv3.Client
+	mu          sync.RWMutex
+	watchers    map[string]context.CancelFunc
+	leases      map[int64]*clientv3.LeaseGrantResponse
+	sessionPool map[string]*concurrency.Session
 }
 
 func NewEtcdStateStore(endpoints []string) (*EtcdStateStore, error) {
@@ -29,7 +29,7 @@ func NewEtcdStateStore(endpoints []string) (*EtcdStateStore, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	_, err = client.Get(ctx, "health")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to etcd: %w", err)
@@ -53,11 +53,11 @@ func (es *EtcdStateStore) Get(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	if len(resp.Kvs) == 0 {
 		return "", nil
 	}
-	
+
 	return string(resp.Kvs[0].Value), nil
 }
 
@@ -125,10 +125,10 @@ func (es *EtcdStateStore) PutWithLease(ctx context.Context, key string, value st
 	}
 
 	es.mu.Lock()
-	es.leases[lease.ID] = lease
+	es.leases[int64(lease.ID)] = lease
 	es.mu.Unlock()
 
-	return lease.ID, nil
+	return int64(lease.ID), nil
 }
 
 func (es *EtcdStateStore) ReleaseLeaseID(ctx context.Context, leaseID int64) error {
@@ -143,7 +143,7 @@ func (es *EtcdStateStore) ReleaseLeaseID(ctx context.Context, leaseID int64) err
 
 func (es *EtcdStateStore) Watch(ctx context.Context, key string, callback func(Event)) error {
 	watchCtx, cancel := context.WithCancel(ctx)
-	
+
 	es.mu.Lock()
 	es.watchers[key] = cancel
 	es.mu.Unlock()
@@ -213,7 +213,7 @@ func (es *EtcdStateStore) Transaction(ctx context.Context, ops []Operation) (boo
 
 func (es *EtcdStateStore) GetMutex(ctx context.Context, lockName string) (*concurrency.Mutex, error) {
 	sessionKey := fmt.Sprintf("session-%s", lockName)
-	
+
 	es.mu.Lock()
 	session, exists := es.sessionPool[sessionKey]
 	es.mu.Unlock()
@@ -224,7 +224,7 @@ func (es *EtcdStateStore) GetMutex(ctx context.Context, lockName string) (*concu
 		if err != nil {
 			return nil, err
 		}
-		
+
 		es.mu.Lock()
 		es.sessionPool[sessionKey] = session
 		es.mu.Unlock()

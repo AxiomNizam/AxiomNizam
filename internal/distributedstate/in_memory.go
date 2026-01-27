@@ -2,7 +2,6 @@ package distributedstate
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 )

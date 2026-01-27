@@ -28,14 +28,14 @@ func NewDistributedLock(store StateStore, lockName string, holder string, timeou
 func (dl *DistributedLock) Acquire(ctx context.Context) (bool, error) {
 	key := fmt.Sprintf("lock/%s", dl.lockName)
 
-	leaseID, err := dl.store.PutWithLease(ctx, key, dl.holder, dl.timeout)
-	if err != nil {
+	success, err := dl.store.CompareAndSwap(ctx, key, "", dl.holder)
+	if err != nil || !success {
 		return false, err
 	}
 
-	success, err := dl.store.CompareAndSwap(ctx, key, "", dl.holder)
-	if !success {
-		dl.store.ReleaseLeaseID(ctx, leaseID)
+	leaseID, err := dl.store.PutWithLease(ctx, key, dl.holder, dl.timeout)
+	if err != nil {
+		dl.store.Delete(ctx, key)
 		return false, err
 	}
 

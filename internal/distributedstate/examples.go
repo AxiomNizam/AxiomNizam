@@ -1,16 +1,14 @@
-package main
+package distributedstate
 
 import (
 	"context"
 	"fmt"
 	"log"
 	"time"
-
-	"example.com/axiomnizam/internal/distributedstate"
 )
 
 func ExampleEtcdStore() {
-	store, err := distributedstate.NewEtcdStateStore([]string{"localhost:2379"})
+	store, err := NewEtcdStateStore([]string{"localhost:2379"})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -33,8 +31,8 @@ func ExampleEtcdStore() {
 }
 
 func ExampleDistributedManager() {
-	store := distributedstate.NewInMemoryStateStore()
-	manager := distributedstate.NewDistributedManager(store, "myapp")
+	store := NewInMemoryStateStore()
+	manager := NewDistributedManager(store, "myapp")
 
 	ctx := context.Background()
 
@@ -53,10 +51,10 @@ func ExampleDistributedManager() {
 }
 
 func ExampleDistributedLock() {
-	store := distributedstate.NewInMemoryStateStore()
+	store := NewInMemoryStateStore()
 	ctx := context.Background()
 
-	lock := distributedstate.NewDistributedLock(store, "critical-section", "node1", 10*time.Second)
+	lock := NewDistributedLock(store, "critical-section", "node1", 10*time.Second)
 
 	acquired, err := lock.Acquire(ctx)
 	if err != nil || !acquired {
@@ -70,10 +68,10 @@ func ExampleDistributedLock() {
 }
 
 func ExampleLeaderElection() {
-	store := distributedstate.NewInMemoryStateStore()
+	store := NewInMemoryStateStore()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	election := distributedstate.NewDistributedLeaderElection(store, "cluster", "node1", 2*time.Second)
+	election := NewDistributedLeaderElection(store, "cluster", "node1", 2*time.Second)
 
 	election.OnLeadershipChange(func(isLeader bool) {
 		if isLeader {
@@ -94,10 +92,10 @@ func ExampleLeaderElection() {
 }
 
 func ExampleDistributedCounter() {
-	store := distributedstate.NewInMemoryStateStore()
+	store := NewInMemoryStateStore()
 	ctx := context.Background()
 
-	counter := distributedstate.NewDistributedCounter(store, "visits")
+	counter := NewDistributedCounter(store, "visits")
 
 	for i := 0; i < 5; i++ {
 		val, _ := counter.Increment(ctx)
@@ -106,10 +104,10 @@ func ExampleDistributedCounter() {
 }
 
 func ExampleDistributedSet() {
-	store := distributedstate.NewInMemoryStateStore()
+	store := NewInMemoryStateStore()
 	ctx := context.Background()
 
-	set := distributedstate.NewDistributedSet(store, "users/active")
+	set := NewDistributedSet(store, "users/active")
 
 	set.Add(ctx, "user1")
 	set.Add(ctx, "user2")
@@ -126,10 +124,10 @@ func ExampleDistributedSet() {
 }
 
 func ExampleDistributedQueue() {
-	store := distributedstate.NewInMemoryStateStore()
+	store := NewInMemoryStateStore()
 	ctx := context.Background()
 
-	queue := distributedstate.NewDistributedQueue(store, "tasks")
+	queue := NewDistributedQueue(store, "tasks")
 
 	queue.Enqueue(ctx, "task1")
 	queue.Enqueue(ctx, "task2")
@@ -143,8 +141,8 @@ func ExampleDistributedQueue() {
 }
 
 func ExampleCachedStore() {
-	underlying := distributedstate.NewInMemoryStateStore()
-	cached := distributedstate.NewCachedStateStore(underlying, 1*time.Second)
+	underlying := NewInMemoryStateStore()
+	cached := NewCachedStateStore(underlying, 1*time.Second)
 
 	ctx := context.Background()
 
@@ -165,14 +163,14 @@ func ExampleCachedStore() {
 }
 
 func ExampleBatchUpdate() {
-	store := distributedstate.NewInMemoryStateStore()
-	manager := distributedstate.NewDistributedManager(store, "app")
+	store := NewInMemoryStateStore()
+	manager := NewDistributedManager(store, "app")
 	ctx := context.Background()
 
-	ops := []distributedstate.BatchOperation{
-		{Key: "config/db", Value: "postgresql", Type: distributedstate.OperationPut},
-		{Key: "config/cache", Value: "redis", Type: distributedstate.OperationPut},
-		{Key: "config/queue", Value: "nats", Type: distributedstate.OperationPut},
+	ops := []BatchOperation{
+		{Key: "config/db", Value: "postgresql", Type: OperationPut},
+		{Key: "config/cache", Value: "redis", Type: OperationPut},
+		{Key: "config/queue", Value: "nats", Type: OperationPut},
 	}
 
 	success, _ := manager.BatchUpdate(ctx, ops)
