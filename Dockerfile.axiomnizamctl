@@ -21,5 +21,5 @@ COPY --from=builder /build/axiomnizamctl /usr/local/bin/axiomnizamctl
 
 RUN chmod +x /usr/local/bin/axiomnizamctl
 
-ENTRYPOINT ["axiomnizamctl"]
-CMD ["--help"]
+ENTRYPOINT ["/bin/sh"]
+CMD ["-i"]
