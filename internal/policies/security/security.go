@@ -12,12 +12,12 @@ type SecurityPolicy struct {
 	Type                 string
 	Version              string
 	Enabled              bool
-	AuthenticationPolicy  AuthenticationPolicy
-	AuthorizationPolicy   AuthorizationPolicy
-	EncryptionPolicy      EncryptionPolicy
-	AuditPolicy           AuditPolicy
-	VulnerabilityPolicy   VulnerabilityPolicy
-	ComplianceFrameworks  []ComplianceFramework
+	AuthenticationPolicy AuthenticationPolicy
+	AuthorizationPolicy  AuthorizationPolicy
+	EncryptionPolicy     EncryptionPolicy
+	AuditPolicy          AuditPolicy
+	VulnerabilityPolicy  VulnerabilityPolicy
+	ComplianceFrameworks []ComplianceFramework
 	Description          string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
@@ -25,13 +25,13 @@ type SecurityPolicy struct {
 
 // AuthenticationPolicy defines authentication requirements
 type AuthenticationPolicy struct {
-	MFARequired          bool
-	MinPasswordLength    int
-	PasswordExpiration   int // days
-	HistoryCheck         int // remember last N passwords
-	LockoutPolicy        LockoutPolicy
-	SessionTimeout       time.Duration
-	AllowedMethods       []string // "password", "mfa", "oauth", "saml"
+	MFARequired        bool
+	MinPasswordLength  int
+	PasswordExpiration int // days
+	HistoryCheck       int // remember last N passwords
+	LockoutPolicy      LockoutPolicy
+	SessionTimeout     time.Duration
+	AllowedMethods     []string // "password", "mfa", "oauth", "saml"
 }
 
 // LockoutPolicy defines account lockout rules
@@ -43,11 +43,11 @@ type LockoutPolicy struct {
 
 // AuthorizationPolicy defines authorization requirements
 type AuthorizationPolicy struct {
-	DefaultDeny          bool
-	RequireApproval      bool
-	SeparationOfDuties   bool
-	PrivilegeEscalation  PrivilegePolicy
-	ResourceBasedPolicy  bool
+	DefaultDeny         bool
+	RequireApproval     bool
+	SeparationOfDuties  bool
+	PrivilegeEscalation PrivilegePolicy
+	ResourceBasedPolicy bool
 }
 
 // PrivilegePolicy defines privilege escalation rules
@@ -61,42 +61,42 @@ type PrivilegePolicy struct {
 
 // EncryptionPolicy defines encryption requirements
 type EncryptionPolicy struct {
-	Algorithm              string
-	MinKeyLength           int
-	RequireAtRest          bool
-	RequireInTransit       bool
-	TLSMinVersion          string // "1.2", "1.3"
-	CertificateValidation  bool
-	CertificatePinning     bool
-	PerfectForwardSecrecy  bool
+	Algorithm             string
+	MinKeyLength          int
+	RequireAtRest         bool
+	RequireInTransit      bool
+	TLSMinVersion         string // "1.2", "1.3"
+	CertificateValidation bool
+	CertificatePinning    bool
+	PerfectForwardSecrecy bool
 }
 
 // AuditPolicy defines auditing requirements
 type AuditPolicy struct {
-	LogAllAccess         bool
-	LogModifications     bool
-	LogDeletions         bool
-	LogAuthentication    bool
-	LogAuthorizationFailures bool
-	RetentionDays        int
+	LogAllAccess              bool
+	LogModifications          bool
+	LogDeletions              bool
+	LogAuthentication         bool
+	LogAuthorizationFailures  bool
+	RetentionDays             int
 	AlertOnSuspiciousActivity bool
-	SuspiciousPatterns   []string
+	SuspiciousPatterns        []string
 }
 
 // VulnerabilityPolicy defines vulnerability management
 type VulnerabilityPolicy struct {
-	ScanFrequency        string // "daily", "weekly", "monthly"
+	ScanFrequency              string // "daily", "weekly", "monthly"
 	MaxCriticalVulnerabilities int
-	MaxHighVulnerabilities int
-	PatchingTimeLimit    time.Duration
-	ZeroDayResponse      string // immediate action required
+	MaxHighVulnerabilities     int
+	PatchingTimeLimit          time.Duration
+	ZeroDayResponse            string // immediate action required
 }
 
 // ComplianceFramework defines compliance frameworks
 type ComplianceFramework struct {
-	Name      string // "HIPAA", "GDPR", "SOC2", "PCI-DSS", "ISO27001"
-	Enabled   bool
-	Controls  []ComplianceControl
+	Name     string // "HIPAA", "GDPR", "SOC2", "PCI-DSS", "ISO27001"
+	Enabled  bool
+	Controls []ComplianceControl
 }
 
 // ComplianceControl defines a compliance control
@@ -147,37 +147,37 @@ func (sp *SecurityPolicy) Validate() error {
 
 // SecurityComplianceEngine manages security and compliance
 type SecurityComplianceEngine struct {
-	policies             []*SecurityPolicy
-	vulnerabilities      map[string]Vulnerability
-	incidents            map[string]SecurityIncident
-	complianceStatus     map[string]ComplianceStatus
+	policies         []*SecurityPolicy
+	vulnerabilities  map[string]Vulnerability
+	incidents        map[string]SecurityIncident
+	complianceStatus map[string]ComplianceStatus
 }
 
 // Vulnerability represents a security vulnerability
 type Vulnerability struct {
-	ID           string
-	CVE          string
-	Severity     string // "critical", "high", "medium", "low"
-	Description  string
+	ID              string
+	CVE             string
+	Severity        string // "critical", "high", "medium", "low"
+	Description     string
 	AffectedSystems []string
-	DiscoveredAt time.Time
-	PatchedAt    time.Time
-	Status       string // "open", "patched", "acknowledged"
+	DiscoveredAt    time.Time
+	PatchedAt       time.Time
+	Status          string // "open", "patched", "acknowledged"
 }
 
 // SecurityIncident represents a security incident
 type SecurityIncident struct {
-	ID              string
-	Type            string // "intrusion", "data_breach", "malware", "unauthorized_access"
-	Severity        string
-	Description     string
-	DiscoveredAt    time.Time
-	ReportedAt      time.Time
-	ResolvedAt      time.Time
-	AffectedAssets  []string
-	RootCause       string
-	Remediation     string
-	Status          string // "open", "investigating", "resolved"
+	ID             string
+	Type           string // "intrusion", "data_breach", "malware", "unauthorized_access"
+	Severity       string
+	Description    string
+	DiscoveredAt   time.Time
+	ReportedAt     time.Time
+	ResolvedAt     time.Time
+	AffectedAssets []string
+	RootCause      string
+	Remediation    string
+	Status         string // "open", "investigating", "resolved"
 }
 
 // ComplianceStatus tracks compliance status
@@ -281,16 +281,16 @@ func (sce *SecurityComplianceEngine) RunSecurityAudit() SecurityAuditResult {
 
 	if critical > 0 {
 		result.PolicyFindings = append(result.PolicyFindings, AuditFinding{
-			Severity:    "critical",
-			Description: fmt.Sprintf("Found %d critical vulnerabilities", critical),
+			Severity:       "critical",
+			Description:    fmt.Sprintf("Found %d critical vulnerabilities", critical),
 			Recommendation: "Patch immediately",
 		})
 	}
 
 	if high > 0 {
 		result.PolicyFindings = append(result.PolicyFindings, AuditFinding{
-			Severity:    "high",
-			Description: fmt.Sprintf("Found %d high-severity vulnerabilities", high),
+			Severity:       "high",
+			Description:    fmt.Sprintf("Found %d high-severity vulnerabilities", high),
 			Recommendation: "Patch within 30 days",
 		})
 	}
@@ -298,8 +298,8 @@ func (sce *SecurityComplianceEngine) RunSecurityAudit() SecurityAuditResult {
 	// Check incidents
 	if len(sce.incidents) > 0 {
 		result.PolicyFindings = append(result.PolicyFindings, AuditFinding{
-			Severity:    "high",
-			Description: fmt.Sprintf("Found %d unresolved security incidents", countUnresolved(sce.incidents)),
+			Severity:       "high",
+			Description:    fmt.Sprintf("Found %d unresolved security incidents", countUnresolved(sce.incidents)),
 			Recommendation: "Investigate and resolve",
 		})
 	}
@@ -350,21 +350,21 @@ type Asset struct {
 
 // Threat represents a threat
 type Threat struct {
-	ID          string
-	Name        string
-	Source      string
-	Probability float64 // 0-1
-	Impact      string // "critical", "high", "medium", "low"
+	ID                 string
+	Name               string
+	Source             string
+	Probability        float64 // 0-1
+	Impact             string  // "critical", "high", "medium", "low"
 	MitigationControls []string
 }
 
 // SecurityControl represents a security control
 type SecurityControl struct {
-	ID          string
-	Name        string
-	Type        string // "preventive", "detective", "corrective"
+	ID            string
+	Name          string
+	Type          string // "preventive", "detective", "corrective"
 	Effectiveness float64
-	CostBenefit float64
+	CostBenefit   float64
 }
 
 // CreateThreatModel creates a new threat model
@@ -386,9 +386,9 @@ func (tm *ThreatModel) IdentifyRisks() []Risk {
 	for _, threat := range tm.Threats {
 		riskScore := threat.Probability * riskScoreForImpact(threat.Impact)
 		risk := Risk{
-			ID:        fmt.Sprintf("risk-%s", threat.ID),
-			Threat:    threat.Name,
-			Score:     riskScore,
+			ID:         fmt.Sprintf("risk-%s", threat.ID),
+			Threat:     threat.Name,
+			Score:      riskScore,
 			Mitigation: findMitigation(tm.Controls, threat.MitigationControls),
 		}
 		risks = append(risks, risk)

@@ -1,0 +1,25 @@
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN GOSUMDB=off go mod tidy
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o axiomnizamctl ./cmd/axiomnizamctl
+
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates bash curl
+
+WORKDIR /app
+
+COPY --from=builder /build/axiomnizamctl /usr/local/bin/axiomnizamctl
+
+RUN chmod +x /usr/local/bin/axiomnizamctl
+
+ENTRYPOINT ["/bin/sh"]
+CMD ["-i"]

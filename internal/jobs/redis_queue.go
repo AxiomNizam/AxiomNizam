@@ -11,6 +11,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Queue errors
+var (
+	ErrQueueEmpty = fmt.Errorf("queue is empty")
+)
+
 // RedisQueue implements Queue interface using Redis backend
 type RedisQueue struct {
 	client        *redis.Client
@@ -61,7 +66,7 @@ func (rq *RedisQueue) Submit(ctx context.Context, job *Job) error {
 
 	// Add to queue using sorted set for priority handling
 	score := float64(time.Now().UnixNano())/1e9 - float64(job.Priority)
-	if err := rq.client.ZAdd(ctx, rq.queueKey, &redis.Z{
+	if err := rq.client.ZAdd(ctx, rq.queueKey, redis.Z{
 		Score:  score,
 		Member: job.ID,
 	}).Err(); err != nil {
@@ -104,7 +109,6 @@ func (rq *RedisQueue) UpdateStatus(ctx context.Context, jobID string, status Job
 	}
 
 	job.Status = status
-	job.UpdatedAt = time.Now()
 
 	// Update job data
 	data, err := json.Marshal(job)
@@ -210,7 +214,7 @@ func (rq *RedisQueue) Requeue(ctx context.Context, jobID string) error {
 
 	// Add back to queue
 	score := float64(time.Now().UnixNano()) / 1e9
-	if err := rq.client.ZAdd(ctx, rq.queueKey, &redis.Z{
+	if err := rq.client.ZAdd(ctx, rq.queueKey, redis.Z{
 		Score:  score,
 		Member: jobID,
 	}).Err(); err != nil {
@@ -220,7 +224,7 @@ func (rq *RedisQueue) Requeue(ctx context.Context, jobID string) error {
 	job, _ := rq.Get(ctx, jobID)
 	if job != nil {
 		job.Status = JobStatusPending
-		job.RetryCount++
+		job.Retries++
 		data, _ := json.Marshal(job)
 		rq.client.HSet(ctx, fmt.Sprintf("job:%s", jobID), "data", data)
 	}
@@ -232,7 +236,6 @@ func (rq *RedisQueue) Requeue(ctx context.Context, jobID string) error {
 // GetByStatus returns jobs with specific status
 func (rq *RedisQueue) GetByStatus(ctx context.Context, status JobStatus, limit int) ([]*Job, error) {
 	// Get all jobs from queue (this is less efficient than in-memory)
-	size, _ := rq.GetSize(ctx)
 	jobs := make([]*Job, 0, limit)
 
 	// Scan through queue
@@ -325,7 +328,7 @@ func (rq *RedisQueue) MoveToDeadLetter(ctx context.Context, jobID string) error 
 
 	// Add to DLQ
 	score := float64(time.Now().UnixNano()) / 1e9
-	if err := rq.client.ZAdd(ctx, rq.dlqKey, &redis.Z{
+	if err := rq.client.ZAdd(ctx, rq.dlqKey, redis.Z{
 		Score:  score,
 		Member: jobID,
 	}).Err(); err != nil {
@@ -408,7 +411,7 @@ func (rqc *RedisQueueCluster) Submit(ctx context.Context, job *Job) error {
 	}
 
 	score := float64(time.Now().UnixNano())/1e9 - float64(job.Priority)
-	if err := rqc.client.ZAdd(ctx, rqc.queueKey, &redis.Z{
+	if err := rqc.client.ZAdd(ctx, rqc.queueKey, redis.Z{
 		Score:  score,
 		Member: job.ID,
 	}).Err(); err != nil {

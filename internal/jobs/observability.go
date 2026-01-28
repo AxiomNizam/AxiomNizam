@@ -11,7 +11,7 @@ import (
 
 // ObservabilityHandler provides HTTP endpoints for job and event observability
 type ObservabilityHandler struct {
-	manager          *JobManager
+	manager          JobManager
 	metricsCollector *MetricsCollector
 	healthMetrics    *HealthMetrics
 	logger           *log.Logger
@@ -19,7 +19,7 @@ type ObservabilityHandler struct {
 
 // NewObservabilityHandler creates a new observability handler
 func NewObservabilityHandler(
-	manager *JobManager,
+	manager JobManager,
 	metricsCollector *MetricsCollector,
 ) *ObservabilityHandler {
 	return &ObservabilityHandler{
@@ -111,7 +111,7 @@ func (oh *ObservabilityHandler) GetJobHealth(c *gin.Context) {
 func (oh *ObservabilityHandler) GetJobDetails(c *gin.Context) {
 	jobID := c.Param("id")
 
-	job, err := oh.manager.GetJob(c.Request.Context(), jobID)
+	job, err := oh.manager.GetJob(jobID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found",
@@ -126,7 +126,7 @@ func (oh *ObservabilityHandler) GetJobDetails(c *gin.Context) {
 func (oh *ObservabilityHandler) GetJobMetrics(c *gin.Context) {
 	jobID := c.Param("id")
 
-	job, err := oh.manager.GetJob(c.Request.Context(), jobID)
+	job, err := oh.manager.GetJob(jobID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found",
@@ -155,7 +155,10 @@ func (oh *ObservabilityHandler) GetJobMetrics(c *gin.Context) {
 func (oh *ObservabilityHandler) GetJobsByStatus(c *gin.Context) {
 	status := c.Param("status")
 
-	jobs, err := oh.manager.queue.GetByStatus(c.Request.Context(), JobStatus(status), 100)
+	jobs, err := oh.manager.ListJobs(&JobFilter{
+		Status: JobStatus(status),
+		Limit:  100,
+	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid status",
@@ -174,7 +177,10 @@ func (oh *ObservabilityHandler) GetJobsByType(c *gin.Context) {
 	jobType := c.Param("type")
 
 	// Get from queue
-	jobs, _ := oh.manager.queue.GetByStatus(c.Request.Context(), JobStatusPending, 1000)
+	jobs, _ := oh.manager.ListJobs(&JobFilter{
+		Type:  JobType(jobType),
+		Limit: 1000,
+	})
 
 	filteredJobs := make([]*Job, 0)
 	for _, job := range jobs {

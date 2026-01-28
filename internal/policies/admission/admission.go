@@ -28,12 +28,12 @@ type AdmissionPolicy struct {
 
 // AdmissionRule is a base admission rule
 type AdmissionRule struct {
-	Name          string
-	Description   string
-	Rule          string
-	Enabled       bool
-	Effect        string // "allow" or "deny"
-	Message       string
+	Name        string
+	Description string
+	Rule        string
+	Enabled     bool
+	Effect      string // "allow" or "deny"
+	Message     string
 }
 
 // MutatingRule modifies incoming requests
@@ -50,7 +50,7 @@ type MutatingRule struct {
 
 // PatchOperation represents a JSON patch operation
 type PatchOperation struct {
-	Op    string      `json:"op"`    // "add", "remove", "replace", "move", "copy", "test"
+	Op    string      `json:"op"` // "add", "remove", "replace", "move", "copy", "test"
 	Path  string      `json:"path"`
 	Value interface{} `json:"value,omitempty"`
 	From  string      `json:"from,omitempty"`
@@ -58,27 +58,27 @@ type PatchOperation struct {
 
 // ValidatingRule validates incoming requests
 type ValidatingRule struct {
-	ID          string
-	Name        string
-	Description string
+	ID                   string
+	Name                 string
+	Description          string
 	ValidationExpression string
-	Message     string
-	Enabled     bool
-	FailurePolicy string
+	Message              string
+	Enabled              bool
+	FailurePolicy        string
 }
 
 // AdmissionRequest represents a request to be admitted
 type AdmissionRequest struct {
-	UID               string
-	Kind              string
-	Namespace         string
-	Name              string
-	Operation         string // "CREATE", "UPDATE", "DELETE", "CONNECT"
-	UserInfo          UserInfo
-	Object            map[string]interface{}
-	OldObject         map[string]interface{}
-	Options           map[string]interface{}
-	DryRun            bool
+	UID       string
+	Kind      string
+	Namespace string
+	Name      string
+	Operation string // "CREATE", "UPDATE", "DELETE", "CONNECT"
+	UserInfo  UserInfo
+	Object    map[string]interface{}
+	OldObject map[string]interface{}
+	Options   map[string]interface{}
+	DryRun    bool
 }
 
 // UserInfo contains user information
@@ -91,13 +91,13 @@ type UserInfo struct {
 
 // AdmissionResponse represents the response to an admission request
 type AdmissionResponse struct {
-	UID           string
-	Allowed       bool
-	Status        *Status
-	Patch         []byte
-	PatchType     string
+	UID              string
+	Allowed          bool
+	Status           *Status
+	Patch            []byte
+	PatchType        string
 	AuditAnnotations map[string]string
-	Warnings      []string
+	Warnings         []string
 }
 
 // Status holds admission status information
@@ -110,10 +110,10 @@ type Status struct {
 
 // StatusDetails holds additional status details
 type StatusDetails struct {
-	Name     string
-	Group    string
-	Kind     string
-	UID      string
+	Name      string
+	Group     string
+	Kind      string
+	UID       string
 	Retryable bool
 }
 
@@ -158,28 +158,28 @@ func (ap *AdmissionPolicy) Validate() error {
 
 // AdmissionController handles admission control
 type AdmissionController struct {
-	policies          []*AdmissionPolicy
-	mutatingWebhooks  []AdmissionWebhook
+	policies           []*AdmissionPolicy
+	mutatingWebhooks   []AdmissionWebhook
 	validatingWebhooks []AdmissionWebhook
 }
 
 // AdmissionWebhook represents a webhook for admission control
 type AdmissionWebhook struct {
-	ID       string
-	Name     string
-	URL      string
-	Timeout  int32
-	Rules    []WebhookRule
-	Enabled  bool
+	ID      string
+	Name    string
+	URL     string
+	Timeout int32
+	Rules   []WebhookRule
+	Enabled bool
 }
 
 // WebhookRule defines when a webhook should be called
 type WebhookRule struct {
-	Operations []string
-	APIGroups  []string
+	Operations  []string
+	APIGroups   []string
 	APIVersions []string
-	Resources  []string
-	Scope      string // "*", "Namespaced", "Cluster"
+	Resources   []string
+	Scope       string // "*", "Namespaced", "Cluster"
 }
 
 // NewAdmissionController creates a new admission controller
@@ -203,10 +203,10 @@ func (ac *AdmissionController) AddPolicy(policy *AdmissionPolicy) error {
 // Admit decides whether to admit a request
 func (ac *AdmissionController) Admit(request AdmissionRequest) AdmissionResponse {
 	response := AdmissionResponse{
-		UID:     request.UID,
-		Allowed: true,
+		UID:              request.UID,
+		Allowed:          true,
 		AuditAnnotations: make(map[string]string),
-		Warnings: make([]string, 0),
+		Warnings:         make([]string, 0),
 	}
 
 	// Apply validating rules
@@ -299,11 +299,11 @@ func (ac *AdmissionController) applyPatches(object map[string]interface{}, patch
 
 // ValidatingAdmissionPolicy is a simple validating policy
 type ValidatingAdmissionPolicy struct {
-	ID        string
-	Name      string
-	Rules     []ValidationRule
-	Enabled   bool
-	Severity  string // "audit", "warn", "deny"
+	ID       string
+	Name     string
+	Rules    []ValidationRule
+	Enabled  bool
+	Severity string // "audit", "warn", "deny"
 }
 
 // ValidationRule defines a validation rule
@@ -338,12 +338,12 @@ type MutatingAdmissionPolicy struct {
 }
 
 // Mutate mutates a request
-func (map *MutatingAdmissionPolicy) Mutate(object map[string]interface{}) (map[string]interface{}, error) {
-	if !map.Enabled {
+func (mp *MutatingAdmissionPolicy) Mutate(object map[string]interface{}) (map[string]interface{}, error) {
+	if !mp.Enabled {
 		return object, nil
 	}
 
-	for _, rule := range map.Rules {
+	for _, rule := range mp.Rules {
 		if !rule.Enabled {
 			continue
 		}

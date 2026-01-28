@@ -3,9 +3,12 @@ package events
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // EventType represents the type of event
@@ -13,16 +16,25 @@ type EventType string
 
 // Common event types
 const (
-	EventTypeUserCreated   EventType = "user.created"
-	EventTypeUserUpdated   EventType = "user.updated"
-	EventTypeUserDeleted   EventType = "user.deleted"
-	EventTypeUserLoggedIn  EventType = "user.logged_in"
-	EventTypeUserLoggedOut EventType = "user.logged_out"
-	EventTypeDataExported  EventType = "data.exported"
-	EventTypeJobStarted    EventType = "job.started"
-	EventTypeJobCompleted  EventType = "job.completed"
-	EventTypeJobFailed     EventType = "job.failed"
-	EventTypeErrorOccurred EventType = "error.occurred"
+	EventTypeUserCreated      EventType = "user.created"
+	EventTypeUserUpdated      EventType = "user.updated"
+	EventTypeUserDeleted      EventType = "user.deleted"
+	EventTypeUserLoggedIn     EventType = "user.logged_in"
+	EventTypeUserLoggedOut    EventType = "user.logged_out"
+	EventTypeDataExported     EventType = "data.exported"
+	EventTypeJobStarted       EventType = "job.started"
+	EventTypeJobCompleted     EventType = "job.completed"
+	EventTypeJobFailed        EventType = "job.failed"
+	EventTypeErrorOccurred    EventType = "error.occurred"
+	EventTypeAPICreated       EventType = "api.created"
+	EventTypeAPIUpdated       EventType = "api.updated"
+	EventTypeAPIDeleted       EventType = "api.deleted"
+	EventTypePolicyAdmitted   EventType = "policy.admitted"
+	EventTypePolicyDenied     EventType = "policy.denied"
+	EventTypeReconcileSuccess EventType = "reconcile.success"
+	EventTypeReconcileFailed  EventType = "reconcile.failed"
+	EventTypeSyncSuccess      EventType = "sync.success"
+	EventTypeSyncFailed       EventType = "sync.failed"
 )
 
 // Event represents a domain event
@@ -195,25 +207,9 @@ func (mb *MemoryBus) Subscribe(eventType EventType, handler EventHandler) error 
 	return nil
 }
 
-// Unsubscribe removes a subscription
+// Unsubscribe removes a subscription (not supported - subscribe is permanent)
 func (mb *MemoryBus) Unsubscribe(eventType EventType, handler EventHandler) error {
-	if handler == nil {
-		return errors.New("handler cannot be nil")
-	}
-
-	mb.mu.Lock()
-	defer mb.mu.Unlock()
-
-	handlers := mb.handlers[eventType]
-	for i, h := range handlers {
-		if h == handler {
-			mb.handlers[eventType] = append(handlers[:i], handlers[i+1:]...)
-			mb.logger.Printf("Handler unsubscribed from event type: %s", eventType)
-			return nil
-		}
-	}
-
-	return errors.New("handler not found")
+	return errors.New("unsubscribe not supported - handlers are permanent for this bus")
 }
 
 // SubscribeAll subscribes to all events
@@ -303,58 +299,7 @@ func (e *Event) AddMetadata(key, value string) {
 
 // generateEventID generates a unique event ID
 func generateEventID() string {
-	return "evt_" + time.Now().Format("20060102150405") + "_" + randString(8)
+	return fmt.Sprintf("evt-%s", uuid.New().String())
 }
 
-// randString generates a random string
-func randString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
-	}
-	return string(b)
-}
-
-// EventFilter represents an event filter
-type EventFilter struct {
-	EventType EventType
-	Source    string
-	UserID    string
-	StartTime time.Time
-	EndTime   time.Time
-	Limit     int
-}
-
-// Filter filters events based on criteria
-func (mb *MemoryBus) Filter(filter *EventFilter) []*Event {
-	mb.mu.RLock()
-	defer mb.mu.RUnlock()
-
-	var results []*Event
-
-	for _, event := range mb.history {
-		if filter.EventType != "" && event.Type != filter.EventType {
-			continue
-		}
-		if filter.Source != "" && event.Source != filter.Source {
-			continue
-		}
-		if filter.UserID != "" && event.UserID != filter.UserID {
-			continue
-		}
-		if !filter.StartTime.IsZero() && event.Timestamp.Before(filter.StartTime) {
-			continue
-		}
-		if !filter.EndTime.IsZero() && event.Timestamp.After(filter.EndTime) {
-			continue
-		}
-
-		results = append(results, event)
-		if filter.Limit > 0 && len(results) >= filter.Limit {
-			break
-		}
-	}
-
-	return results
-}
+// generateEventID and EventFilter are defined in resource_events.go

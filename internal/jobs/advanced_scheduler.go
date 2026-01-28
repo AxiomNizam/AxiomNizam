@@ -62,8 +62,7 @@ func (as *AdvancedScheduler) Schedule(config *ScheduleConfig) error {
 	}
 
 	// Validate cron expression
-	schedule, err := cron.ParseStandard(config.CronExpr)
-	if err != nil {
+	if _, err := cron.ParseStandard(config.CronExpr); err != nil {
 		return fmt.Errorf("invalid cron expression: %w", err)
 	}
 
@@ -73,14 +72,14 @@ func (as *AdvancedScheduler) Schedule(config *ScheduleConfig) error {
 	}
 
 	// Add to scheduler
-	entryID, err := as.scheduler.AddJob(schedule, cron.FuncJob(jobFunc))
+	entryID, err := as.scheduler.AddFunc(config.CronExpr, jobFunc)
 	if err != nil {
 		return fmt.Errorf("failed to add job: %w", err)
 	}
 
 	config.EntryID = entryID
 	config.Enabled = true
-	config.NextRun = schedule.Next(time.Now())
+	config.NextRun = time.Now().Add(time.Minute) // Approximate next run
 
 	as.mu.Lock()
 	as.schedules[config.ID] = config

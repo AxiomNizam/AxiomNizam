@@ -8,31 +8,31 @@ import (
 
 // RatePolicy defines rate limiting policies
 type RatePolicy struct {
-	ID            string
-	Name          string
-	Type          string
-	Version       string
-	Enabled       bool
-	Limits        []RateLimit
-	Algorithms    []RateLimitAlgorithm
-	GlobalLimit   int64
-	BurstSize     int64
-	TimeWindow    time.Duration
-	Description   string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID          string
+	Name        string
+	Type        string
+	Version     string
+	Enabled     bool
+	Limits      []RateLimit
+	Algorithms  []RateLimitAlgorithm
+	GlobalLimit int64
+	BurstSize   int64
+	TimeWindow  time.Duration
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // RateLimit defines a rate limit rule
 type RateLimit struct {
-	ID            string
-	Name          string
-	Resource      string
+	ID                string
+	Name              string
+	Resource          string
 	RequestsPerSecond int64
-	BurstSize     int64
-	Window        time.Duration
-	Priority      int
-	Condition     string
+	BurstSize         int64
+	Window            time.Duration
+	Priority          int
+	Condition         string
 }
 
 // RateLimitAlgorithm defines the rate limiting algorithm
@@ -82,27 +82,27 @@ func (rp *RatePolicy) Validate() error {
 
 // RateLimiter manages rate limiting
 type RateLimiter struct {
-	mu              sync.RWMutex
-	ratePolicies    map[string]*RatePolicy
-	buckets         map[string]TokenBucket
-	slidingWindows  map[string]SlidingWindow
-	clientLimiters  map[string]*ClientLimiter
+	mu             sync.RWMutex
+	ratePolicies   map[string]*RatePolicy
+	buckets        map[string]TokenBucket
+	slidingWindows map[string]SlidingWindow
+	clientLimiters map[string]*ClientLimiter
 }
 
 // TokenBucket implements token bucket algorithm
 type TokenBucket struct {
-	Capacity      int64
-	Tokens        float64
-	RefillRate    float64 // tokens per second
+	Capacity       int64
+	Tokens         float64
+	RefillRate     float64 // tokens per second
 	LastRefillTime time.Time
 }
 
 // SlidingWindow implements sliding window algorithm
 type SlidingWindow struct {
-	Window        time.Duration
-	RequestCount  int64
-	WindowStart   time.Time
-	Requests      []time.Time
+	Window       time.Duration
+	RequestCount int64
+	WindowStart  time.Time
+	Requests     []time.Time
 }
 
 // ClientLimiter tracks rate limits per client
@@ -209,10 +209,10 @@ func (rl *RateLimiter) GetClientStatus(clientID string) (int64, int64, bool, err
 
 // SlidingWindowLimiter implements sliding window rate limiting
 type SlidingWindowLimiter struct {
-	mu              sync.RWMutex
-	windows         map[string][]time.Time
-	requestLimit    int64
-	window          time.Duration
+	mu           sync.RWMutex
+	windows      map[string][]time.Time
+	requestLimit int64
+	window       time.Duration
 }
 
 // NewSlidingWindowLimiter creates a new sliding window limiter
@@ -264,7 +264,7 @@ type FixedWindowLimiter struct {
 
 // FixedWindowCounter holds counter data
 type FixedWindowCounter struct {
-	Count      int64
+	Count       int64
 	WindowStart time.Time
 }
 
@@ -305,18 +305,18 @@ func (fwl *FixedWindowLimiter) Allow(identifier string) bool {
 
 // LeakyBucketLimiter implements leaky bucket algorithm
 type LeakyBucketLimiter struct {
-	mu         sync.RWMutex
-	buckets    map[string]*LeakyBucket
-	capacity   int64
-	leakRate   float64 // units per second
+	mu       sync.RWMutex
+	buckets  map[string]*LeakyBucket
+	capacity int64
+	leakRate float64 // units per second
 }
 
 // LeakyBucket represents a leaky bucket
 type LeakyBucket struct {
-	Water          float64
-	LastLeakTime   time.Time
-	Capacity       int64
-	LeakRate       float64
+	Water        float64
+	LastLeakTime time.Time
+	Capacity     int64
+	LeakRate     float64
 }
 
 // NewLeakyBucketLimiter creates a new leaky bucket limiter

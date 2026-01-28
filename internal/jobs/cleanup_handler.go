@@ -67,8 +67,6 @@ func (dcs *DataCleanupService) CleanupLogs(ctx context.Context, retentionDays in
 		Config:        dcs.config,
 	}
 
-	cutoffTime := time.Now().AddDate(0, 0, -retentionDays)
-
 	dcs.logger.Printf("Starting log cleanup (retention: %d days)", retentionDays)
 
 	// Simulate log cleanup
@@ -348,7 +346,7 @@ func DefaultScheduledCleanupConfig() *ScheduledCleanupConfig {
 }
 
 // ScheduleCleanupJobs schedules all cleanup jobs with the manager
-func ScheduleCleanupJobs(manager *JobManager, config *ScheduledCleanupConfig) error {
+func ScheduleCleanupJobs(manager JobManager, config *ScheduledCleanupConfig) error {
 	if config.CleanupLogs {
 		if err := manager.ScheduleJob(JobTypeDataCleanup, "24h", map[string]interface{}{
 			"type":           "logs",

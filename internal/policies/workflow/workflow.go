@@ -8,51 +8,51 @@ import (
 
 // WorkflowPolicy defines workflow and orchestration policies
 type WorkflowPolicy struct {
-	ID              string
-	Name            string
-	Type            string
-	Version         string
-	Enabled         bool
-	Workflows       []WorkflowDefinition
-	ApprovalRules   []ApprovalRule
-	SLAPolicy       SLAPolicy
-	ErrorHandling   ErrorHandlingPolicy
-	Description     string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID            string
+	Name          string
+	Type          string
+	Version       string
+	Enabled       bool
+	Workflows     []WorkflowDefinition
+	ApprovalRules []ApprovalRule
+	SLAPolicy     SLAPolicy
+	ErrorHandling ErrorHandlingPolicy
+	Description   string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // WorkflowDefinition defines a workflow
 type WorkflowDefinition struct {
-	ID          string
-	Name        string
-	Steps       []WorkflowStep
-	Triggers    []WorkflowTrigger
-	Conditions  []WorkflowCondition
-	Timeout     time.Duration
-	MaxRetries  int
-	RetryDelay  time.Duration
-	Enabled     bool
+	ID         string
+	Name       string
+	Steps      []WorkflowStep
+	Triggers   []WorkflowTrigger
+	Conditions []WorkflowCondition
+	Timeout    time.Duration
+	MaxRetries int
+	RetryDelay time.Duration
+	Enabled    bool
 }
 
 // WorkflowStep represents a single step in a workflow
 type WorkflowStep struct {
-	ID          string
-	Name        string
-	Type        string // "action", "decision", "approval", "notification", "wait"
-	Handler     string
-	Parameters  map[string]interface{}
-	NextSteps   []string // IDs of next steps
-	OnError     string   // ID of error handling step
-	Timeout     time.Duration
+	ID         string
+	Name       string
+	Type       string // "action", "decision", "approval", "notification", "wait"
+	Handler    string
+	Parameters map[string]interface{}
+	NextSteps  []string // IDs of next steps
+	OnError    string   // ID of error handling step
+	Timeout    time.Duration
 }
 
 // WorkflowTrigger defines what triggers a workflow
 type WorkflowTrigger struct {
-	Type       string // "manual", "scheduled", "event", "webhook"
-	Event      string
-	Schedule   string // cron expression for scheduled
-	Condition  string
+	Type      string // "manual", "scheduled", "event", "webhook"
+	Event     string
+	Schedule  string // cron expression for scheduled
+	Condition string
 }
 
 // WorkflowCondition defines branching conditions
@@ -64,12 +64,12 @@ type WorkflowCondition struct {
 
 // ApprovalRule defines approval requirements
 type ApprovalRule struct {
-	ID              string
-	AppliesTo       []string // workflow IDs
+	ID                string
+	AppliesTo         []string // workflow IDs
 	RequiredApprovals int
-	Approvers       []string
-	TimeLimit       time.Duration
-	NotifyBefore    time.Duration
+	Approvers         []string
+	TimeLimit         time.Duration
+	NotifyBefore      time.Duration
 }
 
 // SLAPolicy defines service level agreements for workflows
@@ -82,18 +82,18 @@ type SLAPolicy struct {
 
 // ErrorHandlingPolicy defines error handling behavior
 type ErrorHandlingPolicy struct {
-	RetryPolicy      RetryPolicy
-	FailoverEnabled  bool
-	NotifyOnError    bool
-	LogLevel         string // "debug", "info", "warn", "error"
-	CircuitBreaker   CircuitBreakerConfig
+	RetryPolicy     RetryPolicy
+	FailoverEnabled bool
+	NotifyOnError   bool
+	LogLevel        string // "debug", "info", "warn", "error"
+	CircuitBreaker  CircuitBreakerConfig
 }
 
 // RetryPolicy defines retry behavior
 type RetryPolicy struct {
-	MaxAttempts   int
-	InitialDelay  time.Duration
-	MaxDelay      time.Duration
+	MaxAttempts       int
+	InitialDelay      time.Duration
+	MaxDelay          time.Duration
 	BackoffMultiplier float64
 	RetryableErrors   []string
 }
@@ -146,27 +146,27 @@ func (wp *WorkflowPolicy) Validate() error {
 
 // WorkflowEngine orchestrates workflow execution
 type WorkflowEngine struct {
-	mu                sync.RWMutex
-	policies          []*WorkflowPolicy
-	executions        map[string]WorkflowExecution
-	approvals         map[string]ApprovalRequest
-	slaMonitor        *SLAMonitor
-	errorHandler      *ErrorHandler
+	mu           sync.RWMutex
+	policies     []*WorkflowPolicy
+	executions   map[string]WorkflowExecution
+	approvals    map[string]ApprovalRequest
+	slaMonitor   *SLAMonitor
+	errorHandler *ErrorHandler
 }
 
 // WorkflowExecution tracks workflow execution
 type WorkflowExecution struct {
-	ID              string
-	WorkflowID      string
-	Status          string // "pending", "running", "completed", "failed", "paused"
-	StartTime       time.Time
-	EndTime         time.Time
-	CurrentStep     string
-	CompletedSteps  []string
-	FailedSteps     []string
-	Context         map[string]interface{}
-	Approvals       map[string]bool
-	Errors          []WorkflowError
+	ID             string
+	WorkflowID     string
+	Status         string // "pending", "running", "completed", "failed", "paused"
+	StartTime      time.Time
+	EndTime        time.Time
+	CurrentStep    string
+	CompletedSteps []string
+	FailedSteps    []string
+	Context        map[string]interface{}
+	Approvals      map[string]bool
+	Errors         []WorkflowError
 }
 
 // WorkflowError represents a workflow error
@@ -179,15 +179,15 @@ type WorkflowError struct {
 
 // ApprovalRequest represents an approval request
 type ApprovalRequest struct {
-	ID          string
-	ExecutionID string
+	ID           string
+	ExecutionID  string
 	ApprovalRule ApprovalRule
-	Requestor   string
-	CreatedAt   time.Time
-	DueDate     time.Time
-	Status      string // "pending", "approved", "rejected"
-	Approvers   map[string]bool
-	Comments    []ApprovalComment
+	Requestor    string
+	CreatedAt    time.Time
+	DueDate      time.Time
+	Status       string // "pending", "approved", "rejected"
+	Approvers    map[string]bool
+	Comments     []ApprovalComment
 }
 
 // ApprovalComment represents a comment on approval request

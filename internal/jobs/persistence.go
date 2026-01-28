@@ -141,7 +141,22 @@ func (pq *PersistentQueue) Clear(ctx context.Context) error {
 
 // GetStats returns queue statistics
 func (pq *PersistentQueue) GetStats(ctx context.Context) (*QueueStats, error) {
-	return pq.repository.GetStats(ctx)
+	repoStats, err := pq.repository.GetStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert RepositoryStats to QueueStats
+	return &QueueStats{
+		Total:       repoStats.Total,
+		Pending:     repoStats.Pending,
+		Running:     repoStats.Running,
+		Completed:   repoStats.Completed,
+		Failed:      repoStats.Failed,
+		Cancelled:   repoStats.Cancelled,
+		AverageTime: repoStats.AverageTime,
+		OldestJob:   repoStats.OldestJob,
+	}, nil
 }
 
 // RecoverPendingJobs recovers pending jobs from database on startup
@@ -205,6 +220,46 @@ func (pq *PersistentQueue) CleanupOldJobs(ctx context.Context, retentionDays int
 	pq.logger.Printf("Deleted %d expired jobs", deleted)
 
 	return nil
+}
+
+// Event represents a job event for tracking
+type Event struct {
+	ID            string                 `json:"id" gorm:"primaryKey"`
+	JobID         string                 `json:"jobId" gorm:"index"`
+	Type          EventType              `json:"type" gorm:"index"`
+	Message       string                 `json:"message"`
+	Context       map[string]interface{} `json:"context" gorm:"serializer:json"`
+	Timestamp     time.Time              `json:"timestamp" gorm:"index"`
+	Source        string                 `json:"source"`
+	Data          map[string]interface{} `json:"data"`
+	Metadata      map[string]string      `json:"metadata,omitempty"`
+	UserID        string                 `json:"user_id,omitempty"`
+	CorrelationID string                 `json:"correlation_id,omitempty"`
+}
+
+// EventType represents the type of job event
+type EventType string
+
+// Job event types
+const (
+	EventTypeJobCreated   EventType = "job.created"
+	EventTypeJobStarted   EventType = "job.started"
+	EventTypeJobCompleted EventType = "job.completed"
+	EventTypeJobFailed    EventType = "job.failed"
+	EventTypeJobCanceled  EventType = "job.canceled"
+	EventTypeJobRetried   EventType = "job.retried"
+)
+
+// EventFilter filters job events
+type EventFilter struct {
+	JobID     string
+	Type      EventType
+	Source    string
+	UserID    string
+	StartTime time.Time
+	EndTime   time.Time
+	Limit     int
+	Offset    int
 }
 
 // EventRepository defines the interface for event persistence

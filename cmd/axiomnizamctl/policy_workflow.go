@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -172,7 +173,7 @@ func handlePolicyApply(filename string) {
 		return
 	}
 
-	response, err := apiClient.Post("/api/v1/policies", resource)
+	response, err := apiClient.Post(context.Background(), "/api/v1/policies", resource)
 	if err != nil {
 		fmt.Printf("❌ Failed to apply policy: %v\n", err)
 		return
@@ -186,7 +187,7 @@ func handlePolicyApply(filename string) {
 }
 
 func handlePolicyList() {
-	response, err := apiClient.Get("/api/v1/policies")
+	response, err := apiClient.Get(context.Background(), "/api/v1/policies", nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to list policies: %v\n", err)
 		return
@@ -198,12 +199,12 @@ func handlePolicyList() {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(policies)
 }
 
 func handlePolicyGet(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name), nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to get policy: %v\n", err)
 		return
@@ -215,7 +216,7 @@ func handlePolicyGet(name string) {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(policy)
 }
 
@@ -225,7 +226,7 @@ func handlePolicyDelete(name string) {
 		return
 	}
 
-	response, err := apiClient.Delete(fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name))
+	response, err := apiClient.Delete(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name))
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return
@@ -239,7 +240,7 @@ func handlePolicyDelete(name string) {
 }
 
 func handlePolicyDescribe(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name), nil)
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return
@@ -277,7 +278,7 @@ func handlePolicyDiff(filename string) {
 	metadata := resource["metadata"].(map[string]interface{})
 	name := metadata["name"].(string)
 
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/policies/%s", namespace, name), nil)
 	if err != nil || response.StatusCode == 404 {
 		fmt.Printf("📄 Policy '%s' does not exist on server\n", name)
 		fmt.Printf("⚠️  Applying will CREATE a new policy\n\n")
@@ -319,7 +320,7 @@ func handleWorkflowApply(filename string) {
 		return
 	}
 
-	response, err := apiClient.Post("/api/v1/workflows", resource)
+	response, err := apiClient.Post(context.Background(), "/api/v1/workflows", resource)
 	if err != nil {
 		fmt.Printf("❌ Failed to apply workflow: %v\n", err)
 		return
@@ -333,7 +334,7 @@ func handleWorkflowApply(filename string) {
 }
 
 func handleWorkflowList() {
-	response, err := apiClient.Get("/api/v1/workflows")
+	response, err := apiClient.Get(context.Background(), "/api/v1/workflows", nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to list workflows: %v\n", err)
 		return
@@ -345,12 +346,12 @@ func handleWorkflowList() {
 		return
 	}
 
-	formatter := output.NewFormatter(outputFormat)
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(workflows)
 }
 
 func handleWorkflowRun(name string) {
-	response, err := apiClient.Post(fmt.Sprintf("/api/v1/workflows/%s/run", name), nil)
+	response, err := apiClient.Post(context.Background(), fmt.Sprintf("/api/v1/workflows/%s/run", name), nil)
 	if err != nil {
 		fmt.Printf("❌ Failed to run workflow: %v\n", err)
 		return
@@ -364,7 +365,7 @@ func handleWorkflowRun(name string) {
 }
 
 func handleWorkflowStatus(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name), nil)
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return
@@ -376,7 +377,7 @@ func handleWorkflowStatus(name string) {
 		return
 	}
 
-	metadata := workflow["metadata"].(map[string]interface{})
+	_ = workflow["metadata"].(map[string]interface{})
 	status := workflow["status"].(map[string]interface{})
 
 	fmt.Printf("\n📊 Workflow: %s\n", name)
@@ -397,7 +398,7 @@ func handleWorkflowStatus(name string) {
 }
 
 func handleWorkflowDescribe(name string) {
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name), nil)
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return
@@ -409,9 +410,10 @@ func handleWorkflowDescribe(name string) {
 		return
 	}
 
+	_ = workflow["metadata"].(map[string]interface{})
 	metadata := workflow["metadata"].(map[string]interface{})
-	spec := workflow["spec"].(map[string]interface{})
 	status := workflow["status"].(map[string]interface{})
+	spec := workflow["spec"].(map[string]interface{})
 
 	fmt.Printf("\n📋 Workflow: %s\n", name)
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -438,10 +440,10 @@ func handleWorkflowDiff(filename string) {
 		return
 	}
 
-	metadata := resource["metadata"].(map[string]interface{})
-	name := metadata["name"].(string)
+	_ = resource["metadata"].(map[string]interface{})
+	name := resource["metadata"].(map[string]interface{})["name"].(string)
 
-	response, err := apiClient.Get(fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name))
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name), nil)
 	if err != nil || response.StatusCode == 404 {
 		fmt.Printf("📄 Workflow '%s' does not exist on server\n", name)
 		fmt.Printf("⚠️  Applying will CREATE a new workflow\n\n")

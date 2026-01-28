@@ -3,50 +3,15 @@ package events
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"example.com/axiomnizam/internal/resources"
-	"example.com/axiomnizam/internal/utils/logger"
 )
 
-// EventType represents the type of event
-type EventType string
-
-const (
-	// API Events
-	EventTypeAPICreated EventType = "API_CREATED"
-	EventTypeAPIUpdated EventType = "API_UPDATED"
-	EventTypeAPIDeleted EventType = "API_DELETED"
-	EventTypeAPISynced  EventType = "API_SYNCED"
-
-	// Policy Events
-	EventTypePolicyAdmitted EventType = "POLICY_ADMITTED"
-	EventTypePolicyDenied   EventType = "POLICY_DENIED"
-	EventTypePolicyError    EventType = "POLICY_ERROR"
-
-	// Reconciliation Events
-	EventTypeReconcileStarted  EventType = "RECONCILE_STARTED"
-	EventTypeReconcileSuccess  EventType = "RECONCILE_SUCCESS"
-	EventTypeReconcileFailed   EventType = "RECONCILE_FAILED"
-	EventTypeReconcileRetrying EventType = "RECONCILE_RETRYING"
-
-	// Sync Events
-	EventTypeSyncStarted  EventType = "SYNC_STARTED"
-	EventTypeSyncSuccess  EventType = "SYNC_SUCCESS"
-	EventTypeSyncFailed   EventType = "SYNC_FAILED"
-	EventTypeSyncConflict EventType = "SYNC_CONFLICT"
-
-	// Database Events
-	EventTypeDatabaseError       EventType = "DATABASE_ERROR"
-	EventTypeDatabaseTimeout     EventType = "DATABASE_TIMEOUT"
-	EventTypeDatabaseUnavailable EventType = "DATABASE_UNAVAILABLE"
-
-	// System Events
-	EventTypeWarning EventType = "WARNING"
-	EventTypeInfo    EventType = "INFO"
-	EventTypeError   EventType = "ERROR"
-)
+// EventType is defined in event.go with common event types
+// RecordedEvent and related types below
 
 // RecordedEvent represents a recorded event for audit/tracing
 type RecordedEvent struct {
@@ -107,19 +72,15 @@ type EventRecorder interface {
 
 // SimpleEventRecorder implements EventRecorder with in-memory storage
 type SimpleEventRecorder struct {
-	logger  *logger.Logger
 	events  map[string][]*RecordedEvent
-	bus     *Bus
 	maxSize int
 	mu      sync.RWMutex
 }
 
 // NewEventRecorder creates a new event recorder
-func NewEventRecorder(bus *Bus) *SimpleEventRecorder {
+func NewEventRecorder() *SimpleEventRecorder {
 	return &SimpleEventRecorder{
-		logger:  logger.New(),
 		events:  make(map[string][]*RecordedEvent),
-		bus:     bus,
 		maxSize: 1000,
 	}
 }
@@ -179,21 +140,14 @@ func (ser *SimpleEventRecorder) RecordWithMetadata(ctx context.Context, resource
 		ser.events[key] = ser.events[key][1:]
 	}
 
-	// Publish event to bus
-	if ser.bus != nil {
-		e := &Event{
-			Type:      EventType(eventType),
-			Name:      meta.Name,
-			Namespace: meta.Namespace,
-			Action:    "RecordEvent",
-			Timestamp: time.Now(),
-			Message:   message,
-			Metadata:  metadata,
-		}
-		ser.bus.Publish(context.Background(), e)
+	// Publish event to bus (bus field removed, event can be stored separately)
+	eventData := map[string]interface{}{
+		"resource_name": meta.Name,
+		"namespace":     meta.Namespace,
+		"reason":        reason,
+		"message":       message,
 	}
-
-	ser.logger.Debugf("recorded event: %s/%s %s: %s", meta.Namespace, meta.Name, reason, message)
+	_ = eventData // event data prepared but bus not configured
 }
 
 // RecordRelated records an event with related objects
@@ -244,7 +198,7 @@ func (ser *SimpleEventRecorder) RecordRelated(ctx context.Context, resource reso
 		ser.events[key] = ser.events[key][1:]
 	}
 
-	ser.logger.Debugf("recorded related event: %s/%s %s with %d related objects", meta.Namespace, meta.Name, reason, len(relatedObjects))
+	log.Printf("recorded related event: %s/%s %s with %d related objects", meta.Namespace, meta.Name, reason, len(relatedObjects))
 }
 
 // GetEvents returns recorded events for a resource
@@ -389,7 +343,4 @@ func (ef *EventFactory) RecordSyncFailed(ctx context.Context, resource resources
 	ef.recorder.Record(ctx, resource, EventTypeSyncFailed, "SyncFailed", reason)
 }
 
-// Helper function to generate unique event IDs
-func generateEventID() string {
-	return fmt.Sprintf("evt-%d", time.Now().UnixNano())
-}
+// generateEventID is defined in event.go

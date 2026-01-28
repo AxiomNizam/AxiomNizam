@@ -8,46 +8,46 @@ import (
 
 // AccessPolicy defines access control rules
 type AccessPolicy struct {
-	ID            string
-	Name          string
-	Type          string
-	Version       string
-	Enabled       bool
-	Principal     Principal
-	Resources     []Resource
-	Actions       []string
-	Effect        string // "allow" or "deny"
-	Conditions    []AccessCondition
-	Description   string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID          string
+	Name        string
+	Type        string
+	Version     string
+	Enabled     bool
+	Principal   Principal
+	Resources   []Resource
+	Actions     []string
+	Effect      string // "allow" or "deny"
+	Conditions  []AccessCondition
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // Principal represents who is requesting access
 type Principal struct {
-	Type    string // "user", "group", "service", "role"
-	ID      string
-	Name    string
-	Tags    map[string]string
+	Type       string // "user", "group", "service", "role"
+	ID         string
+	Name       string
+	Tags       map[string]string
 	Attributes map[string]interface{}
 }
 
 // Resource represents what is being accessed
 type Resource struct {
-	Type       string // "database", "table", "api", "file"
-	ID         string
-	Name       string
-	Namespace  string
-	Tags       map[string]string
-	Sensitive  bool
+	Type      string // "database", "table", "api", "file"
+	ID        string
+	Name      string
+	Namespace string
+	Tags      map[string]string
+	Sensitive bool
 }
 
 // AccessCondition defines conditions for access
 type AccessCondition struct {
-	Type       string // "time", "ip", "mfa", "location"
-	Operator   string // "equals", "notequals", "in", "notin", "matches"
-	Value      string
-	Values     []string
+	Type     string // "time", "ip", "mfa", "location"
+	Operator string // "equals", "notequals", "in", "notin", "matches"
+	Value    string
+	Values   []string
 }
 
 // GetID returns the policy ID
@@ -136,17 +136,17 @@ type AccessPolicyBuilder struct {
 func NewAccessPolicyBuilder(id, name string) *AccessPolicyBuilder {
 	return &AccessPolicyBuilder{
 		policy: &AccessPolicy{
-			ID:        id,
-			Name:      name,
-			Type:      "access",
-			Version:   "1.0",
-			Enabled:   true,
-			Effect:    "allow",
-			Resources: make([]Resource, 0),
-			Actions:   make([]string, 0),
+			ID:         id,
+			Name:       name,
+			Type:       "access",
+			Version:    "1.0",
+			Enabled:    true,
+			Effect:     "allow",
+			Resources:  make([]Resource, 0),
+			Actions:    make([]string, 0),
 			Conditions: make([]AccessCondition, 0),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		},
 	}
 }
@@ -316,7 +316,7 @@ func (ae *ABACEngine) evaluateCondition(condition AccessCondition) bool {
 
 // RoleBasedAccessControl (RBAC) implementation
 type RBACEngine struct {
-	roleAssignments map[string][]string // userID -> roles
+	roleAssignments map[string][]string      // userID -> roles
 	rolePolicies    map[string]*AccessPolicy // role -> policy
 }
 

@@ -1,0 +1,304 @@
+package rbac
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// RBACHandler handles RBAC endpoints
+type RBACHandler struct {
+	manager RBACManager
+}
+
+// NewRBACHandler creates handler
+func NewRBACHandler(manager RBACManager) *RBACHandler {
+	return &RBACHandler{manager: manager}
+}
+
+// CreateRole handles POST /api/v1/roles
+func (h *RBACHandler) CreateRole(c *gin.Context) {
+	var req struct {
+		TenantID    string       `json:"tenantId" binding:"required"`
+		Name        string       `json:"name" binding:"required"`
+		Description string       `json:"description"`
+		Permissions []Permission `json:"permissions"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	role := &Role{
+		TenantID:    req.TenantID,
+		Name:        req.Name,
+		Description: req.Description,
+		Type:        "CUSTOM",
+		Permissions: req.Permissions,
+		IsActive:    true,
+		CreatedAt:   time.Now(),
+	}
+
+	created, err := h.manager.CreateRole(role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, created)
+}
+
+// GetRole handles GET /api/v1/roles/:id
+func (h *RBACHandler) GetRole(c *gin.Context) {
+	id := c.Param("id")
+	role, err := h.manager.GetRole(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "role not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, role)
+}
+
+// ListRoles handles GET /api/v1/roles
+func (h *RBACHandler) ListRoles(c *gin.Context) {
+	tenantID := c.Query("tenantId")
+	roles, err := h.manager.ListRoles(tenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"roles": roles, "count": len(roles)})
+}
+
+// UpdateRole handles PATCH /api/v1/roles/:id
+func (h *RBACHandler) UpdateRole(c *gin.Context) {
+	id := c.Param("id")
+	var req map[string]interface{}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	role, err := h.manager.GetRole(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "role not found"})
+		return
+	}
+
+	role.UpdatedAt = time.Now()
+	updated, err := h.manager.UpdateRole(role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
+}
+
+// DeleteRole handles DELETE /api/v1/roles/:id
+func (h *RBACHandler) DeleteRole(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.manager.DeleteRole(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "role deleted"})
+}
+
+// BindRole handles POST /api/v1/role-bindings
+func (h *RBACHandler) BindRole(c *gin.Context) {
+	var req struct {
+		TenantID      string        `json:"tenantId" binding:"required"`
+		RoleID        string        `json:"roleId" binding:"required"`
+		PrincipalType PrincipalType `json:"principalType" binding:"required"`
+		PrincipalID   string        `json:"principalId" binding:"required"`
+		Scope         string        `json:"scope"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	binding := &RoleBinding{
+		TenantID:      req.TenantID,
+		RoleID:        req.RoleID,
+		PrincipalType: req.PrincipalType,
+		PrincipalID:   req.PrincipalID,
+		Scope:         req.Scope,
+		Effective:     true,
+		CreatedAt:     time.Now(),
+	}
+
+	created, err := h.manager.CreateRoleBinding(binding)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, created)
+}
+
+// ListBindings handles GET /api/v1/role-bindings
+func (h *RBACHandler) ListBindings(c *gin.Context) {
+	tenantID := c.Query("tenantId")
+	principalID := c.Query("principalId")
+
+	bindings, err := h.manager.ListRoleBindings(tenantID, principalID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"bindings": bindings, "count": len(bindings)})
+}
+
+// DeleteBinding handles DELETE /api/v1/role-bindings/:id
+func (h *RBACHandler) DeleteBinding(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.manager.DeleteRoleBinding(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "binding deleted"})
+}
+
+// CheckPermission handles POST /api/v1/permissions/check
+func (h *RBACHandler) CheckPermission(c *gin.Context) {
+	var req PermissionCheck
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := h.manager.CheckPermission(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// ListPermissions handles GET /api/v1/permissions
+func (h *RBACHandler) ListPermissions(c *gin.Context) {
+	tenantID := c.Query("tenantId")
+	resource := c.Query("resource")
+
+	permissions, err := h.manager.ListPermissions(tenantID, resource)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"permissions": permissions, "count": len(permissions)})
+}
+
+// CreateAccessRequest handles POST /api/v1/access-requests
+func (h *RBACHandler) CreateAccessRequest(c *gin.Context) {
+	var req struct {
+		TenantID      string `json:"tenantId" binding:"required"`
+		PrincipalID   string `json:"principalId" binding:"required"`
+		ResourceType  string `json:"resourceType" binding:"required"`
+		Action        string `json:"action" binding:"required"`
+		Duration      int    `json:"duration"`
+		Justification string `json:"justification"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	accessReq := &AccessRequest{
+		TenantID:      req.TenantID,
+		PrincipalType: "USER",
+		PrincipalID:   req.PrincipalID,
+		ResourceType:  req.ResourceType,
+		Action:        req.Action,
+		Duration:      req.Duration,
+		Justification: req.Justification,
+		Status:        "Pending",
+		RequestedAt:   time.Now(),
+	}
+
+	created, err := h.manager.CreateAccessRequest(accessReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, created)
+}
+
+// ApproveAccessRequest handles POST /api/v1/access-requests/:id/approve
+func (h *RBACHandler) ApproveAccessRequest(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		ApprovedBy string `json:"approvedBy" binding:"required"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	approved, err := h.manager.ApproveAccessRequest(id, req.ApprovedBy)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, approved)
+}
+
+// RegisterRBACRoutes registers all RBAC routes
+func RegisterRBACRoutes(router *gin.Engine, manager RBACManager) {
+	handler := NewRBACHandler(manager)
+	
+	group := router.Group("/api/v1")
+	{
+		// Roles
+		group.POST("/roles", handler.CreateRole)
+		group.GET("/roles", handler.ListRoles)
+		group.GET("/roles/:id", handler.GetRole)
+		group.PATCH("/roles/:id", handler.UpdateRole)
+		group.DELETE("/roles/:id", handler.DeleteRole)
+		
+		// Role Bindings
+		group.POST("/role-bindings", handler.BindRole)
+		group.GET("/role-bindings", handler.ListBindings)
+		group.DELETE("/role-bindings/:id", handler.DeleteBinding)
+		
+		// Permissions
+		group.GET("/permissions", handler.ListPermissions)
+		group.POST("/permissions/check", handler.CheckPermission)
+		
+		// Access Requests
+		group.POST("/access-requests", handler.CreateAccessRequest)
+		group.POST("/access-requests/:id/approve", handler.ApproveAccessRequest)
+	}
+}
+
+// RBACManager interface
+type RBACManager interface {
+	CreateRole(role *Role) (*Role, error)
+	GetRole(id string) (*Role, error)
+	ListRoles(tenantID string) ([]*Role, error)
+	UpdateRole(role *Role) (*Role, error)
+	DeleteRole(id string) error
+	CreateRoleBinding(binding *RoleBinding) (*RoleBinding, error)
+	ListRoleBindings(tenantID, principalID string) ([]*RoleBinding, error)
+	DeleteRoleBinding(id string) error
+	CheckPermission(req *PermissionCheck) (*PermissionCheckResult, error)
+	ListPermissions(tenantID, resource string) ([]*Permission, error)
+	CreateAccessRequest(req *AccessRequest) (*AccessRequest, error)
+	ApproveAccessRequest(id, approvedBy string) (*AccessRequest, error)
+}

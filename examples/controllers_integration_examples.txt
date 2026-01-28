@@ -1,0 +1,389 @@
+package controllers
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"example.com/axiomnizam/internal/controllers"
+	"example.com/axiomnizam/internal/events"
+	"example.com/axiomnizam/internal/models"
+)
+
+// ExampleAdmissionControllerFlow demonstrates the complete admission flow
+func ExampleAdmissionControllerFlow() {
+	fmt.Println("=== EXAMPLE 1: Admission Controller Flow ===")
+
+	// Create event bus
+	retPolicy := &events.RetentionPolicy{
+		MaxAge:   7 * 24 * time.Hour,
+		MaxCount: 10000,
+	}
+	eventBus := events.NewEventBusWithLifecycle(10000, retPolicy)
+
+	// Create RBAC engine
+	rbacEngine := controllers.NewRBACEngine()
+
+	// Create roles and bindings
+	role := &controllers.Role{
+		Name:      "pod-manager",
+		Namespace: "default",
+		Rules: []*controllers.PolicyRule{
+			{
+				Verbs:     []string{"create", "update", "delete"},
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+			},
+		},
+	}
+
+	rbacEngine.CreateRole(context.Background(), role)
+
+	binding := &controllers.RoleBinding{
+		Name:      "developers",
+		Namespace: "default",
+		Role:      "pod-manager",
+		Subjects: []*controllers.Subject{
+			{Type: "User", Name: "alice"},
+		},
+	}
+
+	rbacEngine.CreateRoleBinding(context.Background(), binding)
+
+	// Create resource quota
+	quotaMgr := controllers.NewResourceQuotaManager()
+	quota := &controllers.Quota{
+		Namespace: "default",
+		Resources: map[string]*controllers.ResourceLimit{
+			"Pod": {
+				Kind:     "Pod",
+				MaxCount: 100,
+			},
+		},
+		Used: make(map[string]int64),
+	}
+	quotaMgr.CreateQuota(context.Background(), quota)
+
+	// Create admission controller
+	admCtrl := controllers.NewAdmissionController(eventBus, nil, rbacEngine, quotaMgr)
+
+	// Register validating webhooks
+	admCtrl.RegisterValidator(&NameValidationWebhook{})
+
+	// Create admission request
+	req := &controllers.AdmissionRequest{
+		ID:        "test-1",
+		Timestamp: time.Now(),
+		Kind:      "Pod",
+		Name:      "my-pod",
+		Namespace: "default",
+		Operation: "create",
+		UserID:    "alice",
+		UserRole:  "user",
+		Resource: map[string]interface{}{
+			"name": "my-pod",
+		},
+	}
+
+	// Process admission
+	resp, err := admCtrl.Admit(context.Background(), req)
+	if err != nil {
+		log.Fatalf("Admission failed: %v", err)
+	}
+
+	fmt.Printf("Admission Decision: Allowed=%v, Code=%d\n", resp.Allowed, resp.Code)
+	fmt.Printf("Processing Time: %dms\n", resp.ProcessingMs)
+	for i, phase := range resp.Phases {
+		fmt.Printf("  Phase %d: %s - %s\n", i+1, phase.Phase, phase.Status)
+	}
+}
+
+// ExampleRBACEngine demonstrates RBAC functionality
+func ExampleRBACEngine() {
+	fmt.Println("\n=== EXAMPLE 2: RBAC Engine ===")
+
+	rbacEngine := controllers.NewRBACEngine()
+
+	// Create cluster roles
+	adminRole := &controllers.ClusterRole{
+		Name: "admin",
+		Rules: []*controllers.PolicyRule{
+			{
+				Verbs:     []string{"*"},
+				APIGroups: []string{"*"},
+				Resources: []string{"*"},
+			},
+		},
+	}
+
+	rbacEngine.CreateClusterRole(context.Background(), adminRole)
+
+	// Create cluster role binding
+	adminBinding := &controllers.ClusterRoleBinding{
+		Name: "admin-users",
+		Role: "admin",
+		Subjects: []*controllers.Subject{
+			{Type: "User", Name: "admin-user"},
+		},
+	}
+
+	rbacEngine.CreateClusterRoleBinding(context.Background(), adminBinding)
+
+	// Check permissions
+	allowed, reason := rbacEngine.CanPerform(context.Background(), "admin-user", "Pod", "delete", "default")
+	fmt.Printf("Admin can delete Pods: %v (%s)\n", allowed, reason)
+
+	allowed, reason = rbacEngine.CanPerform(context.Background(), "unknown-user", "Pod", "delete", "default")
+	fmt.Printf("Unknown user can delete Pods: %v (%s)\n", allowed, reason)
+
+	// Get audit log
+	auditLog := rbacEngine.GetAuditLog(context.Background(), "", nil, 10)
+	fmt.Printf("Audit log entries: %d\n", len(auditLog))
+
+	// Get stats
+	stats := rbacEngine.GetRBACStats(context.Background())
+	fmt.Printf("RBAC Stats: %v\n", stats)
+}
+
+// ExampleEventModel demonstrates event model functionality
+func ExampleEventModel() {
+	fmt.Println("\n=== EXAMPLE 3: Event Model ===")
+
+	// Create event bus
+	eventBus := events.NewEventBusWithLifecycle(10000, nil)
+
+	// Subscribe to resource events
+	eventHandler := func(ctx context.Context, event *events.Event) error {
+		fmt.Printf("Event received: %s - %s\n", event.Type, event.Data["reason"])
+		return nil
+	}
+
+	eventBus.SubscribeToResourceEvents(
+		[]events.ResourceEventType{events.EventResourceCreated},
+		eventHandler,
+	)
+
+	// Create and publish event
+	event := &events.ResourceEvent{
+		Type:      events.EventResourceCreated,
+		Kind:      "Pod",
+		Name:      "my-pod",
+		Namespace: "default",
+		Reason:    "Created",
+		Message:   "Pod successfully created",
+		Source:    "pod-controller",
+		Severity:  "info",
+	}
+
+	eventBus.PublishResourceEvent(context.Background(), event)
+	time.Sleep(100 * time.Millisecond)
+
+	// Query events
+	filter := &events.EventFilter{
+		Kind:      "Pod",
+		Namespace: "default",
+	}
+
+	events := eventBus.GetEvents(context.Background(), filter, 10)
+	fmt.Printf("Found %d events\n", len(events))
+
+	// Get metrics
+	metrics := eventBus.GetMetrics()
+	fmt.Printf("Event Bus Metrics: Total=%d, Dropped=%d\n", metrics.TotalEvents, metrics.DroppedEvents)
+}
+
+// ExampleControllerReconciliation demonstrates controller reconciliation
+func ExampleControllerReconciliation() {
+	fmt.Println("\n=== EXAMPLE 4: Controller Reconciliation ===")
+
+	// Create components
+	eventBus := events.NewEventBusWithLifecycle(10000, nil)
+	rbacEngine := controllers.NewRBACEngine()
+	quotaMgr := controllers.NewResourceQuotaManager()
+	admCtrl := controllers.NewAdmissionController(eventBus, nil, rbacEngine, quotaMgr)
+
+	// Create queue (stub)
+	queue := &MockWorkQueue{}
+
+	// Create resource manager (stub)
+	resMgr := &controllers.ResourceManager{}
+
+	// Create reconciler
+	reconciler := controllers.NewControllerReconciler(
+		"pod-controller",
+		"Pod",
+		eventBus,
+		admCtrl,
+		rbacEngine,
+		resMgr,
+		queue,
+	)
+
+	// Register an observer
+	observer := &MockObserver{}
+	reconciler.RegisterObserver(observer)
+
+	fmt.Printf("Reconciler created: %s\n", reconciler.Name)
+	fmt.Printf("Resource Kind: %s\n", reconciler.ResourceKind)
+	fmt.Printf("Retry Policy: Max=%d, InitialBackoff=%v\n",
+		reconciler.RetryPolicy.MaxRetries,
+		reconciler.RetryPolicy.InitialBackoff)
+}
+
+// ExampleAPIResource demonstrates APIResource and CRD
+func ExampleAPIResource() {
+	fmt.Println("\n=== EXAMPLE 5: APIResource and CRD ===")
+
+	// Define schema for custom resource
+	schema := &models.ValidationSchema{
+		OpenAPIV3Schema: &models.JSONSchema{
+			Type: "object",
+			Properties: map[string]*models.JSONSchema{
+				"spec": {
+					Type: "object",
+					Properties: map[string]*models.JSONSchema{
+						"replicas": {
+							Type:    "integer",
+							Minimum: ptrFloat(1),
+							Maximum: ptrFloat(10),
+						},
+						"image": {
+							Type:      "string",
+							MinLength: ptrInt(5),
+							Pattern:   "^[a-z0-9]+/[a-z0-9:.-]+$",
+						},
+					},
+					Required: []string{"replicas", "image"},
+				},
+			},
+		},
+	}
+
+	// Create CRD
+	crd := &models.CustomResourceDefinition{
+		APIVersion: "apiextensions.k8s.io/v1",
+		Kind:       "CustomResourceDefinition",
+		Metadata: models.Metadata{
+			Name: "deployments.example.com",
+		},
+		Spec: models.CRDSpec{
+			Group: "example.com",
+			Names: models.CRDNames{
+				Plural: "deployments",
+				Kind:   "Deployment",
+			},
+			Scope: "Namespaced",
+			Versions: []models.CRDVersion{
+				{
+					Name:    "v1",
+					Served:  true,
+					Storage: true,
+					Schema:  schema,
+					Subresources: &models.Subresources{
+						Status: &models.StatusSubresource{},
+					},
+				},
+			},
+		},
+	}
+
+	fmt.Printf("CRD created: %s\n", crd.Metadata.Name)
+	fmt.Printf("Group: %s\n", crd.Spec.Group)
+	fmt.Printf("Scope: %s\n", crd.Spec.Scope)
+
+	// Create validator
+	validator := models.NewAPIResourceValidator(schema)
+
+	// Create a resource instance
+	factory := models.NewAPIResourceFactory("Deployment", "example.com/v1", schema)
+	resource := factory.Create("my-deployment", "default", map[string]interface{}{
+		"replicas": 3,
+		"image":    "nginx:latest",
+	})
+
+	fmt.Printf("Resource created: %s/%s\n", resource.Metadata.Namespace, resource.Metadata.Name)
+
+	// Validate
+	if err := validator.Validate(resource); err != nil {
+		fmt.Printf("Validation error: %v\n", err)
+	} else {
+		fmt.Println("Resource validation passed")
+	}
+
+	// Convert to JSON
+	jsonData, err := resource.AsJSON()
+	if err != nil {
+		log.Fatalf("JSON conversion failed: %v", err)
+	}
+
+	fmt.Printf("Resource as JSON (first 200 chars): %s\n", string(jsonData[:min(200, len(jsonData))]))
+}
+
+// Helper structures and functions
+
+type NameValidationWebhook struct{}
+
+func (n *NameValidationWebhook) Validate(ctx context.Context, req *controllers.AdmissionRequest) (bool, string, error) {
+	if len(req.Name) < 3 {
+		return false, "name must be at least 3 characters", nil
+	}
+	return true, "", nil
+}
+
+func (n *NameValidationWebhook) Name() string {
+	return "name-validator"
+}
+
+func (n *NameValidationWebhook) Phase() controllers.AdmissionPhase {
+	return controllers.PhaseValidation
+}
+
+type MockWorkQueue struct{}
+
+func (m *MockWorkQueue) Add(item interface{}) error {
+	return nil
+}
+
+func (m *MockWorkQueue) AddAfter(item interface{}, duration time.Duration) error {
+	return nil
+}
+
+func (m *MockWorkQueue) Get() (interface{}, bool) {
+	return nil, false
+}
+
+func (m *MockWorkQueue) Done(item interface{}) {
+}
+
+func (m *MockWorkQueue) ShutDown() {
+}
+
+type MockObserver struct{}
+
+func (m *MockObserver) Name() string {
+	return "mock-observer"
+}
+
+func (m *MockObserver) Observe(ctx context.Context, res interface{}) (map[string]interface{}, error) {
+	return map[string]interface{}{"status": "healthy"}, nil
+}
+
+func (m *MockObserver) GetInterval() time.Duration {
+	return 30 * time.Second
+}
+
+func ptrFloat(f float64) *float64 {
+	return &f
+}
+
+func ptrInt(i int) *int {
+	return &i
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

@@ -32,9 +32,9 @@ type DataClassification struct {
 
 // DataHandlingRule defines how data should be handled
 type DataHandlingRule struct {
-	DataLevel      string
-	AllowedActions []string // "read", "write", "delete", "export", "share"
-	RequiredApprovals int
+	DataLevel            string
+	AllowedActions       []string // "read", "write", "delete", "export", "share"
+	RequiredApprovals    int
 	NotificationRequired bool
 	LoggingRequired      bool
 	MaskingRequired      bool
@@ -42,31 +42,31 @@ type DataHandlingRule struct {
 
 // RetentionPolicy defines data retention rules
 type RetentionPolicy struct {
-	MinRetentionDays  int
-	MaxRetentionDays  int
-	AutoDeleteAfter   int
-	ArchiveAfter      int
-	Purpose           string
-	ApplicableTo      []string
+	MinRetentionDays int
+	MaxRetentionDays int
+	AutoDeleteAfter  int
+	ArchiveAfter     int
+	Purpose          string
+	ApplicableTo     []string
 }
 
 // AuditingRequirements defines audit requirements
 type AuditingRequirements struct {
-	Required              bool
-	LogAllAccess          bool
-	LogModifications      bool
-	LogDeletions          bool
-	RetentionDays         int
-	SendAlertsOn          []string // "access", "modification", "deletion", "export"
+	Required         bool
+	LogAllAccess     bool
+	LogModifications bool
+	LogDeletions     bool
+	RetentionDays    int
+	SendAlertsOn     []string // "access", "modification", "deletion", "export"
 }
 
 // EncryptionPolicy defines encryption requirements
 type EncryptionPolicy struct {
-	AtRestRequired       bool
-	InTransitRequired    bool
-	Algorithm            string // "AES-256", "RSA", etc
-	KeyManagement        string // "system", "customer"
-	ComplianceStandard   string // "HIPAA", "GDPR", "SOC2"
+	AtRestRequired     bool
+	InTransitRequired  bool
+	Algorithm          string // "AES-256", "RSA", etc
+	KeyManagement      string // "system", "customer"
+	ComplianceStandard string // "HIPAA", "GDPR", "SOC2"
 }
 
 // GetID returns policy ID
@@ -110,23 +110,23 @@ func (dp *DataPolicy) Validate() error {
 
 // DataGovernanceEngine manages data governance
 type DataGovernanceEngine struct {
-	policies        []*DataPolicy
-	dataInventory   map[string]DataAsset
+	policies         []*DataPolicy
+	dataInventory    map[string]DataAsset
 	complianceChecks map[string]ComplianceCheck
 }
 
 // DataAsset represents a data asset
 type DataAsset struct {
-	ID               string
-	Name             string
-	Classification   string
-	Owner            string
-	Sensitivity      string
-	CreatedAt        time.Time
-	LastAccessedAt   time.Time
-	AccessLog        []AccessRecord
-	Handlers         []string
-	Metadata         map[string]interface{}
+	ID             string
+	Name           string
+	Classification string
+	Owner          string
+	Sensitivity    string
+	CreatedAt      time.Time
+	LastAccessedAt time.Time
+	AccessLog      []AccessRecord
+	Handlers       []string
+	Metadata       map[string]interface{}
 }
 
 // AccessRecord records data access
@@ -317,17 +317,17 @@ func (dge *DataGovernanceEngine) isDataEncrypted(asset DataAsset) bool {
 
 // DataMaskingPolicy defines data masking rules
 type DataMaskingPolicy struct {
-	ID          string
-	Name        string
-	Patterns    []MaskingPattern
-	Enabled     bool
+	ID       string
+	Name     string
+	Patterns []MaskingPattern
+	Enabled  bool
 }
 
 // MaskingPattern defines a masking pattern
 type MaskingPattern struct {
-	DataType    string // "ssn", "email", "phone", "credit_card"
-	MaskType    string // "hash", "redact", "partial", "shuffle"
-	MaskFormat  string // format string for masked output
+	DataType   string // "ssn", "email", "phone", "credit_card"
+	MaskType   string // "hash", "redact", "partial", "shuffle"
+	MaskFormat string // format string for masked output
 }
 
 // MaskData masks sensitive data based on policy
@@ -368,9 +368,9 @@ func shuffleData(data string) string {
 
 // DataLineage tracks data relationships
 type DataLineage struct {
-	AssetID  string
-	Sources  []string // upstream data assets
-	Targets  []string // downstream data assets
+	AssetID   string
+	Sources   []string // upstream data assets
+	Targets   []string // downstream data assets
 	Transform string   // transformation applied
 	CreatedAt time.Time
 }

@@ -8,13 +8,13 @@ import (
 
 // PolicyEngine is the core policy evaluation engine
 type PolicyEngine struct {
-	mu              sync.RWMutex
-	policies        map[string]Policy
-	evaluators      map[string]PolicyEvaluator
-	cache           map[string]EvaluationResult
-	cacheTTL        time.Duration
-	auditLog        []PolicyAuditLog
-	maxAuditLogs    int
+	mu           sync.RWMutex
+	policies     map[string]Policy
+	evaluators   map[string]PolicyEvaluator
+	cache        map[string]EvaluationResult
+	cacheTTL     time.Duration
+	auditLog     []PolicyAuditLog
+	maxAuditLogs int
 }
 
 // Policy defines the base policy interface
@@ -46,34 +46,34 @@ type PolicyEvaluator interface {
 
 // PolicyContext holds context for policy evaluation
 type PolicyContext struct {
-	RequestID      string
-	UserID         string
-	Action         string
-	Resource       string
-	ResourceType   string
-	Namespace      string
-	Attributes     map[string]interface{}
-	Timestamp      time.Time
-	SourceIP       string
-	RequestMethod  string
+	RequestID     string
+	UserID        string
+	Action        string
+	Resource      string
+	ResourceType  string
+	Namespace     string
+	Attributes    map[string]interface{}
+	Timestamp     time.Time
+	SourceIP      string
+	RequestMethod string
 }
 
 // EvaluationResult holds the result of policy evaluation
 type EvaluationResult struct {
-	PolicyID  string
-	Allowed   bool
-	Reason    string
-	Timestamp time.Time
+	PolicyID   string
+	Allowed    bool
+	Reason     string
+	Timestamp  time.Time
 	DurationMs int64
 }
 
 // PolicyAuditLog holds audit log information
 type PolicyAuditLog struct {
-	Timestamp   time.Time
-	PolicyID    string
-	Action      string
-	Context     PolicyContext
-	Result      EvaluationResult
+	Timestamp    time.Time
+	PolicyID     string
+	Action       string
+	Context      PolicyContext
+	Result       EvaluationResult
 	ErrorMessage string
 }
 
@@ -434,12 +434,12 @@ func (pb *PolicyBuilder) Build() (*BasePolicy, error) {
 
 // PolicyStatus holds the status of a policy
 type PolicyStatus struct {
-	PolicyID          string
-	Enabled           bool
-	TotalEvaluations  int64
-	SuccessfulEvals   int64
-	FailedEvals       int64
-	AvgEvalTime       time.Duration
-	LastEvaluated     time.Time
-	ErrorRate         float64
+	PolicyID         string
+	Enabled          bool
+	TotalEvaluations int64
+	SuccessfulEvals  int64
+	FailedEvals      int64
+	AvgEvalTime      time.Duration
+	LastEvaluated    time.Time
+	ErrorRate        float64
 }
