@@ -146,6 +146,7 @@ func main() {
 	// Health check endpoints (no auth required)
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
+	router.GET("/distributed", healthHandler.Distributed)
 
 	// Authentication endpoints (no auth required for login/refresh)
 	authHandler := handlers.NewAuthHandler()

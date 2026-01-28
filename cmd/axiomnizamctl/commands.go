@@ -16,13 +16,18 @@ var StatusCmd = &cobra.Command{
 }
 
 func handleStatus() error {
+	if err := validateServerConnection(); err != nil {
+		printWarningMessage("Not connected to server")
+		fmt.Println("\nℹ️  Run 'axiomnizamctl login' to connect")
+		return nil
+	}
+
 	fmt.Println("\n📊 AxiomNizam Status")
-	fmt.Println("─" + string([]rune{}))
+	fmt.Println("─────────────────────────────────────")
 
 	context := configManager.GetCurrentContext()
 	if context == nil {
-		fmt.Println("❌ Not configured. Run 'axiomnizamctl login'")
-		return nil
+		return NewCommandError(ErrConfigError, "No context configured")
 	}
 
 	fmt.Printf("✓ Connected to: %s\n", context.Cluster.Server)
@@ -42,6 +47,25 @@ func handleStatus() error {
 				fmt.Printf("✓ Server Status: %s\n", health.Status)
 				if health.Version != "" {
 					fmt.Printf("✓ Server Version: %s\n", health.Version)
+				}
+			}
+		}
+
+		// Check distributed status
+		distResp, err := apiClient.GetSimple("/distributed")
+		if err == nil && distResp.StatusCode == 200 {
+			var distStatus struct {
+				Data struct {
+					IsDistributed bool     `json:"is_distributed"`
+					Members       []string `json:"members"`
+					Healthy       bool     `json:"healthy"`
+				} `json:"data"`
+			}
+			if distResp.JSON(&distStatus) == nil {
+				if distStatus.Data.IsDistributed {
+					fmt.Printf("✓ Distributed Mode: ENABLED (%d members)\n", len(distStatus.Data.Members))
+				} else {
+					fmt.Println("✓ Distributed Mode: DISABLED (single instance)")
 				}
 			}
 		}

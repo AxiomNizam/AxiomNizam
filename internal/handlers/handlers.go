@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"os/exec"
+	"strings"
 
 	"example.com/axiomnizam/internal/database"
 	"example.com/axiomnizam/internal/models"
@@ -210,5 +212,56 @@ func (h *HealthHandler) Status(c *gin.Context) {
 		Status:  "ok",
 		Message: "System status",
 		Data:    status,
+	})
+}
+
+// Distributed handles GET /distributed - Check if system is running in distributed mode
+func (h *HealthHandler) Distributed(c *gin.Context) {
+	distributedStatus := map[string]interface{}{
+		"is_distributed": false,
+		"members":        []string{},
+		"leader":         "",
+		"healthy":        false,
+		"error":          nil,
+	}
+
+	cmd := exec.Command("etcdctl", "--endpoints=localhost:2379", "member", "list")
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		distributedStatus["error"] = "etcdctl not available or etcd not running"
+		c.JSON(http.StatusOK, models.Response{
+			Status:  "ok",
+			Message: "Distributed status check",
+			Data:    distributedStatus,
+		})
+		return
+	}
+
+	members := []string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line != "" {
+			members = append(members, line)
+		}
+	}
+
+	if len(members) > 0 {
+		distributedStatus["is_distributed"] = true
+		distributedStatus["members"] = members
+		distributedStatus["member_count"] = len(members)
+	}
+
+	healthCmd := exec.Command("etcdctl", "--endpoints=localhost:2379", "endpoint", "health")
+	healthOutput, healthErr := healthCmd.CombinedOutput()
+
+	if healthErr == nil {
+		distributedStatus["healthy"] = true
+		distributedStatus["health_info"] = strings.TrimSpace(string(healthOutput))
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Status:  "ok",
+		Message: "Distributed status check",
+		Data:    distributedStatus,
 	})
 }

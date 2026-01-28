@@ -22,8 +22,8 @@ var APICreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new API",
 	Long:  "Interactively create a new API resource",
-	Run: func(cmd *cobra.Command, args []string) {
-		handleAPICreate()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleAPICreate()
 	},
 }
 
@@ -31,8 +31,8 @@ var APIListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all APIs",
 	Long:  "List all API resources in namespace",
-	Run: func(cmd *cobra.Command, args []string) {
-		handleAPIList()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleAPIList()
 	},
 }
 
@@ -41,8 +41,8 @@ var APIGetCmd = &cobra.Command{
 	Short: "Get API details",
 	Long:  "Get detailed information about a specific API",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		handleAPIGet(args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleAPIGet(args[0])
 	},
 }
 
@@ -51,8 +51,8 @@ var APIUpdateCmd = &cobra.Command{
 	Short: "Update an API",
 	Long:  "Update a specific field in an API resource",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		handleAPIUpdate(args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleAPIUpdate(args[0])
 	},
 }
 
@@ -61,8 +61,8 @@ var APIDeleteCmd = &cobra.Command{
 	Short: "Delete an API",
 	Long:  "Delete an API resource (requires confirmation)",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		handleAPIDelete(args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleAPIDelete(args[0])
 	},
 }
 
@@ -113,8 +113,8 @@ var APIDescribeCmd = &cobra.Command{
 	Short: "Show detailed API information",
 	Long:  "Show detailed information about an API including status and events",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		handleAPIDescribe(args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleAPIDescribe(args[0])
 	},
 }
 
@@ -122,22 +122,39 @@ var APIDiffCmd = &cobra.Command{
 	Use:   "diff -f [file]",
 	Short: "Show differences between file and server",
 	Long:  "Show what would change if you applied a YAML file",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		file, _ := cmd.Flags().GetString("filename")
 		if file == "" {
-			fmt.Println("❌ filename flag is required")
-			return
+			return NewCommandError(ErrInvalidInput, "filename flag (-f) is required")
 		}
-		handleAPIDiff(file)
+		return handleAPIDiff(file)
 	},
 }
 
-func handleAPICreate() {
+func handleAPICreate() error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+
 	fmt.Println("📝 Create API Resource")
 
 	name := promptInput("API Name")
+	if err := validateResourceName(name); err != nil {
+		return err
+	}
+
 	db := promptInput("Database")
+	if db == "" {
+		return NewCommandError(ErrInvalidInput, "Database cannot be empty")
+	}
+
 	table := promptInput("Table")
+	if table == "" {
+		return NewCommandError(ErrInvalidInput, "Table cannot be empty")
+	}
 
 	apiResource := map[string]interface{}{
 		"apiVersion": "axiom-nizam.io/v1",
@@ -156,69 +173,117 @@ func handleAPICreate() {
 		},
 	}
 
-	// Send to server
 	response, err := apiClient.PostSimple("/api/v1/apis", apiResource)
 	if err != nil {
-		fmt.Printf("❌ Failed to create API: %v\n", err)
-		return
+		return NewCommandError(ErrNetwork, "Failed to create API", err.Error())
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		fmt.Printf("✅ API '%s' created successfully\n", name)
-	} else {
-		fmt.Printf("❌ Failed: %s\n", response.Status)
+		printSuccessMessage(fmt.Sprintf("API '%s' created successfully", name))
 	}
+
+	return nil
 }
 
-func handleAPIList() {
-	fmt.Println("📋 APIs")
-
-	response, err := apiClient.GetSimple("/api/v1/apis")
-	if err != nil {
-		fmt.Printf("❌ Failed to list APIs: %v\n", err)
-		return
+func handleAPIList() error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
 	}
 
-	if response.StatusCode != 200 {
-		fmt.Printf("❌ Request failed: %s\n", response.Status)
-		return
+	fmt.Println("📋 APIs in namespace: " + namespace)
+
+	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis", namespace))
+	if err != nil {
+		return NewCommandError(ErrNetwork, "Failed to list APIs", err.Error())
+	}
+
+	if response.StatusCode == 404 {
+		printInfoMessage("No APIs found in this namespace")
+		return nil
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
 	}
 
 	var apis []map[string]interface{}
 	if err := response.JSON(&apis); err != nil {
-		fmt.Printf("❌ Failed to parse response: %v\n", err)
-		return
+		return NewCommandError(ErrInvalidInput, "Failed to parse response", err.Error())
+	}
+
+	if len(apis) == 0 {
+		printInfoMessage("No APIs found in this namespace")
+		return nil
 	}
 
 	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(apis)
+
+	return nil
 }
 
-func handleAPIGet(name string) {
-	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
-	if err != nil {
-		fmt.Printf("❌ Failed to get API: %v\n", err)
-		return
+func handleAPIGet(name string) error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+	if err := validateResourceName(name); err != nil {
+		return err
 	}
 
-	if response.StatusCode != 200 {
-		fmt.Printf("❌ API not found\n")
-		return
+	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
+	if err != nil {
+		return NewCommandError(ErrNetwork, "Failed to get API", err.Error())
+	}
+
+	if response.StatusCode == 404 {
+		return NewCommandError(ErrNotFound, fmt.Sprintf("API '%s' not found in namespace '%s'", name, namespace))
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
 	}
 
 	var api map[string]interface{}
 	if err := response.JSON(&api); err != nil {
-		fmt.Printf("❌ Failed to parse response: %v\n", err)
-		return
+		return NewCommandError(ErrInvalidInput, "Failed to parse response", err.Error())
 	}
 
 	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(api)
+
+	return nil
 }
 
-func handleAPIUpdate(name string) {
+func handleAPIUpdate(name string) error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+	if err := validateResourceName(name); err != nil {
+		return err
+	}
+
 	field := promptInput("Field to update")
+	if field == "" {
+		return NewCommandError(ErrInvalidInput, "Field cannot be empty")
+	}
+
 	value := promptInput("New value")
+	if value == "" {
+		return NewCommandError(ErrInvalidInput, "Value cannot be empty")
+	}
 
 	updatePayload := map[string]interface{}{
 		field: value,
@@ -226,100 +291,153 @@ func handleAPIUpdate(name string) {
 
 	response, err := apiClient.PutSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name), updatePayload)
 	if err != nil {
-		fmt.Printf("❌ Failed to update API: %v\n", err)
-		return
+		return NewCommandError(ErrNetwork, "Failed to update API", err.Error())
 	}
 
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		fmt.Printf("✅ API '%s' updated successfully\n", name)
-	} else {
-		fmt.Printf("❌ Failed: %s\n", response.Status)
+	if response.StatusCode == 404 {
+		return NewCommandError(ErrNotFound, fmt.Sprintf("API '%s' not found", name))
 	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
+	}
+
+	printSuccessMessage(fmt.Sprintf("API '%s' updated successfully", name))
+
+	return nil
 }
 
-func handleAPIDelete(name string) {
+func handleAPIDelete(name string) error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+	if err := validateResourceName(name); err != nil {
+		return err
+	}
+
 	if !confirmAction("Are you sure you want to delete this API?") {
-		fmt.Println("❌ Cancelled")
-		return
+		printWarningMessage("Deletion cancelled")
+		return nil
 	}
 
 	response, err := apiClient.DeleteSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
 	if err != nil {
-		fmt.Printf("❌ Failed to delete API: %v\n", err)
-		return
+		return NewCommandError(ErrNetwork, "Failed to delete API", err.Error())
 	}
 
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		fmt.Printf("✅ API '%s' deleted successfully\n", name)
-	} else {
-		fmt.Printf("❌ Failed: %s\n", response.Status)
+	if response.StatusCode == 404 {
+		return NewCommandError(ErrNotFound, fmt.Sprintf("API '%s' not found", name))
 	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
+	}
+
+	printSuccessMessage(fmt.Sprintf("API '%s' deleted successfully", name))
+
+	return nil
 }
 
-func handleAPIApply(filename string) {
+func handleAPIApply(filename string) error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+
 	// Read YAML file
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("❌ Failed to read file: %v\n", err)
-		return
+		if os.IsNotExist(err) {
+			return NewCommandError(ErrFileNotFound, fmt.Sprintf("File not found: %s", filename))
+		}
+		return NewCommandError(ErrFileNotFound, "Failed to read file", err.Error())
 	}
 
 	// Parse YAML
 	var resource map[string]interface{}
 	if err := yaml.Unmarshal(data, &resource); err != nil {
-		fmt.Printf("❌ Failed to parse YAML: %v\n", err)
-		return
+		return NewCommandError(ErrYAMLError, "Failed to parse YAML", err.Error())
 	}
 
 	// Extract name from metadata
 	metadata, ok := resource["metadata"].(map[string]interface{})
 	if !ok {
-		fmt.Println("❌ Invalid resource: missing metadata")
-		return
+		return NewCommandError(ErrInvalidInput, "Invalid resource: missing or invalid metadata")
 	}
 
 	name, ok := metadata["name"].(string)
-	if !ok {
-		fmt.Println("❌ Invalid resource: missing metadata.name")
-		return
+	if !ok || name == "" {
+		return NewCommandError(ErrInvalidInput, "Invalid resource: missing metadata.name")
+	}
+
+	if err := validateResourceName(name); err != nil {
+		return err
 	}
 
 	// Send to server
 	response, err := apiClient.PostSimple("/api/v1/apis", resource)
 	if err != nil {
-		fmt.Printf("❌ Failed to apply API: %v\n", err)
-		return
+		return NewCommandError(ErrNetwork, "Failed to apply API", err.Error())
 	}
 
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		fmt.Printf("✅ API '%s' applied successfully\n", name)
-	} else {
-		fmt.Printf("❌ Failed: %s\n", response.Status)
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
 	}
+
+	printSuccessMessage(fmt.Sprintf("API '%s' applied successfully", name), "Resource has been created/updated on the server")
+
+	return nil
 }
 
-func handleAPIDescribe(name string) {
-	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
-	if err != nil {
-		output.PrintError(output.ErrServerError, err.Error())
-		return
+func handleAPIDescribe(name string) error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+	if err := validateResourceName(name); err != nil {
+		return err
 	}
 
-	if response.StatusCode != 200 {
-		output.PrintError(output.ErrNotFound, fmt.Sprintf("API '%s' not found in namespace '%s'", name, namespace))
-		return
+	response, err := apiClient.GetSimple(fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name))
+	if err != nil {
+		return NewCommandError(ErrNetwork, "Failed to describe API", err.Error())
+	}
+
+	if response.StatusCode == 404 {
+		return NewCommandError(ErrNotFound, fmt.Sprintf("API '%s' not found in namespace '%s'", name, namespace))
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
 	}
 
 	var api map[string]interface{}
 	if err := response.JSON(&api); err != nil {
-		output.PrintError(output.ErrInvalidInput, "Failed to parse response")
-		return
+		return NewCommandError(ErrInvalidInput, "Failed to parse response", err.Error())
 	}
 
 	// Print detailed info
-	metadata := api["metadata"].(map[string]interface{})
-	spec := api["spec"].(map[string]interface{})
-	status := api["status"].(map[string]interface{})
+	metadata, ok := api["metadata"].(map[string]interface{})
+	if !ok {
+		return NewCommandError(ErrInvalidInput, "Invalid API response format")
+	}
+
+	spec, ok := api["spec"].(map[string]interface{})
+	if !ok {
+		return NewCommandError(ErrInvalidInput, "Invalid API response format")
+	}
+
+	status, ok := api["status"].(map[string]interface{})
+	if !ok {
+		status = make(map[string]interface{})
+	}
 
 	fmt.Printf("\n📋 API: %s\n", name)
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -354,47 +472,77 @@ func handleAPIDescribe(name string) {
 		}
 	}
 	fmt.Println()
+
+	return nil
 }
 
-func handleAPIDiff(filename string) {
+func handleAPIDiff(filename string) error {
+	if err := validateServerConnection(); err != nil {
+		return err
+	}
+	if err := validateNamespace(); err != nil {
+		return err
+	}
+
 	// Read YAML file
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		output.PrintError(output.ErrInvalidInput, "Failed to read file: "+err.Error())
-		return
+		if os.IsNotExist(err) {
+			return NewCommandError(ErrFileNotFound, fmt.Sprintf("File not found: %s", filename))
+		}
+		return NewCommandError(ErrFileNotFound, "Failed to read file", err.Error())
 	}
 
 	// Parse YAML
 	var resource map[string]interface{}
 	if err := yaml.Unmarshal(data, &resource); err != nil {
-		output.PrintError(output.ErrInvalidYAML, "Failed to parse YAML: "+err.Error())
-		return
+		return NewCommandError(ErrYAMLError, "Failed to parse YAML", err.Error())
 	}
 
-	metadata := resource["metadata"].(map[string]interface{})
-	name := metadata["name"].(string)
+	metadata, ok := resource["metadata"].(map[string]interface{})
+	if !ok {
+		return NewCommandError(ErrInvalidInput, "Invalid resource: missing or invalid metadata")
+	}
+
+	name, ok := metadata["name"].(string)
+	if !ok || name == "" {
+		return NewCommandError(ErrInvalidInput, "Invalid resource: missing metadata.name")
+	}
+
+	if err := validateResourceName(name); err != nil {
+		return err
+	}
 
 	// Get current from server
 	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/apis/%s", namespace, name), nil)
 	if err != nil {
-		output.PrintError(output.ErrServerError, err.Error())
-		return
+		return NewCommandError(ErrNetwork, "Failed to get resource from server", err.Error())
 	}
 
 	if response.StatusCode == 404 {
 		fmt.Printf("📄 Resource '%s' does not exist on server\n", name)
 		fmt.Printf("⚠️  Applying this file will CREATE a new resource\n\n")
-		return
+		return nil
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Server error (%d)", response.StatusCode), response.Status)
 	}
 
 	var current map[string]interface{}
 	if err := response.JSON(&current); err != nil {
-		output.PrintError(output.ErrInvalidInput, "Failed to parse response")
-		return
+		return NewCommandError(ErrInvalidInput, "Failed to parse server response", err.Error())
 	}
 
-	fileSpec := resource["spec"].(map[string]interface{})
-	currentSpec := current["spec"].(map[string]interface{})
+	fileSpec, ok := resource["spec"].(map[string]interface{})
+	if !ok {
+		return NewCommandError(ErrInvalidInput, "Invalid resource: missing spec")
+	}
+
+	currentSpec, ok := current["spec"].(map[string]interface{})
+	if !ok {
+		return NewCommandError(ErrInvalidInput, "Invalid server response: missing spec")
+	}
 
 	fmt.Printf("\n📊 Diff: %s\n", name)
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -415,6 +563,8 @@ func handleAPIDiff(filename string) {
 		fmt.Println("✅ No differences - file matches server state")
 	}
 	fmt.Println()
+
+	return nil
 }
 
 func init() {

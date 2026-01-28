@@ -109,14 +109,14 @@ func loginWithPassword(serverURL string) error {
 		username = promptInput("Username")
 	}
 	if username == "" {
-		return fmt.Errorf("username is required")
+		return NewCommandError(ErrInvalidInput, "Username is required")
 	}
 
 	if password == "" {
 		password = promptPassword("Password")
 	}
 	if password == "" {
-		return fmt.Errorf("password is required")
+		return NewCommandError(ErrInvalidInput, "Password is required")
 	}
 
 	// Create temporary client
@@ -131,11 +131,15 @@ func loginWithPassword(serverURL string) error {
 
 	response, err := tempClient.Post(context.Background(), "/api/v1/auth/login", loginReq)
 	if err != nil {
-		return fmt.Errorf("login request failed: %w", err)
+		return NewCommandError(ErrNetwork, "Login request failed", err.Error())
 	}
 
-	if response.StatusCode != 200 {
-		return fmt.Errorf("login failed: %s", response.Status)
+	if response.StatusCode == 401 {
+		return NewCommandError(ErrUnauthorized, "Invalid username or password")
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("Login failed (%d)", response.StatusCode), response.Status)
 	}
 
 	// Parse response
@@ -149,11 +153,11 @@ func loginWithPassword(serverURL string) error {
 	}
 
 	if err := response.JSON(&result); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+		return NewCommandError(ErrInvalidInput, "Failed to parse login response", err.Error())
 	}
 
 	if result.Token == "" {
-		return fmt.Errorf("no token in response")
+		return NewCommandError(ErrServerError, "No authentication token in response")
 	}
 
 	// Save to config
@@ -165,7 +169,7 @@ func loginWithAPIKey(serverURL string) error {
 		apiKey = promptPassword("API Key")
 	}
 	if apiKey == "" {
-		return fmt.Errorf("API key is required")
+		return NewCommandError(ErrInvalidInput, "API key is required")
 	}
 
 	// Create temporary client
@@ -176,11 +180,15 @@ func loginWithAPIKey(serverURL string) error {
 	// Verify API key
 	response, err := tempClient.Get(context.Background(), "/api/v1/auth/verify", nil)
 	if err != nil {
-		return fmt.Errorf("API key verification failed: %w", err)
+		return NewCommandError(ErrNetwork, "API key verification failed", err.Error())
 	}
 
-	if response.StatusCode != 200 {
-		return fmt.Errorf("invalid API key: %s", response.Status)
+	if response.StatusCode == 401 {
+		return NewCommandError(ErrUnauthorized, "Invalid API key")
+	}
+
+	if response.StatusCode >= 400 {
+		return NewCommandError(ErrServerError, fmt.Sprintf("API key verification failed (%d)", response.StatusCode), response.Status)
 	}
 
 	// Save to config
@@ -247,26 +255,28 @@ func handleLogout() error {
 	}
 
 	if err := configManager.DeleteToken(); err != nil {
-		return fmt.Errorf("logout failed: %w", err)
+		return NewCommandError(ErrConfigError, "Failed to logout", err.Error())
 	}
 
-	fmt.Println("✅ Successfully logged out")
-	fmt.Println("💡 Tip: Run 'axiomnizamctl login' to authenticate again")
+	printSuccessMessage("Successfully logged out")
+	printInfoMessage("Run 'axiomnizamctl login' to authenticate again")
 
 	return nil
 }
 
 func handleCurrentUser() error {
+	if configManager == nil {
+		configManager = client.NewConfigManager()
+	}
+
 	token := configManager.GetToken()
 	if token == "" {
-		fmt.Println("❌ Not authenticated. Run 'axiomnizamctl login' first.")
-		return nil
+		return NewCommandError(ErrUnauthorized, "Not authenticated", "Run 'axiomnizamctl login' first")
 	}
 
 	context := configManager.GetCurrentContext()
 	if context == nil {
-		fmt.Println("❌ No context configured")
-		return nil
+		return NewCommandError(ErrConfigError, "No context configured")
 	}
 
 	fmt.Println("\n👤 Current User")

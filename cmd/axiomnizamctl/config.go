@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"example.com/axiomnizam/internal/client"
 	"example.com/axiomnizam/internal/output"
@@ -120,7 +121,7 @@ func handleConfigView() error {
 
 	config := configManager.GetCurrentContext()
 	if config == nil {
-		return fmt.Errorf("no context configured")
+		return NewCommandError(ErrConfigError, "No context configured")
 	}
 
 	formatter := output.NewFormatter(outputFormat, os.Stdout)
@@ -138,8 +139,7 @@ func handleConfigCurrentContext() error {
 
 	context := configManager.GetCurrentContext()
 	if context == nil {
-		fmt.Println("❌ No context configured")
-		return nil
+		return NewCommandError(ErrConfigError, "No context configured")
 	}
 
 	fmt.Println(context.Name)
@@ -151,24 +151,11 @@ func handleConfigUseContext(contextName string) error {
 		configManager = client.NewConfigManager()
 	}
 
-	contexts := configManager.ListContexts()
-	found := false
-	for _, ctx := range contexts {
-		if ctx.Name == contextName {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("context '%s' not found", contextName)
-	}
-
 	if err := configManager.SetCurrentContext(contextName); err != nil {
-		return fmt.Errorf("failed to switch context: %w", err)
+		return NewCommandError(ErrConfigError, fmt.Sprintf("Failed to set context: %s", contextName), err.Error())
 	}
 
-	fmt.Printf("✅ Switched to context '%s'\n", contextName)
+	printSuccessMessage(fmt.Sprintf("Switched to context '%s'", contextName))
 	return nil
 }
 
@@ -179,28 +166,23 @@ func handleConfigGetClusters() error {
 
 	contexts := configManager.ListContexts()
 
-	headers := []string{"NAME", "CLUSTER", "SERVER", "NAMESPACE"}
-	rows := make([][]string, 0)
-
-	for _, ctx := range contexts {
-		clusterName := ""
-		if ctx.Cluster != nil {
-			clusterName = ctx.Cluster.Server
-		}
-		rows = append(rows, []string{
-			ctx.Name,
-			clusterName,
-			ctx.Cluster.Server,
-			ctx.Namespace,
-		})
-	}
-
-	if len(rows) == 0 {
-		fmt.Println("No contexts configured. Run 'axiomnizamctl login' to get started.")
+	if len(contexts) == 0 {
+		printInfoMessage("No contexts configured")
 		return nil
 	}
 
-	printTable(headers, rows)
+	fmt.Println("\nConfigured Clusters:")
+	fmt.Println(strings.Repeat("─", 50))
+
+	seenClusters := make(map[string]bool)
+
+	for _, ctx := range contexts {
+		if ctx.Cluster != nil && !seenClusters[ctx.Cluster.Server] {
+			seenClusters[ctx.Cluster.Server] = true
+			fmt.Printf("  • %s\n", ctx.Cluster.Server)
+		}
+	}
+
 	return nil
 }
 
