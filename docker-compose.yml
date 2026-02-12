@@ -11,10 +11,10 @@ services:
       - valkey
       - keycloak
       - etcd
-      - mysql
+      # - mysql
       # - mariadb
       - postgres
-      - mongodb
+      # - mongodb
       # - percona
       # - firebase
       # - oracle
@@ -96,34 +96,34 @@ services:
       - etcd-data:/etcd-data
 
   # Test CLI for Distributed State Store
-  axiomnizamctl:
-    build:
-      context: .
-      dockerfile: Dockerfile.axiomnizamctl
-    container_name: axiomnizamctl
-    networks:
-      - app-network
-    depends_on:
-      - etcd
-    environment:
-      ETCD_ENDPOINT: etcd:2379
-    stdin_open: true
-    tty: true
-    restart: unless-stopped
+  # axiomnizamctl:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.axiomnizamctl
+  #   container_name: axiomnizamctl
+  #   networks:
+  #     - app-network
+  #   depends_on:
+  #     - etcd
+  #   environment:
+  #     ETCD_ENDPOINT: etcd:2379
+  #   stdin_open: true
+  #   tty: true
+  #   restart: unless-stopped
 
   # MySQL
-  mysql:
-    image: mysql:8.0
-    container_name: mysql8
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: app_db
-    networks:
-      - app-network
-    volumes:
-      - mysql-data:/var/lib/mysql
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: mysql8
+  #   ports:
+  #     - "3306:3306"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #     MYSQL_DATABASE: app_db
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
 
   # MariaDB
   # mariadb:
@@ -162,18 +162,18 @@ services:
       retries: 10
 
   # MongoDB
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
-    networks:
-      - app-network
-    volumes:
-      - mongodb-data:/data/db
+  # mongodb:
+  #   image: mongo:latest
+  #   container_name: mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: root
+  #     MONGO_INITDB_ROOT_PASSWORD: root
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - mongodb-data:/data/db
 
   # Percona MySQL
   # percona:
