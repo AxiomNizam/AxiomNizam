@@ -7,6 +7,10 @@
     <title>{{ .title }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="/static/responsive.css">
+    <link rel="stylesheet" href="/static/gis-dashboard.css">
+    <!-- Leaflet.js for GIS maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
     <div class="app-container">
@@ -22,6 +26,10 @@
                     <a href="/" class="nav-link {{ if eq .page "public-dashboard" }}active{{ end }}">
                         <span class="nav-icon">📊</span>
                         <span>Dashboard</span>
+                    </a>
+                    <a href="/gis" class="nav-link {{ if eq .page "gis-dashboard" }}active{{ end }}">
+                        <span class="nav-icon">🌍</span>
+                        <span>GIS</span>
                     </a>
                     {{ if .isAuth }}
                     <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}">
@@ -60,6 +68,8 @@
                 {{ template "admin" . }}
             {{ else if eq .pageName "system-manager" }}
                 {{ template "system-manager" . }}
+            {{ else if eq .pageName "gis-dashboard" }}
+                {{ template "gis-dashboard" . }}
             {{ end }}
         </main>
 
@@ -115,6 +125,8 @@
 
     <script src="/static/auth.js"></script>
     <script>
+        window.BACKEND_URL = '{{ .backendURL }}';
+
         // Theme management
         function initTheme() {
             const savedTheme = localStorage.getItem('theme') || 'dark';

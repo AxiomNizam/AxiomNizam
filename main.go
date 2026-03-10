@@ -437,6 +437,36 @@ func main() {
 	router.POST("/api/v1/jobs/:id/cancel", jobHandler.Cancel)
 	router.DELETE("/api/v1/jobs/:id", jobHandler.Delete)
 
+	// ====================================
+	// GIS DASHBOARD ENDPOINTS
+	// ====================================
+	gisHandler := handlers.NewGISHandler()
+	gisAPI := router.Group("/api/v1/gis")
+	{
+		gisAPI.GET("/summary", gisHandler.GetSummary)
+
+		gisAPI.GET("/layers", gisHandler.ListLayers)
+		gisAPI.POST("/layers", gisHandler.CreateLayer)
+		gisAPI.PUT("/layers/:id", gisHandler.UpdateLayer)
+		gisAPI.DELETE("/layers/:id", gisHandler.DeleteLayer)
+
+		gisAPI.GET("/regions", gisHandler.ListRegions)
+		gisAPI.GET("/regions/:id", gisHandler.GetRegion)
+		gisAPI.POST("/regions", gisHandler.CreateRegion)
+		gisAPI.PUT("/regions/:id", gisHandler.UpdateRegion)
+		gisAPI.DELETE("/regions/:id", gisHandler.DeleteRegion)
+
+		gisAPI.GET("/markers", gisHandler.ListMarkers)
+		gisAPI.POST("/markers", gisHandler.CreateMarker)
+		gisAPI.DELETE("/markers/:id", gisHandler.DeleteMarker)
+
+		gisAPI.GET("/datasets", gisHandler.ListDatasets)
+		gisAPI.GET("/datasets/:id", gisHandler.GetDataset)
+		gisAPI.POST("/datasets", gisHandler.CreateDataset)
+		gisAPI.PUT("/datasets/:id", gisHandler.UpdateDataset)
+		gisAPI.DELETE("/datasets/:id", gisHandler.DeleteDataset)
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
