@@ -1,8 +1,13 @@
 // =============================================
 // AxiomNizam GIS Dashboard JavaScript
+// Supports: General, Agriculture, Industries, Medical (Domestic BD)
+//           Satellite, Airplane, Ship (International)
 // =============================================
 
 const GIS_API = (window.BACKEND_URL || 'http://localhost:8000') + '/api/v1/gis';
+
+// Current dashboard type
+let currentDashType = 'general';
 
 // State
 let gisMap = null;
@@ -13,17 +18,47 @@ let gisState = {
     datasets: [],
     activeDataset: null,
     selectedRegion: null,
-    mapLayers: {},           // leaflet layer references
-    divisionPolygons: {},    // division id -> L.polygon
+    mapLayers: {},
+    divisionPolygons: {},
     districtPolygons: {},
     markerGroup: null,
     currentPage: 1,
     pageSize: 10,
     tableData: [],
     filteredData: [],
+    tableColumns: [],
     isMeasuring: false,
     measurePoints: [],
     measureLine: null,
+    baseLayers: {},
+    dashboardConfig: {},
+};
+
+// Dashboard theme configurations
+const DASH_THEMES = {
+    general:     { icon: '🌍', title: 'GENERAL',     accent: '#3b82f6', legendTitle: 'Population' },
+    agriculture: { icon: '🌾', title: 'AGRICULTURE',  accent: '#2ecc71', legendTitle: 'Rice Production (MT)' },
+    industries:  { icon: '🏭', title: 'INDUSTRIES',   accent: '#e74c3c', legendTitle: 'Industrial Output (Cr)' },
+    medical:     { icon: '🏥', title: 'MEDICAL',      accent: '#e74c3c', legendTitle: 'EPI Coverage %' },
+    satellite:   { icon: '🛰️', title: 'SATELLITE',    accent: '#00bcd4', legendTitle: 'Orbit Type' },
+    airplane:    { icon: '✈️', title: 'AIRPLANE',      accent: '#ff5722', legendTitle: 'Traffic Density' },
+    ship:        { icon: '🚢', title: 'SHIP',          accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
+};
+
+const MARKER_EMOJIS = {
+    general:     { capital: '⭐', port: '⚓', airport: '✈️', infrastructure: '🛣️', tourism: '🏖️', nature: '🌳' },
+    agriculture: { research: '🔬', cold_storage: '❄️', processing: '🏭', tea_estate: '🍵', dairy: '🥛', seed_bank: '🌱', market: '🛒' },
+    industries:  { epz: '🏗️', industrial_zone: '🏭', textile: '🧵', port_industry: '⚓', tech_park: '💻', sez: '📦', power: '⚡' },
+    medical:     { hospital: '🏥', research: '🔬', clinic: '🩺', vaccine: '💉', blood_bank: '🩸' },
+    satellite:   { satellite: '🛰️', constellation: '✨', navigation: '📡', weather: '🌤️', ground_station: '📻', launch_site: '🚀', earth_observation: '🌍' },
+    airplane:    { airport: '✈️', aircraft: '🛩️' },
+    ship:        { port: '⚓', canal: '🌊', strait: '🌊', vessel: '🚢' },
+};
+
+// Map configurations per scope
+const MAP_CONFIG = {
+    domestic:      { center: [23.6850, 90.3563], zoom: 7, maxBounds: [[18, 85], [28, 96]], minZoom: 5 },
+    international: { center: [20, 0], zoom: 2, maxBounds: [[-85, -180], [85, 180]], minZoom: 2 },
 };
 
 // =============================================
@@ -100,26 +135,113 @@ function initMap() {
 }
 
 // =============================================
+// Dashboard Type Switching
+// =============================================
+
+function getDashScope() {
+    return (currentDashType === 'general' || currentDashType === 'agriculture' || currentDashType === 'industries' || currentDashType === 'medical') ? 'domestic' : 'international';
+}
+
+function switchDashboardType(type) {
+    if (type === currentDashType) return;
+    currentDashType = type;
+
+    // Update type bar button states
+    document.querySelectorAll('.gis-type-btn').forEach(b => b.classList.remove('active'));
+    const activeBtn = document.querySelector('.gis-type-btn[data-type="' + type + '"]');
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Update dashboard info panel
+    const theme = DASH_THEMES[type] || DASH_THEMES.general;
+    const iconEl = document.getElementById('dashInfoIcon');
+    const titleEl = document.getElementById('dashInfoTitle');
+    if (iconEl) iconEl.textContent = theme.icon;
+    if (titleEl) titleEl.textContent = theme.title;
+
+    // Update accent color
+    document.documentElement.style.setProperty('--gis-accent', theme.accent);
+
+    // Clear map layers
+    clearMapLayers();
+
+    // Reconfigure map for scope
+    const scope = getDashScope();
+    const mapCfg = MAP_CONFIG[scope];
+    gisMap.setMaxBounds(mapCfg.maxBounds);
+    gisMap.setMinZoom(mapCfg.minZoom);
+    gisMap.flyTo(mapCfg.center, mapCfg.zoom, { duration: 1.2 });
+
+    // Load data for new type
+    loadGISData();
+}
+
+function clearMapLayers() {
+    Object.values(gisState.divisionPolygons).forEach(p => gisMap.removeLayer(p));
+    Object.values(gisState.districtPolygons).forEach(p => gisMap.removeLayer(p));
+    if (gisState.markerGroup) gisMap.removeLayer(gisState.markerGroup);
+    gisState.divisionPolygons = {};
+    gisState.districtPolygons = {};
+    gisState.markerGroup = null;
+    gisState.layers = [];
+    gisState.regions = [];
+    gisState.markers = [];
+    gisState.datasets = [];
+    gisState.activeDataset = null;
+    gisState.selectedRegion = null;
+}
+
+// =============================================
 // Data Loading
 // =============================================
 
 async function loadGISData() {
     try {
-        const [summaryRes, layersRes, regionsRes, markersRes, datasetsRes] = await Promise.all([
-            fetch(GIS_API + '/summary'),
-            fetch(GIS_API + '/layers'),
-            fetch(GIS_API + '/regions'),
-            fetch(GIS_API + '/markers'),
-            fetch(GIS_API + '/datasets'),
-        ]);
+        if (currentDashType === 'general') {
+            // Use original GIS endpoints
+            const [summaryRes, layersRes, regionsRes, markersRes, datasetsRes] = await Promise.all([
+                fetch(GIS_API + '/summary'),
+                fetch(GIS_API + '/layers'),
+                fetch(GIS_API + '/regions'),
+                fetch(GIS_API + '/markers'),
+                fetch(GIS_API + '/datasets'),
+            ]);
+            if (!summaryRes.ok || !layersRes.ok || !regionsRes.ok || !markersRes.ok || !datasetsRes.ok) {
+                throw new Error('One or more API calls failed');
+            }
+            const summary = await summaryRes.json();
+            gisState.layers = await layersRes.json();
+            gisState.regions = await regionsRes.json();
+            gisState.markers = await markersRes.json();
+            gisState.datasets = await datasetsRes.json();
 
-        const summary = await summaryRes.json();
-        gisState.layers = await layersRes.json();
-        gisState.regions = await regionsRes.json();
-        gisState.markers = await markersRes.json();
-        gisState.datasets = await datasetsRes.json();
+            updateSummaryCards(summary);
+            renderDashDescription('Population, divisions, districts and points of interest across Bangladesh');
+        } else {
+            // Use specialized dashboard endpoint
+            const res = await fetch(GIS_API + '/dashboards/' + encodeURIComponent(currentDashType));
+            if (!res.ok) throw new Error('Dashboard API failed: ' + res.status);
+            const data = await res.json();
 
-        updateSummaryCards(summary);
+            gisState.layers = data.layers || [];
+            gisState.regions = data.regions || [];
+            gisState.markers = data.markers || [];
+            gisState.datasets = data.datasets || [];
+            gisState.dashboardConfig = data.config || {};
+
+            const summary = {
+                totalLayers: gisState.layers.length,
+                totalRegions: gisState.regions.length,
+                totalMarkers: gisState.markers.length,
+                totalDatasets: gisState.datasets.length,
+                regionsByType: {},
+            };
+            gisState.regions.forEach(r => {
+                summary.regionsByType[r.type] = (summary.regionsByType[r.type] || 0) + 1;
+            });
+            updateSummaryCards(summary);
+            renderDashDescription(data.description || '');
+        }
+
         renderLayers();
         renderDivisionGrid();
         renderRegionsOnMap();
@@ -127,13 +249,23 @@ async function loadGISData() {
         populateFilterDropdowns();
         populateDatasetSelector();
 
-        // Load first dataset by default
         if (gisState.datasets.length > 0) {
             loadDataset(gisState.datasets[0].id);
         }
+
+        // Reset properties panel
+        const emptyEl = document.getElementById('propertiesEmpty');
+        const contentEl = document.getElementById('propertiesContent');
+        if (emptyEl) emptyEl.style.display = 'flex';
+        if (contentEl) contentEl.style.display = 'none';
     } catch (err) {
         console.error('Failed to load GIS data:', err);
     }
+}
+
+function renderDashDescription(desc) {
+    const el = document.getElementById('dashInfoDesc');
+    if (el) el.textContent = desc;
 }
 
 // =============================================
@@ -141,19 +273,129 @@ async function loadGISData() {
 // =============================================
 
 function updateSummaryCards(summary) {
-    document.getElementById('valDivisions').textContent = summary.regionsByType?.division || 0;
-    document.getElementById('valDistricts').textContent = summary.regionsByType?.district || 0;
-    document.getElementById('valMarkers').textContent = summary.totalMarkers || 0;
-    document.getElementById('valLayers').textContent = summary.totalLayers || 0;
-    document.getElementById('valDatasets').textContent = summary.totalDatasets || 0;
+    const cards = getSummaryCardConfig(summary);
+    const cardElements = document.querySelectorAll('.gis-summary-card');
 
-    // Calculate total population from regions
-    let totalPop = 0;
-    const divisions = gisState.regions.filter(r => r.type === 'division');
-    divisions.forEach(r => {
-        if (r.properties?.population) totalPop += r.properties.population;
+    cards.forEach((card, i) => {
+        if (cardElements[i]) {
+            const iconEl = cardElements[i].querySelector('.summary-icon');
+            const valEl = cardElements[i].querySelector('.summary-value');
+            const lblEl = cardElements[i].querySelector('.summary-label');
+            if (iconEl) { iconEl.textContent = card.icon; iconEl.style.background = card.color; }
+            if (valEl) valEl.textContent = card.value;
+            if (lblEl) lblEl.textContent = card.label;
+        }
     });
-    document.getElementById('valPopulation').textContent = formatPopulation(totalPop);
+}
+
+function getSummaryCardConfig(summary) {
+    const rbt = summary.regionsByType || {};
+    const totalRegions = Object.values(rbt).reduce((a, b) => a + b, 0);
+
+    switch (currentDashType) {
+        case 'general':
+            return [
+                { icon: '🏠', color: '#3b82f6', value: rbt.division || 0, label: 'Divisions' },
+                { icon: '🏢', color: '#10b981', value: rbt.district || 0, label: 'Districts' },
+                { icon: '👥', color: '#8b5cf6', value: calcTotalPopField('population'), label: 'Population' },
+                { icon: '📌', color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
+                { icon: '🗺️', color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
+                { icon: '📁', color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        case 'agriculture':
+            return [
+                { icon: '🌾', color: '#2ecc71', value: totalRegions, label: 'Agri Zones' },
+                { icon: '🌿', color: '#27ae60', value: calcFieldTotal('rice_production'), label: 'Rice (MT)' },
+                { icon: '🌻', color: '#f39c12', value: calcFieldTotal('wheat_production'), label: 'Wheat (MT)' },
+                { icon: '📌', color: '#3498db', value: summary.totalMarkers || 0, label: 'Facilities' },
+                { icon: '💧', color: '#2980b9', value: calcFieldAvg('irrigation_pct') + '%', label: 'Avg Irrigation' },
+                { icon: '📁', color: '#8e44ad', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        case 'industries':
+            return [
+                { icon: '🏭', color: '#e74c3c', value: totalRegions, label: 'Ind. Divisions' },
+                { icon: '🏗️', color: '#c0392b', value: calcFieldTotal('factories'), label: 'Factories' },
+                { icon: '👷', color: '#f39c12', value: calcFieldTotal('employment'), label: 'Employment' },
+                { icon: '📦', color: '#3498db', value: calcFieldTotal('garment_units'), label: 'Garment Units' },
+                { icon: '📌', color: '#9b59b6', value: summary.totalMarkers || 0, label: 'Markers' },
+                { icon: '📁', color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        case 'medical':
+            return [
+                { icon: '🏥', color: '#e74c3c', value: calcFieldTotal('hospitals'), label: 'Hospitals' },
+                { icon: '🛏️', color: '#3498db', value: calcFieldTotal('beds'), label: 'Hospital Beds' },
+                { icon: '👨‍⚕️', color: '#2ecc71', value: calcFieldTotal('doctors'), label: 'Doctors' },
+                { icon: '💉', color: '#f39c12', value: calcFieldAvg('epi_coverage') + '%', label: 'Avg EPI Coverage' },
+                { icon: '🩺', color: '#9b59b6', value: calcFieldTotal('community_clinics'), label: 'Clinics' },
+                { icon: '📁', color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        case 'satellite':
+            return [
+                { icon: '🛰️', color: '#00bcd4', value: totalRegions, label: 'Orbit Zones' },
+                { icon: '📡', color: '#ff9800', value: calcFieldTotal('satellites'), label: 'Satellites' },
+                { icon: '🚀', color: '#e91e63', value: countMarkerCategory('launch_site'), label: 'Launch Sites' },
+                { icon: '📻', color: '#f44336', value: countMarkerCategory('ground_station'), label: 'Ground Stations' },
+                { icon: '📌', color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
+                { icon: '📁', color: '#9c27b0', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        case 'airplane':
+            return [
+                { icon: '✈️', color: '#ff5722', value: totalRegions, label: 'Air Regions' },
+                { icon: '🛬', color: '#2196f3', value: countMarkerCategory('airport'), label: 'Airports' },
+                { icon: '🛩️', color: '#ff9800', value: countMarkerCategory('aircraft'), label: 'Aircraft' },
+                { icon: '👥', color: '#4caf50', value: calcFieldTotal('annual_passengers'), label: 'Passengers/yr' },
+                { icon: '🛫', color: '#9c27b0', value: calcFieldTotal('airlines'), label: 'Airlines' },
+                { icon: '📁', color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        case 'ship':
+            return [
+                { icon: '🌊', color: '#0277bd', value: totalRegions, label: 'Ocean Zones' },
+                { icon: '⚓', color: '#f44336', value: countMarkerCategory('port'), label: 'Ports' },
+                { icon: '🚢', color: '#ff9800', value: countMarkerCategory('vessel'), label: 'Vessels' },
+                { icon: '🌊', color: '#00897b', value: countMarkerCategory('canal') + countMarkerCategory('strait'), label: 'Chokepoints' },
+                { icon: '📌', color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
+                { icon: '📁', color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
+            ];
+        default:
+            return [
+                { icon: '🗺️', color: '#3b82f6', value: totalRegions, label: 'Regions' },
+                { icon: '📌', color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
+                { icon: '🗺️', color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
+                { icon: '📁', color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { icon: '📊', color: '#10b981', value: '-', label: '-' },
+                { icon: '🔷', color: '#8b5cf6', value: '-', label: '-' },
+            ];
+    }
+}
+
+function calcTotalPopField(field) {
+    const divs = gisState.regions.filter(r => r.type === 'division');
+    let total = 0;
+    divs.forEach(r => { if (r.properties && r.properties[field]) total += r.properties[field]; });
+    return formatPopulation(total);
+}
+
+function calcFieldTotal(field) {
+    let total = 0;
+    gisState.regions.forEach(r => {
+        if (r.properties && r.properties[field]) total += Number(r.properties[field]);
+    });
+    return formatPopulation(total);
+}
+
+function calcFieldAvg(field) {
+    let total = 0, count = 0;
+    gisState.regions.forEach(r => {
+        if (r.properties && r.properties[field] !== undefined) {
+            total += Number(r.properties[field]);
+            count++;
+        }
+    });
+    return count > 0 ? Math.round(total / count) : 0;
+}
+
+function countMarkerCategory(cat) {
+    return gisState.markers.filter(m => m.category === cat).length;
 }
 
 function formatPopulation(num) {
@@ -216,20 +458,21 @@ function toggleLayer(id, visible) {
     const layer = gisState.layers.find(l => l.id === id);
     if (layer) layer.visible = visible;
 
-    if (id === 'divisions') {
+    // Determine which map group to toggle by layer index/type
+    const geoLayers = gisState.layers.filter(l => l.type === 'geojson' || l.type === 'heatmap');
+    const markerLayers = gisState.layers.filter(l => l.type === 'marker');
+
+    if (geoLayers.length > 0 && geoLayers[0].id === id) {
         Object.values(gisState.divisionPolygons).forEach(p => {
-            if (visible) p.addTo(gisMap);
-            else gisMap.removeLayer(p);
+            if (visible) p.addTo(gisMap); else gisMap.removeLayer(p);
         });
-    } else if (id === 'districts') {
+    } else if (geoLayers.length > 1 && geoLayers[1].id === id) {
         Object.values(gisState.districtPolygons).forEach(p => {
-            if (visible) p.addTo(gisMap);
-            else gisMap.removeLayer(p);
+            if (visible) p.addTo(gisMap); else gisMap.removeLayer(p);
         });
-    } else if (id === 'markers') {
+    } else if (markerLayers.some(l => l.id === id)) {
         if (gisState.markerGroup) {
-            if (visible) gisState.markerGroup.addTo(gisMap);
-            else gisMap.removeLayer(gisState.markerGroup);
+            if (visible) gisState.markerGroup.addTo(gisMap); else gisMap.removeLayer(gisState.markerGroup);
         }
     }
 }
@@ -248,43 +491,74 @@ function renderDivisionGrid() {
     if (!container) return;
     container.innerHTML = '';
 
-    const divisions = gisState.regions.filter(r => r.type === 'division');
-    divisions.sort((a, b) => a.name.localeCompare(b.name));
+    const primaryTypes = getPrimaryRegionTypes();
+    const primaries = gisState.regions.filter(r => primaryTypes.includes(r.type));
+    primaries.sort((a, b) => a.name.localeCompare(b.name));
 
-    divisions.forEach(div => {
+    primaries.forEach(div => {
         const btn = document.createElement('button');
         btn.className = 'gis-division-btn';
-        btn.textContent = div.name;
-        btn.onclick = () => flyToDivision(div);
+        btn.textContent = div.name.length > 18 ? div.name.substring(0, 16) + '…' : div.name;
+        btn.title = div.name;
+        btn.onclick = () => flyToRegion(div);
         container.appendChild(btn);
     });
+
+    // Update panel header
+    const panelHeader = container.closest('.gis-panel');
+    if (panelHeader) {
+        const h3 = panelHeader.querySelector('h3');
+        if (h3) h3.textContent = getRegionGridLabel();
+    }
 }
 
-function flyToDivision(division) {
-    gisMap.flyTo(division.center, 9, { duration: 1 });
-    showRegionProperties(division);
+function getPrimaryRegionTypes() {
+    switch (currentDashType) {
+        case 'general': case 'agriculture': case 'industries': case 'medical':
+            return ['division'];
+        case 'satellite': return ['orbit_zone'];
+        case 'airplane': return ['air_region'];
+        case 'ship': return ['ocean_zone'];
+        default: return ['division'];
+    }
+}
 
-    // Load districts for this division
-    loadDistrictsForDivision(division.id);
+function getRegionGridLabel() {
+    switch (currentDashType) {
+        case 'general': case 'agriculture': case 'industries': case 'medical':
+            return 'DIVISIONS';
+        case 'satellite': return 'ORBIT ZONES';
+        case 'airplane': return 'AIR REGIONS';
+        case 'ship': return 'OCEAN ZONES';
+        default: return 'REGIONS';
+    }
+}
+
+function flyToRegion(region) {
+    const scope = getDashScope();
+    const zoomLevel = scope === 'domestic' ? 9 : 4;
+    gisMap.flyTo(region.center, zoomLevel, { duration: 1 });
+    showRegionProperties(region);
+    if (currentDashType === 'general') loadDistrictsForDivision(region.id);
 }
 
 async function loadDistrictsForDivision(divisionId) {
+    if (currentDashType !== 'general') return;
     try {
-        const res = await fetch(GIS_API + '/regions?type=district&parent=' + divisionId);
+        const res = await fetch(GIS_API + '/regions?type=district&parent=' + encodeURIComponent(divisionId));
+        if (!res.ok) return;
         const districts = await res.json();
         if (districts.length > 0) {
-            // Update data table with district data
             const tableRows = districts.map(d => ({
                 name: d.name,
                 population: d.properties?.population || 0,
-                area: d.properties?.area_km2 || 0,
             }));
             populateDataTable(
                 [
-                    { key: 'name', label: 'Title', type: 'string' },
-                    { key: 'population', label: 'Value', type: 'number' },
+                    { key: 'name', label: 'District', type: 'string' },
+                    { key: 'population', label: 'Population', type: 'number' },
                 ],
-                tableRows.map(r => ({ name: r.name, population: formatPopulation(r.population) })),
+                tableRows,
                 'District Population'
             );
         }
@@ -298,106 +572,178 @@ async function loadDistrictsForDivision(divisionId) {
 // =============================================
 
 function renderRegionsOnMap() {
-    const divisions = gisState.regions.filter(r => r.type === 'division');
-    const districts = gisState.regions.filter(r => r.type === 'district');
-    const divLayer = gisState.layers.find(l => l.id === 'divisions');
-    const distLayer = gisState.layers.find(l => l.id === 'districts');
+    const primaryTypes = getPrimaryRegionTypes();
+    const primaries = gisState.regions.filter(r => primaryTypes.includes(r.type));
+    const secondaries = gisState.regions.filter(r => !primaryTypes.includes(r.type));
 
-    // Division approximate polygons as circles (real GeoJSON can be uploaded later)
-    divisions.forEach(div => {
-        const color = div.properties?.color || randomColor();
-        const pop = div.properties?.population || 0;
-        const radius = Math.max(25000, Math.sqrt(pop) * 5);
+    const primaryLayerVisible = gisState.layers.length > 0 ? gisState.layers[0].visible : true;
+    const secondaryLayerVisible = gisState.layers.length > 1 ? gisState.layers[1].visible : false;
 
-        const circle = L.circle(div.center, {
+    const scope = getDashScope();
+
+    primaries.forEach(region => {
+        const color = region.properties?.color || randomColor();
+        const val = region.properties?.population || 0;
+        const radius = scope === 'domestic'
+            ? Math.max(25000, Math.sqrt(Math.max(val, 0) / 100) * 500)
+            : Math.max(500000, Math.sqrt(Math.max(val, 0) / 1000) * 5000);
+
+        const circle = L.circle(region.center, {
             radius: radius,
             color: darkenColor(color),
             weight: 2,
             fillColor: color,
             fillOpacity: 0.3,
-            className: 'gis-region-polygon',
         });
 
-        circle.bindTooltip(div.name, {
-            permanent: true,
+        circle.bindTooltip(region.name, {
+            permanent: scope === 'domestic',
             direction: 'center',
             className: 'gis-division-label',
         });
 
         circle.on('click', () => {
-            showRegionProperties(div);
-            flyToDivision(div);
+            showRegionProperties(region);
+            if (currentDashType === 'general') loadDistrictsForDivision(region.id);
         });
+        circle.on('mouseover', function () { this.setStyle({ fillOpacity: 0.5, weight: 3 }); });
+        circle.on('mouseout', function () { this.setStyle({ fillOpacity: 0.3, weight: 2 }); });
 
-        circle.on('mouseover', function () {
-            this.setStyle({ fillOpacity: 0.5, weight: 3 });
-        });
-        circle.on('mouseout', function () {
-            this.setStyle({ fillOpacity: 0.3, weight: 2 });
-        });
-
-        if (divLayer?.visible) circle.addTo(gisMap);
-        gisState.divisionPolygons[div.id] = circle;
+        if (primaryLayerVisible) circle.addTo(gisMap);
+        gisState.divisionPolygons[region.id] = circle;
     });
 
-    // District circles (smaller, only shown when zoomed in)
-    districts.forEach(dist => {
-        const pop = dist.properties?.population || 0;
-        const radius = Math.max(5000, Math.sqrt(pop) * 2.5);
+    secondaries.forEach(region => {
+        const val = region.properties?.population || 0;
+        const radius = scope === 'domestic'
+            ? Math.max(5000, Math.sqrt(Math.max(val, 0) / 100) * 250)
+            : Math.max(200000, Math.sqrt(Math.max(val, 0) / 1000) * 2000);
 
-        const circle = L.circle(dist.center, {
+        const circle = L.circle(region.center, {
             radius: radius,
             color: '#666',
             weight: 1,
-            fillColor: getPopulationColor(pop),
+            fillColor: getValueColor(val),
             fillOpacity: 0.4,
         });
 
-        circle.bindTooltip(dist.name, { direction: 'top' });
-        circle.on('click', () => showRegionProperties(dist));
+        circle.bindTooltip(region.name, { direction: 'top' });
+        circle.on('click', () => showRegionProperties(region));
 
-        if (distLayer?.visible) circle.addTo(gisMap);
-        gisState.districtPolygons[dist.id] = circle;
+        if (secondaryLayerVisible) circle.addTo(gisMap);
+        gisState.districtPolygons[region.id] = circle;
     });
 
-    // Build choropleth legend
     renderLegend();
 }
 
-function getPopulationColor(pop) {
-    if (pop > 10000000) return '#1a5276';
-    if (pop > 5000000) return '#2471a3';
-    if (pop > 3000000) return '#2e86c1';
-    if (pop > 2000000) return '#5dade2';
-    if (pop > 1000000) return '#85c1e9';
-    return '#d6eaf8';
+function getValueColor(val) {
+    switch (currentDashType) {
+        case 'agriculture':
+            if (val > 6000000) return '#1b5e20';
+            if (val > 4000000) return '#2e7d32';
+            if (val > 3000000) return '#43a047';
+            if (val > 2000000) return '#66bb6a';
+            return '#a5d6a7';
+        case 'industries':
+            if (val > 200000) return '#b71c1c';
+            if (val > 100000) return '#d32f2f';
+            if (val > 50000) return '#e53935';
+            if (val > 30000) return '#ef5350';
+            return '#ef9a9a';
+        case 'medical':
+            if (val > 200) return '#1b5e20';
+            if (val > 100) return '#388e3c';
+            if (val > 50) return '#66bb6a';
+            return '#a5d6a7';
+        default:
+            if (val > 10000000) return '#1a5276';
+            if (val > 5000000) return '#2471a3';
+            if (val > 3000000) return '#2e86c1';
+            if (val > 2000000) return '#5dade2';
+            if (val > 1000000) return '#85c1e9';
+            return '#d6eaf8';
+    }
 }
 
 function renderLegend() {
     const body = document.getElementById('legendBody');
+    const titleEl = document.querySelector('.gis-legend h4');
     if (!body) return;
     body.innerHTML = '';
 
-    const levels = [
-        { color: '#d6eaf8', label: '< 1M' },
-        { color: '#85c1e9', label: '1M - 2M' },
-        { color: '#5dade2', label: '2M - 3M' },
-        { color: '#2e86c1', label: '3M - 5M' },
-        { color: '#2471a3', label: '5M - 10M' },
-        { color: '#1a5276', label: '> 10M' },
-    ];
+    const theme = DASH_THEMES[currentDashType] || DASH_THEMES.general;
+    if (titleEl) titleEl.textContent = theme.legendTitle;
 
+    const levels = getLegendLevels();
     levels.forEach(lvl => {
         const item = document.createElement('div');
         item.className = 'gis-legend-item';
-        item.innerHTML = `<span class="legend-color" style="background:${lvl.color}"></span><span>${lvl.label}</span>`;
+        item.innerHTML = '<span class="legend-color" style="background:' + lvl.color + '"></span><span>' + lvl.label + '</span>';
         body.appendChild(item);
     });
+}
 
-    const hint = document.createElement('div');
-    hint.className = 'gis-legend-hint';
-    hint.textContent = 'Mouse over a region';
-    body.appendChild(hint);
+function getLegendLevels() {
+    switch (currentDashType) {
+        case 'agriculture':
+            return [
+                { color: '#a5d6a7', label: '< 3M MT' },
+                { color: '#66bb6a', label: '3M - 4M' },
+                { color: '#43a047', label: '4M - 5M' },
+                { color: '#2e7d32', label: '5M - 6M' },
+                { color: '#1b5e20', label: '> 6M MT' },
+            ];
+        case 'industries':
+            return [
+                { color: '#ef9a9a', label: '< 30K Cr' },
+                { color: '#ef5350', label: '30K - 50K' },
+                { color: '#e53935', label: '50K - 100K' },
+                { color: '#d32f2f', label: '100K - 200K' },
+                { color: '#b71c1c', label: '> 200K Cr' },
+            ];
+        case 'medical':
+            return [
+                { color: '#a5d6a7', label: '< 50 Hospitals' },
+                { color: '#66bb6a', label: '50 - 100' },
+                { color: '#388e3c', label: '100 - 200' },
+                { color: '#1b5e20', label: '> 200' },
+            ];
+        case 'satellite':
+            return [
+                { color: '#e3f2fd', label: 'LEO (160-2000km)' },
+                { color: '#fff3e0', label: 'MEO (2000-35786km)' },
+                { color: '#fce4ec', label: 'GEO (35786km)' },
+                { color: '#e8eaf6', label: 'SSO (Polar)' },
+            ];
+        case 'airplane':
+            return [
+                { color: '#ffecb3', label: 'Asia-Pacific' },
+                { color: '#bbdefb', label: 'Europe' },
+                { color: '#c8e6c9', label: 'North America' },
+                { color: '#f8bbd0', label: 'Middle East' },
+                { color: '#d1c4e9', label: 'Africa' },
+                { color: '#ffe0b2', label: 'Latin America' },
+            ];
+        case 'ship':
+            return [
+                { color: '#b3e5fc', label: 'Indian Ocean' },
+                { color: '#c8e6c9', label: 'Pacific Ocean' },
+                { color: '#dcedc8', label: 'Atlantic Ocean' },
+                { color: '#fff9c4', label: 'Mediterranean' },
+                { color: '#ffe0b2', label: 'South China Sea' },
+                { color: '#e1bee7', label: 'Bay of Bengal' },
+            ];
+        default:
+            return [
+                { color: '#d6eaf8', label: '< 1M' },
+                { color: '#85c1e9', label: '1M - 2M' },
+                { color: '#5dade2', label: '2M - 3M' },
+                { color: '#2e86c1', label: '3M - 5M' },
+                { color: '#2471a3', label: '5M - 10M' },
+                { color: '#1a5276', label: '> 10M' },
+            ];
+    }
 }
 
 // =============================================
@@ -405,27 +751,17 @@ function renderLegend() {
 // =============================================
 
 function renderMarkersOnMap() {
-    if (gisState.markerGroup) {
-        gisMap.removeLayer(gisState.markerGroup);
-    }
+    if (gisState.markerGroup) gisMap.removeLayer(gisState.markerGroup);
     gisState.markerGroup = L.layerGroup();
 
-    const markerColors = {
-        capital: '#e74c3c',
-        port: '#3498db',
-        airport: '#2ecc71',
-        infrastructure: '#9b59b6',
-        tourism: '#f39c12',
-        nature: '#27ae60',
-    };
+    const emojis = MARKER_EMOJIS[currentDashType] || MARKER_EMOJIS.general;
 
     gisState.markers.forEach(m => {
-        const color = m.color || markerColors[m.category] || '#3388ff';
+        const color = m.color || '#3388ff';
+        const emoji = emojis[m.category] || '📍';
 
         const icon = L.divIcon({
-            html: `<div class="gis-marker-icon" style="background:${color}">
-                     <span>${getMarkerEmoji(m.category)}</span>
-                   </div>`,
+            html: '<div class="gis-marker-icon" style="background:' + color + '"><span>' + emoji + '</span></div>',
             className: 'gis-marker-container',
             iconSize: [32, 32],
             iconAnchor: [16, 32],
@@ -433,21 +769,15 @@ function renderMarkersOnMap() {
         });
 
         const marker = L.marker([m.lat, m.lng], { icon: icon });
-        marker.bindPopup(`<strong>${m.name}</strong><br><em>${m.category}</em>`);
+        marker.bindPopup('<strong>' + m.name + '</strong><br><em>' + m.category + '</em>');
         marker.on('click', () => showMarkerProperties(m));
         gisState.markerGroup.addLayer(marker);
     });
 
-    const markerLayer = gisState.layers.find(l => l.id === 'markers');
-    if (markerLayer?.visible) gisState.markerGroup.addTo(gisMap);
-}
-
-function getMarkerEmoji(category) {
-    const emojis = {
-        capital: '⭐', port: '⚓', airport: '✈️',
-        infrastructure: '🛣️', tourism: '🏖️', nature: '🌳',
-    };
-    return emojis[category] || '📍';
+    // Check if any marker layer is visible
+    const markerLayers = gisState.layers.filter(l => l.type === 'marker');
+    const anyVisible = markerLayers.length === 0 || markerLayers.some(l => l.visible);
+    if (anyVisible) gisState.markerGroup.addTo(gisMap);
 }
 
 // =============================================
@@ -464,22 +794,17 @@ function showRegionProperties(region) {
     grid.innerHTML = '';
 
     const props = {
-        'Type': region.type,
+        'Type': region.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         'ID': region.id,
         'Center': region.center ? region.center[0].toFixed(4) + ', ' + region.center[1].toFixed(4) : '-',
     };
 
     if (region.properties) {
         Object.keys(region.properties).forEach(key => {
+            if (key === 'color') return;
             const val = region.properties[key];
             const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            if (key === 'population') {
-                props[label] = Number(val).toLocaleString();
-            } else if (key === 'color') {
-                return; // skip color
-            } else {
-                props[label] = typeof val === 'number' ? val.toLocaleString() : val;
-            }
+            props[label] = typeof val === 'number' ? val.toLocaleString() : val;
         });
     }
 
@@ -503,14 +828,15 @@ function showMarkerProperties(marker) {
     grid.innerHTML = '';
 
     const props = {
-        'Category': marker.category,
+        'Category': marker.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         'Latitude': marker.lat.toFixed(4),
         'Longitude': marker.lng.toFixed(4),
     };
 
     if (marker.properties) {
         Object.entries(marker.properties).forEach(([k, v]) => {
-            props[k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())] = v;
+            const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            props[label] = typeof v === 'number' ? v.toLocaleString() : v;
         });
     }
 
@@ -550,8 +876,17 @@ async function switchDataset() {
 
 async function loadDataset(id) {
     try {
-        const res = await fetch(GIS_API + '/datasets/' + id);
-        const ds = await res.json();
+        let ds;
+        if (currentDashType === 'general') {
+            const res = await fetch(GIS_API + '/datasets/' + encodeURIComponent(id));
+            if (!res.ok) return;
+            ds = await res.json();
+        } else {
+            // For specialized dashboards, datasets are already in state
+            ds = gisState.datasets.find(d => d.id === id);
+        }
+        if (!ds) return;
+
         gisState.activeDataset = ds;
         populateDataTable(ds.columns, ds.rows, ds.name);
         computeStats(ds);
@@ -581,6 +916,7 @@ function renderTablePage() {
     const tbody = document.getElementById('dataTableBody');
     const data = gisState.filteredData;
     const cols = gisState.tableColumns;
+    if (!cols || !data) return;
     const start = (gisState.currentPage - 1) * gisState.pageSize;
     const pageData = data.slice(start, start + gisState.pageSize);
 
@@ -603,7 +939,7 @@ function renderTablePage() {
     // Footer
     const totalPages = Math.ceil(data.length / gisState.pageSize);
     document.getElementById('tableInfo').textContent =
-        `${start + 1}-${Math.min(start + gisState.pageSize, data.length)} of ${data.length}`;
+        data.length > 0 ? `${start + 1}-${Math.min(start + gisState.pageSize, data.length)} of ${data.length}` : '0 rows';
 
     const pagination = document.getElementById('tablePagination');
     pagination.innerHTML = '';
@@ -646,7 +982,8 @@ function highlightRegionFromTable(row) {
     if (!name) return;
     const region = gisState.regions.find(r => r.name === name);
     if (region) {
-        gisMap.flyTo(region.center, 10, { duration: 0.8 });
+        const scope = getDashScope();
+        gisMap.flyTo(region.center, scope === 'domestic' ? 10 : 4, { duration: 0.8 });
         showRegionProperties(region);
     }
 }
@@ -705,16 +1042,31 @@ function populateFilterDropdowns() {
     const divSelect = document.getElementById('filterDivision');
     if (!divSelect) return;
 
-    const divisions = gisState.regions.filter(r => r.type === 'division');
-    divisions.sort((a, b) => a.name.localeCompare(b.name));
+    const primaryTypes = getPrimaryRegionTypes();
+    const primaries = gisState.regions.filter(r => primaryTypes.includes(r.type));
+    primaries.sort((a, b) => a.name.localeCompare(b.name));
 
-    divSelect.innerHTML = '<option value="">All Divisions</option>';
-    divisions.forEach(d => {
+    const label = getRegionGridLabel().replace(/S$/, '');
+    divSelect.innerHTML = '<option value="">All ' + label + 's</option>';
+    primaries.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.id;
         opt.textContent = d.name;
         divSelect.appendChild(opt);
     });
+
+    // Update region type dropdown
+    const typeSelect = document.getElementById('filterRegionType');
+    if (typeSelect) {
+        const regionTypes = [...new Set(gisState.regions.map(r => r.type))];
+        typeSelect.innerHTML = '<option value="">All Types</option>';
+        regionTypes.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            typeSelect.appendChild(opt);
+        });
+    }
 }
 
 function applyFilters() {
@@ -722,22 +1074,23 @@ function applyFilters() {
     const regionType = document.getElementById('filterRegionType').value;
 
     if (divId) {
-        const div = gisState.regions.find(r => r.id === divId);
-        if (div) {
-            gisMap.flyTo(div.center, 9, { duration: 1 });
-            showRegionProperties(div);
-            loadDistrictsForDivision(divId);
+        const region = gisState.regions.find(r => r.id === divId);
+        if (region) {
+            const scope = getDashScope();
+            gisMap.flyTo(region.center, scope === 'domestic' ? 9 : 4, { duration: 1 });
+            showRegionProperties(region);
+            if (currentDashType === 'general') loadDistrictsForDivision(divId);
         }
     }
 
-    // Show/hide regions based on type filter
-    if (regionType === 'division' || regionType === '') {
+    const primaryTypes = getPrimaryRegionTypes();
+    if (!regionType || primaryTypes.includes(regionType)) {
         Object.values(gisState.divisionPolygons).forEach(p => p.addTo(gisMap));
     } else {
         Object.values(gisState.divisionPolygons).forEach(p => gisMap.removeLayer(p));
     }
 
-    if (regionType === 'district' || regionType === '') {
+    if (!regionType || !primaryTypes.includes(regionType)) {
         Object.values(gisState.districtPolygons).forEach(p => p.addTo(gisMap));
     } else {
         Object.values(gisState.districtPolygons).forEach(p => gisMap.removeLayer(p));
@@ -755,7 +1108,9 @@ function clearFilters() {
 // =============================================
 
 function resetMapView() {
-    gisMap.flyTo([23.6850, 90.3563], 7, { duration: 1 });
+    const scope = getDashScope();
+    const cfg = MAP_CONFIG[scope];
+    gisMap.flyTo(cfg.center, cfg.zoom, { duration: 1 });
 }
 
 function toggleFullscreen() {

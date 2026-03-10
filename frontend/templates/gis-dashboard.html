@@ -1,17 +1,61 @@
 {{ define "gis-dashboard" }}
-<div class="gis-container">
-    <!-- Left Sidebar: Filters & Layers -->
-    <aside class="gis-sidebar" id="gisSidebar">
-        <div class="gis-sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
-            <span class="toggle-icon">◀</span>
+<div class="gis-hub-container">
+    <!-- Dashboard Type Selector Bar -->
+    <div class="gis-type-bar" id="gisTypeBar">
+        <div class="gis-type-group">
+            <span class="gis-type-group-label">🇧🇩 Domestic</span>
+            <button class="gis-type-btn active" data-type="general" onclick="switchDashboardType('general')">
+                <span class="type-icon">🌍</span><span class="type-label">General</span>
+            </button>
+            <button class="gis-type-btn" data-type="agriculture" onclick="switchDashboardType('agriculture')">
+                <span class="type-icon">🌾</span><span class="type-label">Agriculture</span>
+            </button>
+            <button class="gis-type-btn" data-type="industries" onclick="switchDashboardType('industries')">
+                <span class="type-icon">🏭</span><span class="type-label">Industries</span>
+            </button>
+            <button class="gis-type-btn" data-type="medical" onclick="switchDashboardType('medical')">
+                <span class="type-icon">🏥</span><span class="type-label">Medical</span>
+            </button>
         </div>
+        <div class="gis-type-group">
+            <span class="gis-type-group-label">🌐 International</span>
+            <button class="gis-type-btn" data-type="satellite" onclick="switchDashboardType('satellite')">
+                <span class="type-icon">🛰️</span><span class="type-label">Satellite</span>
+            </button>
+            <button class="gis-type-btn" data-type="airplane" onclick="switchDashboardType('airplane')">
+                <span class="type-icon">✈️</span><span class="type-label">Airplane</span>
+            </button>
+            <button class="gis-type-btn" data-type="ship" onclick="switchDashboardType('ship')">
+                <span class="type-icon">🚢</span><span class="type-label">Ship</span>
+            </button>
+        </div>
+    </div>
 
-        <!-- Data Filters -->
-        <div class="gis-panel">
-            <div class="gis-panel-header">
-                <span class="panel-icon">▼</span>
-                <h3>DATA FILTERS</h3>
+    <!-- Main GIS Dashboard Area -->
+    <div class="gis-container">
+        <!-- Left Sidebar: Filters & Layers -->
+        <aside class="gis-sidebar" id="gisSidebar">
+            <div class="gis-sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+                <span class="toggle-icon">◀</span>
             </div>
+
+            <!-- Dashboard Info -->
+            <div class="gis-panel gis-dashboard-info" id="dashboardInfoPanel">
+                <div class="gis-panel-header">
+                    <span class="panel-icon" id="dashInfoIcon">🌍</span>
+                    <h3 id="dashInfoTitle">GENERAL</h3>
+                </div>
+                <div class="gis-panel-body">
+                    <p class="gis-dash-desc" id="dashInfoDesc">Population, divisions, districts and points of interest across Bangladesh</p>
+                </div>
+            </div>
+
+            <!-- Data Filters -->
+            <div class="gis-panel">
+                <div class="gis-panel-header">
+                    <span class="panel-icon">▼</span>
+                    <h3>DATA FILTERS</h3>
+                </div>
             <div class="gis-panel-body">
                 <div class="gis-filter-group">
                     <label><span class="filter-icon">📍</span> Division</label>
@@ -73,45 +117,45 @@
     <div class="gis-main">
         <!-- Summary Cards -->
         <div class="gis-summary-bar" id="gisSummaryBar">
-            <div class="gis-summary-card" id="summaryDivisions">
+            <div class="gis-summary-card">
                 <div class="summary-icon" style="background: #3b82f6;">🏠</div>
                 <div class="summary-info">
-                    <span class="summary-value" id="valDivisions">-</span>
+                    <span class="summary-value">-</span>
                     <span class="summary-label">Divisions</span>
                 </div>
             </div>
-            <div class="gis-summary-card" id="summaryDistricts">
+            <div class="gis-summary-card">
                 <div class="summary-icon" style="background: #10b981;">🏢</div>
                 <div class="summary-info">
-                    <span class="summary-value" id="valDistricts">-</span>
+                    <span class="summary-value">-</span>
                     <span class="summary-label">Districts</span>
                 </div>
             </div>
-            <div class="gis-summary-card" id="summaryPopulation">
+            <div class="gis-summary-card">
                 <div class="summary-icon" style="background: #8b5cf6;">👥</div>
                 <div class="summary-info">
-                    <span class="summary-value" id="valPopulation">-</span>
-                    <span class="summary-label">Total Population</span>
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Population</span>
                 </div>
             </div>
-            <div class="gis-summary-card" id="summaryMarkers">
+            <div class="gis-summary-card">
                 <div class="summary-icon" style="background: #f59e0b;">📌</div>
                 <div class="summary-info">
-                    <span class="summary-value" id="valMarkers">-</span>
+                    <span class="summary-value">-</span>
                     <span class="summary-label">Markers</span>
                 </div>
             </div>
-            <div class="gis-summary-card" id="summaryLayers">
+            <div class="gis-summary-card">
                 <div class="summary-icon" style="background: #ef4444;">🗺️</div>
                 <div class="summary-info">
-                    <span class="summary-value" id="valLayers">-</span>
+                    <span class="summary-value">-</span>
                     <span class="summary-label">Layers</span>
                 </div>
             </div>
-            <div class="gis-summary-card" id="summaryDatasets">
+            <div class="gis-summary-card">
                 <div class="summary-icon" style="background: #06b6d4;">📁</div>
                 <div class="summary-info">
-                    <span class="summary-value" id="valDatasets">-</span>
+                    <span class="summary-value">-</span>
                     <span class="summary-label">Datasets</span>
                 </div>
             </div>
@@ -209,6 +253,7 @@
             </div>
         </div>
     </aside>
+</div>
 </div>
 
 <script src="/static/gis-dashboard.js"></script>

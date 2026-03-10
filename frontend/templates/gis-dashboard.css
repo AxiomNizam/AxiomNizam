@@ -5,9 +5,10 @@
 /* ----- Layout ----- */
 .gis-container {
     display: flex;
-    height: calc(100vh - 130px);
+    height: calc(100vh - 175px);
     overflow: hidden;
     gap: 0;
+    flex: 1;
 }
 
 /* ----- Left Sidebar ----- */
@@ -877,5 +878,120 @@
 
     .gis-legend {
         max-width: 150px;
+    }
+}
+
+/* =============================================
+   Dashboard Type Selector Bar
+   ============================================= */
+
+.gis-hub-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.gis-type-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    background: var(--bg-secondary, #1a1d23);
+    border-bottom: 1px solid var(--border-color, #2d3748);
+    flex-shrink: 0;
+    overflow-x: auto;
+}
+
+.gis-type-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.gis-type-group-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted, #718096);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    margin-right: 4px;
+}
+
+.gis-type-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color, #2d3748);
+    border-radius: 6px;
+    background: var(--bg-primary, #0d1117);
+    color: var(--text-secondary, #a0aec0);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.gis-type-btn:hover {
+    background: var(--bg-tertiary, #2d3748);
+    color: var(--text-primary, #e2e8f0);
+    border-color: var(--gis-accent, #3b82f6);
+}
+
+.gis-type-btn.active {
+    background: var(--gis-accent, #3b82f6);
+    color: #fff;
+    border-color: var(--gis-accent, #3b82f6);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.gis-type-btn .type-icon {
+    font-size: 14px;
+}
+
+.gis-type-btn .type-label {
+    font-size: 12px;
+}
+
+/* Dashboard Info Panel */
+.gis-dashboard-info {
+    border-bottom: 2px solid var(--gis-accent, #3b82f6);
+}
+
+.gis-dashboard-info .gis-panel-header {
+    gap: 8px;
+}
+
+.gis-dashboard-info .panel-icon {
+    font-size: 18px;
+}
+
+.gis-dash-desc {
+    font-size: 11px;
+    color: var(--text-muted, #718096);
+    line-height: 1.4;
+    margin: 0;
+}
+
+/* Responsive type bar */
+@media (max-width: 768px) {
+    .gis-type-bar {
+        padding: 6px 10px;
+        gap: 10px;
+    }
+    .gis-type-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+    .gis-type-btn .type-label {
+        display: none;
+    }
+    .gis-type-btn .type-icon {
+        font-size: 16px;
+    }
+    .gis-type-group-label {
+        font-size: 10px;
     }
 }

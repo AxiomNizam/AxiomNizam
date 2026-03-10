@@ -96,7 +96,7 @@ func dashboardHandler(c *gin.Context) {
 		"page":        "public-dashboard",
 		"isAuth":      isAuth,
 		"userName":    userName,
-		"backendURL":  "http://localhost:8000",
+		"backendURL":  backendURL,
 		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
 		"health":      health,
 	})

@@ -467,6 +467,15 @@ func main() {
 		gisAPI.DELETE("/datasets/:id", gisHandler.DeleteDataset)
 	}
 
+	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
+	gisSpecHandler := handlers.NewGISSpecializedHandler()
+	gisSpecAPI := router.Group("/api/v1/gis/dashboards")
+	{
+		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)
+		gisSpecAPI.GET("/:type", gisSpecHandler.GetDashboard)
+		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
