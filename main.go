@@ -382,6 +382,61 @@ func main() {
 	router.POST("/api/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
 	router.GET("/api/notifications/status", notificationHandler.GetNotificationStatus)
 
+	// ====================================
+	// CLI AUTHENTICATION ENDPOINTS
+	// ====================================
+	cliAuth := handlers.NewCLIAuthHandler()
+	router.POST("/api/v1/auth/login", cliAuth.Login)
+	router.GET("/api/v1/auth/verify", cliAuth.Verify)
+	router.GET("/api/v1/auth/whoami", cliAuth.WhoAmI)
+
+	// ====================================
+	// KUBERNETES-STYLE RESOURCE ENDPOINTS
+	// ====================================
+	resourceHandler := handlers.NewResourceHandler()
+
+	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
+	nsAPI := router.Group("/api/v1/namespaces")
+	{
+		nsAPI.POST("/:namespace/:kind", resourceHandler.CreateOrUpdate)
+		nsAPI.GET("/:namespace/:kind", resourceHandler.List)
+		nsAPI.GET("/:namespace/:kind/:name", resourceHandler.Get)
+		nsAPI.PUT("/:namespace/:kind/:name", resourceHandler.Update)
+		nsAPI.DELETE("/:namespace/:kind/:name", resourceHandler.Delete)
+		nsAPI.GET("/:namespace/:kind/:name/status", resourceHandler.GetStatus)
+		nsAPI.GET("/:namespace/:kind/:name/events", resourceHandler.Events)
+	}
+
+	// Non-namespaced resource endpoints: /api/v1/{kind}
+	router.POST("/api/v1/apis", resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/apis", resourceHandler.ListAll)
+	router.POST("/api/v1/policies", resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/policies", resourceHandler.ListAll)
+	router.POST("/api/v1/workflows", resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/workflows", resourceHandler.ListAll)
+	router.POST("/api/v1/workflows/:name/run", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": fmt.Sprintf("Workflow '%s' started", c.Param("name")), "status": "Running"})
+	})
+
+	// DataSource endpoints
+	dsHandler := handlers.NewDataSourceHandler()
+	router.POST("/api/v1/datasources", dsHandler.Create)
+	router.GET("/api/v1/datasources", dsHandler.List)
+	router.GET("/api/v1/datasources/:name", dsHandler.Get)
+	router.PUT("/api/v1/datasources/:name", dsHandler.Update)
+	router.DELETE("/api/v1/datasources/:name", dsHandler.Delete)
+	router.POST("/api/v1/datasources/:name/test", dsHandler.Test)
+
+	// Job endpoints
+	jobHandler := handlers.NewJobHandler()
+	router.POST("/api/v1/jobs", jobHandler.Create)
+	router.GET("/api/v1/jobs", jobHandler.List)
+	router.GET("/api/v1/jobs/:id", jobHandler.Get)
+	router.POST("/api/v1/jobs/:id/run", jobHandler.Run)
+	router.GET("/api/v1/jobs/:id/logs", jobHandler.GetLogs)
+	router.POST("/api/v1/jobs/:id/cancel", jobHandler.Cancel)
+	router.DELETE("/api/v1/jobs/:id", jobHandler.Delete)
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 

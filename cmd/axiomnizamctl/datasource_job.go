@@ -87,11 +87,39 @@ var DataSourceDiffCmd = &cobra.Command{
 	},
 }
 
+// DataSource Get Command
+var DataSourceGetCmd = &cobra.Command{
+	Use:   "get [name]",
+	Short: "Get datasource details",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		handleDataSourceGet(args[0])
+	},
+}
+
+// DataSource Update Command
+var DataSourceUpdateCmd = &cobra.Command{
+	Use:   "update [name]",
+	Short: "Update a datasource field",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		handleDataSourceUpdate(args[0])
+	},
+}
+
 // Job Commands
 var JobCmd = &cobra.Command{
 	Use:   "job",
 	Short: "Manage jobs",
-	Long:  "List, get, view logs, and cancel jobs",
+	Long:  "Create, list, run, get, view logs, and cancel jobs",
+}
+
+var JobCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new job",
+	Run: func(cmd *cobra.Command, args []string) {
+		handleJobCreate()
+	},
 }
 
 var JobListCmd = &cobra.Command{
@@ -108,6 +136,24 @@ var JobGetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		handleJobGet(args[0])
+	},
+}
+
+var JobRunCmd = &cobra.Command{
+	Use:   "run [name]",
+	Short: "Run a job",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		handleJobRun(args[0])
+	},
+}
+
+var JobDeleteCmd2 = &cobra.Command{
+	Use:   "delete [name]",
+	Short: "Delete a job",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		handleJobDelete(args[0])
 	},
 }
 
@@ -213,6 +259,63 @@ func handleDataSourceList() {
 
 	formatter := output.NewFormatter(outputFormat, os.Stdout)
 	formatter.Print(datasources)
+}
+
+func handleDataSourceGet(name string) {
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/datasources/%s", name), nil)
+	if err != nil {
+		fmt.Printf("❌ Failed to get datasource: %v\n", err)
+		return
+	}
+
+	if response.StatusCode == 404 {
+		fmt.Printf("❌ DataSource '%s' not found\n", name)
+		return
+	}
+
+	var datasource map[string]interface{}
+	if err := response.JSON(&datasource); err != nil {
+		fmt.Printf("❌ Failed to parse response: %v\n", err)
+		return
+	}
+
+	formatter := output.NewFormatter(outputFormat, os.Stdout)
+	formatter.Print(datasource)
+}
+
+func handleDataSourceUpdate(name string) {
+	field := promptInput("Field to update")
+	if field == "" {
+		fmt.Println("❌ Field cannot be empty")
+		return
+	}
+
+	value := promptInput("New value")
+	if value == "" {
+		fmt.Println("❌ Value cannot be empty")
+		return
+	}
+
+	updatePayload := map[string]interface{}{
+		field: value,
+	}
+
+	response, err := apiClient.Put(context.Background(), fmt.Sprintf("/api/v1/datasources/%s", name), updatePayload)
+	if err != nil {
+		fmt.Printf("❌ Failed to update datasource: %v\n", err)
+		return
+	}
+
+	if response.StatusCode == 404 {
+		fmt.Printf("❌ DataSource '%s' not found\n", name)
+		return
+	}
+
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		fmt.Printf("✅ DataSource '%s' updated successfully\n", name)
+	} else {
+		fmt.Printf("❌ Failed: %s\n", response.Status)
+	}
 }
 
 func handleDataSourceTest(name string) {
@@ -384,6 +487,44 @@ func handleDataSourceDiff(filename string) {
 }
 
 // Job handlers
+func handleJobCreate() {
+	fmt.Println("📝 Create Job")
+
+	name := promptInput("Job Name")
+	if name == "" {
+		fmt.Println("❌ Job name cannot be empty")
+		return
+	}
+
+	jobType := promptInput("Type (sync/transform/backup)")
+	schedule := promptInput("Schedule (cron expression, leave empty for manual)")
+
+	resource := map[string]interface{}{
+		"apiVersion": "axiom-nizam.io/v1",
+		"kind":       "Job",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"spec": map[string]interface{}{
+			"type":     jobType,
+			"schedule": schedule,
+		},
+	}
+
+	response, err := apiClient.Post(context.Background(), "/api/v1/jobs", resource)
+	if err != nil {
+		fmt.Printf("❌ Failed to create job: %v\n", err)
+		return
+	}
+
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		fmt.Printf("✅ Job '%s' created\n", name)
+	} else {
+		fmt.Printf("❌ Failed: %s\n", response.Status)
+	}
+}
+
 func handleJobList() {
 	response, err := apiClient.Get(context.Background(), "/api/v1/jobs", nil)
 	if err != nil {
@@ -449,6 +590,39 @@ func handleJobCancel(jobID string) {
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		fmt.Printf("✅ Job '%s' cancelled\n", jobID)
+	} else {
+		fmt.Printf("❌ Failed: %s\n", response.Status)
+	}
+}
+
+func handleJobRun(name string) {
+	response, err := apiClient.Post(context.Background(), fmt.Sprintf("/api/v1/jobs/%s/run", name), nil)
+	if err != nil {
+		fmt.Printf("❌ Failed to run job: %v\n", err)
+		return
+	}
+
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		fmt.Printf("✅ Job '%s' started\n", name)
+	} else {
+		fmt.Printf("❌ Failed: %s\n", response.Status)
+	}
+}
+
+func handleJobDelete(name string) {
+	if !confirmAction("Are you sure you want to delete this job?") {
+		fmt.Println("❌ Cancelled")
+		return
+	}
+
+	response, err := apiClient.Delete(context.Background(), fmt.Sprintf("/api/v1/jobs/%s", name))
+	if err != nil {
+		fmt.Printf("❌ Failed to delete job: %v\n", err)
+		return
+	}
+
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		fmt.Printf("✅ Job '%s' deleted\n", name)
 	} else {
 		fmt.Printf("❌ Failed: %s\n", response.Status)
 	}
@@ -599,6 +773,8 @@ func handleJobStatus(jobID string) {
 func init() {
 	DataSourceCmd.AddCommand(DataSourceCreateCmd)
 	DataSourceCmd.AddCommand(DataSourceListCmd)
+	DataSourceCmd.AddCommand(DataSourceGetCmd)
+	DataSourceCmd.AddCommand(DataSourceUpdateCmd)
 	DataSourceCmd.AddCommand(DataSourceTestCmd)
 	DataSourceCmd.AddCommand(DataSourceApplyCmd)
 	DataSourceCmd.AddCommand(DataSourceDeleteCmd)
@@ -608,10 +784,13 @@ func init() {
 	DataSourceApplyCmd.Flags().StringP("filename", "f", "", "YAML file path")
 	DataSourceDiffCmd.Flags().StringP("filename", "f", "", "YAML file path")
 
+	JobCmd.AddCommand(JobCreateCmd)
 	JobCmd.AddCommand(JobListCmd)
 	JobCmd.AddCommand(JobGetCmd)
+	JobCmd.AddCommand(JobRunCmd)
 	JobCmd.AddCommand(JobLogsCmd)
 	JobCmd.AddCommand(JobCancelCmd)
+	JobCmd.AddCommand(JobDeleteCmd2)
 	JobCmd.AddCommand(JobDescribeCmd)
 	JobCmd.AddCommand(JobDiffCmd)
 	JobCmd.AddCommand(JobStatusCmd)

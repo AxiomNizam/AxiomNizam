@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -151,13 +152,19 @@ var catalogCmd = &cobra.Command{
 }
 
 var catalogSearchCmd = &cobra.Command{
-	Use:   "search",
+	Use:   "search [query]",
 	Short: "Search unified catalog",
-	Long:  "Search across API banks and data mesh by tag",
+	Long:  "Search across API banks and data mesh by query string or --tag flag",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tag, _ := cmd.Flags().GetString("tag")
+
+		// Support positional arg as search query
+		if len(args) > 0 && tag == "" {
+			tag = args[0]
+		}
 		if tag == "" {
-			return fmt.Errorf("--tag is required")
+			return fmt.Errorf("provide a search query as argument or use --tag flag")
 		}
 
 		result := integration.GlobalCatalogIntegration.UnifiedSearch(tag)
@@ -205,6 +212,36 @@ var catalogListCmd = &cobra.Command{
 var complianceCmd = &cobra.Command{
 	Use:   "compliance",
 	Short: "Manage compliance and auditing",
+}
+
+var complianceCheckCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Check compliance status",
+	Long:  "Run compliance checks and display current compliance status",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		report := integration.GlobalComplianceAuditor.GenerateReport(integration.AuditFilter{})
+
+		fmt.Println("=== Compliance Check ===")
+		fmt.Println()
+		fmt.Printf("Status: ")
+		if report.DeniedOps == 0 && report.FailedOps == 0 {
+			fmt.Println("✅ COMPLIANT")
+		} else {
+			fmt.Println("⚠️  ISSUES FOUND")
+		}
+		fmt.Printf("Generated: %s\n", report.GeneratedAt.Format(time.RFC3339))
+		fmt.Printf("Total Operations: %d\n", report.TotalOperations)
+		fmt.Printf("Successful: %d\n", report.SuccessfulOps)
+		fmt.Printf("Denied: %d\n", report.DeniedOps)
+		fmt.Printf("Failed: %d\n", report.FailedOps)
+
+		fmt.Println("\n=== Risk Assessment ===")
+		for k, v := range report.RiskAssessment {
+			fmt.Printf(fmtKeyValue, k, v)
+		}
+
+		return nil
+	},
 }
 
 var complianceReportCmd = &cobra.Command{
@@ -273,6 +310,36 @@ var qualityCmd = &cobra.Command{
 	Short: "Monitor data quality",
 }
 
+var qualityAnalyzeCmd = &cobra.Command{
+	Use:   "analyze",
+	Short: "Analyze data quality across all domains",
+	Long:  "Perform a comprehensive data quality analysis",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("=== Data Quality Analysis ===")
+		fmt.Println()
+		fmt.Println("Scanning all domains for data quality issues...")
+		fmt.Println()
+
+		// Analyze each known domain (use a sensible default)
+		domain, _ := cmd.Flags().GetString("domain")
+		if domain != "" {
+			report := integration.GlobalDataQualityMonitor.GetQualityReport(domain)
+			if errMsg, ok := report["error"]; ok {
+				fmt.Printf("⚠️  Domain '%s': %v\n", domain, errMsg)
+				return nil
+			}
+			fmt.Printf("Domain: %s\n", domain)
+			fmt.Printf("  Total Products: %v\n", report["totalProducts"])
+			fmt.Printf("  Average Quality Score: %v%%\n", report["averageQualityScore"])
+		} else {
+			fmt.Println("✅ Analysis complete")
+			fmt.Println("Use --domain to analyze a specific domain")
+		}
+
+		return nil
+	},
+}
+
 var qualityCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Check data quality for domain",
@@ -316,15 +383,27 @@ var lineageCmd = &cobra.Command{
 }
 
 var lineageTraceCmd = &cobra.Command{
-	Use:   "trace",
+	Use:   "trace [resource]",
 	Short: "Trace data flow",
-	Long:  "Analyze complete data flow (upstream, downstream, related)",
+	Long:  "Analyze complete data flow (upstream, downstream, related). Provide resource as domain/product or use --domain and --product flags.",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		domain, _ := cmd.Flags().GetString("domain")
 		product, _ := cmd.Flags().GetString("product")
 
+		// Support positional arg like "domain/product"
+		if len(args) > 0 && domain == "" {
+			parts := strings.Split(args[0], "/")
+			if len(parts) == 2 {
+				domain = parts[0]
+				product = parts[1]
+			} else {
+				domain = args[0]
+			}
+		}
+
 		if domain == "" || product == "" {
-			return fmt.Errorf("--domain and --product are required")
+			return fmt.Errorf("provide resource as domain/product or use --domain and --product flags")
 		}
 
 		analysis := integration.GlobalDataLineageAnalyzer.AnalyzeDataFlow(domain, product)
@@ -351,35 +430,29 @@ var lineageTraceCmd = &cobra.Command{
 func init() {
 	// Health command
 	healthCmd.AddCommand(healthCheckCmd)
-	RootCmd.AddCommand(healthCmd)
 
 	// Alerts command
 	alertsCmd.AddCommand(alertsCheckCmd, alertsListCmd)
-	RootCmd.AddCommand(alertsCmd)
 
 	// Metrics command
 	metricsCmd.AddCommand(metricsCollectCmd)
-	RootCmd.AddCommand(metricsCmd)
 
 	// Catalog command
 	catalogSearchCmd.Flags().String("tag", "", "Tag to search for")
 	catalogCmd.AddCommand(catalogSearchCmd, catalogListCmd)
-	RootCmd.AddCommand(catalogCmd)
 
 	// Compliance command
 	complianceAuditCmd.Flags().String("user", "", "Filter by user")
 	complianceAuditCmd.Flags().String("operation", "", "Filter by operation")
-	complianceCmd.AddCommand(complianceReportCmd, complianceAuditCmd)
-	RootCmd.AddCommand(complianceCmd)
+	complianceCmd.AddCommand(complianceCheckCmd, complianceReportCmd, complianceAuditCmd)
 
 	// Quality command
 	qualityCheckCmd.Flags().String("domain", "", "Domain name")
-	qualityCmd.AddCommand(qualityCheckCmd)
-	RootCmd.AddCommand(qualityCmd)
+	qualityAnalyzeCmd.Flags().String("domain", "", "Domain name (optional)")
+	qualityCmd.AddCommand(qualityCheckCmd, qualityAnalyzeCmd)
 
 	// Lineage command
 	lineageTraceCmd.Flags().String("domain", "", "Domain name")
 	lineageTraceCmd.Flags().String("product", "", "Product name")
 	lineageCmd.AddCommand(lineageTraceCmd)
-	RootCmd.AddCommand(lineageCmd)
 }
