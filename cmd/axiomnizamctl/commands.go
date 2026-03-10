@@ -37,7 +37,7 @@ func handleStatus() error {
 
 	// Try to check server health
 	if apiClient != nil {
-		response, err := apiClient.GetSimple("/api/v1/health")
+		response, err := apiClient.GetSimple("/health")
 		if err == nil && response.StatusCode == 200 {
 			var health struct {
 				Status  string `json:"status"`
