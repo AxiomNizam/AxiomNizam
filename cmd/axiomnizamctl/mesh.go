@@ -10,6 +10,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	flagDomainName  = "Domain name"
+	flagProductName = "Product name"
+)
+
 var MeshCmd = &cobra.Command{
 	Use:   "mesh",
 	Short: "Manage data mesh",
@@ -176,7 +181,8 @@ func handleCreateDomain(name, owner, description string) error {
 func handleListDomains() error {
 	domains := mesh.ListDomains()
 
-	fmt.Println("🌐 Data Mesh Domains\n")
+	fmt.Println("🌐 Data Mesh Domains")
+	fmt.Println()
 	fmt.Printf("%-25s %-20s %-10s %s\n", "NAME", "OWNER", "PRODUCTS", "DESCRIPTION")
 	fmt.Println(strings.Repeat("─", 80))
 
@@ -329,26 +335,26 @@ func handleLineageTrace(domainName, productName, direction string) error {
 }
 
 func init() {
-	MeshDomainCreateCmd.Flags().StringP("name", "n", "", "Domain name")
+	MeshDomainCreateCmd.Flags().StringP("name", "n", "", flagDomainName)
 	MeshDomainCreateCmd.Flags().StringP("owner", "o", "", "Domain owner")
 	MeshDomainCreateCmd.Flags().StringP("description", "d", "", "Domain description")
 
-	MeshProductCreateCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshProductCreateCmd.Flags().StringP("name", "n", "", "Product name")
+	MeshProductCreateCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshProductCreateCmd.Flags().StringP("name", "n", "", flagProductName)
 	MeshProductCreateCmd.Flags().StringP("owner", "o", "", "Product owner")
 	MeshProductCreateCmd.Flags().StringP("description", "d", "", "Product description")
 
-	MeshProductListCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshProductGetCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshProductGetCmd.Flags().StringP("name", "n", "", "Product name")
+	MeshProductListCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshProductGetCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshProductGetCmd.Flags().StringP("name", "n", "", flagProductName)
 
-	MeshSubscribeCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshSubscribeCmd.Flags().StringP("product", "p", "", "Product name")
+	MeshSubscribeCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshSubscribeCmd.Flags().StringP("product", "p", "", flagProductName)
 	MeshSubscribeCmd.Flags().StringP("subscriber", "s", "", "Subscriber ID")
 	MeshSubscribeCmd.Flags().StringP("port", "", "default", "Output port name")
 
-	MeshLineageCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshLineageCmd.Flags().StringP("product", "p", "", "Product name")
+	MeshLineageCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshLineageCmd.Flags().StringP("product", "p", "", flagProductName)
 	MeshLineageCmd.Flags().StringP("direction", "d", "downstream", "Direction (downstream/upstream)")
 
 	MeshDomainCmd.AddCommand(MeshDomainCreateCmd)

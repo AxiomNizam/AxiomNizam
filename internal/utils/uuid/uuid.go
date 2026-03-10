@@ -29,16 +29,16 @@ func GenerateV5(namespace uuid.UUID, name string) string {
 }
 
 // NamespaceDNS is the DNS namespace UUID
-var NamespaceDNS = uuid.NamespaceDNS
+var NamespaceDNS = uuid.NameSpaceDNS
 
 // NamespaceURL is the URL namespace UUID
-var NamespaceURL = uuid.NamespaceURL
+var NamespaceURL = uuid.NameSpaceURL
 
 // NamespaceOID is the OID namespace UUID
-var NamespaceOID = uuid.NamespaceOID
+var NamespaceOID = uuid.NameSpaceOID
 
 // NamespaceX500 is the X.500 DN namespace UUID
-var NamespaceX500 = uuid.NamespaceX500
+var NamespaceX500 = uuid.NameSpaceX500
 
 // Parse parses a UUID string
 func Parse(s string) (uuid.UUID, error) {

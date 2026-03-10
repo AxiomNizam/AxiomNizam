@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const fmtKeyValue = "%s: %v\n"
+
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "Check system health and status",
@@ -121,22 +123,22 @@ var metricsCollectCmd = &cobra.Command{
 
 		fmt.Println("=== Data Mesh Metrics ===")
 		for k, v := range metrics.DataMeshMetrics {
-			fmt.Printf("%s: %v\n", k, v)
+			fmt.Printf(fmtKeyValue, k, v)
 		}
 
 		fmt.Println("\n=== API Bank Metrics ===")
 		for k, v := range metrics.APIBankMetrics {
-			fmt.Printf("%s: %v\n", k, v)
+			fmt.Printf(fmtKeyValue, k, v)
 		}
 
 		fmt.Println("\n=== Compliance Metrics ===")
 		for k, v := range metrics.ComplianceMetrics {
-			fmt.Printf("%s: %v\n", k, v)
+			fmt.Printf(fmtKeyValue, k, v)
 		}
 
 		fmt.Println("\n=== Performance Metrics ===")
 		for k, v := range metrics.PerformanceMetrics {
-			fmt.Printf("%s: %v\n", k, v)
+			fmt.Printf(fmtKeyValue, k, v)
 		}
 
 		return nil
@@ -165,17 +167,13 @@ var catalogSearchCmd = &cobra.Command{
 		// Print API banks
 		if banks, ok := result["apiBanks"]; ok {
 			fmt.Println("=== API Banks ===")
-			if refs, ok := banks.(interface{}); ok {
-				fmt.Printf("%v\n", refs)
-			}
+			fmt.Printf("%v\n", banks)
 		}
 
 		// Print data products
 		if products, ok := result["dataProducts"]; ok {
 			fmt.Println("\n=== Data Products ===")
-			if prods, ok := products.(interface{}); ok {
-				fmt.Printf("%v\n", prods)
-			}
+			fmt.Printf("%v\n", products)
 		}
 
 		return nil
@@ -188,7 +186,8 @@ var catalogListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		catalog := integration.GlobalCatalogIntegration.GetCompleteDataCatalog()
 
-		fmt.Println("=== Complete Data Catalog ===\n")
+		fmt.Println("=== Complete Data Catalog ===")
+		fmt.Println()
 
 		if banks, ok := catalog["apiBanks"].(map[string]interface{}); ok {
 			fmt.Printf("API Banks: %v\n", banks["count"])
@@ -214,7 +213,8 @@ var complianceReportCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		report := integration.GlobalComplianceAuditor.GenerateReport(integration.AuditFilter{})
 
-		fmt.Println("=== Compliance Report ===\n")
+		fmt.Println("=== Compliance Report ===")
+		fmt.Println()
 		fmt.Printf("Generated: %s\n", report.GeneratedAt.Format(time.RFC3339))
 		fmt.Printf("Total Operations: %d\n", report.TotalOperations)
 		fmt.Printf("Successful: %d (%.2f%%)\n", report.SuccessfulOps, float64(report.SuccessfulOps)*100/float64(report.TotalOperations))
@@ -228,7 +228,7 @@ var complianceReportCmd = &cobra.Command{
 
 		fmt.Println("\n=== Risk Assessment ===")
 		for k, v := range report.RiskAssessment {
-			fmt.Printf("%s: %v\n", k, v)
+			fmt.Printf(fmtKeyValue, k, v)
 		}
 
 		return nil

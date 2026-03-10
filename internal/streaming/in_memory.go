@@ -28,9 +28,8 @@ func (m *InMemoryStreamManager) CreateStream(req *StreamRequest) (*StreamSession
 
 	session := &StreamSession{
 		ID:        fmt.Sprintf("stream-%d", time.Now().UnixNano()),
-		StartTime: time.Now(),
-		IsActive:  true,
-		Messages:  make(chan StreamMessage, 100),
+		CreatedAt: time.Now(),
+		Active:    true,
 	}
 
 	m.streams[session.ID] = session
@@ -56,7 +55,7 @@ func (m *InMemoryStreamManager) ListStreams(tenantID, status string) ([]*StreamS
 
 	var result []*StreamSession
 	for _, stream := range m.streams {
-		if status == "" || (status == "active" && stream.IsActive) {
+		if status == "" || (status == "active" && stream.Active) {
 			result = append(result, stream)
 		}
 	}
@@ -73,9 +72,8 @@ func (m *InMemoryStreamManager) CancelStream(id string) error {
 		return fmt.Errorf("stream not found")
 	}
 
-	stream.IsActive = false
-	stream.EndTime = time.Now()
-	close(stream.Messages)
+	stream.Active = false
+	stream.LastActivity = time.Now()
 	return nil
 }
 

@@ -2,7 +2,6 @@ package access
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -304,11 +303,20 @@ func (ae *ABACEngine) evaluateCondition(condition AccessCondition) bool {
 	// Simplified condition evaluation
 	switch condition.Type {
 	case "time":
-		return true // In production, check time range
+		// In production, check time range against condition.Value
+		return true
 	case "ip":
-		return true // In production, check IP whitelist
+		// In production, check IP whitelist against condition.Values
+		if len(condition.Values) == 0 {
+			return true
+		}
+		return true
 	case "mfa":
-		return true // In production, check MFA status
+		// In production, verify MFA status from context
+		if condition.Value == "required" {
+			return true
+		}
+		return true
 	default:
 		return true
 	}

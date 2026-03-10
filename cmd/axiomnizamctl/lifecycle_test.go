@@ -5,7 +5,88 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"example.com/axiomnizam/internal/resources/apiresource"
 )
+
+const testAPIName = "test-api"
+
+// verifyResourceExists verifies a resource exists in store and returns it.
+func verifyResourceExists(t *testing.T, cm *CLIManager, ctx context.Context, namespace, apiName string) *apiresource.APIResource {
+	t.Helper()
+	time.Sleep(100 * time.Millisecond)
+	api, err := cm.store.Get(ctx, namespace, apiName)
+	if err != nil {
+		t.Fatalf("Store Get failed: %v", err)
+	}
+	if api == nil {
+		t.Fatal("Resource not found in store")
+	}
+	return api
+}
+
+// verifyPendingStatus checks that the resource starts in Pending state.
+func verifyPendingStatus(t *testing.T, api *apiresource.APIResource) {
+	t.Helper()
+	if api.Status.Phase != "Pending" {
+		t.Fatalf("Expected Phase=Pending, got %s", api.Status.Phase)
+	}
+	if api.Status.Ready {
+		t.Fatal("Expected Ready=false initially")
+	}
+}
+
+// waitForReady polls until the resource reaches Ready or times out.
+func waitForReady(t *testing.T, cm *CLIManager, ctx context.Context, namespace, apiName string) {
+	t.Helper()
+	maxWait := time.Now().Add(5 * time.Second)
+	for time.Now().Before(maxWait) {
+		api, err := cm.store.Get(ctx, namespace, apiName)
+		if err != nil {
+			t.Fatalf("Store Get failed during wait: %v", err)
+		}
+		if api.Status.Phase == "Ready" && api.Status.Ready {
+			return
+		}
+		if api.Status.Phase == "Failed" {
+			t.Fatalf("Resource entered Failed state: %s", api.Status.Message)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// verifyFinalStatus checks the final resource state after reconciliation.
+func verifyFinalStatus(t *testing.T, cm *CLIManager, ctx context.Context, namespace, apiName string) {
+	t.Helper()
+	api, err := cm.store.Get(ctx, namespace, apiName)
+	if err != nil {
+		t.Fatalf("Final Get failed: %v", err)
+	}
+	if api.Status.Phase != "Ready" {
+		t.Fatalf("Expected final Phase=Ready, got %s", api.Status.Phase)
+	}
+	if !api.Status.Ready {
+		t.Fatal("Expected final Ready=true")
+	}
+	if api.Metadata.Generation < 2 {
+		t.Fatalf("Expected Generation >= 2 after reconciliation, got %d", api.Metadata.Generation)
+	}
+}
+
+// verifyListQueryable ensures the resource appears in store List results.
+func verifyListQueryable(t *testing.T, cm *CLIManager, ctx context.Context, namespace, apiName string) {
+	t.Helper()
+	apis, err := cm.store.List(ctx, namespace)
+	if err != nil {
+		t.Fatalf("Store List failed: %v", err)
+	}
+	for _, a := range apis {
+		if a.Metadata.Name == apiName && a.Metadata.Namespace == namespace {
+			return
+		}
+	}
+	t.Fatal("Resource not found in List results")
+}
 
 // TestReconciliationLoopComplete validates the end-to-end lifecycle
 func TestReconciliationLoopComplete(t *testing.T) {
@@ -25,12 +106,9 @@ func TestReconciliationLoopComplete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Initialize
 			cm := NewCLIManager()
 			defer cm.Shutdown()
 
-			// Step 1: Apply resource
-			t.Logf("Step 1: Applying APIResource from %s", tt.yamlPath)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
@@ -38,113 +116,14 @@ func TestReconciliationLoopComplete(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Apply failed: %v", err)
 			}
-			t.Log("✓ Apply succeeded")
 
-			// Step 2: Verify resource is stored
-			t.Logf("Step 2: Verifying resource exists in store")
-			time.Sleep(100 * time.Millisecond)
+			api := verifyResourceExists(t, cm, ctx, tt.namespace, tt.apiName)
+			verifyPendingStatus(t, api)
+			waitForReady(t, cm, ctx, tt.namespace, tt.apiName)
+			verifyFinalStatus(t, cm, ctx, tt.namespace, tt.apiName)
+			verifyListQueryable(t, cm, ctx, tt.namespace, tt.apiName)
 
-			api, err := cm.store.Get(ctx, tt.namespace, tt.apiName)
-			if err != nil {
-				t.Fatalf("Store Get failed: %v", err)
-			}
-			if api == nil {
-				t.Fatal("Resource not found in store")
-			}
-			t.Log("✓ Resource found in store")
-
-			// Step 3: Verify initial status is Pending
-			t.Logf("Step 3: Verifying initial status is Pending")
-			if api.Status.Phase != "Pending" {
-				t.Fatalf("Expected Phase=Pending, got %s", api.Status.Phase)
-			}
-			if api.Status.Ready {
-				t.Fatal("Expected Ready=false initially")
-			}
-			t.Logf("✓ Initial status correct: Phase=%s, Ready=%v", api.Status.Phase, api.Status.Ready)
-
-			// Step 4: Wait for reconciliation to complete
-			t.Logf("Step 4: Waiting for reconciliation (max 5 seconds)")
-			maxWait := time.Now().Add(5 * time.Second)
-
-			for time.Now().Before(maxWait) {
-				api, err := cm.store.Get(ctx, tt.namespace, tt.apiName)
-				if err != nil {
-					t.Fatalf("Store Get failed during wait: %v", err)
-				}
-
-				if api.Status.Phase == "Ready" && api.Status.Ready {
-					t.Logf("✓ Resource reached Ready state")
-					break
-				}
-
-				if api.Status.Phase == "Failed" {
-					t.Fatalf("Resource entered Failed state: %s", api.Status.Message)
-				}
-
-				time.Sleep(100 * time.Millisecond)
-			}
-
-			// Step 5: Final verification
-			t.Logf("Step 5: Final status verification")
-			api, err = cm.store.Get(ctx, tt.namespace, tt.apiName)
-			if err != nil {
-				t.Fatalf("Final Get failed: %v", err)
-			}
-
-			if api.Status.Phase != "Ready" {
-				t.Fatalf("Expected final Phase=Ready, got %s", api.Status.Phase)
-			}
-			if !api.Status.Ready {
-				t.Fatal("Expected final Ready=true")
-			}
-			if api.Status.Message == "" {
-				t.Logf("✓ Final status: Phase=%s, Ready=%v, Message='%s'",
-					api.Status.Phase, api.Status.Ready, api.Status.Message)
-			}
-
-			// Step 6: Verify reconciliation happened
-			t.Logf("Step 6: Verifying reconciliation metrics")
-			if api.Metadata.Generation < 2 {
-				t.Fatalf("Expected Generation >= 2 after reconciliation, got %d", api.Metadata.Generation)
-			}
-			t.Logf("✓ Resource generation incremented: %d", api.Metadata.Generation)
-
-			// Step 7: Verify resource is queryable
-			t.Logf("Step 7: Verifying Get query works")
-			apis, err := cm.store.List(ctx, tt.namespace)
-			if err != nil {
-				t.Fatalf("Store List failed: %v", err)
-			}
-			if len(apis) == 0 {
-				t.Fatal("Expected at least 1 resource from List")
-			}
-
-			found := false
-			for _, a := range apis {
-				if a.Metadata.Name == tt.apiName && a.Metadata.Namespace == tt.namespace {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Fatal("Resource not found in List results")
-			}
-			t.Logf("✓ Resource queryable via List")
-
-			t.Log("\n" + "======================================================================")
 			t.Log("RECONCILIATION LOOP TEST PASSED")
-			t.Log("======================================================================")
-			t.Log("\nLifecycle Validated:")
-			t.Log("  1. YAML file parsed successfully")
-			t.Log("  2. Resource created with Pending status")
-			t.Log("  3. Resource stored in persistence layer")
-			t.Log("  4. Item enqueued for reconciliation")
-			t.Log("  5. Reconciliation loop processed item")
-			t.Log("  6. Status transitioned: Pending → Creating → Ready")
-			t.Log("  7. Status updated in store")
-			t.Log("  8. Resource queryable with final status")
-			t.Log("\nThis proves the complete YAML → Store → Reconcile → Status pattern works.")
 		})
 	}
 }
@@ -166,7 +145,7 @@ func TestStatusTransitions(t *testing.T) {
 		"timeout":     30,
 	}
 
-	api := NewAPIResource("default", "test-api", spec)
+	api := apiresource.New("default", testAPIName, spec)
 
 	// Verify initial state is Pending
 	if api.Status.Phase != "Pending" {
@@ -182,12 +161,12 @@ func TestStatusTransitions(t *testing.T) {
 
 	// Simulate state transitions
 	stored.MarkCreating("Initializing API")
-	err = cm.store.Update(ctx, stored)
+	_, err = cm.store.Update(ctx, stored)
 	if err != nil {
 		t.Fatalf("Update to Creating failed: %v", err)
 	}
 
-	retrieved, err := cm.store.Get(ctx, "default", "test-api")
+	retrieved, err := cm.store.Get(ctx, "default", testAPIName)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -200,12 +179,12 @@ func TestStatusTransitions(t *testing.T) {
 	// Transition to Ready
 	retrieved.SetReady(true)
 	retrieved.SetPhase("Ready")
-	err = cm.store.Update(ctx, retrieved)
+	_, err = cm.store.Update(ctx, retrieved)
 	if err != nil {
 		t.Fatalf("Update to Ready failed: %v", err)
 	}
 
-	final, err := cm.store.Get(ctx, "default", "test-api")
+	final, err := cm.store.Get(ctx, "default", testAPIName)
 	if err != nil {
 		t.Fatalf("Final Get failed: %v", err)
 	}
@@ -238,9 +217,9 @@ func BenchmarkReconciliation(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		apiName := fmt.Sprintf("bench-api-%d", i)
-		api := NewAPIResource("default", apiName, spec)
+		api := apiresource.New("default", apiName, spec)
 
-		stored, err := cm.store.Create(ctx, api)
+		_, err := cm.store.Create(ctx, api)
 		if err != nil {
 			b.Fatalf("Create failed: %v", err)
 		}

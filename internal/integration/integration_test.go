@@ -10,6 +10,11 @@ import (
 	"example.com/axiomnizam/internal/mesh"
 )
 
+const (
+	testOwnerUser  = "test-user"
+	testOwnerInteg = "integration-test"
+)
+
 // TestDataMeshIntegration tests data mesh integration
 func TestDataMeshIntegration(t *testing.T) {
 	ctx := context.Background()
@@ -17,14 +22,14 @@ func TestDataMeshIntegration(t *testing.T) {
 	// Create domain
 	domain := &mesh.DataDomain{
 		Name:  "TestDomain",
-		Owner: "test-user",
+		Owner: testOwnerUser,
 	}
 	mesh.GlobalDataMesh.CreateDomain(ctx, domain)
 
 	// Create product
 	product := &mesh.DataProduct{
 		Name:  "TestProduct",
-		Owner: "test-user",
+		Owner: testOwnerUser,
 		Schema: map[string]interface{}{
 			"field1": "string",
 			"field2": "int",
@@ -33,7 +38,7 @@ func TestDataMeshIntegration(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "TestDomain", product)
 
 	// Subscribe
-	subscription, err := mesh.GlobalDataMesh.Subscribe(ctx, "TestDomain", "TestProduct", "subscriber", &mesh.DataPort{})
+	subscription, err := mesh.GlobalDataMesh.Subscribe(ctx, "TestDomain", "TestProduct", "subscriber", "default")
 	if err != nil {
 		t.Fatalf("Failed to subscribe: %v", err)
 	}
@@ -52,7 +57,7 @@ func TestAPIBankIntegration(t *testing.T) {
 	// Create bank
 	bank := &apibanks.APIBank{
 		Name:  "TestBank",
-		Owner: "test-user",
+		Owner: testOwnerUser,
 	}
 	if err := apibanks.GlobalAPIBankManager.CreateBank(ctx, bank); err != nil {
 		t.Fatalf("Failed to create bank: %v", err)
@@ -65,7 +70,7 @@ func TestAPIBankIntegration(t *testing.T) {
 		Kind:        "API",
 		DataClasses: []string{"test"},
 	}
-	if err := apibanks.GlobalAPIBankManager.AddAPIToBank(ctx, "TestBank", api); err != nil {
+	if err := apibanks.GlobalAPIBankManager.AddAPIToBank(ctx, "TestBank", *api); err != nil {
 		t.Fatalf("Failed to add API: %v", err)
 	}
 
@@ -89,7 +94,7 @@ func TestComplianceIntegration(t *testing.T) {
 	// Record operations
 	op := Operation{
 		Operation:    "TestOperation",
-		User:         "test-user",
+		User:         testOwnerUser,
 		Resource:     "test-resource",
 		ResourceType: "TestType",
 		Action:       "test",
@@ -224,7 +229,7 @@ func TestAlertGeneration(t *testing.T) {
 	// Alerts may be empty or contain health warnings
 	activeAlerts := GlobalAlertManager.GetActiveAlerts()
 
-	t.Logf("✅ Alert generation test passed: %d active alerts", len(activeAlerts))
+	t.Logf("✅ Alert generation test passed: %d generated, %d active alerts", len(alerts), len(activeAlerts))
 }
 
 // TestPlatformMetrics tests metrics collection
@@ -257,14 +262,14 @@ func TestFullIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Create domain
-	domain := &mesh.DataDomain{Name: "FullIntegrationTest", Owner: "integration-test"}
+	domain := &mesh.DataDomain{Name: "FullIntegrationTest", Owner: testOwnerInteg}
 	mesh.GlobalDataMesh.CreateDomain(ctx, domain)
 	t.Logf("✅ Created domain")
 
 	// 2. Create product
 	product := &mesh.DataProduct{
 		Name:  "IntegrationTestProduct",
-		Owner: "integration-test",
+		Owner: testOwnerInteg,
 		Schema: map[string]interface{}{
 			"id":   "string",
 			"data": "string",
@@ -275,7 +280,7 @@ func TestFullIntegration(t *testing.T) {
 	t.Logf("✅ Created product")
 
 	// 3. Create subscription
-	sub, err := mesh.GlobalDataMesh.Subscribe(ctx, "FullIntegrationTest", "IntegrationTestProduct", "integration-consumer", &mesh.DataPort{})
+	sub, err := mesh.GlobalDataMesh.Subscribe(ctx, "FullIntegrationTest", "IntegrationTestProduct", "integration-consumer", "default")
 	if err != nil {
 		t.Fatalf("Failed to subscribe: %v", err)
 	}
@@ -284,7 +289,7 @@ func TestFullIntegration(t *testing.T) {
 	// 4. Create API bank
 	bank := &apibanks.APIBank{
 		Name:  "IntegrationTestBank",
-		Owner: "integration-test",
+		Owner: testOwnerInteg,
 	}
 	if err := apibanks.GlobalAPIBankManager.CreateBank(ctx, bank); err != nil {
 		t.Fatalf("Failed to create bank: %v", err)
@@ -295,7 +300,7 @@ func TestFullIntegration(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		op := Operation{
 			Operation:    fmt.Sprintf("TestOp%d", i),
-			User:         "integration-test",
+			User:         testOwnerInteg,
 			Resource:     "FullIntegrationTest/IntegrationTestProduct",
 			ResourceType: "DataProduct",
 			Action:       "read",

@@ -6,6 +6,11 @@ import (
 	"sync"
 )
 
+const (
+	errTenantNotFound = "tenant not found: %s"
+	errQuotaNotFound  = "quota not found: %s"
+)
+
 // TenantManager manages tenant lifecycle
 type TenantManager interface {
 	// CreateTenant creates new tenant
@@ -115,7 +120,7 @@ func (itm *InMemoryTenantManager) GetTenant(ctx context.Context, tenantID string
 
 	tenant, exists := itm.tenants[tenantID]
 	if !exists {
-		return nil, fmt.Errorf("tenant not found: %s", tenantID)
+		return nil, fmt.Errorf(errTenantNotFound, tenantID)
 	}
 	return tenant, nil
 }
@@ -126,7 +131,7 @@ func (itm *InMemoryTenantManager) UpdateTenant(ctx context.Context, tenant *Tena
 	defer itm.mu.Unlock()
 
 	if _, exists := itm.tenants[tenant.ID]; !exists {
-		return fmt.Errorf("tenant not found: %s", tenant.ID)
+		return fmt.Errorf(errTenantNotFound, tenant.ID)
 	}
 	itm.tenants[tenant.ID] = tenant
 	return nil
@@ -139,7 +144,7 @@ func (itm *InMemoryTenantManager) DeleteTenant(ctx context.Context, tenantID str
 
 	tenant, exists := itm.tenants[tenantID]
 	if !exists {
-		return fmt.Errorf("tenant not found: %s", tenantID)
+		return fmt.Errorf(errTenantNotFound, tenantID)
 	}
 	tenant.Status = TenantArchived
 	return nil
@@ -166,7 +171,7 @@ func (itm *InMemoryTenantManager) GetQuota(ctx context.Context, tenantID string)
 
 	quota, exists := itm.quotas[tenantID]
 	if !exists {
-		return nil, fmt.Errorf("quota not found: %s", tenantID)
+		return nil, fmt.Errorf(errQuotaNotFound, tenantID)
 	}
 	return quota, nil
 }
@@ -177,7 +182,7 @@ func (itm *InMemoryTenantManager) UpdateQuota(ctx context.Context, tenantID stri
 	defer itm.mu.Unlock()
 
 	if _, exists := itm.quotas[tenantID]; !exists {
-		return fmt.Errorf("quota not found: %s", tenantID)
+		return fmt.Errorf(errQuotaNotFound, tenantID)
 	}
 	itm.quotas[tenantID] = quota
 	return nil
@@ -190,7 +195,7 @@ func (itm *InMemoryTenantManager) CheckQuota(ctx context.Context, tenantID strin
 
 	quota, exists := itm.quotas[tenantID]
 	if !exists {
-		return fmt.Errorf("quota not found: %s", tenantID)
+		return fmt.Errorf(errQuotaNotFound, tenantID)
 	}
 
 	switch quotaType {
@@ -225,7 +230,7 @@ func (itm *InMemoryTenantManager) AddMember(ctx context.Context, tenantID, userI
 	defer itm.mu.Unlock()
 
 	if _, exists := itm.tenants[tenantID]; !exists {
-		return nil, fmt.Errorf("tenant not found: %s", tenantID)
+		return nil, fmt.Errorf(errTenantNotFound, tenantID)
 	}
 
 	member := &TenantMember{

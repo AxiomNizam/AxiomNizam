@@ -6,11 +6,13 @@ import (
 	"time"
 )
 
+const errExportNotFound = "export not found"
+
 // InMemoryExportManager in-memory export implementation
 type InMemoryExportManager struct {
 	mu        sync.RWMutex
 	exports   map[string]*ExportJob
-	results   map[string][]*ExportResult
+	history   map[string][]*ExportHistory
 	templates map[string]*ExportTemplate
 }
 
@@ -18,7 +20,7 @@ type InMemoryExportManager struct {
 func NewInMemoryExportManager() *InMemoryExportManager {
 	return &InMemoryExportManager{
 		exports:   make(map[string]*ExportJob),
-		results:   make(map[string][]*ExportResult),
+		history:   make(map[string][]*ExportHistory),
 		templates: make(map[string]*ExportTemplate),
 	}
 }
@@ -35,10 +37,10 @@ func (m *InMemoryExportManager) SubmitExport(export *ExportJob) (*ExportJob, err
 		export.CreatedAt = time.Now()
 	}
 
-	export.Status = "submitted"
+	export.Status = ExportPending
 	export.Progress = 0
 	m.exports[export.ID] = export
-	m.results[export.ID] = []*ExportResult{}
+	m.history[export.ID] = []*ExportHistory{}
 
 	return export, nil
 }
@@ -50,7 +52,7 @@ func (m *InMemoryExportManager) GetExport(id string) (*ExportJob, error) {
 
 	export, exists := m.exports[id]
 	if !exists {
-		return nil, fmt.Errorf("export not found")
+		return nil, fmt.Errorf(errExportNotFound)
 	}
 	return export, nil
 }
@@ -71,18 +73,17 @@ func (m *InMemoryExportManager) ListExports(tenantID string) ([]*ExportJob, erro
 }
 
 // UpdateProgress updates export progress
-func (m *InMemoryExportManager) UpdateProgress(id string, progress int, status string) error {
+func (m *InMemoryExportManager) UpdateProgress(id string, progress float64, status ExportStatus) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	export, exists := m.exports[id]
 	if !exists {
-		return fmt.Errorf("export not found")
+		return fmt.Errorf(errExportNotFound)
 	}
 
 	export.Progress = progress
 	export.Status = status
-	export.UpdatedAt = time.Now()
 
 	return nil
 }
@@ -94,25 +95,24 @@ func (m *InMemoryExportManager) CancelExport(id string) error {
 
 	export, exists := m.exports[id]
 	if !exists {
-		return fmt.Errorf("export not found")
+		return fmt.Errorf(errExportNotFound)
 	}
 
-	export.Status = "cancelled"
-	export.UpdatedAt = time.Now()
+	export.Status = ExportCancelled
 
 	return nil
 }
 
-// GetResults retrieves export results
-func (m *InMemoryExportManager) GetResults(exportID string) ([]*ExportResult, error) {
+// GetHistory retrieves export history
+func (m *InMemoryExportManager) GetHistory(exportID string) ([]*ExportHistory, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	results, exists := m.results[exportID]
+	hist, exists := m.history[exportID]
 	if !exists {
-		return nil, fmt.Errorf("results not found")
+		return nil, fmt.Errorf("history not found")
 	}
-	return results, nil
+	return hist, nil
 }
 
 // GetDownloadURL gets download URL
@@ -122,10 +122,10 @@ func (m *InMemoryExportManager) GetDownloadURL(id string) (string, error) {
 
 	export, exists := m.exports[id]
 	if !exists {
-		return "", fmt.Errorf("export not found")
+		return "", fmt.Errorf(errExportNotFound)
 	}
 
-	if export.Status != "completed" {
+	if export.Status != ExportCompleted {
 		return "", fmt.Errorf("export not ready")
 	}
 

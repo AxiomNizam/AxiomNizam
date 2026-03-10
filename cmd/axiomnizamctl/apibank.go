@@ -109,7 +109,8 @@ func handleCreateAPIBank(name, owner, description string) error {
 func handleListAPIBanks() error {
 	banks := apibanks.ListBanks()
 
-	fmt.Println("📦 API Banks\n")
+	fmt.Println("📦 API Banks")
+	fmt.Println()
 	fmt.Printf("%-30s %-20s %-10s %s\n", "NAME", "OWNER", "APIS", "DESCRIPTION")
 	fmt.Println(strings.Repeat("─", 85))
 
@@ -183,7 +184,8 @@ func handleAddAPIToBank(bankName, apiName, endpoint, kind string) error {
 func handleSearchAPIBanks(tag, owner, dataClass string) error {
 	catalog := apibanks.NewAPIBankCatalog(apibanks.GlobalAPIBankManager)
 
-	fmt.Println("🔍 API Bank Search Results\n")
+	fmt.Println("🔍 API Bank Search Results")
+	fmt.Println()
 
 	if owner != "" {
 		banks := catalog.SearchByOwner(owner)

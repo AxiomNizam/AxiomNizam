@@ -11,6 +11,8 @@ import (
 	"example.com/axiomnizam/internal/mesh"
 )
 
+const resFinanceTransaction = "Finance/TransactionData"
+
 // SystemDemo provides demonstration of integrated system capabilities
 type SystemDemo struct {
 	ctx       context.Context
@@ -44,7 +46,8 @@ type DemoStep struct {
 
 // RunFullIntegrationDemo demonstrates complete system integration
 func (sd *SystemDemo) RunFullIntegrationDemo() error {
-	fmt.Println("=== AxiomNizam Full Integration Demo ===\n")
+	fmt.Println("=== AxiomNizam Full Integration Demo ===")
+	fmt.Println()
 
 	scenarios := []DemoScenario{
 		sd.scenarioDataMeshSetup(),
@@ -127,7 +130,7 @@ func (sd *SystemDemo) scenarioDataMeshSetup() DemoScenario {
 					return GlobalComplianceAuditor.RecordOperation(ctx, Operation{
 						Operation:    "ProductCreation",
 						User:         "admin",
-						Resource:     "Finance/TransactionData",
+						Resource:     resFinanceTransaction,
 						ResourceType: "DataProduct",
 						Action:       "create",
 						Status:       "success",
@@ -243,7 +246,7 @@ func (sd *SystemDemo) scenarioCompliance() DemoScenario {
 						{
 							Operation:    "DataAccess",
 							User:         "user1",
-							Resource:     "Finance/TransactionData",
+							Resource:     resFinanceTransaction,
 							ResourceType: "DataProduct",
 							Action:       "read",
 							Status:       "success",
@@ -251,7 +254,7 @@ func (sd *SystemDemo) scenarioCompliance() DemoScenario {
 						{
 							Operation:    "DataAccess",
 							User:         "user2",
-							Resource:     "Finance/TransactionData",
+							Resource:     resFinanceTransaction,
 							ResourceType: "DataProduct",
 							Action:       "read",
 							Status:       "denied",
@@ -259,7 +262,7 @@ func (sd *SystemDemo) scenarioCompliance() DemoScenario {
 						{
 							Operation:    "DataModification",
 							User:         "user1",
-							Resource:     "Finance/TransactionData",
+							Resource:     resFinanceTransaction,
 							ResourceType: "DataProduct",
 							Action:       "modify",
 							Status:       "success",
@@ -374,7 +377,7 @@ func (sd *SystemDemo) scenarioDataLineage() DemoScenario {
 
 // printSummary prints demo summary
 func (sd *SystemDemo) printSummary() {
-	fmt.Println("\n\n=== Demo Summary ===\n")
+	fmt.Println("\n\n=== Demo Summary ===")
 
 	// Collect metrics
 	metrics := GlobalPlatformMetricsCollector.CollectMetrics(sd.ctx)
@@ -396,36 +399,43 @@ func (sd *SystemDemo) printSummary() {
 
 // Example shows practical usage examples
 func (sd *SystemDemo) Example() error {
-	fmt.Println("=== Practical Usage Examples ===\n")
+	fmt.Println("=== Practical Usage Examples ===")
+	fmt.Println()
 
 	// Example 1: Create and subscribe
 	fmt.Println("1️⃣ Create data product and subscribe:")
 	fmt.Println("   $ axiomnizamctl mesh domain create --name Finance --owner finance-team")
 	fmt.Println("   $ axiomnizamctl mesh product create --domain Finance --name TransactionData --owner finance-team")
-	fmt.Println("   $ axiomnizamctl mesh subscribe --domain Finance --product TransactionData --subscriber analytics-team\n")
+	fmt.Println("   $ axiomnizamctl mesh subscribe --domain Finance --product TransactionData --subscriber analytics-team")
+	fmt.Println()
 
 	// Example 2: Create API bank
 	fmt.Println("2️⃣ Create API bank and add APIs:")
 	fmt.Println("   $ axiomnizamctl apibank create --name CorporateAPIs --owner api-team")
-	fmt.Println("   $ axiomnizamctl apibank add-api --bank CorporateAPIs --name TransactionAPI --endpoint https://api.example.com/v1/transactions\n")
+	fmt.Println("   $ axiomnizamctl apibank add-api --bank CorporateAPIs --name TransactionAPI --endpoint https://api.example.com/v1/transactions")
+	fmt.Println()
 
 	// Example 3: Monitor health
 	fmt.Println("3️⃣ Monitor system health and alerts:")
 	fmt.Println("   $ axiomnizamctl health check")
-	fmt.Println("   $ axiomnizamctl alerts list\n")
+	fmt.Println("   $ axiomnizamctl alerts list")
+	fmt.Println()
 
 	// Example 4: Compliance
 	fmt.Println("4️⃣ Generate compliance reports:")
 	fmt.Println("   $ axiomnizamctl compliance report")
-	fmt.Println("   $ axiomnizamctl compliance audit --user user1\n")
+	fmt.Println("   $ axiomnizamctl compliance audit --user user1")
+	fmt.Println()
 
 	// Example 5: Quality
 	fmt.Println("5️⃣ Check data quality:")
-	fmt.Println("   $ axiomnizamctl quality check --domain Finance\n")
+	fmt.Println("   $ axiomnizamctl quality check --domain Finance")
+	fmt.Println()
 
 	// Example 6: Lineage
 	fmt.Println("6️⃣ Analyze data lineage:")
-	fmt.Println("   $ axiomnizamctl lineage trace --domain Finance --product TransactionData\n")
+	fmt.Println("   $ axiomnizamctl lineage trace --domain Finance --product TransactionData")
+	fmt.Println()
 
 	return nil
 }

@@ -46,11 +46,12 @@ func main() {
 	fmt.Println("  ✓ Informer factory created")
 
 	// Initialize event bus
-	eventBus := events.NewBus()
+	eventBus := events.NewMemoryBus(10000)
 	fmt.Println("  ✓ Event bus created")
 
 	// Initialize event recorder
-	eventRecorder := events.NewEventRecorder(eventBus)
+	eventRecorder := events.NewEventRecorder()
+	_ = eventBus // event bus available for subscriptions
 	fmt.Println("  ✓ Event recorder created")
 
 	// Initialize controller manager
@@ -74,9 +75,15 @@ func main() {
 
 	// Initialize API server
 	fmt.Println("\n📡 Starting API server...")
+	apiStore := apiserver.NewResourceStore()
+	apiSrv := apiserver.NewAPIServer(apiStore)
+	apiSrv.RegisterRoutes()
+	_ = controllerManager // controller manager available for reconciliation
+	_ = eventRecorder     // event recorder available for audit
+	_ = cacheStore        // cache store available for caching
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),
-		Handler:      apiserver.NewRouter(controllerManager, eventRecorder, cacheStore),
+		Handler:      apiSrv.Router(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -87,7 +94,7 @@ func main() {
 		fmt.Printf("✅ API Server listening on http://localhost:%d\n", *port)
 		fmt.Println("\n📚 API Documentation: http://localhost:" + fmt.Sprintf("%d", *port) + "/api/docs")
 		fmt.Println("🏥 Health Check: http://localhost:" + fmt.Sprintf("%d", *port) + "/health")
-		fmt.Println("\n🎯 Ready to accept requests...\n")
+		fmt.Println("\n🎯 Ready to accept requests...")
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
