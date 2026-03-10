@@ -476,6 +476,18 @@ func main() {
 		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
 	}
 
+	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
+	analyticsHandler := handlers.NewAnalyticsHandler()
+	analyticsAPI := router.Group("/api/v1/analytics")
+	{
+		analyticsAPI.GET("/dashboards", analyticsHandler.ListDashboards)
+		analyticsAPI.GET("/dashboards/:id", analyticsHandler.GetDashboard)
+		analyticsAPI.PUT("/dashboards/:id/widgets/:widgetId", analyticsHandler.UpdateWidget)
+		analyticsAPI.PUT("/dashboards/:id/layout", analyticsHandler.ReorderWidgets)
+		analyticsAPI.GET("/dashboards/:id/widgets/:widgetId/export", analyticsHandler.ExportCSV)
+		analyticsAPI.GET("/widget-types", analyticsHandler.GetWidgetTypes)
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 

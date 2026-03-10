@@ -1,0 +1,104 @@
+{{ define "analytics-dashboard" }}
+<link rel="stylesheet" href="/static/analytics-dashboard.css">
+
+<div class="analytics-container">
+  <!-- Header Bar -->
+  <div class="analytics-header">
+    <div class="analytics-header-left">
+      <h1 class="analytics-title">📈 Analytics Dashboard</h1>
+      <select id="dashboardSelector" class="analytics-select" onchange="loadDashboard(this.value)">
+        <option value="">Select Dashboard...</option>
+      </select>
+      <span id="dashboardDesc" class="analytics-desc"></span>
+    </div>
+    <div class="analytics-header-right">
+      <button class="analytics-btn analytics-btn-icon" id="editModeToggle" onclick="toggleEditMode()" title="Toggle Edit Mode">
+        <span id="editModeIcon">✏️</span>
+        <span id="editModeLabel">Edit</span>
+      </button>
+      <button class="analytics-btn analytics-btn-icon" onclick="refreshDashboard()" title="Refresh">🔄</button>
+      <div class="analytics-dropdown" id="exportDropdown">
+        <button class="analytics-btn analytics-btn-primary" onclick="toggleExportMenu()">📥 Export</button>
+        <div class="analytics-dropdown-menu" id="exportMenu">
+          <div class="analytics-dropdown-item" onclick="exportAllCSV()">📄 Export All as CSV</div>
+          <div class="analytics-dropdown-item" onclick="exportAllXLSX()">📊 Export All as XLSX</div>
+          <div class="analytics-dropdown-divider"></div>
+          <div id="exportWidgetList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="analytics-filter-bar" id="filterBar" style="display:none;">
+    <div class="analytics-filters" id="filterContainer"></div>
+    <button class="analytics-btn analytics-btn-sm" onclick="applyDashFilters()">Apply</button>
+    <button class="analytics-btn analytics-btn-sm analytics-btn-ghost" onclick="resetDashFilters()">Reset</button>
+  </div>
+
+  <!-- Widget Grid -->
+  <div class="analytics-grid" id="widgetGrid">
+    <div class="analytics-empty" id="emptyState">
+      <div class="analytics-empty-icon">📊</div>
+      <h3>Select a Dashboard</h3>
+      <p>Choose a dashboard from the dropdown above to view analytics</p>
+    </div>
+  </div>
+
+  <!-- Widget Editor Modal -->
+  <div class="analytics-modal-overlay" id="widgetEditorOverlay" style="display:none;" onclick="closeWidgetEditor(event)">
+    <div class="analytics-modal" onclick="event.stopPropagation()">
+      <div class="analytics-modal-header">
+        <h3>⚙️ Edit Widget</h3>
+        <button class="analytics-modal-close" onclick="closeWidgetEditor()">&times;</button>
+      </div>
+      <div class="analytics-modal-body">
+        <div class="analytics-form-group">
+          <label>Title</label>
+          <input type="text" id="editorTitle" class="analytics-input" />
+        </div>
+        <div class="analytics-form-group">
+          <label>Chart Type</label>
+          <div class="analytics-type-grid" id="editorTypeGrid"></div>
+        </div>
+        <div class="analytics-form-row">
+          <div class="analytics-form-group">
+            <label>Width (1-12 columns)</label>
+            <input type="range" id="editorWidth" min="2" max="12" value="6" class="analytics-range" oninput="document.getElementById('editorWidthVal').textContent=this.value" />
+            <span id="editorWidthVal" class="analytics-range-val">6</span>
+          </div>
+          <div class="analytics-form-group">
+            <label>Height (1-4 rows)</label>
+            <input type="range" id="editorHeight" min="1" max="4" value="2" class="analytics-range" oninput="document.getElementById('editorHeightVal').textContent=this.value" />
+            <span id="editorHeightVal" class="analytics-range-val">2</span>
+          </div>
+        </div>
+        <div class="analytics-form-group">
+          <label>Show Legend</label>
+          <label class="analytics-toggle">
+            <input type="checkbox" id="editorShowLegend" />
+            <span class="analytics-toggle-slider"></span>
+          </label>
+        </div>
+        <div class="analytics-form-group">
+          <label>Show Grid</label>
+          <label class="analytics-toggle">
+            <input type="checkbox" id="editorShowGrid" />
+            <span class="analytics-toggle-slider"></span>
+          </label>
+        </div>
+        <div class="analytics-form-group">
+          <label>Colors (comma-separated hex)</label>
+          <input type="text" id="editorColors" class="analytics-input" placeholder="#3b82f6, #10b981, #f59e0b" />
+        </div>
+      </div>
+      <div class="analytics-modal-footer">
+        <button class="analytics-btn analytics-btn-ghost" onclick="closeWidgetEditor()">Cancel</button>
+        <button class="analytics-btn analytics-btn-primary" onclick="saveWidgetEdits()">💾 Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/analytics-dashboard.js"></script>
+{{ end }}

@@ -8,9 +8,12 @@
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="/static/responsive.css">
     <link rel="stylesheet" href="/static/gis-dashboard.css">
+    <link rel="stylesheet" href="/static/analytics-dashboard.css">
     <!-- Leaflet.js for GIS maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Chart.js for Analytics dashboard -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -30,6 +33,10 @@
                     <a href="/gis" class="nav-link {{ if eq .page "gis-dashboard" }}active{{ end }}">
                         <span class="nav-icon">🌍</span>
                         <span>GIS</span>
+                    </a>
+                    <a href="/analytics" class="nav-link {{ if eq .page "analytics-dashboard" }}active{{ end }}">
+                        <span class="nav-icon">📈</span>
+                        <span>Analytics</span>
                     </a>
                     {{ if .isAuth }}
                     <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}">
@@ -70,6 +77,8 @@
                 {{ template "system-manager" . }}
             {{ else if eq .pageName "gis-dashboard" }}
                 {{ template "gis-dashboard" . }}
+            {{ else if eq .pageName "analytics-dashboard" }}
+                {{ template "analytics-dashboard" . }}
             {{ end }}
         </main>
 
