@@ -20,11 +20,11 @@ func NewTenantHandler(manager TenantManager) *TenantHandler {
 // CreateTenant handles POST /api/v1/tenants
 func (h *TenantHandler) CreateTenant(c *gin.Context) {
 	var req struct {
-		Name      string `json:"name" binding:"required"`
-		Email     string `json:"email" binding:"required"`
-		Owner     string `json:"owner" binding:"required"`
-		Tier      TenantTier `json:"tier"`
-		Isolation TenantIsolation `json:"isolation"`
+		Name           string          `json:"name" binding:"required"`
+		DisplayName    string          `json:"displayName"`
+		Owner          string          `json:"owner" binding:"required"`
+		Tier           TenantTier      `json:"tier"`
+		IsolationLevel TenantIsolation `json:"isolationLevel"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -33,15 +33,14 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 	}
 
 	tenant := &Tenant{
-		Name:       req.Name,
-		Email:      req.Email,
-		Status:     "Active",
-		Tier:       req.Tier,
-		Isolation:  req.Isolation,
-		CreatedAt:  time.Now(),
+		Name:           req.Name,
+		DisplayName:    req.DisplayName,
+		Tier:           req.Tier,
+		IsolationLevel: req.IsolationLevel,
+		CreatedAt:      time.Now(),
 	}
 
-	created, err := h.manager.CreateTenant(tenant, req.Owner)
+	created, err := h.manager.CreateTenant(c.Request.Context(), tenant, req.Owner)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -53,7 +52,7 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 // GetTenant handles GET /api/v1/tenants/:id
 func (h *TenantHandler) GetTenant(c *gin.Context) {
 	id := c.Param("id")
-	tenant, err := h.manager.GetTenant(id)
+	tenant, err := h.manager.GetTenant(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
 		return
@@ -72,25 +71,25 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 		return
 	}
 
-	tenant, err := h.manager.GetTenant(id)
+	tenant, err := h.manager.GetTenant(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
 		return
 	}
 
 	tenant.UpdatedAt = time.Now()
-	updated, err := h.manager.UpdateTenant(tenant)
-	if err != nil {
+	if err := h.manager.UpdateTenant(c.Request.Context(), tenant); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, updated)
+	c.JSON(http.StatusOK, tenant)
 }
 
 // ListTenants handles GET /api/v1/tenants
 func (h *TenantHandler) ListTenants(c *gin.Context) {
-	tenants, err := h.manager.ListTenants()
+	ownerID := c.Query("owner")
+	tenants, err := h.manager.ListTenants(c.Request.Context(), ownerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -102,7 +101,7 @@ func (h *TenantHandler) ListTenants(c *gin.Context) {
 // DeleteTenant handles DELETE /api/v1/tenants/:id
 func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.manager.DeleteTenant(id); err != nil {
+	if err := h.manager.DeleteTenant(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -114,8 +113,8 @@ func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 func (h *TenantHandler) AddMember(c *gin.Context) {
 	tenantID := c.Param("id")
 	var req struct {
-		UserID string      `json:"userId" binding:"required"`
-		Role   MemberRole  `json:"role" binding:"required"`
+		UserID string     `json:"userId" binding:"required"`
+		Role   MemberRole `json:"role" binding:"required"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -123,15 +122,8 @@ func (h *TenantHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	member := &TenantMember{
-		TenantID: tenantID,
-		UserID:   req.UserID,
-		Role:     req.Role,
-		Status:   "Active",
-		JoinedAt: time.Now(),
-	}
-
-	if err := h.manager.AddMember(member); err != nil {
+	member, err := h.manager.AddMember(c.Request.Context(), tenantID, req.UserID, req.Role)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -144,7 +136,7 @@ func (h *TenantHandler) RemoveMember(c *gin.Context) {
 	tenantID := c.Param("id")
 	userID := c.Param("userId")
 
-	if err := h.manager.RemoveMember(tenantID, userID); err != nil {
+	if err := h.manager.RemoveMember(c.Request.Context(), tenantID, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -155,7 +147,7 @@ func (h *TenantHandler) RemoveMember(c *gin.Context) {
 // GetQuota handles GET /api/v1/tenants/:id/quota
 func (h *TenantHandler) GetQuota(c *gin.Context) {
 	id := c.Param("id")
-	quota, err := h.manager.GetQuota(id)
+	quota, err := h.manager.GetQuota(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "quota not found"})
 		return
@@ -177,14 +169,8 @@ func (h *TenantHandler) CheckQuota(c *gin.Context) {
 		return
 	}
 
-	ok, err := h.manager.CheckQuota(id, req.Resource, req.Amount)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	if !ok {
-		c.JSON(http.StatusForbidden, gin.H{"error": "quota exceeded"})
+	if err := h.manager.CheckQuota(c.Request.Context(), id, req.Resource, req.Amount); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -194,7 +180,7 @@ func (h *TenantHandler) CheckQuota(c *gin.Context) {
 // RegisterTenantRoutes registers all tenant routes
 func RegisterTenantRoutes(router *gin.Engine, manager TenantManager) {
 	handler := NewTenantHandler(manager)
-	
+
 	group := router.Group("/api/v1/tenants")
 	{
 		group.POST("", handler.CreateTenant)

@@ -10,10 +10,33 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	flagDomainName  = "Domain name"
+	flagProductName = "Product name"
+)
+
 var MeshCmd = &cobra.Command{
 	Use:   "mesh",
 	Short: "Manage data mesh",
 	Long:  "Create, list, and manage data mesh domains and products",
+}
+
+var MeshListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List data mesh instances",
+	Long:  "List all data mesh domains and products",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleMeshList()
+	},
+}
+
+var MeshStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Check mesh status",
+	Long:  "Check status of the data mesh",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleMeshStatus()
+	},
 }
 
 var MeshDomainCmd = &cobra.Command{
@@ -150,6 +173,63 @@ var MeshLineageCmd = &cobra.Command{
 	},
 }
 
+// handleMeshList lists all data mesh domains and products
+func handleMeshList() error {
+	domains := mesh.ListDomains()
+
+	fmt.Println("🌐 Data Mesh Overview")
+	fmt.Println()
+	fmt.Printf("Total Domains: %d\n\n", len(domains))
+
+	fmt.Printf("%-25s %-20s %-10s %s\n", "DOMAIN", "OWNER", "PRODUCTS", "DESCRIPTION")
+	fmt.Println(strings.Repeat("─", 80))
+
+	totalProducts := 0
+	for _, domain := range domains {
+		totalProducts += len(domain.DataProducts)
+		fmt.Printf("%-25s %-20s %-10d %s\n",
+			domain.Name,
+			domain.Owner,
+			len(domain.DataProducts),
+			domain.Description,
+		)
+	}
+
+	fmt.Printf("\nTotal Products: %d\n", totalProducts)
+	return nil
+}
+
+// handleMeshStatus shows mesh status
+func handleMeshStatus() error {
+	domains := mesh.ListDomains()
+
+	fmt.Println("🌐 Data Mesh Status")
+	fmt.Println()
+
+	totalProducts := 0
+	totalSubscriptions := 0
+
+	for _, domain := range domains {
+		totalProducts += len(domain.DataProducts)
+		for _, product := range domain.DataProducts {
+			totalSubscriptions += len(product.Subscriptions)
+		}
+	}
+
+	fmt.Printf("Domains:       %d\n", len(domains))
+	fmt.Printf("Products:      %d\n", totalProducts)
+	fmt.Printf("Subscriptions: %d\n", totalSubscriptions)
+	fmt.Println()
+
+	if len(domains) == 0 {
+		fmt.Println("ℹ️  No domains configured. Use 'axiomnizamctl mesh domain create' to get started.")
+	} else {
+		fmt.Println("✅ Mesh is operational")
+	}
+
+	return nil
+}
+
 // handleCreateDomain creates a domain
 func handleCreateDomain(name, owner, description string) error {
 	domain := &mesh.DataDomain{
@@ -176,7 +256,8 @@ func handleCreateDomain(name, owner, description string) error {
 func handleListDomains() error {
 	domains := mesh.ListDomains()
 
-	fmt.Println("🌐 Data Mesh Domains\n")
+	fmt.Println("🌐 Data Mesh Domains")
+	fmt.Println()
 	fmt.Printf("%-25s %-20s %-10s %s\n", "NAME", "OWNER", "PRODUCTS", "DESCRIPTION")
 	fmt.Println(strings.Repeat("─", 80))
 
@@ -329,26 +410,26 @@ func handleLineageTrace(domainName, productName, direction string) error {
 }
 
 func init() {
-	MeshDomainCreateCmd.Flags().StringP("name", "n", "", "Domain name")
+	MeshDomainCreateCmd.Flags().StringP("name", "n", "", flagDomainName)
 	MeshDomainCreateCmd.Flags().StringP("owner", "o", "", "Domain owner")
 	MeshDomainCreateCmd.Flags().StringP("description", "d", "", "Domain description")
 
-	MeshProductCreateCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshProductCreateCmd.Flags().StringP("name", "n", "", "Product name")
+	MeshProductCreateCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshProductCreateCmd.Flags().StringP("name", "n", "", flagProductName)
 	MeshProductCreateCmd.Flags().StringP("owner", "o", "", "Product owner")
 	MeshProductCreateCmd.Flags().StringP("description", "d", "", "Product description")
 
-	MeshProductListCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshProductGetCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshProductGetCmd.Flags().StringP("name", "n", "", "Product name")
+	MeshProductListCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshProductGetCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshProductGetCmd.Flags().StringP("name", "n", "", flagProductName)
 
-	MeshSubscribeCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshSubscribeCmd.Flags().StringP("product", "p", "", "Product name")
+	MeshSubscribeCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshSubscribeCmd.Flags().StringP("product", "p", "", flagProductName)
 	MeshSubscribeCmd.Flags().StringP("subscriber", "s", "", "Subscriber ID")
 	MeshSubscribeCmd.Flags().StringP("port", "", "default", "Output port name")
 
-	MeshLineageCmd.Flags().StringP("domain", "", "", "Domain name")
-	MeshLineageCmd.Flags().StringP("product", "p", "", "Product name")
+	MeshLineageCmd.Flags().StringP("domain", "", "", flagDomainName)
+	MeshLineageCmd.Flags().StringP("product", "p", "", flagProductName)
 	MeshLineageCmd.Flags().StringP("direction", "d", "downstream", "Direction (downstream/upstream)")
 
 	MeshDomainCmd.AddCommand(MeshDomainCreateCmd)
@@ -359,6 +440,8 @@ func init() {
 	MeshProductCmd.AddCommand(MeshProductListCmd)
 	MeshProductCmd.AddCommand(MeshProductGetCmd)
 
+	MeshCmd.AddCommand(MeshListCmd)
+	MeshCmd.AddCommand(MeshStatusCmd)
 	MeshCmd.AddCommand(MeshDomainCmd)
 	MeshCmd.AddCommand(MeshProductCmd)
 	MeshCmd.AddCommand(MeshSubscribeCmd)

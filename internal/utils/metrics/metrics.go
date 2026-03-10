@@ -10,7 +10,7 @@ import (
 type Metric interface {
 	Name() string
 	Type() string
-	Value() interface{}
+	MetricValue() interface{}
 	Labels() map[string]string
 }
 
@@ -58,6 +58,16 @@ func (c *Counter) Name() string {
 // Type returns the metric type
 func (c *Counter) Type() string {
 	return "counter"
+}
+
+// Labels returns the counter labels
+func (c *Counter) Labels() map[string]string {
+	return c.labels
+}
+
+// MetricValue returns the counter value as interface
+func (c *Counter) MetricValue() interface{} {
+	return c.Value()
 }
 
 // Gauge represents a gauge metric
@@ -113,6 +123,16 @@ func (g *Gauge) Name() string {
 // Type returns the metric type
 func (g *Gauge) Type() string {
 	return "gauge"
+}
+
+// Labels returns the gauge labels
+func (g *Gauge) Labels() map[string]string {
+	return g.labels
+}
+
+// MetricValue returns the gauge value as interface
+func (g *Gauge) MetricValue() interface{} {
+	return g.Value()
 }
 
 // Histogram represents a histogram metric
@@ -178,6 +198,16 @@ func (h *Histogram) Name() string {
 // Type returns the metric type
 func (h *Histogram) Type() string {
 	return "histogram"
+}
+
+// Labels returns the histogram labels
+func (h *Histogram) Labels() map[string]string {
+	return h.labels
+}
+
+// MetricValue returns the histogram value as interface
+func (h *Histogram) MetricValue() interface{} {
+	return h.Mean()
 }
 
 // Timer measures duration
@@ -396,7 +426,7 @@ func (m *Meter) Snapshot() MetricSnapshot {
 	}
 
 	for _, metric := range m.registry.All() {
-		snapshot.Metrics[metric.Name()] = metric.Value()
+		snapshot.Metrics[metric.Name()] = metric.MetricValue()
 	}
 
 	return snapshot

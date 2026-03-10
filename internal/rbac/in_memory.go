@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const errRequestNotFound = "request not found"
+
 // InMemoryRBACManager in-memory RBAC implementation
 type InMemoryRBACManager struct {
 	mu             sync.RWMutex
@@ -129,7 +131,7 @@ func (m *InMemoryRBACManager) ListRoleBindings(roleID, subjectID string) ([]*Rol
 		if roleID != "" && b.RoleID != roleID {
 			continue
 		}
-		if subjectID != "" && b.SubjectID != subjectID {
+		if subjectID != "" && b.PrincipalID != subjectID {
 			continue
 		}
 		result = append(result, b)
@@ -166,7 +168,7 @@ func (m *InMemoryRBACManager) ListPermissions(roleID string) ([]*Permission, err
 
 	var result []*Permission
 	for _, p := range m.permissions {
-		if roleID != "" && p.RoleID != roleID {
+		if roleID != "" && p.TenantID != roleID {
 			continue
 		}
 		result = append(result, p)
@@ -181,7 +183,7 @@ func (m *InMemoryRBACManager) CheckPermission(subjectID, resource, action string
 
 	// Get role bindings for subject
 	for _, binding := range m.bindings {
-		if binding.SubjectID != subjectID {
+		if binding.PrincipalID != subjectID {
 			continue
 		}
 
@@ -191,9 +193,9 @@ func (m *InMemoryRBACManager) CheckPermission(subjectID, resource, action string
 			continue
 		}
 
-		// Check if role has permission
-		for _, perm := range m.permissions {
-			if perm.RoleID == role.ID && perm.Resource == resource && perm.Action == action {
+		// Check if role has permission for this resource/action
+		for _, perm := range role.Permissions {
+			if perm.Resource == resource && perm.Action == action {
 				return true, nil
 			}
 		}
@@ -210,11 +212,11 @@ func (m *InMemoryRBACManager) CreateAccessRequest(request *AccessRequest) (*Acce
 	if request.ID == "" {
 		request.ID = fmt.Sprintf("request-%d", time.Now().UnixNano())
 	}
-	if request.CreatedAt.IsZero() {
-		request.CreatedAt = time.Now()
+	if request.RequestedAt.IsZero() {
+		request.RequestedAt = time.Now()
 	}
 
-	request.Status = "pending"
+	request.Status = RequestStatusPending
 	m.accessRequests[request.ID] = request
 	return request, nil
 }
@@ -226,7 +228,7 @@ func (m *InMemoryRBACManager) GetAccessRequest(id string) (*AccessRequest, error
 
 	request, exists := m.accessRequests[id]
 	if !exists {
-		return nil, fmt.Errorf("request not found")
+		return nil, fmt.Errorf(errRequestNotFound)
 	}
 	return request, nil
 }
@@ -238,10 +240,10 @@ func (m *InMemoryRBACManager) ListAccessRequests(subjectID, status string) ([]*A
 
 	var result []*AccessRequest
 	for _, r := range m.accessRequests {
-		if subjectID != "" && r.SubjectID != subjectID {
+		if subjectID != "" && r.PrincipalID != subjectID {
 			continue
 		}
-		if status != "" && r.Status != status {
+		if status != "" && string(r.Status) != status {
 			continue
 		}
 		result = append(result, r)
@@ -256,19 +258,19 @@ func (m *InMemoryRBACManager) ApproveAccessRequest(requestID, approverID string)
 
 	request, exists := m.accessRequests[requestID]
 	if !exists {
-		return fmt.Errorf("request not found")
+		return fmt.Errorf(errRequestNotFound)
 	}
 
-	request.Status = "approved"
+	request.Status = RequestStatusApproved
 	request.ApprovedAt = time.Now()
 	request.ApprovedBy = approverID
 
 	// Create role binding
 	binding := &RoleBinding{
-		ID:        fmt.Sprintf("binding-%d", time.Now().UnixNano()),
-		RoleID:    request.RoleID,
-		SubjectID: request.SubjectID,
-		CreatedAt: time.Now(),
+		ID:          fmt.Sprintf("binding-%d", time.Now().UnixNano()),
+		RoleID:      request.ResourceID,
+		PrincipalID: request.PrincipalID,
+		CreatedAt:   time.Now(),
 	}
 	m.bindings[binding.ID] = binding
 
@@ -282,12 +284,12 @@ func (m *InMemoryRBACManager) RejectAccessRequest(requestID, approverID, reason 
 
 	request, exists := m.accessRequests[requestID]
 	if !exists {
-		return fmt.Errorf("request not found")
+		return fmt.Errorf(errRequestNotFound)
 	}
 
-	request.Status = "rejected"
+	request.Status = RequestStatusRejected
 	request.RejectionReason = reason
-	request.RejectedBy = approverID
+	request.RejectedAt = time.Now()
 
 	return nil
 }

@@ -1,0 +1,260 @@
+{{ define "gis-dashboard" }}
+<div class="gis-hub-container">
+    <!-- Dashboard Type Selector Bar -->
+    <div class="gis-type-bar" id="gisTypeBar">
+        <div class="gis-type-group">
+            <span class="gis-type-group-label">🇧🇩 Domestic</span>
+            <button class="gis-type-btn active" data-type="general" onclick="switchDashboardType('general')">
+                <span class="type-icon">🌍</span><span class="type-label">General</span>
+            </button>
+            <button class="gis-type-btn" data-type="agriculture" onclick="switchDashboardType('agriculture')">
+                <span class="type-icon">🌾</span><span class="type-label">Agriculture</span>
+            </button>
+            <button class="gis-type-btn" data-type="industries" onclick="switchDashboardType('industries')">
+                <span class="type-icon">🏭</span><span class="type-label">Industries</span>
+            </button>
+            <button class="gis-type-btn" data-type="medical" onclick="switchDashboardType('medical')">
+                <span class="type-icon">🏥</span><span class="type-label">Medical</span>
+            </button>
+        </div>
+        <div class="gis-type-group">
+            <span class="gis-type-group-label">🌐 International</span>
+            <button class="gis-type-btn" data-type="satellite" onclick="switchDashboardType('satellite')">
+                <span class="type-icon">🛰️</span><span class="type-label">Satellite</span>
+            </button>
+            <button class="gis-type-btn" data-type="airplane" onclick="switchDashboardType('airplane')">
+                <span class="type-icon">✈️</span><span class="type-label">Airplane</span>
+            </button>
+            <button class="gis-type-btn" data-type="ship" onclick="switchDashboardType('ship')">
+                <span class="type-icon">🚢</span><span class="type-label">Ship</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main GIS Dashboard Area -->
+    <div class="gis-container">
+        <!-- Left Sidebar: Filters & Layers -->
+        <aside class="gis-sidebar" id="gisSidebar">
+            <div class="gis-sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+                <span class="toggle-icon">◀</span>
+            </div>
+
+            <!-- Dashboard Info -->
+            <div class="gis-panel gis-dashboard-info" id="dashboardInfoPanel">
+                <div class="gis-panel-header">
+                    <span class="panel-icon" id="dashInfoIcon">🌍</span>
+                    <h3 id="dashInfoTitle">GENERAL</h3>
+                </div>
+                <div class="gis-panel-body">
+                    <p class="gis-dash-desc" id="dashInfoDesc">Population, divisions, districts and points of interest across Bangladesh</p>
+                </div>
+            </div>
+
+            <!-- Data Filters -->
+            <div class="gis-panel">
+                <div class="gis-panel-header">
+                    <span class="panel-icon">▼</span>
+                    <h3>DATA FILTERS</h3>
+                </div>
+            <div class="gis-panel-body">
+                <div class="gis-filter-group">
+                    <label><span class="filter-icon">📍</span> Division</label>
+                    <select id="filterDivision" onchange="applyFilters()">
+                        <option value="">All Divisions</option>
+                    </select>
+                </div>
+                <div class="gis-filter-group">
+                    <label><span class="filter-icon">🏢</span> Region Type</label>
+                    <select id="filterRegionType" onchange="applyFilters()">
+                        <option value="">All Types</option>
+                        <option value="division">Division</option>
+                        <option value="district">District</option>
+                        <option value="upazila">Upazila</option>
+                    </select>
+                </div>
+                <div class="gis-filter-group">
+                    <label><span class="filter-icon">📊</span> Dataset</label>
+                    <select id="filterDataset" onchange="switchDataset()">
+                    </select>
+                </div>
+                <div class="gis-filter-actions">
+                    <button class="gis-btn gis-btn-primary" onclick="applyFilters()">
+                        <span>✔</span> Apply
+                    </button>
+                    <button class="gis-btn gis-btn-secondary" onclick="clearFilters()">
+                        <span>✕</span> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layers Control -->
+        <div class="gis-panel">
+            <div class="gis-panel-header">
+                <span class="panel-icon">◎</span>
+                <h3>LAYERS</h3>
+            </div>
+            <div class="gis-panel-body" id="layersList">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Quick Navigation -->
+        <div class="gis-panel">
+            <div class="gis-panel-header">
+                <span class="panel-icon">⊞</span>
+                <h3>DIVISIONS</h3>
+            </div>
+            <div class="gis-panel-body">
+                <div class="gis-division-grid" id="divisionGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Center: Map + Summary -->
+    <div class="gis-main">
+        <!-- Summary Cards -->
+        <div class="gis-summary-bar" id="gisSummaryBar">
+            <div class="gis-summary-card">
+                <div class="summary-icon" style="background: #3b82f6;">🏠</div>
+                <div class="summary-info">
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Divisions</span>
+                </div>
+            </div>
+            <div class="gis-summary-card">
+                <div class="summary-icon" style="background: #10b981;">🏢</div>
+                <div class="summary-info">
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Districts</span>
+                </div>
+            </div>
+            <div class="gis-summary-card">
+                <div class="summary-icon" style="background: #8b5cf6;">👥</div>
+                <div class="summary-info">
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Population</span>
+                </div>
+            </div>
+            <div class="gis-summary-card">
+                <div class="summary-icon" style="background: #f59e0b;">📌</div>
+                <div class="summary-info">
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Markers</span>
+                </div>
+            </div>
+            <div class="gis-summary-card">
+                <div class="summary-icon" style="background: #ef4444;">🗺️</div>
+                <div class="summary-info">
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Layers</span>
+                </div>
+            </div>
+            <div class="gis-summary-card">
+                <div class="summary-icon" style="background: #06b6d4;">📁</div>
+                <div class="summary-info">
+                    <span class="summary-value">-</span>
+                    <span class="summary-label">Datasets</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="gis-map-wrapper">
+            <div id="gisMap" class="gis-map"></div>
+
+            <!-- Map Controls Overlay -->
+            <div class="gis-map-tools">
+                <button class="gis-tool-btn" onclick="gisMap.zoomIn()" title="Zoom In">+</button>
+                <button class="gis-tool-btn" onclick="gisMap.zoomOut()" title="Zoom Out">−</button>
+                <div class="gis-tool-divider"></div>
+                <button class="gis-tool-btn" onclick="resetMapView()" title="Reset View">⌂</button>
+                <button class="gis-tool-btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+                <button class="gis-tool-btn" id="measureBtn" onclick="toggleMeasure()" title="Measure Distance">📏</button>
+                <button class="gis-tool-btn" onclick="locateUser()" title="My Location">◎</button>
+            </div>
+
+            <!-- Legend -->
+            <div class="gis-legend" id="gisLegend">
+                <div class="gis-legend-header" onclick="toggleLegend()">
+                    <span id="legendTitle">Population</span>
+                    <span class="legend-toggle" id="legendToggle">▾</span>
+                </div>
+                <div class="gis-legend-body" id="legendBody">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Coordinates & Zoom -->
+            <div class="gis-map-info">
+                <span id="mapCoords">0.0000, 0.0000</span>
+                <span id="mapZoom">Zoom 7</span>
+            </div>
+
+            <!-- Scale bar -->
+            <div class="gis-scale" id="gisScale"></div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Properties & Data Table -->
+    <aside class="gis-data-panel" id="gisDataPanel">
+        <div class="gis-data-panel-toggle" onclick="toggleDataPanel()">
+            <span class="toggle-icon" id="dataPanelToggleIcon">▶</span>
+        </div>
+
+        <!-- Tab buttons -->
+        <div class="gis-data-tabs">
+            <button class="gis-data-tab active" onclick="switchDataTab('properties')" id="tabProperties">Properties</button>
+            <button class="gis-data-tab" onclick="switchDataTab('data')" id="tabData">Data Table</button>
+            <button class="gis-data-tab" onclick="switchDataTab('stats')" id="tabStats">Statistics</button>
+        </div>
+
+        <!-- Properties Panel -->
+        <div class="gis-data-content active" id="panelProperties">
+            <div class="gis-properties-empty" id="propertiesEmpty">
+                <span class="empty-icon">🗺️</span>
+                <p>Click on a region or marker to view properties</p>
+            </div>
+            <div class="gis-properties-content" id="propertiesContent" style="display:none;">
+                <h3 id="propTitle"></h3>
+                <div class="gis-prop-grid" id="propGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table Panel -->
+        <div class="gis-data-content" id="panelData">
+            <div class="gis-table-header">
+                <h3 id="tableTitle">Dataset</h3>
+                <div class="gis-table-controls">
+                    <input type="text" class="gis-search-input" id="tableSearch" placeholder="Search across all columns..." oninput="filterTable()">
+                    <button class="gis-btn gis-btn-sm" onclick="exportTableCSV()" title="Download CSV">⬇</button>
+                </div>
+            </div>
+            <div class="gis-table-wrapper" id="tableWrapper">
+                <table class="gis-table" id="dataTable">
+                    <thead id="dataTableHead"></thead>
+                    <tbody id="dataTableBody"></tbody>
+                </table>
+            </div>
+            <div class="gis-table-footer" id="tableFooter">
+                <span id="tableInfo">0 rows</span>
+                <div class="gis-pagination" id="tablePagination"></div>
+            </div>
+        </div>
+
+        <!-- Statistics Panel -->
+        <div class="gis-data-content" id="panelStats">
+            <div class="gis-stats-grid" id="statsGrid">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </aside>
+</div>
+</div>
+
+<script src="/static/gis-dashboard.js"></script>
+{{ end }}

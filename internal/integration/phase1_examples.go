@@ -6,7 +6,7 @@ import (
 
 // GraphQLExample shows how to use GraphQL
 func GraphQLExample() {
-	fmt.Println(`
+	fmt.Print(`
 === GraphQL EXAMPLES ===
 
 1. Query Users:
@@ -46,7 +46,7 @@ API Endpoints:
 
 // RateLimitExample shows how to use rate limiting
 func RateLimitExample() {
-	fmt.Println(`
+	fmt.Print(`
 === RATE LIMITING & QUOTAS EXAMPLES ===
 
 1. Check User Quota:
@@ -97,7 +97,7 @@ Rate Limit Response Headers:
 
 // APIDocumentationExample shows how to use API docs
 func APIDocumentationExample() {
-	fmt.Println(`
+	fmt.Print(`
 === API DOCUMENTATION EXAMPLES ===
 
 1. Get OpenAPI Spec (JSON):
@@ -143,7 +143,7 @@ Integration:
 
 // PerformanceExample shows how to use performance monitoring
 func PerformanceExample() {
-	fmt.Println(`
+	fmt.Print(`
 === QUERY PERFORMANCE MONITORING EXAMPLES ===
 
 1. Get Overall Query Stats:
@@ -259,7 +259,7 @@ GET /api/v1/performance/dashboard
 
 // ConfigurationExample shows configuration
 func ConfigurationExample() {
-	fmt.Println(`
+	fmt.Print(`
 === CONFIGURATION EXAMPLES ===
 
 1. QuotaManager Setup:
@@ -302,12 +302,12 @@ features.ApplyRateLimitMiddleware(router)
 // RunAllExamples runs all examples
 func RunAllExamples() {
 	GraphQLExample()
-	fmt.Println("\n")
+	fmt.Println()
 	RateLimitExample()
-	fmt.Println("\n")
+	fmt.Println()
 	APIDocumentationExample()
-	fmt.Println("\n")
+	fmt.Println()
 	PerformanceExample()
-	fmt.Println("\n")
+	fmt.Println()
 	ConfigurationExample()
 }

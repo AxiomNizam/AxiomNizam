@@ -11,7 +11,7 @@ import (
 
 // StreamHandler handles streaming endpoints
 type StreamHandler struct {
-	manager StreamManager
+	manager  StreamManager
 	upgrader websocket.Upgrader
 }
 
@@ -38,8 +38,8 @@ func (h *StreamHandler) HandleStream(c *gin.Context) {
 
 	session := &StreamSession{
 		ID:        fmt.Sprintf("session-%d", time.Now().UnixNano()),
-		StartTime: time.Now(),
-		IsActive:  true,
+		CreatedAt: time.Now(),
+		Active:    true,
 	}
 
 	for {
@@ -60,16 +60,15 @@ func (h *StreamHandler) HandleStream(c *gin.Context) {
 			continue
 		}
 
-		// Send stream messages
-		for msg := range stream.Messages {
-			if err := conn.WriteJSON(msg); err != nil {
-				break
-			}
-		}
+		// Acknowledge stream creation
+		conn.WriteJSON(StreamMessage{
+			Type: "query_result",
+			Data: map[string]interface{}{"streamId": stream.ID},
+		})
 	}
 
-	session.IsActive = false
-	session.EndTime = time.Now()
+	session.Active = false
+	session.LastActivity = time.Now()
 }
 
 // CreateStreamRequest handles POST /api/v1/streams
@@ -129,10 +128,10 @@ func (h *StreamHandler) CancelStream(c *gin.Context) {
 // Subscribe handles POST /api/v1/subscriptions
 func (h *StreamHandler) Subscribe(c *gin.Context) {
 	var req struct {
-		TenantID  string   `json:"tenantId" binding:"required"`
-		Topic     string   `json:"topic" binding:"required"`
-		EventTypes []string `json:"eventTypes"`
-		Filters   map[string]interface{} `json:"filters"`
+		TenantID   string                 `json:"tenantId" binding:"required"`
+		Topic      string                 `json:"topic" binding:"required"`
+		EventTypes []string               `json:"eventTypes"`
+		Filters    map[string]interface{} `json:"filters"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -144,7 +143,7 @@ func (h *StreamHandler) Subscribe(c *gin.Context) {
 		TenantID:   req.TenantID,
 		Topic:      req.Topic,
 		EventTypes: req.EventTypes,
-		Filters:    req.Filters,
+		Filter:     req.Filters,
 		CreatedAt:  time.Now(),
 	}
 
@@ -171,10 +170,10 @@ func (h *StreamHandler) Unsubscribe(c *gin.Context) {
 // RegisterStreamRoutes registers all streaming routes
 func RegisterStreamRoutes(router *gin.Engine, manager StreamManager) {
 	handler := NewStreamHandler(manager)
-	
+
 	// WebSocket endpoint
 	router.GET("/ws/stream", handler.HandleStream)
-	
+
 	// REST endpoints
 	group := router.Group("/api/v1")
 	{

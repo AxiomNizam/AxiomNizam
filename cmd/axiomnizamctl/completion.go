@@ -38,7 +38,3 @@ Install powershell completion:
 		}
 	},
 }
-
-func init() {
-	RootCmd.AddCommand(completionCmd)
-}

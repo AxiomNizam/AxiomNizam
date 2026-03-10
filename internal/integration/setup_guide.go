@@ -6,7 +6,7 @@ import (
 
 // SetupGuide provides step-by-step setup instructions
 func PrintSetupGuide() {
-	fmt.Println(`
+	fmt.Print(`
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║                    PHASE 1 FEATURES SETUP GUIDE                               ║
 ║           GraphQL | Rate Limiting | API Docs | Performance Monitor            ║
@@ -229,7 +229,7 @@ Test Queries: See phase1_examples.go for complete examples
 
 // QuickStart provides quick start instructions
 func PrintQuickStart() {
-	fmt.Println(`
+	fmt.Print(`
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║                         QUICK START (2 MINUTES)                               ║
 ╚════════════════════════════════════════════════════════════════════════════════╝

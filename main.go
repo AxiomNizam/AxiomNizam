@@ -382,6 +382,112 @@ func main() {
 	router.POST("/api/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
 	router.GET("/api/notifications/status", notificationHandler.GetNotificationStatus)
 
+	// ====================================
+	// CLI AUTHENTICATION ENDPOINTS
+	// ====================================
+	cliAuth := handlers.NewCLIAuthHandler()
+	router.POST("/api/v1/auth/login", cliAuth.Login)
+	router.GET("/api/v1/auth/verify", cliAuth.Verify)
+	router.GET("/api/v1/auth/whoami", cliAuth.WhoAmI)
+
+	// ====================================
+	// KUBERNETES-STYLE RESOURCE ENDPOINTS
+	// ====================================
+	resourceHandler := handlers.NewResourceHandler()
+
+	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
+	nsAPI := router.Group("/api/v1/namespaces")
+	{
+		nsAPI.POST("/:namespace/:kind", resourceHandler.CreateOrUpdate)
+		nsAPI.GET("/:namespace/:kind", resourceHandler.List)
+		nsAPI.GET("/:namespace/:kind/:name", resourceHandler.Get)
+		nsAPI.PUT("/:namespace/:kind/:name", resourceHandler.Update)
+		nsAPI.DELETE("/:namespace/:kind/:name", resourceHandler.Delete)
+		nsAPI.GET("/:namespace/:kind/:name/status", resourceHandler.GetStatus)
+		nsAPI.GET("/:namespace/:kind/:name/events", resourceHandler.Events)
+	}
+
+	// Non-namespaced resource endpoints: /api/v1/{kind}
+	router.POST("/api/v1/apis", resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/apis", resourceHandler.ListAll)
+	router.POST("/api/v1/policies", resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/policies", resourceHandler.ListAll)
+	router.POST("/api/v1/workflows", resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/workflows", resourceHandler.ListAll)
+	router.POST("/api/v1/workflows/:name/run", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": fmt.Sprintf("Workflow '%s' started", c.Param("name")), "status": "Running"})
+	})
+
+	// DataSource endpoints
+	dsHandler := handlers.NewDataSourceHandler()
+	router.POST("/api/v1/datasources", dsHandler.Create)
+	router.GET("/api/v1/datasources", dsHandler.List)
+	router.GET("/api/v1/datasources/:name", dsHandler.Get)
+	router.PUT("/api/v1/datasources/:name", dsHandler.Update)
+	router.DELETE("/api/v1/datasources/:name", dsHandler.Delete)
+	router.POST("/api/v1/datasources/:name/test", dsHandler.Test)
+
+	// Job endpoints
+	jobHandler := handlers.NewJobHandler()
+	router.POST("/api/v1/jobs", jobHandler.Create)
+	router.GET("/api/v1/jobs", jobHandler.List)
+	router.GET("/api/v1/jobs/:id", jobHandler.Get)
+	router.POST("/api/v1/jobs/:id/run", jobHandler.Run)
+	router.GET("/api/v1/jobs/:id/logs", jobHandler.GetLogs)
+	router.POST("/api/v1/jobs/:id/cancel", jobHandler.Cancel)
+	router.DELETE("/api/v1/jobs/:id", jobHandler.Delete)
+
+	// ====================================
+	// GIS DASHBOARD ENDPOINTS
+	// ====================================
+	gisHandler := handlers.NewGISHandler()
+	gisAPI := router.Group("/api/v1/gis")
+	{
+		gisAPI.GET("/summary", gisHandler.GetSummary)
+
+		gisAPI.GET("/layers", gisHandler.ListLayers)
+		gisAPI.POST("/layers", gisHandler.CreateLayer)
+		gisAPI.PUT("/layers/:id", gisHandler.UpdateLayer)
+		gisAPI.DELETE("/layers/:id", gisHandler.DeleteLayer)
+
+		gisAPI.GET("/regions", gisHandler.ListRegions)
+		gisAPI.GET("/regions/:id", gisHandler.GetRegion)
+		gisAPI.POST("/regions", gisHandler.CreateRegion)
+		gisAPI.PUT("/regions/:id", gisHandler.UpdateRegion)
+		gisAPI.DELETE("/regions/:id", gisHandler.DeleteRegion)
+
+		gisAPI.GET("/markers", gisHandler.ListMarkers)
+		gisAPI.POST("/markers", gisHandler.CreateMarker)
+		gisAPI.DELETE("/markers/:id", gisHandler.DeleteMarker)
+
+		gisAPI.GET("/datasets", gisHandler.ListDatasets)
+		gisAPI.GET("/datasets/:id", gisHandler.GetDataset)
+		gisAPI.POST("/datasets", gisHandler.CreateDataset)
+		gisAPI.PUT("/datasets/:id", gisHandler.UpdateDataset)
+		gisAPI.DELETE("/datasets/:id", gisHandler.DeleteDataset)
+	}
+
+	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
+	gisSpecHandler := handlers.NewGISSpecializedHandler()
+	gisSpecAPI := router.Group("/api/v1/gis/dashboards")
+	{
+		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)
+		gisSpecAPI.GET("/:type", gisSpecHandler.GetDashboard)
+		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
+	}
+
+	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
+	analyticsHandler := handlers.NewAnalyticsHandler()
+	analyticsAPI := router.Group("/api/v1/analytics")
+	{
+		analyticsAPI.GET("/dashboards", analyticsHandler.ListDashboards)
+		analyticsAPI.GET("/dashboards/:id", analyticsHandler.GetDashboard)
+		analyticsAPI.PUT("/dashboards/:id/widgets/:widgetId", analyticsHandler.UpdateWidget)
+		analyticsAPI.PUT("/dashboards/:id/layout", analyticsHandler.ReorderWidgets)
+		analyticsAPI.GET("/dashboards/:id/widgets/:widgetId/export", analyticsHandler.ExportCSV)
+		analyticsAPI.GET("/widget-types", analyticsHandler.GetWidgetTypes)
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 

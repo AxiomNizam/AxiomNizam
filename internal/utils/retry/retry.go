@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const errMaxAttemptsExceeded = "max attempts (%d) exceeded"
+
 // Config defines retry configuration
 type Config struct {
 	MaxAttempts       int
@@ -41,7 +43,7 @@ type Func func(ctx context.Context, attempt int) error
 // Do executes a function with retry logic
 func Do(ctx context.Context, config Config, fn Func) Result {
 	result := Result{
-		LastError: fmt.Errorf("max attempts (%d) exceeded", config.MaxAttempts),
+		LastError: fmt.Errorf(errMaxAttemptsExceeded, config.MaxAttempts),
 	}
 
 	backoff := config.InitialBackoff
@@ -128,7 +130,7 @@ func Once(ctx context.Context, fn Func) error {
 func WithLimit(fn Func, maxAttempts int) Func {
 	return func(ctx context.Context, attempt int) error {
 		if attempt > maxAttempts {
-			return fmt.Errorf("max attempts (%d) exceeded", maxAttempts)
+			return fmt.Errorf(errMaxAttemptsExceeded, maxAttempts)
 		}
 		return fn(ctx, attempt)
 	}
@@ -155,9 +157,9 @@ func WithFilter(fn Func, isRetryable func(error) bool) Func {
 }
 
 func applyJitter(backoff time.Duration) time.Duration {
-	// Add random jitter to prevent thundering herd
+	// Add jitter to prevent thundering herd
 	jitterAmount := time.Duration(float64(backoff) * 0.1) // 10% jitter
-	return backoff                                        // Could add randomness here
+	return backoff + jitterAmount
 }
 
 // Backoff strategy interface
@@ -213,7 +215,7 @@ func (cb *ConstantBackoff) NextBackoff(attempt int) time.Duration {
 // DoWithStrategy executes function with custom backoff strategy
 func DoWithStrategy(ctx context.Context, maxAttempts int, strategy BackoffStrategy, fn Func) Result {
 	result := Result{
-		LastError: fmt.Errorf("max attempts (%d) exceeded", maxAttempts),
+		LastError: fmt.Errorf(errMaxAttemptsExceeded, maxAttempts),
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {

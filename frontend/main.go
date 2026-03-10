@@ -63,6 +63,8 @@ func main() {
 	router.GET("/", dashboardHandler)
 	router.GET("/admin", adminHandler)
 	router.GET("/system-manager", systemManagerHandler)
+	router.GET("/gis", gisHandler)
+	router.GET("/analytics", analyticsHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -76,7 +78,9 @@ func main() {
 	fmt.Printf("📊 Dashboard: http://localhost:%s\n", port)
 	fmt.Printf("🔧 Admin: http://localhost:%s/admin\n", port)
 	fmt.Printf("🖥️  System Manager: http://localhost:%s/system-manager\n", port)
-	fmt.Printf("📡 Backend: %s\n\n", backendURL)
+	fmt.Printf("🌍 GIS Dashboard: http://localhost:%s/gis\n", port)
+	fmt.Printf("� Analytics Dashboard: http://localhost:%s/analytics\n", port)
+	fmt.Printf("�� Backend: %s\n\n", backendURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
 }
@@ -94,7 +98,7 @@ func dashboardHandler(c *gin.Context) {
 		"page":        "public-dashboard",
 		"isAuth":      isAuth,
 		"userName":    userName,
-		"backendURL":  "http://localhost:8000",
+		"backendURL":  backendURL,
 		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
 		"health":      health,
 	})
@@ -136,6 +140,46 @@ func systemManagerHandler(c *gin.Context) {
 		"title":      "AxiomNizam - System Manager",
 		"pageName":   "system-manager",
 		"page":       "system-manager",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// analyticsHandler serves the analytics dashboard
+func analyticsHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "User"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Analytics Dashboard",
+		"pageName":   "analytics-dashboard",
+		"page":       "analytics-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// gisHandler serves the GIS dashboard
+func gisHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "User"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - GIS Dashboard",
+		"pageName":   "gis-dashboard",
+		"page":       "gis-dashboard",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,

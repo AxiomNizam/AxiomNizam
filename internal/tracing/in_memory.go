@@ -11,7 +11,7 @@ type InMemoryTracingManager struct {
 	mu       sync.RWMutex
 	traces   map[string]*Trace
 	spans    map[string]*Span
-	services map[string]*ServiceMetrics
+	services map[string]*TraceMetrics
 }
 
 // NewInMemoryTracingManager creates manager
@@ -19,7 +19,7 @@ func NewInMemoryTracingManager() *InMemoryTracingManager {
 	return &InMemoryTracingManager{
 		traces:   make(map[string]*Trace),
 		spans:    make(map[string]*Span),
-		services: make(map[string]*ServiceMetrics),
+		services: make(map[string]*TraceMetrics),
 	}
 }
 
@@ -35,6 +35,14 @@ func (m *InMemoryTracingManager) GetTrace(id string) (*Trace, error) {
 	return trace, nil
 }
 
+// traceService returns the primary service name from a trace.
+func traceService(t *Trace) string {
+	if len(t.Services) > 0 {
+		return t.Services[0]
+	}
+	return ""
+}
+
 // SearchTraces searches traces by criteria
 func (m *InMemoryTracingManager) SearchTraces(req *TraceSearchRequest) ([]*Trace, error) {
 	m.mu.RLock()
@@ -42,13 +50,10 @@ func (m *InMemoryTracingManager) SearchTraces(req *TraceSearchRequest) ([]*Trace
 
 	var result []*Trace
 	for _, t := range m.traces {
-		if req.Service != "" && t.Service != req.Service {
+		if req.Service != "" && traceService(t) != req.Service {
 			continue
 		}
 		if req.MinDuration > 0 && t.Duration < req.MinDuration {
-			continue
-		}
-		if req.Status != "" && t.Status != req.Status {
 			continue
 		}
 		result = append(result, t)
@@ -99,13 +104,16 @@ func (m *InMemoryTracingManager) RecordTrace(trace *Trace) error {
 
 	m.traces[trace.ID] = trace
 
-	// Update service metrics
-	if m.services[trace.Service] == nil {
-		m.services[trace.Service] = &ServiceMetrics{
-			Service: trace.Service,
+	// Update service metrics for the primary service
+	svc := traceService(trace)
+	if svc != "" {
+		if m.services[svc] == nil {
+			m.services[svc] = &TraceMetrics{
+				Service: svc,
+			}
 		}
+		m.services[svc].TraceCount++
 	}
-	m.services[trace.Service].RequestCount++
 
 	return nil
 }
@@ -124,18 +132,18 @@ func (m *InMemoryTracingManager) RecordSpan(span *Span) error {
 }
 
 // GetServiceMap builds service dependency map
-func (m *InMemoryTracingManager) GetServiceMap() (map[string][]*ServiceDependency, error) {
+func (m *InMemoryTracingManager) GetServiceMap() (map[string][]*DependencyMetrics, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	dependencies := make(map[string][]*ServiceDependency)
+	dependencies := make(map[string][]*DependencyMetrics)
 	for _, span := range m.spans {
 		if span.ParentSpanID != "" {
 			parent := m.spans[span.ParentSpanID]
 			if parent != nil {
-				dep := &ServiceDependency{
-					Source: parent.Service,
-					Target: span.Service,
+				dep := &DependencyMetrics{
+					Source:      parent.Service,
+					Destination: span.Service,
 				}
 				dependencies[parent.Service] = append(dependencies[parent.Service], dep)
 			}
@@ -145,7 +153,7 @@ func (m *InMemoryTracingManager) GetServiceMap() (map[string][]*ServiceDependenc
 }
 
 // GetServiceMetrics retrieves service metrics
-func (m *InMemoryTracingManager) GetServiceMetrics(service string) (*ServiceMetrics, error) {
+func (m *InMemoryTracingManager) GetServiceMetrics(service string) (*TraceMetrics, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -157,19 +165,19 @@ func (m *InMemoryTracingManager) GetServiceMetrics(service string) (*ServiceMetr
 }
 
 // GetOperationMetrics retrieves operation metrics
-func (m *InMemoryTracingManager) GetOperationMetrics(service, operation string) (*OperationMetrics, error) {
+func (m *InMemoryTracingManager) GetOperationMetrics(service, operation string) (*SpanMetrics, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	count := 0
-	var totalDuration time.Duration
-	errorCount := 0
+	var count int64
+	var totalDuration int64
+	var errorCount int64
 
 	for _, span := range m.spans {
-		if span.Service == service && span.Operation == operation {
+		if span.Service == service && span.OperationName == operation {
 			count++
 			totalDuration += span.Duration
-			if span.Status == "error" {
+			if span.Status == SpanStatusError {
 				errorCount++
 			}
 		}
@@ -179,12 +187,12 @@ func (m *InMemoryTracingManager) GetOperationMetrics(service, operation string) 
 		return nil, fmt.Errorf("no metrics found")
 	}
 
-	return &OperationMetrics{
-		Service:      service,
-		Operation:    operation,
-		RequestCount: count,
-		ErrorCount:   errorCount,
-		AvgDuration:  totalDuration / time.Duration(count),
+	return &SpanMetrics{
+		Service:         service,
+		Operation:       operation,
+		SpanCount:       count,
+		ErrorSpanCount:  errorCount,
+		AverageDuration: totalDuration / count,
 	}, nil
 }
 
@@ -193,18 +201,18 @@ func (m *InMemoryTracingManager) AnalyzeErrors(service string) ([]*ErrorAnalysis
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	errorMap := make(map[string]int)
+	errorMap := make(map[string]int64)
 	for _, span := range m.spans {
-		if span.Service == service && span.Status == "error" {
-			errorMap[span.Error]++
+		if span.Service == service && span.Error {
+			errorMap[span.ErrorMessage]++
 		}
 	}
 
 	var result []*ErrorAnalysis
 	for errMsg, count := range errorMap {
 		result = append(result, &ErrorAnalysis{
-			Error: errMsg,
-			Count: count,
+			ErrorType: errMsg,
+			Count:     count,
 		})
 	}
 	return result, nil

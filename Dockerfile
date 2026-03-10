@@ -38,7 +38,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Build CLI tool
 RUN --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 go build -o axiomnizamctl ./cmd/axiomnizamctl 2>&1 || (echo "CLI build failed with exit code $?" && exit 1)
+    CGO_ENABLED=0 go build -o axiomnizamctl \
+    ./cmd/axiomnizamctl 2>&1 || \
+    (echo "CLI build failed" && exit 1)
 
 # Runtime stage
 FROM debian:bookworm-slim

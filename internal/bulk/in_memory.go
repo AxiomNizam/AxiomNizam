@@ -6,11 +6,13 @@ import (
 	"time"
 )
 
+const errOperationNotFound = "operation not found"
+
 // InMemoryBulkManager in-memory bulk operations implementation
 type InMemoryBulkManager struct {
-	mu        sync.RWMutex
+	mu         sync.RWMutex
 	operations map[string]*BulkOperation
-	results   map[string]*BulkOperationResponse
+	results    map[string]*BulkOperationResponse
 }
 
 // NewInMemoryBulkManager creates manager
@@ -44,7 +46,7 @@ func (m *InMemoryBulkManager) GetOperation(id string) (*BulkOperation, error) {
 
 	op, exists := m.operations[id]
 	if !exists {
-		return nil, fmt.Errorf("operation not found")
+		return nil, fmt.Errorf(errOperationNotFound)
 	}
 	return op, nil
 }
@@ -59,7 +61,7 @@ func (m *InMemoryBulkManager) ListOperations(tenantID, status string) ([]*BulkOp
 		if tenantID != "" && op.TenantID != tenantID {
 			continue
 		}
-		if status != "" && op.Status != status {
+		if status != "" && string(op.Status) != status {
 			continue
 		}
 		result = append(result, op)
@@ -74,11 +76,12 @@ func (m *InMemoryBulkManager) CancelOperation(id string) error {
 
 	op, exists := m.operations[id]
 	if !exists {
-		return fmt.Errorf("operation not found")
+		return fmt.Errorf(errOperationNotFound)
 	}
 
 	op.Status = "Cancelled"
-	op.CompletedAt = time.Now()
+	now := time.Now()
+	op.CompletedAt = &now
 	return nil
 }
 
@@ -89,7 +92,7 @@ func (m *InMemoryBulkManager) RetryFailed(id string) (*BulkOperation, error) {
 
 	op, exists := m.operations[id]
 	if !exists {
-		return nil, fmt.Errorf("operation not found")
+		return nil, fmt.Errorf(errOperationNotFound)
 	}
 
 	op.Status = "Running"

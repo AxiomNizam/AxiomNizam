@@ -68,12 +68,12 @@ func (rs *ResourceStore) Get(namespace, name string) (resources.Resource, error)
 	}
 
 	if rs.resources[namespace] == nil {
-		return nil, fmt.Errorf("resource not found: %s/%s", namespace, name)
+		return nil, fmt.Errorf(errResourceNotFound, namespace, name)
 	}
 
 	resource := rs.resources[namespace][name]
 	if resource == nil {
-		return nil, fmt.Errorf("resource not found: %s/%s", namespace, name)
+		return nil, fmt.Errorf(errResourceNotFound, namespace, name)
 	}
 
 	return resource.DeepCopy(), nil
@@ -91,12 +91,12 @@ func (rs *ResourceStore) Update(resource resources.Resource) error {
 	}
 
 	if rs.resources[namespace] == nil {
-		return fmt.Errorf("resource not found: %s/%s", namespace, meta.Name)
+		return fmt.Errorf(errResourceNotFound, namespace, meta.Name)
 	}
 
 	oldResource := rs.resources[namespace][meta.Name]
 	if oldResource == nil {
-		return fmt.Errorf("resource not found: %s/%s", namespace, meta.Name)
+		return fmt.Errorf(errResourceNotFound, namespace, meta.Name)
 	}
 
 	rs.resources[namespace][meta.Name] = resource.DeepCopy()
@@ -115,12 +115,12 @@ func (rs *ResourceStore) Delete(namespace, name string) error {
 	}
 
 	if rs.resources[namespace] == nil {
-		return fmt.Errorf("resource not found: %s/%s", namespace, name)
+		return fmt.Errorf(errResourceNotFound, namespace, name)
 	}
 
 	resource := rs.resources[namespace][name]
 	if resource == nil {
-		return fmt.Errorf("resource not found: %s/%s", namespace, name)
+		return fmt.Errorf(errResourceNotFound, namespace, name)
 	}
 
 	delete(rs.resources[namespace], name)
@@ -192,6 +192,10 @@ const (
 	WatchEventAdded    WatchEventType = "ADDED"
 	WatchEventModified WatchEventType = "MODIFIED"
 	WatchEventDeleted  WatchEventType = "DELETED"
+
+	errResourceNotFound = "resource not found: %s/%s"
+	errUnknownKind      = "unknown resource kind: %s"
+	routeNsKindName     = "/:namespace/:kind/:name"
 )
 
 // APIServer provides REST API for resources
@@ -214,17 +218,17 @@ func (as *APIServer) RegisterRoutes() {
 
 	// Generic resource endpoints
 	api.POST("/:namespace/:kind", as.CreateResource)
-	api.GET("/:namespace/:kind/:name", as.GetResource)
-	api.PUT("/:namespace/:kind/:name", as.UpdateResource)
-	api.DELETE("/:namespace/:kind/:name", as.DeleteResource)
+	api.GET(routeNsKindName, as.GetResource)
+	api.PUT(routeNsKindName, as.UpdateResource)
+	api.DELETE(routeNsKindName, as.DeleteResource)
 	api.GET("/:namespace/:kind", as.ListResources)
 
 	// Apply endpoint (CLI applies resources here)
 	api.POST("/:namespace/:kind/apply", as.ApplyResource)
 
 	// Status subresource
-	api.GET("/:namespace/:kind/:name/status", as.GetResourceStatus)
-	api.PUT("/:namespace/:kind/:name/status", as.UpdateResourceStatus)
+	api.GET(routeNsKindName+"/status", as.GetResourceStatus)
+	api.PUT(routeNsKindName+"/status", as.UpdateResourceStatus)
 }
 
 // CreateResource creates a new resource
@@ -264,7 +268,7 @@ func (as *APIServer) CreateResource(c *gin.Context) {
 		resource = &sr
 
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown resource kind: %s", kind)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf(errUnknownKind, kind)})
 		return
 	}
 
@@ -319,7 +323,7 @@ func (as *APIServer) UpdateResource(c *gin.Context) {
 		resource = &wr
 
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown resource kind: %s", kind)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf(errUnknownKind, kind)})
 		return
 	}
 
@@ -383,44 +387,49 @@ func (as *APIServer) GetResourceStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, resource.GetStatus())
 }
 
-// ApplyResource applies a resource (create or update + enqueue for reconciliation)
-func (as *APIServer) ApplyResource(c *gin.Context) {
-	kind := c.Param("kind")
-	namespace := c.Param("namespace")
-
-	var resource resources.Resource
-
-	// Unmarshal based on kind
+// parseResourceByKind unmarshals a resource from the request based on its kind.
+func (as *APIServer) parseResourceByKind(c *gin.Context, kind, namespace string) (resources.Resource, bool) {
 	switch kind {
 	case "workloads":
 		var wr resources.WorkloadResource
 		if err := c.ShouldBindJSON(&wr); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+			return nil, false
 		}
 		wr.ObjectMeta.Namespace = namespace
-		resource = &wr
+		return &wr, true
 
 	case "pipelines":
 		var pr resources.PipelineResource
 		if err := c.ShouldBindJSON(&pr); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+			return nil, false
 		}
 		pr.ObjectMeta.Namespace = namespace
-		resource = &pr
+		return &pr, true
 
 	case "schedules":
 		var sr resources.ScheduleResource
 		if err := c.ShouldBindJSON(&sr); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+			return nil, false
 		}
 		sr.ObjectMeta.Namespace = namespace
-		resource = &sr
+		return &sr, true
 
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unknown resource kind: %s", kind)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf(errUnknownKind, kind)})
+		return nil, false
+	}
+}
+
+// ApplyResource applies a resource (create or update + enqueue for reconciliation)
+func (as *APIServer) ApplyResource(c *gin.Context) {
+	kind := c.Param("kind")
+	namespace := c.Param("namespace")
+
+	resource, ok := as.parseResourceByKind(c, kind, namespace)
+	if !ok {
 		return
 	}
 
@@ -441,7 +450,6 @@ func (as *APIServer) ApplyResource(c *gin.Context) {
 	} else {
 		// Update existing resource
 		if existing.GetObjectMeta().Generation != meta.Generation {
-			// Generation mismatch - conflict
 			c.JSON(http.StatusConflict, gin.H{"error": "Generation mismatch"})
 			return
 		}
@@ -504,4 +512,9 @@ func (as *APIServer) UpdateResourceStatus(c *gin.Context) {
 func (as *APIServer) Run(addr string) error {
 	as.RegisterRoutes()
 	return as.router.Run(addr)
+}
+
+// Router returns the underlying http.Handler for use with custom http.Server
+func (as *APIServer) Router() http.Handler {
+	return as.router
 }

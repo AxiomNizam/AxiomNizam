@@ -9,47 +9,51 @@ import (
 // InMemoryEventBusManager in-memory event bus implementation
 type InMemoryEventBusManager struct {
 	mu            sync.RWMutex
-	events        map[string]*Event
-	topics        map[string]*Topic
-	subscriptions map[string]*Subscription
-	dlq           map[string]*DeadLetterEvent
+	events        map[string]*EventBusEvent
+	topics        map[string]*EventTopic
+	subscriptions map[string]*EventSubscription
+	dlq           map[string]*DLQEvent
 }
 
 // NewInMemoryEventBusManager creates manager
 func NewInMemoryEventBusManager() *InMemoryEventBusManager {
 	return &InMemoryEventBusManager{
-		events:        make(map[string]*Event),
-		topics:        make(map[string]*Topic),
-		subscriptions: make(map[string]*Subscription),
-		dlq:           make(map[string]*DeadLetterEvent),
+		events:        make(map[string]*EventBusEvent),
+		topics:        make(map[string]*EventTopic),
+		subscriptions: make(map[string]*EventSubscription),
+		dlq:           make(map[string]*DLQEvent),
 	}
 }
 
 // PublishEvent publishes event
-func (m *InMemoryEventBusManager) PublishEvent(event *Event) error {
+func (m *InMemoryEventBusManager) PublishEvent(event *EventBusEvent) (*EventPublishResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if event.ID == "" {
 		event.ID = fmt.Sprintf("event-%d", time.Now().UnixNano())
 	}
-	if event.CreatedAt.IsZero() {
-		event.CreatedAt = time.Now()
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
 	}
 
 	m.events[event.ID] = event
 
-	// Deliver to subscriptions
-	topic := m.topics[event.Topic]
+	// Update topic message count
+	topic := m.topics[event.Type]
 	if topic != nil {
-		topic.EventCount++
+		topic.MessageCount++
 	}
 
-	return nil
+	return &EventPublishResponse{
+		EventID:   event.ID,
+		Timestamp: event.Timestamp,
+		Topic:     event.Type,
+	}, nil
 }
 
 // GetEvent retrieves event
-func (m *InMemoryEventBusManager) GetEvent(id string) (*Event, error) {
+func (m *InMemoryEventBusManager) GetEvent(id string) (*EventBusEvent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -60,26 +64,32 @@ func (m *InMemoryEventBusManager) GetEvent(id string) (*Event, error) {
 	return event, nil
 }
 
-// ListEvents lists events
-func (m *InMemoryEventBusManager) ListEvents(topic string, limit int) ([]*Event, error) {
+// ListEvents lists events filtered by tenantID, eventType, and processed status
+func (m *InMemoryEventBusManager) ListEvents(tenantID, eventType, processed string) ([]*EventBusEvent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*Event
+	var result []*EventBusEvent
 	for _, e := range m.events {
-		if topic != "" && e.Topic != topic {
+		if tenantID != "" && e.TenantID != tenantID {
+			continue
+		}
+		if eventType != "" && e.Type != eventType {
+			continue
+		}
+		if processed == "true" && !e.IsProcessed {
+			continue
+		}
+		if processed == "false" && e.IsProcessed {
 			continue
 		}
 		result = append(result, e)
-		if limit > 0 && len(result) >= limit {
-			break
-		}
 	}
 	return result, nil
 }
 
 // CreateTopic creates topic
-func (m *InMemoryEventBusManager) CreateTopic(topic *Topic) (*Topic, error) {
+func (m *InMemoryEventBusManager) CreateTopic(topic *EventTopic) (*EventTopic, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -92,11 +102,11 @@ func (m *InMemoryEventBusManager) CreateTopic(topic *Topic) (*Topic, error) {
 }
 
 // ListTopics lists topics
-func (m *InMemoryEventBusManager) ListTopics() ([]*Topic, error) {
+func (m *InMemoryEventBusManager) ListTopics() ([]*EventTopic, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*Topic
+	var result []*EventTopic
 	for _, t := range m.topics {
 		result = append(result, t)
 	}
@@ -104,7 +114,7 @@ func (m *InMemoryEventBusManager) ListTopics() ([]*Topic, error) {
 }
 
 // CreateSubscription creates subscription
-func (m *InMemoryEventBusManager) CreateSubscription(sub *Subscription) (*Subscription, error) {
+func (m *InMemoryEventBusManager) CreateSubscription(sub *EventSubscription) (*EventSubscription, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -120,7 +130,7 @@ func (m *InMemoryEventBusManager) CreateSubscription(sub *Subscription) (*Subscr
 }
 
 // GetSubscription retrieves subscription
-func (m *InMemoryEventBusManager) GetSubscription(id string) (*Subscription, error) {
+func (m *InMemoryEventBusManager) GetSubscription(id string) (*EventSubscription, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -131,14 +141,14 @@ func (m *InMemoryEventBusManager) GetSubscription(id string) (*Subscription, err
 	return sub, nil
 }
 
-// ListSubscriptions lists subscriptions
-func (m *InMemoryEventBusManager) ListSubscriptions(topic string) ([]*Subscription, error) {
+// ListSubscriptions lists subscriptions filtered by tenantID
+func (m *InMemoryEventBusManager) ListSubscriptions(tenantID string) ([]*EventSubscription, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*Subscription
+	var result []*EventSubscription
 	for _, s := range m.subscriptions {
-		if topic != "" && s.Topic != topic {
+		if tenantID != "" && s.TenantID != tenantID {
 			continue
 		}
 		result = append(result, s)
@@ -155,14 +165,14 @@ func (m *InMemoryEventBusManager) DeleteSubscription(id string) error {
 	return nil
 }
 
-// ListDLQ lists dead letter queue
-func (m *InMemoryEventBusManager) ListDLQ(topic string) ([]*DeadLetterEvent, error) {
+// ListDLQEvents lists dead letter queue events filtered by tenantID
+func (m *InMemoryEventBusManager) ListDLQEvents(tenantID string) ([]*DLQEvent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*DeadLetterEvent
+	var result []*DLQEvent
 	for _, e := range m.dlq {
-		if topic != "" && e.Topic != topic {
+		if tenantID != "" && e.TenantID != tenantID {
 			continue
 		}
 		result = append(result, e)
@@ -170,8 +180,8 @@ func (m *InMemoryEventBusManager) ListDLQ(topic string) ([]*DeadLetterEvent, err
 	return result, nil
 }
 
-// PurgeDeadLetterEvent purges DLQ entry
-func (m *InMemoryEventBusManager) PurgeDeadLetterEvent(id string) error {
+// PurgeDLQEvent purges DLQ entry
+func (m *InMemoryEventBusManager) PurgeDLQEvent(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
