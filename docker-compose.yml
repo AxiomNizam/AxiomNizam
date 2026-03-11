@@ -162,18 +162,18 @@ services:
       retries: 10
 
   # MongoDB
-  # mongodb:
-  #   image: mongo:latest
-  #   container_name: mongodb
-  #   ports:
-  #     - "27017:27017"
-  #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: root
-  #     MONGO_INITDB_ROOT_PASSWORD: root
-  #   networks:
-  #     - app-network
-  #   volumes:
-  #     - mongodb-data:/data/db
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    networks:
+      - app-network
+    volumes:
+      - mongodb-data:/data/db
 
   # Percona MySQL
   # percona:

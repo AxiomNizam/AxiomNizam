@@ -1,0 +1,467 @@
+{
+	"info": {
+		"_postman_id": "netintel-collection-001",
+		"name": "AxiomNizam — Network Intelligence API",
+		"description": "Full REST API for the Network Intelligence module: parsers, log ingest, topology, heatmaps, trends, predictions, anomalies, alerts, forecasts, and tracks.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Summary & Observability",
+			"item": [
+				{
+					"name": "Get Dashboard Summary",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/summary",
+						"header": [],
+						"description": "Returns full dashboard summary: KPIs, top devices, zone activity, severity breakdown, metrics."
+					}
+				},
+				{
+					"name": "Get Observability Stats",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/observability",
+						"header": [],
+						"description": "Returns log entry statistics: counts by type, severity, protocol, and totals."
+					}
+				},
+				{
+					"name": "Get Log Types",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/log-types",
+						"header": [],
+						"description": "Returns all supported log types (wifi_probe, ip_flow, syslog, pcap, csi, etc.) with metadata."
+					}
+				}
+			]
+		},
+		{
+			"name": "Parsers",
+			"item": [
+				{
+					"name": "List Parsers",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/parsers",
+						"header": [],
+						"description": "List all configured log parsers."
+					}
+				},
+				{
+					"name": "Get Parser",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/parsers/parser-wifi-probe",
+						"header": [],
+						"description": "Get a specific parser by ID."
+					}
+				},
+				{
+					"name": "Create Parser",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/api/v1/netintel/parsers",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"New SNMP Trap Parser\",\n  \"log_type\": \"snmp\",\n  \"description\": \"Captures SNMP traps from core switches\",\n  \"source\": {\n    \"type\": \"stream\",\n    \"endpoint\": \"udp://0.0.0.0:162\"\n  }\n}"
+						},
+						"description": "Create a new parser instance."
+					}
+				},
+				{
+					"name": "Update Parser",
+					"request": {
+						"method": "PUT",
+						"url": "{{baseUrl}}/api/v1/netintel/parsers/parser-wifi-probe",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Wi-Fi Probe Scanner v2\",\n  \"status\": \"paused\"\n}"
+						},
+						"description": "Update parser name, description, or status."
+					}
+				},
+				{
+					"name": "Delete Parser",
+					"request": {
+						"method": "DELETE",
+						"url": "{{baseUrl}}/api/v1/netintel/parsers/parser-radius",
+						"header": [],
+						"description": "Delete a parser by ID."
+					}
+				}
+			]
+		},
+		{
+			"name": "Log Entries",
+			"item": [
+				{
+					"name": "List Log Entries",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/logs?limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "logs"],
+							"query": [
+								{ "key": "limit", "value": "50" }
+							]
+						},
+						"header": [],
+						"description": "List parsed log entries. Supports ?type=wifi_probe&severity=error&limit=100 filters."
+					}
+				},
+				{
+					"name": "List Logs by Type (wifi_probe)",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/logs?type=wifi_probe&limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "logs"],
+							"query": [
+								{ "key": "type", "value": "wifi_probe" },
+								{ "key": "limit", "value": "50" }
+							]
+						},
+						"header": [],
+						"description": "Filter logs by Wi-Fi probe type."
+					}
+				},
+				{
+					"name": "List Logs by Severity (error)",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/logs?severity=error&limit=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "logs"],
+							"query": [
+								{ "key": "severity", "value": "error" },
+								{ "key": "limit", "value": "100" }
+							]
+						},
+						"header": [],
+						"description": "Filter logs by severity."
+					}
+				},
+				{
+					"name": "Ingest Log Entry",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/api/v1/netintel/logs",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"log_type\": \"wifi_probe\",\n  \"source\": \"AP-Test-1\",\n  \"severity\": \"info\",\n  \"message\": \"Probe request from aa:bb:cc:dd:ee:ff for TestSSID\",\n  \"device_mac\": \"aa:bb:cc:dd:ee:ff\",\n  \"ssid\": \"TestSSID\",\n  \"signal\": -45,\n  \"location\": { \"lat\": 23.8105, \"lng\": 90.4128 }\n}"
+						},
+						"description": "Ingest (push) a new log entry for parsing."
+					}
+				},
+				{
+					"name": "Get Entry Stats",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/logs/stats",
+						"header": [],
+						"description": "Aggregated statistics: counts by type, severity, protocol, total bytes."
+					}
+				}
+			]
+		},
+		{
+			"name": "Topology",
+			"item": [
+				{
+					"name": "Get Network Topology",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/topology",
+						"header": [],
+						"description": "Returns full network topology graph (nodes + edges + stats)."
+					}
+				},
+				{
+					"name": "Get Topology Node",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/topology/nodes/router-core-1",
+						"header": [],
+						"description": "Get a specific topology node by ID."
+					}
+				},
+				{
+					"name": "Update Node Status",
+					"request": {
+						"method": "PUT",
+						"url": "{{baseUrl}}/api/v1/netintel/topology/nodes/esp32-4",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"online\"\n}"
+						},
+						"description": "Update a topology node's status (online/offline/degraded)."
+					}
+				}
+			]
+		},
+		{
+			"name": "Heatmaps",
+			"item": [
+				{
+					"name": "Get Heatmap — Wi-Fi Signal",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/heatmap?category=wifi_signal",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "heatmap"],
+							"query": [
+								{ "key": "category", "value": "wifi_signal" }
+							]
+						},
+						"header": [],
+						"description": "Wi-Fi signal strength heatmap data."
+					}
+				},
+				{
+					"name": "Get Heatmap — Movement Density",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/heatmap?category=movement_density",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "heatmap"],
+							"query": [
+								{ "key": "category", "value": "movement_density" }
+							]
+						},
+						"header": [],
+						"description": "Movement density heatmap data."
+					}
+				},
+				{
+					"name": "Get Heatmap — Traffic Volume",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/heatmap?category=traffic_volume",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "heatmap"],
+							"query": [
+								{ "key": "category", "value": "traffic_volume" }
+							]
+						},
+						"header": [],
+						"description": "Traffic volume heatmap data."
+					}
+				}
+			]
+		},
+		{
+			"name": "Trends & Forecasts",
+			"item": [
+				{
+					"name": "Get Traffic Trend",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/trends?metric=traffic&hours=24",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "trends"],
+							"query": [
+								{ "key": "metric", "value": "traffic" },
+								{ "key": "hours", "value": "24" }
+							]
+						},
+						"header": [],
+						"description": "Time-series trend data. Metrics: traffic, errors, devices, connectivity."
+					}
+				},
+				{
+					"name": "Get Errors Trend",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/trends?metric=errors&hours=12",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "trends"],
+							"query": [
+								{ "key": "metric", "value": "errors" },
+								{ "key": "hours", "value": "12" }
+							]
+						},
+						"header": [],
+						"description": "Error trend over last 12 hours."
+					}
+				},
+				{
+					"name": "List All Forecasts",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/forecasts",
+						"header": [],
+						"description": "Returns all traffic forecasts with confidence and trend direction."
+					}
+				},
+				{
+					"name": "Get Forecast by Metric",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/forecasts/traffic_bytes",
+						"header": [],
+						"description": "Get forecast for a specific metric."
+					}
+				}
+			]
+		},
+		{
+			"name": "Predictions & Tracks",
+			"item": [
+				{
+					"name": "Get Movement Predictions",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/predictions",
+						"header": [],
+						"description": "Returns AI movement predictions for all tracked devices."
+					}
+				},
+				{
+					"name": "List Movement Tracks",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/tracks",
+						"header": [],
+						"description": "List all device movement tracks with path, distance, speed, zones."
+					}
+				},
+				{
+					"name": "Get Track by MAC",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/tracks/aa:bb:cc:dd:ee:ff",
+						"header": [],
+						"description": "Get movement track for a specific device MAC."
+					}
+				}
+			]
+		},
+		{
+			"name": "Anomalies",
+			"item": [
+				{
+					"name": "List Anomalies",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/anomalies",
+						"header": [],
+						"description": "List all detected anomalies. Supports ?status=active&severity=critical."
+					}
+				},
+				{
+					"name": "List Active Critical Anomalies",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/anomalies?status=active&severity=critical",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "anomalies"],
+							"query": [
+								{ "key": "status", "value": "active" },
+								{ "key": "severity", "value": "critical" }
+							]
+						},
+						"header": [],
+						"description": "Filter for active critical anomalies."
+					}
+				},
+				{
+					"name": "Acknowledge Anomaly",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/api/v1/netintel/anomalies/anom-001/acknowledge",
+						"header": [],
+						"description": "Mark an anomaly as acknowledged."
+					}
+				},
+				{
+					"name": "Resolve Anomaly",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/api/v1/netintel/anomalies/anom-001/resolve",
+						"header": [],
+						"description": "Mark an anomaly as resolved."
+					}
+				}
+			]
+		},
+		{
+			"name": "Alerts",
+			"item": [
+				{
+					"name": "List Alerts",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/api/v1/netintel/alerts",
+						"header": [],
+						"description": "List all alerts. Supports ?status=active."
+					}
+				},
+				{
+					"name": "List Active Alerts",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/netintel/alerts?status=active",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "netintel", "alerts"],
+							"query": [
+								{ "key": "status", "value": "active" }
+							]
+						},
+						"header": [],
+						"description": "Filter for active alerts."
+					}
+				},
+				{
+					"name": "Acknowledge Alert",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/api/v1/netintel/alerts/alert-001/acknowledge",
+						"header": [],
+						"description": "Mark an alert as acknowledged."
+					}
+				},
+				{
+					"name": "Resolve Alert",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/api/v1/netintel/alerts/alert-001/resolve",
+						"header": [],
+						"description": "Mark an alert as resolved."
+					}
+				}
+			]
+		}
+	]
+}

@@ -488,6 +488,98 @@ func main() {
 		analyticsAPI.GET("/widget-types", analyticsHandler.GetWidgetTypes)
 	}
 
+	// ====================================
+	// CDC & ETL DATA PLATFORM ENDPOINTS
+	// ====================================
+	cdcEtlHandler := handlers.NewCDCETLHandler()
+
+	// ETL Pipeline Management
+	etlAPI := router.Group("/api/v1/etl")
+	{
+		etlAPI.GET("/pipelines", cdcEtlHandler.ListETLPipelines)
+		etlAPI.GET("/pipelines/:id", cdcEtlHandler.GetETLPipeline)
+		etlAPI.POST("/pipelines", cdcEtlHandler.CreateETLPipeline)
+		etlAPI.PUT("/pipelines/:id", cdcEtlHandler.UpdateETLPipeline)
+		etlAPI.DELETE("/pipelines/:id", cdcEtlHandler.DeleteETLPipeline)
+		etlAPI.POST("/pipelines/:id/run", cdcEtlHandler.RunETLPipeline)
+		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
+		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
+		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
+		etlAPI.GET("/observability", cdcEtlHandler.GetETLObservability)
+	}
+
+	// CDC Pipeline Management
+	cdcAPI := router.Group("/api/v1/cdc")
+	{
+		cdcAPI.GET("/pipelines", cdcEtlHandler.ListCDCPipelines)
+		cdcAPI.GET("/pipelines/:id", cdcEtlHandler.GetCDCPipeline)
+		cdcAPI.POST("/pipelines", cdcEtlHandler.CreateCDCPipeline)
+		cdcAPI.PUT("/pipelines/:id", cdcEtlHandler.UpdateCDCPipeline)
+		cdcAPI.DELETE("/pipelines/:id", cdcEtlHandler.DeleteCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/start", cdcEtlHandler.StartCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/pause", cdcEtlHandler.PauseCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/stop", cdcEtlHandler.StopCDCPipeline)
+		cdcAPI.GET("/sources", cdcEtlHandler.GetCDCSourceTypes)
+		cdcAPI.GET("/sinks", cdcEtlHandler.GetCDCSinkTypes)
+		cdcAPI.GET("/observability", cdcEtlHandler.GetCDCObservability)
+	}
+
+	// Data Platform Overview
+	router.GET("/api/v1/data-platform/overview", cdcEtlHandler.GetPlatformOverview)
+
+	// ====================================
+	// NETWORK INTELLIGENCE ENDPOINTS
+	// ====================================
+	netIntelHandler := handlers.NewNetIntelHandler()
+
+	netintelAPI := router.Group("/api/v1/netintel")
+	{
+		// Summary & Observability
+		netintelAPI.GET("/summary", netIntelHandler.GetSummary)
+		netintelAPI.GET("/observability", netIntelHandler.GetObservability)
+		netintelAPI.GET("/log-types", netIntelHandler.GetLogTypes)
+
+		// Parser CRUD
+		netintelAPI.GET("/parsers", netIntelHandler.ListParsers)
+		netintelAPI.GET("/parsers/:id", netIntelHandler.GetParser)
+		netintelAPI.POST("/parsers", netIntelHandler.CreateParser)
+		netintelAPI.PUT("/parsers/:id", netIntelHandler.UpdateParser)
+		netintelAPI.DELETE("/parsers/:id", netIntelHandler.DeleteParser)
+
+		// Log Entries
+		netintelAPI.GET("/logs", netIntelHandler.ListEntries)
+		netintelAPI.POST("/logs", netIntelHandler.IngestLog)
+		netintelAPI.GET("/logs/stats", netIntelHandler.GetEntryStats)
+
+		// Topology
+		netintelAPI.GET("/topology", netIntelHandler.GetTopology)
+		netintelAPI.GET("/topology/nodes/:id", netIntelHandler.GetTopologyNode)
+		netintelAPI.PUT("/topology/nodes/:id", netIntelHandler.UpdateTopologyNode)
+
+		// Heatmaps & Trends
+		netintelAPI.GET("/heatmap", netIntelHandler.GetHeatmap)
+		netintelAPI.GET("/trends", netIntelHandler.GetTrends)
+
+		// Predictions & Tracks
+		netintelAPI.GET("/predictions", netIntelHandler.GetPredictions)
+		netintelAPI.GET("/tracks", netIntelHandler.ListTracks)
+		netintelAPI.GET("/tracks/:mac", netIntelHandler.GetTrack)
+
+		// Anomalies
+		netintelAPI.GET("/anomalies", netIntelHandler.ListAnomalies)
+		netintelAPI.POST("/anomalies/:id/acknowledge", netIntelHandler.AcknowledgeAnomaly)
+		netintelAPI.POST("/anomalies/:id/resolve", netIntelHandler.ResolveAnomaly)
+
+		// Alerts
+		netintelAPI.GET("/alerts", netIntelHandler.ListAlerts)
+		netintelAPI.POST("/alerts/:id/acknowledge", netIntelHandler.AcknowledgeAlert)
+		netintelAPI.POST("/alerts/:id/resolve", netIntelHandler.ResolveAlert)
+
+		// Forecasts
+		netintelAPI.GET("/forecasts", netIntelHandler.ListForecasts)
+		netintelAPI.GET("/forecasts/:metric", netIntelHandler.GetForecast)
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 

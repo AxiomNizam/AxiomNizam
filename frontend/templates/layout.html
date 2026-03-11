@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="/static/responsive.css">
     <link rel="stylesheet" href="/static/gis-dashboard.css">
     <link rel="stylesheet" href="/static/analytics-dashboard.css">
+    <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
+    <link rel="stylesheet" href="/static/netintel-dashboard.css">
     <!-- Leaflet.js for GIS maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -37,6 +39,14 @@
                     <a href="/analytics" class="nav-link {{ if eq .page "analytics-dashboard" }}active{{ end }}">
                         <span class="nav-icon">📈</span>
                         <span>Analytics</span>
+                    </a>
+                    <a href="/cdc-etl" class="nav-link {{ if eq .page "cdc-etl-dashboard" }}active{{ end }}">
+                        <span class="nav-icon">🔄</span>
+                        <span>CDC/ETL</span>
+                    </a>
+                    <a href="/netintel" class="nav-link {{ if eq .page "netintel-dashboard" }}active{{ end }}">
+                        <span class="nav-icon">📡</span>
+                        <span>NetIntel</span>
                     </a>
                     {{ if .isAuth }}
                     <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}">
@@ -79,6 +89,10 @@
                 {{ template "gis-dashboard" . }}
             {{ else if eq .pageName "analytics-dashboard" }}
                 {{ template "analytics-dashboard" . }}
+            {{ else if eq .pageName "cdc-etl-dashboard" }}
+                {{ template "cdc-etl-dashboard" . }}
+            {{ else if eq .pageName "netintel-dashboard" }}
+                {{ template "netintel-dashboard" . }}
             {{ end }}
         </main>
 

@@ -1,0 +1,331 @@
+{{ define "netintel-dashboard" }}
+<div class="netintel-container">
+    <!-- Tab Navigation -->
+    <div class="ni-tab-nav">
+        <button class="ni-tab active" data-tab="overview" onclick="NI.switchTab('overview')">
+            <span class="tab-icon">🏠</span> Overview
+        </button>
+        <button class="ni-tab" data-tab="logs" onclick="NI.switchTab('logs')">
+            <span class="tab-icon">📋</span> Log Explorer
+        </button>
+        <button class="ni-tab" data-tab="topology" onclick="NI.switchTab('topology')">
+            <span class="tab-icon">🔗</span> Topology
+        </button>
+        <button class="ni-tab" data-tab="heatmap" onclick="NI.switchTab('heatmap')">
+            <span class="tab-icon">🗺️</span> Heatmaps
+        </button>
+        <button class="ni-tab" data-tab="trends" onclick="NI.switchTab('trends')">
+            <span class="tab-icon">📈</span> Trends
+        </button>
+        <button class="ni-tab" data-tab="alerts" onclick="NI.switchTab('alerts')">
+            <span class="tab-icon">🔔</span> Alerts
+            <span class="ni-badge" id="alertBadge">0</span>
+        </button>
+        <button class="ni-tab" data-tab="predictions" onclick="NI.switchTab('predictions')">
+            <span class="tab-icon">🔮</span> Predictions
+        </button>
+        <button class="ni-tab" data-tab="parsers" onclick="NI.switchTab('parsers')">
+            <span class="tab-icon">⚙️</span> Parsers
+        </button>
+    </div>
+
+    <!-- ====== OVERVIEW TAB ====== -->
+    <div class="ni-panel active" id="panel-overview">
+        <div class="ni-kpi-grid">
+            <div class="ni-kpi-card">
+                <div class="ni-kpi-icon">📡</div>
+                <div class="ni-kpi-value" id="kpi-devices">—</div>
+                <div class="ni-kpi-label">Active Devices</div>
+            </div>
+            <div class="ni-kpi-card">
+                <div class="ni-kpi-icon">📋</div>
+                <div class="ni-kpi-value" id="kpi-entries">—</div>
+                <div class="ni-kpi-label">Log Entries</div>
+            </div>
+            <div class="ni-kpi-card">
+                <div class="ni-kpi-icon">🔔</div>
+                <div class="ni-kpi-value ni-kpi-alert" id="kpi-alerts">—</div>
+                <div class="ni-kpi-label">Active Alerts</div>
+            </div>
+            <div class="ni-kpi-card">
+                <div class="ni-kpi-icon">⚠️</div>
+                <div class="ni-kpi-value ni-kpi-anomaly" id="kpi-anomalies">—</div>
+                <div class="ni-kpi-label">Anomalies</div>
+            </div>
+            <div class="ni-kpi-card">
+                <div class="ni-kpi-icon">🎯</div>
+                <div class="ni-kpi-value" id="kpi-accuracy">—</div>
+                <div class="ni-kpi-label">Prediction Accuracy</div>
+            </div>
+            <div class="ni-kpi-card">
+                <div class="ni-kpi-icon">📶</div>
+                <div class="ni-kpi-value" id="kpi-signal">—</div>
+                <div class="ni-kpi-label">Avg Signal (dBm)</div>
+            </div>
+        </div>
+
+        <div class="ni-charts-row">
+            <div class="ni-chart-card">
+                <h3>Log Distribution by Type</h3>
+                <canvas id="chartLogTypes"></canvas>
+            </div>
+            <div class="ni-chart-card">
+                <h3>Severity Breakdown</h3>
+                <canvas id="chartSeverity"></canvas>
+            </div>
+        </div>
+
+        <div class="ni-charts-row">
+            <div class="ni-chart-card ni-chart-wide">
+                <h3>Traffic Trend (24h)</h3>
+                <canvas id="chartTrafficTrend"></canvas>
+            </div>
+        </div>
+
+        <div class="ni-section">
+            <h3>Top Devices</h3>
+            <div class="ni-table-wrap">
+                <table class="ni-table">
+                    <thead>
+                        <tr><th>MAC</th><th>Name</th><th>Entries</th><th>Avg Signal</th><th>Zone</th><th>Risk</th></tr>
+                    </thead>
+                    <tbody id="topDevicesBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ni-section">
+            <h3>Zone Activity</h3>
+            <div class="ni-zone-bars" id="zoneBars"></div>
+        </div>
+    </div>
+
+    <!-- ====== LOG EXPLORER TAB ====== -->
+    <div class="ni-panel" id="panel-logs">
+        <div class="ni-toolbar">
+            <select id="logTypeFilter" onchange="NI.loadLogs()">
+                <option value="">All Types</option>
+            </select>
+            <select id="logSeverityFilter" onchange="NI.loadLogs()">
+                <option value="">All Severities</option>
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Error</option>
+                <option value="critical">Critical</option>
+            </select>
+            <select id="logLimitFilter" onchange="NI.loadLogs()">
+                <option value="100">100 entries</option>
+                <option value="200" selected>200 entries</option>
+                <option value="500">500 entries</option>
+                <option value="1000">1000 entries</option>
+            </select>
+            <button class="ni-btn" onclick="NI.loadLogs()">🔄 Refresh</button>
+            <button class="ni-btn ni-btn-secondary" onclick="NI.exportLogs()">📥 Export CSV</button>
+        </div>
+
+        <div class="ni-log-stats" id="logStats"></div>
+
+        <div class="ni-table-wrap ni-table-scroll">
+            <table class="ni-table ni-table-compact">
+                <thead>
+                    <tr><th>Time</th><th>Type</th><th>Severity</th><th>Source</th><th>Message</th><th>Device</th></tr>
+                </thead>
+                <tbody id="logTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ====== TOPOLOGY TAB ====== -->
+    <div class="ni-panel" id="panel-topology">
+        <div class="ni-toolbar">
+            <span class="ni-toolbar-label">Network Topology Graph</span>
+            <button class="ni-btn" onclick="NI.loadTopology()">🔄 Refresh</button>
+        </div>
+        <div class="ni-topo-stats" id="topoStats"></div>
+        <div class="ni-topo-container">
+            <canvas id="topoCanvas" width="820" height="620"></canvas>
+        </div>
+        <div class="ni-topo-legend">
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#3b82f6"></span> Router</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#10b981"></span> Switch</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#f59e0b"></span> Access Point</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#ef4444"></span> Firewall</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#8b5cf6"></span> Server</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#06b6d4"></span> Sensor</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#ec4899"></span> Gateway</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#64748b"></span> Device</span>
+            <span class="ni-legend-item"><span class="ni-legend-dot" style="background:#a855f7"></span> Cloud</span>
+        </div>
+    </div>
+
+    <!-- ====== HEATMAP TAB ====== -->
+    <div class="ni-panel" id="panel-heatmap">
+        <div class="ni-toolbar">
+            <select id="heatmapCategory" onchange="NI.loadHeatmap()">
+                <option value="wifi_signal">Wi-Fi Signal Strength</option>
+                <option value="movement_density">Movement Density</option>
+                <option value="traffic_volume">Traffic Volume</option>
+            </select>
+            <button class="ni-btn" onclick="NI.loadHeatmap()">🔄 Refresh</button>
+        </div>
+        <div id="heatmapMap" class="ni-heatmap-map"></div>
+        <div class="ni-heatmap-legend" id="heatmapLegend"></div>
+    </div>
+
+    <!-- ====== TRENDS TAB ====== -->
+    <div class="ni-panel" id="panel-trends">
+        <div class="ni-toolbar">
+            <select id="trendMetric" onchange="NI.loadTrends()">
+                <option value="traffic">Traffic (Bytes)</option>
+                <option value="errors">Errors</option>
+                <option value="devices">Device Activity</option>
+                <option value="connectivity">Connectivity (WiFi/CSI)</option>
+            </select>
+            <select id="trendHours" onchange="NI.loadTrends()">
+                <option value="6">Last 6h</option>
+                <option value="12">Last 12h</option>
+                <option value="24" selected>Last 24h</option>
+                <option value="48">Last 48h</option>
+            </select>
+            <button class="ni-btn" onclick="NI.loadTrends()">🔄 Refresh</button>
+        </div>
+        <div class="ni-chart-card ni-chart-full">
+            <h3 id="trendTitle">Traffic Trend</h3>
+            <canvas id="chartTrend"></canvas>
+        </div>
+
+        <div class="ni-section">
+            <h3>Traffic Forecasts</h3>
+            <div class="ni-forecast-grid" id="forecastGrid"></div>
+        </div>
+    </div>
+
+    <!-- ====== ALERTS TAB ====== -->
+    <div class="ni-panel" id="panel-alerts">
+        <div class="ni-toolbar">
+            <select id="alertStatusFilter" onchange="NI.loadAlerts()">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
+            </select>
+            <button class="ni-btn" onclick="NI.loadAlerts()">🔄 Refresh</button>
+        </div>
+
+        <div class="ni-section">
+            <h3>Active Alerts</h3>
+            <div class="ni-alert-list" id="alertList"></div>
+        </div>
+
+        <div class="ni-section">
+            <h3>Anomaly Detection</h3>
+            <div class="ni-toolbar ni-toolbar-inner">
+                <select id="anomalyStatusFilter" onchange="NI.loadAnomalies()">
+                    <option value="">All</option>
+                    <option value="active">Active</option>
+                    <option value="acknowledged">Acknowledged</option>
+                    <option value="resolved">Resolved</option>
+                </select>
+                <select id="anomalySeverityFilter" onchange="NI.loadAnomalies()">
+                    <option value="">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+            <div class="ni-anomaly-list" id="anomalyList"></div>
+        </div>
+    </div>
+
+    <!-- ====== PREDICTIONS TAB ====== -->
+    <div class="ni-panel" id="panel-predictions">
+        <div class="ni-toolbar">
+            <span class="ni-toolbar-label">Movement Predictions & Device Tracking</span>
+            <button class="ni-btn" onclick="NI.loadPredictions()">🔄 Refresh</button>
+        </div>
+
+        <div class="ni-pred-grid" id="predictionGrid"></div>
+
+        <div class="ni-section">
+            <h3>Movement Tracks</h3>
+            <div class="ni-table-wrap ni-table-scroll">
+                <table class="ni-table">
+                    <thead>
+                        <tr><th>Device</th><th>Name</th><th>Zones Visited</th><th>Distance</th><th>Avg Speed</th><th>Points</th><th>Last Seen</th></tr>
+                    </thead>
+                    <tbody id="trackTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== PARSERS TAB ====== -->
+    <div class="ni-panel" id="panel-parsers">
+        <div class="ni-toolbar">
+            <span class="ni-toolbar-label">Log Parser Configuration</span>
+            <button class="ni-btn ni-btn-primary" onclick="NI.showCreateParser()">+ New Parser</button>
+            <button class="ni-btn" onclick="NI.loadParsers()">🔄 Refresh</button>
+        </div>
+
+        <div class="ni-section">
+            <h3>Supported Log Types</h3>
+            <div class="ni-logtypes-grid" id="logTypesGrid"></div>
+        </div>
+
+        <div class="ni-section">
+            <h3>Parser Instances</h3>
+            <div class="ni-table-wrap">
+                <table class="ni-table">
+                    <thead>
+                        <tr><th>Name</th><th>Type</th><th>Source</th><th>Status</th><th>Parsed</th><th>Errors</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody id="parserTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parser Create Modal -->
+    <div class="ni-modal" id="parserModal">
+        <div class="ni-modal-content">
+            <div class="ni-modal-header">
+                <h3>Create New Parser</h3>
+                <button class="ni-modal-close" onclick="NI.closeParserModal()">&times;</button>
+            </div>
+            <div class="ni-modal-body">
+                <div class="ni-form-group">
+                    <label>Name</label>
+                    <input type="text" id="parserName" placeholder="My Parser">
+                </div>
+                <div class="ni-form-group">
+                    <label>Log Type</label>
+                    <select id="parserLogType"></select>
+                </div>
+                <div class="ni-form-group">
+                    <label>Description</label>
+                    <textarea id="parserDesc" rows="3" placeholder="Parser description..."></textarea>
+                </div>
+                <div class="ni-form-group">
+                    <label>Source Type</label>
+                    <select id="parserSourceType">
+                        <option value="agent">Agent</option>
+                        <option value="stream">Stream</option>
+                        <option value="file">File</option>
+                        <option value="api">API</option>
+                        <option value="syslog_receiver">Syslog Receiver</option>
+                    </select>
+                </div>
+                <div class="ni-form-group">
+                    <label>Endpoint</label>
+                    <input type="text" id="parserEndpoint" placeholder="udp://0.0.0.0:514">
+                </div>
+                <button class="ni-btn ni-btn-primary ni-btn-full" onclick="NI.createParser()">Create Parser</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/netintel-dashboard.js"></script>
+{{ end }}
