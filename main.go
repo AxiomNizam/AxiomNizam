@@ -527,6 +527,59 @@ func main() {
 	// Data Platform Overview
 	router.GET("/api/v1/data-platform/overview", cdcEtlHandler.GetPlatformOverview)
 
+	// ====================================
+	// NETWORK INTELLIGENCE ENDPOINTS
+	// ====================================
+	netIntelHandler := handlers.NewNetIntelHandler()
+
+	netintelAPI := router.Group("/api/v1/netintel")
+	{
+		// Summary & Observability
+		netintelAPI.GET("/summary", netIntelHandler.GetSummary)
+		netintelAPI.GET("/observability", netIntelHandler.GetObservability)
+		netintelAPI.GET("/log-types", netIntelHandler.GetLogTypes)
+
+		// Parser CRUD
+		netintelAPI.GET("/parsers", netIntelHandler.ListParsers)
+		netintelAPI.GET("/parsers/:id", netIntelHandler.GetParser)
+		netintelAPI.POST("/parsers", netIntelHandler.CreateParser)
+		netintelAPI.PUT("/parsers/:id", netIntelHandler.UpdateParser)
+		netintelAPI.DELETE("/parsers/:id", netIntelHandler.DeleteParser)
+
+		// Log Entries
+		netintelAPI.GET("/logs", netIntelHandler.ListEntries)
+		netintelAPI.POST("/logs", netIntelHandler.IngestLog)
+		netintelAPI.GET("/logs/stats", netIntelHandler.GetEntryStats)
+
+		// Topology
+		netintelAPI.GET("/topology", netIntelHandler.GetTopology)
+		netintelAPI.GET("/topology/nodes/:id", netIntelHandler.GetTopologyNode)
+		netintelAPI.PUT("/topology/nodes/:id", netIntelHandler.UpdateTopologyNode)
+
+		// Heatmaps & Trends
+		netintelAPI.GET("/heatmap", netIntelHandler.GetHeatmap)
+		netintelAPI.GET("/trends", netIntelHandler.GetTrends)
+
+		// Predictions & Tracks
+		netintelAPI.GET("/predictions", netIntelHandler.GetPredictions)
+		netintelAPI.GET("/tracks", netIntelHandler.ListTracks)
+		netintelAPI.GET("/tracks/:mac", netIntelHandler.GetTrack)
+
+		// Anomalies
+		netintelAPI.GET("/anomalies", netIntelHandler.ListAnomalies)
+		netintelAPI.POST("/anomalies/:id/acknowledge", netIntelHandler.AcknowledgeAnomaly)
+		netintelAPI.POST("/anomalies/:id/resolve", netIntelHandler.ResolveAnomaly)
+
+		// Alerts
+		netintelAPI.GET("/alerts", netIntelHandler.ListAlerts)
+		netintelAPI.POST("/alerts/:id/acknowledge", netIntelHandler.AcknowledgeAlert)
+		netintelAPI.POST("/alerts/:id/resolve", netIntelHandler.ResolveAlert)
+
+		// Forecasts
+		netintelAPI.GET("/forecasts", netIntelHandler.ListForecasts)
+		netintelAPI.GET("/forecasts/:metric", netIntelHandler.GetForecast)
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 

@@ -66,6 +66,7 @@ func main() {
 	router.GET("/gis", gisHandler)
 	router.GET("/analytics", analyticsHandler)
 	router.GET("/cdc-etl", cdcEtlHandler)
+	router.GET("/netintel", netintelHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -82,6 +83,7 @@ func main() {
 	fmt.Printf("🌍 GIS Dashboard: http://localhost:%s/gis\n", port)
 	fmt.Printf("📊 Analytics Dashboard: http://localhost:%s/analytics\n", port)
 	fmt.Printf("🔄 CDC/ETL Dashboard: http://localhost:%s/cdc-etl\n", port)
+	fmt.Printf("📡 Network Intelligence: http://localhost:%s/netintel\n", port)
 	fmt.Printf("📡 Backend: %s\n\n", backendURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
@@ -182,6 +184,26 @@ func cdcEtlHandler(c *gin.Context) {
 		"title":      "AxiomNizam - CDC/ETL Dashboard",
 		"pageName":   "cdc-etl-dashboard",
 		"page":       "cdc-etl-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// netintelHandler serves the Network Intelligence dashboard
+func netintelHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "User"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Network Intelligence",
+		"pageName":   "netintel-dashboard",
+		"page":       "netintel-dashboard",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,
