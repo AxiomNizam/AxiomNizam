@@ -1,0 +1,177 @@
+{{ define "cdc-etl-dashboard" }}
+<div class="cdc-etl-dashboard" id="cdcEtlApp">
+    <!-- Tab Navigation -->
+    <div class="cdc-etl-tabs">
+        <button class="cdc-etl-tab active" onclick="switchTab('etl')" id="tab-etl">
+            <span>🔄</span> ETL Pipelines <span class="tab-badge" id="etl-count">0</span>
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('cdc')" id="tab-cdc">
+            <span>📡</span> CDC Pipelines <span class="tab-badge" id="cdc-count">0</span>
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('observability')" id="tab-obs">
+            <span>📊</span> Observability
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('connectors')" id="tab-conn">
+            <span>🔌</span> Connectors
+        </button>
+    </div>
+
+    <!-- ===================== ETL Tab ===================== -->
+    <div class="panel-tab-content active" id="panel-etl">
+        <div class="kpi-grid" id="etl-kpis"></div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>ETL Pipelines</h3>
+                <button class="btn-create" onclick="openCreateModal('etl')">+ New Pipeline</button>
+            </div>
+            <table class="pipeline-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Steps</th>
+                        <th>Schedule</th>
+                        <th>Runs</th>
+                        <th>Last Run</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="etl-pipeline-body"></tbody>
+            </table>
+        </div>
+
+        <!-- ETL Runs -->
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Recent Runs</h3>
+            </div>
+            <table class="pipeline-table">
+                <thead>
+                    <tr>
+                        <th>Run ID</th>
+                        <th>Pipeline</th>
+                        <th>Status</th>
+                        <th>Trigger</th>
+                        <th>Rows Read</th>
+                        <th>Rows Written</th>
+                        <th>Duration</th>
+                        <th>Started</th>
+                    </tr>
+                </thead>
+                <tbody id="etl-runs-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===================== CDC Tab ===================== -->
+    <div class="panel-tab-content" id="panel-cdc">
+        <div class="kpi-grid" id="cdc-kpis"></div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>CDC Pipelines</h3>
+                <button class="btn-create" onclick="openCreateModal('cdc')">+ New Pipeline</button>
+            </div>
+            <table class="pipeline-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Source</th>
+                        <th>Sink</th>
+                        <th>Events</th>
+                        <th>Errors</th>
+                        <th>Lag</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="cdc-pipeline-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===================== Observability Tab ===================== -->
+    <div class="panel-tab-content" id="panel-observability">
+        <h3 class="section-title">📊 Platform Observability</h3>
+        <div class="kpi-grid" id="obs-kpis"></div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h4>ETL Run History</h4>
+                <canvas id="chart-etl-runs"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>CDC Events/sec Throughput</h4>
+                <canvas id="chart-cdc-throughput"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>ETL Step Type Distribution</h4>
+                <canvas id="chart-etl-steps"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>CDC Events by Operation</h4>
+                <canvas id="chart-cdc-ops"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h4>Error Breakdown (ETL)</h4>
+                <ul class="error-list" id="etl-error-list"></ul>
+            </div>
+            <div class="chart-card">
+                <h4>Error Breakdown (CDC)</h4>
+                <ul class="error-list" id="cdc-error-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== Connectors Tab ===================== -->
+    <div class="panel-tab-content" id="panel-connectors">
+        <h3 class="section-title">🔌 ETL Connectors</h3>
+        <div class="connector-grid" id="etl-connectors"></div>
+
+        <h3 class="section-title">📡 CDC Sources</h3>
+        <div class="connector-grid" id="cdc-sources"></div>
+
+        <h3 class="section-title">📤 CDC Sinks</h3>
+        <div class="connector-grid" id="cdc-sinks"></div>
+    </div>
+</div>
+
+<!-- Create Pipeline Modal -->
+<div class="cdc-etl-modal-overlay" id="createModal">
+    <div class="cdc-etl-modal">
+        <h3 id="modal-title">Create Pipeline</h3>
+        <div class="modal-form-group">
+            <label>Name</label>
+            <input type="text" id="modal-name" placeholder="Pipeline name">
+        </div>
+        <div class="modal-form-group">
+            <label>Description</label>
+            <textarea id="modal-desc" placeholder="Describe this pipeline"></textarea>
+        </div>
+        <div class="modal-form-group" id="modal-schedule-group">
+            <label>Schedule (cron)</label>
+            <input type="text" id="modal-schedule" placeholder="*/30 * * * *">
+        </div>
+        <div class="modal-form-group" id="modal-source-group" style="display:none">
+            <label>Source Type</label>
+            <select id="modal-source-type"></select>
+        </div>
+        <div class="modal-form-group" id="modal-sink-group" style="display:none">
+            <label>Sink Type</label>
+            <select id="modal-sink-type"></select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeCreateModal()">Cancel</button>
+            <button class="btn-submit" onclick="submitCreate()">Create</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/cdc-etl-dashboard.js"></script>
+{{ end }}

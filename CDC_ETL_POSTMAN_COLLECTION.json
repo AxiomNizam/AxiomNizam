@@ -1,0 +1,276 @@
+{
+	"info": {
+		"_postman_id": "cdc-etl-collection-2026",
+		"name": "AxiomNizam CDC & ETL Platform",
+		"description": "Full CDC (Change Data Capture) and ETL (Extract, Transform, Load) pipeline management, observability, and connector endpoints.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "ETL Pipelines",
+			"item": [
+				{
+					"name": "List ETL Pipelines",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/pipelines",
+						"description": "Get all ETL pipelines with their current status, steps, and run counts."
+					}
+				},
+				{
+					"name": "Get ETL Pipeline",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/pipelines/etl-mysql-pg-sync",
+						"description": "Get a specific ETL pipeline by ID."
+					}
+				},
+				{
+					"name": "Create ETL Pipeline",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/api/v1/etl/pipelines",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"My Custom Pipeline\",\n  \"description\": \"Extract from CSV, transform, load to PostgreSQL\",\n  \"schedule\": \"0 */2 * * *\",\n  \"steps\": [\n    {\n      \"id\": \"s1\",\n      \"name\": \"Read CSV\",\n      \"type\": \"extract\",\n      \"connector\": \"csv\",\n      \"order\": 1,\n      \"config\": { \"path\": \"/data/input.csv\" }\n    },\n    {\n      \"id\": \"s2\",\n      \"name\": \"Transform\",\n      \"type\": \"transform\",\n      \"connector\": \"\",\n      \"order\": 2,\n      \"config\": { \"operations\": [\"lowercase:email\"] }\n    },\n    {\n      \"id\": \"s3\",\n      \"name\": \"Load to PG\",\n      \"type\": \"load\",\n      \"connector\": \"postgres\",\n      \"order\": 3,\n      \"config\": { \"host\": \"localhost\", \"database\": \"warehouse\", \"table\": \"data\" }\n    }\n  ],\n  \"tags\": [\"custom\", \"csv\"]\n}"
+						},
+						"description": "Create a new ETL pipeline with steps and schedule."
+					}
+				},
+				{
+					"name": "Update ETL Pipeline",
+					"request": {
+						"method": "PUT",
+						"url": "{{base_url}}/api/v1/etl/pipelines/etl-mysql-pg-sync",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"MySQL-PG Sync (Updated)\",\n  \"schedule\": \"*/15 * * * *\"\n}"
+						},
+						"description": "Update an existing ETL pipeline."
+					}
+				},
+				{
+					"name": "Delete ETL Pipeline",
+					"request": {
+						"method": "DELETE",
+						"url": "{{base_url}}/api/v1/etl/pipelines/etl-csv-mongo-analytics",
+						"description": "Delete an ETL pipeline by ID."
+					}
+				},
+				{
+					"name": "Run ETL Pipeline",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/api/v1/etl/pipelines/etl-mysql-pg-sync/run",
+						"description": "Trigger a manual run of an ETL pipeline."
+					}
+				}
+			]
+		},
+		{
+			"name": "ETL Runs",
+			"item": [
+				{
+					"name": "List All ETL Runs",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/runs",
+						"description": "Get all ETL pipeline run history."
+					}
+				},
+				{
+					"name": "List Runs for Pipeline",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/runs?pipeline_id=etl-mysql-pg-sync",
+						"description": "Get runs filtered by pipeline ID."
+					}
+				},
+				{
+					"name": "Get ETL Run",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/runs/run-seed-1",
+						"description": "Get details of a specific run including step results and metrics."
+					}
+				}
+			]
+		},
+		{
+			"name": "ETL Observability",
+			"item": [
+				{
+					"name": "Get ETL Observability",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/observability",
+						"description": "Get ETL observability metrics: total runs, success/failure counts, rows processed, avg duration, step type stats, error breakdown, and throughput log."
+					}
+				},
+				{
+					"name": "Get ETL Connectors",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/etl/connectors",
+						"description": "List all available ETL connectors (databases, files, APIs, queues, streams)."
+					}
+				}
+			]
+		},
+		{
+			"name": "CDC Pipelines",
+			"item": [
+				{
+					"name": "List CDC Pipelines",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/cdc/pipelines",
+						"description": "Get all CDC pipelines with source/sink configs, event counts, lag, and status."
+					}
+				},
+				{
+					"name": "Get CDC Pipeline",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/cdc/pipelines/cdc-mysql-kafka",
+						"description": "Get a specific CDC pipeline by ID."
+					}
+				},
+				{
+					"name": "Create CDC Pipeline",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/api/v1/cdc/pipelines",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"PG WAL to Redis\",\n  \"description\": \"Capture PostgreSQL WAL changes and publish to Redis Streams\",\n  \"source\": {\n    \"type\": \"pg_wal\",\n    \"connector\": \"postgres\",\n    \"config\": { \"host\": \"localhost\", \"port\": 5432, \"database\": \"mydb\", \"slot_name\": \"cdc_slot\" },\n    \"tables\": [\"orders\", \"inventory\"]\n  },\n  \"sink\": {\n    \"type\": \"redis\",\n    \"connector\": \"redis\",\n    \"config\": { \"host\": \"localhost\", \"port\": 6379, \"stream_key\": \"cdc:pg-changes\" },\n    \"batch_size\": 50\n  },\n  \"filters\": {\n    \"operations\": [\"INSERT\", \"UPDATE\"]\n  },\n  \"tags\": [\"postgres\", \"redis\", \"realtime\"]\n}"
+						},
+						"description": "Create a new CDC pipeline with source connector, sink connector, and filters."
+					}
+				},
+				{
+					"name": "Update CDC Pipeline",
+					"request": {
+						"method": "PUT",
+						"url": "{{base_url}}/api/v1/cdc/pipelines/cdc-mysql-kafka",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"MySQL Binlog → Kafka (Renamed)\",\n  \"description\": \"Updated description\"\n}"
+						},
+						"description": "Update an existing CDC pipeline."
+					}
+				},
+				{
+					"name": "Delete CDC Pipeline",
+					"request": {
+						"method": "DELETE",
+						"url": "{{base_url}}/api/v1/cdc/pipelines/cdc-maria-redis",
+						"description": "Delete a CDC pipeline."
+					}
+				}
+			]
+		},
+		{
+			"name": "CDC Actions",
+			"item": [
+				{
+					"name": "Start CDC Pipeline",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/api/v1/cdc/pipelines/cdc-mongo-webhook/start",
+						"description": "Start a CDC pipeline (begin capturing changes)."
+					}
+				},
+				{
+					"name": "Pause CDC Pipeline",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/api/v1/cdc/pipelines/cdc-mysql-kafka/pause",
+						"description": "Pause a running CDC pipeline."
+					}
+				},
+				{
+					"name": "Stop CDC Pipeline",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/api/v1/cdc/pipelines/cdc-pg-elastic/stop",
+						"description": "Stop a CDC pipeline completely."
+					}
+				}
+			]
+		},
+		{
+			"name": "CDC Observability",
+			"item": [
+				{
+					"name": "Get CDC Observability",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/cdc/observability",
+						"description": "Get CDC observability metrics: pipeline counts, events total, events/sec, errors, lag, events by operation, events by table, error breakdown, and throughput log."
+					}
+				},
+				{
+					"name": "Get CDC Source Types",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/cdc/sources",
+						"description": "List all available CDC source connector types (MySQL binlog, PG WAL, MongoDB oplog, polling, webhook, etc.)."
+					}
+				},
+				{
+					"name": "Get CDC Sink Types",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/cdc/sinks",
+						"description": "List all available CDC sink connector types (Kafka, webhook, PostgreSQL, Elasticsearch, S3, Redis, API)."
+					}
+				}
+			]
+		},
+		{
+			"name": "Data Platform",
+			"item": [
+				{
+					"name": "Platform Overview",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/v1/data-platform/overview",
+						"description": "Get combined overview of the entire data platform: ETL and CDC observability, connector counts, and all pipelines."
+					}
+				}
+			]
+		}
+	]
+}

@@ -488,6 +488,45 @@ func main() {
 		analyticsAPI.GET("/widget-types", analyticsHandler.GetWidgetTypes)
 	}
 
+	// ====================================
+	// CDC & ETL DATA PLATFORM ENDPOINTS
+	// ====================================
+	cdcEtlHandler := handlers.NewCDCETLHandler()
+
+	// ETL Pipeline Management
+	etlAPI := router.Group("/api/v1/etl")
+	{
+		etlAPI.GET("/pipelines", cdcEtlHandler.ListETLPipelines)
+		etlAPI.GET("/pipelines/:id", cdcEtlHandler.GetETLPipeline)
+		etlAPI.POST("/pipelines", cdcEtlHandler.CreateETLPipeline)
+		etlAPI.PUT("/pipelines/:id", cdcEtlHandler.UpdateETLPipeline)
+		etlAPI.DELETE("/pipelines/:id", cdcEtlHandler.DeleteETLPipeline)
+		etlAPI.POST("/pipelines/:id/run", cdcEtlHandler.RunETLPipeline)
+		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
+		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
+		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
+		etlAPI.GET("/observability", cdcEtlHandler.GetETLObservability)
+	}
+
+	// CDC Pipeline Management
+	cdcAPI := router.Group("/api/v1/cdc")
+	{
+		cdcAPI.GET("/pipelines", cdcEtlHandler.ListCDCPipelines)
+		cdcAPI.GET("/pipelines/:id", cdcEtlHandler.GetCDCPipeline)
+		cdcAPI.POST("/pipelines", cdcEtlHandler.CreateCDCPipeline)
+		cdcAPI.PUT("/pipelines/:id", cdcEtlHandler.UpdateCDCPipeline)
+		cdcAPI.DELETE("/pipelines/:id", cdcEtlHandler.DeleteCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/start", cdcEtlHandler.StartCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/pause", cdcEtlHandler.PauseCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/stop", cdcEtlHandler.StopCDCPipeline)
+		cdcAPI.GET("/sources", cdcEtlHandler.GetCDCSourceTypes)
+		cdcAPI.GET("/sinks", cdcEtlHandler.GetCDCSinkTypes)
+		cdcAPI.GET("/observability", cdcEtlHandler.GetCDCObservability)
+	}
+
+	// Data Platform Overview
+	router.GET("/api/v1/data-platform/overview", cdcEtlHandler.GetPlatformOverview)
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 

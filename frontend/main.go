@@ -65,6 +65,7 @@ func main() {
 	router.GET("/system-manager", systemManagerHandler)
 	router.GET("/gis", gisHandler)
 	router.GET("/analytics", analyticsHandler)
+	router.GET("/cdc-etl", cdcEtlHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -79,8 +80,9 @@ func main() {
 	fmt.Printf("🔧 Admin: http://localhost:%s/admin\n", port)
 	fmt.Printf("🖥️  System Manager: http://localhost:%s/system-manager\n", port)
 	fmt.Printf("🌍 GIS Dashboard: http://localhost:%s/gis\n", port)
-	fmt.Printf("� Analytics Dashboard: http://localhost:%s/analytics\n", port)
-	fmt.Printf("�� Backend: %s\n\n", backendURL)
+	fmt.Printf("📊 Analytics Dashboard: http://localhost:%s/analytics\n", port)
+	fmt.Printf("🔄 CDC/ETL Dashboard: http://localhost:%s/cdc-etl\n", port)
+	fmt.Printf("📡 Backend: %s\n\n", backendURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
 }
@@ -160,6 +162,26 @@ func analyticsHandler(c *gin.Context) {
 		"title":      "AxiomNizam - Analytics Dashboard",
 		"pageName":   "analytics-dashboard",
 		"page":       "analytics-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// cdcEtlHandler serves the CDC/ETL dashboard
+func cdcEtlHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "User"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - CDC/ETL Dashboard",
+		"pageName":   "cdc-etl-dashboard",
+		"page":       "cdc-etl-dashboard",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,
