@@ -1,4 +1,4 @@
-// Admin Dashboard JS — API Builder, CSV-to-Dashboard, Dashboard↔GIS Converter
+// Admin Dashboard JS — API Builder, File-to-Dashboard, Dashboard↔GIS Converter, File Scanner
 const BACKEND_URL = (() => {
     const elem = document.getElementById('backendURL');
     if (elem && elem.textContent) {
@@ -51,6 +51,8 @@ window.addEventListener('DOMContentLoaded', function() {
     loadCSVHistory();
     loadAPIs();
     setupCSVDropZone();
+    setupScanDropZone();
+    loadScannerHealth();
 });
 
 function switchTab(tabName) {
@@ -65,6 +67,7 @@ function switchTab(tabName) {
     if (tabName === 'api-builder') { loadBuilderSummary(); loadCustomAPIs(); }
     if (tabName === 'csv-upload') { loadCSVHistory(); }
     if (tabName === 'converter') { loadConverterDropdowns(); loadConversionHistory(); }
+    if (tabName === 'file-scanner') { loadScanHistory(); loadScannerHealth(); }
 }
 
 // ===================================================================
@@ -138,6 +141,14 @@ function openCreateAPIModal() {
 function closeCreateAPIModal() {
     document.getElementById('createAPIModal').style.display = 'none';
     document.getElementById('createAPIForm').reset();
+    var ttlGroup = document.getElementById('cacheTTLGroup');
+    if (ttlGroup) ttlGroup.style.display = 'none';
+}
+
+function toggleCacheTTL() {
+    var checked = document.getElementById('apiCacheInput').checked;
+    var group = document.getElementById('cacheTTLGroup');
+    if (group) group.style.display = checked ? 'block' : 'none';
 }
 
 function submitCreateAPI(e) {
@@ -166,6 +177,8 @@ function submitCreateAPI(e) {
         category: document.getElementById('apiCategoryInput').value,
         auth_required: document.getElementById('apiAuthInput').checked,
         rate_limit: parseInt(document.getElementById('apiRateLimitInput').value) || 0,
+        cache_enabled: document.getElementById('apiCacheInput').checked,
+        cache_ttl: parseInt(document.getElementById('apiCacheTTLInput').value) || 300,
         mock_response: mockResp,
         query_params: queryParams
     };
@@ -212,12 +225,12 @@ function setupCSVDropZone() {
         if (e.dataTransfer.files.length > 0) {
             var fi = document.getElementById('csvFileInput');
             fi.files = e.dataTransfer.files;
-            handleCSVUpload();
+            handleFileUpload();
         }
     });
 }
 
-function handleCSVUpload() {
+function handleFileUpload() {
     var fileInput = document.getElementById('csvFileInput');
     if (!fileInput.files || !fileInput.files[0]) return;
     var file = fileInput.files[0];
@@ -318,13 +331,22 @@ function loadCSVHistory() {
             el.innerHTML = '<div class="empty-state">No CSV uploads yet</div>';
             return;
         }
-        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Rows</th><th>Cols</th><th>Geo</th><th>Status</th><th>Dashboard</th><th>Actions</th></tr></thead><tbody>';
+        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Type</th><th>Rows</th><th>Cols</th><th>Geo</th><th>Status</th><th>Dashboard</th><th>Actions</th></tr></thead><tbody>';
         list.forEach(function(u) {
             var safeId = u.id.replace(/'/g, "\\'");
-            html += '<tr><td>' + escapeHtml(u.filename) + '</td><td>' + u.rows + '</td><td>' + u.columns + '</td>' +
+            var dashActions = '';
+            if (u.dashboard_id) {
+                var safeDashId = u.dashboard_id.replace(/'/g, "\\'");
+                dashActions = '<span>' + escapeHtml(u.dashboard_id) + '</span> <button class="btn-sm btn-del" onclick="deleteDashboard(\'' + safeDashId + '\')">Del</button>';
+            } else if (u.gis_dashboard_id) {
+                dashActions = escapeHtml(u.gis_dashboard_id);
+            } else {
+                dashActions = '-';
+            }
+            html += '<tr><td>' + escapeHtml(u.filename) + '</td><td>' + (u.file_type || 'csv').toUpperCase() + '</td><td>' + u.rows + '</td><td>' + u.columns + '</td>' +
                 '<td>' + (u.has_geo_data ? 'Yes' : '-') + '</td>' +
                 '<td><span class="status-badge status-' + u.status + '">' + u.status + '</span></td>' +
-                '<td>' + (u.dashboard_id || u.gis_dashboard_id || '-') + '</td>' +
+                '<td>' + dashActions + '</td>' +
                 '<td><button class="btn-sm btn-del" onclick="deleteCSVUpload(\'' + safeId + '\')">Del</button></td></tr>';
         });
         html += '</tbody></table>';
@@ -592,6 +614,147 @@ function addLog(message, type) {
         '<span class="log-level">' + type.toUpperCase() + '</span>' +
         '<span class="log-message">' + escapeHtml(message) + '</span>';
     logViewer.insertBefore(entry, logViewer.firstChild);
+}
+
+// ===================================================================
+// File Scanner (SafeGate Pipeline)
+// ===================================================================
+function setupScanDropZone() {
+    var dz = document.getElementById('scanDropZone');
+    if (!dz) return;
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+    dz.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dz.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) {
+            var fi = document.getElementById('scanFileInput');
+            fi.files = e.dataTransfer.files;
+            handleFileScan();
+        }
+    });
+}
+
+function handleFileScan() {
+    var fileInput = document.getElementById('scanFileInput');
+    if (!fileInput.files || !fileInput.files[0]) return;
+    var file = fileInput.files[0];
+
+    var formData = new FormData();
+    formData.append('file', file);
+
+    var token = localStorage.getItem('authToken');
+    var headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    document.getElementById('scanResult').style.display = 'block';
+    document.getElementById('scanFilenameDisplay').textContent = 'Scanning ' + file.name + '...';
+    document.getElementById('scanBadges').innerHTML = '<span class="badge">Scanning...</span>';
+    document.getElementById('scanFindings').innerHTML = '<div class="loading">Running SafeGate pipeline...</div>';
+
+    fetch(BACKEND_URL + '/api/v1/builder/scanner/scan', {
+        method: 'POST', headers: headers, body: formData
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.status === 'success') {
+            showScanResult(d.scan);
+            addLog('Scanned file: ' + d.scan.filename + ' — ' + (d.safe ? 'SAFE' : 'THREATS FOUND'), d.safe ? 'info' : 'error');
+            loadScanHistory();
+        } else {
+            document.getElementById('scanFindings').innerHTML = '<div class="error-state">' + escapeHtml(d.error || 'Scan failed') + '</div>';
+        }
+    }).catch(function(err) {
+        document.getElementById('scanFindings').innerHTML = '<div class="error-state">Scan error: ' + escapeHtml(err.message) + '</div>';
+    });
+}
+
+function showScanResult(scan) {
+    document.getElementById('scanFilenameDisplay').textContent = scan.filename;
+    var safeBadge = scan.safe
+        ? '<span class="badge badge-success">✅ SAFE</span>'
+        : '<span class="badge badge-danger">⚠️ THREATS FOUND</span>';
+    document.getElementById('scanBadges').innerHTML =
+        safeBadge + ' ' +
+        '<span class="badge">' + formatFileSize(scan.file_size) + '</span> ' +
+        '<span class="badge">' + scan.findings.length + ' finding(s)</span>';
+
+    var html = '';
+    if (scan.findings.length === 0) {
+        html = '<div class="empty-state" style="padding:10px">No security issues found.</div>';
+    } else {
+        html = '<table class="admin-table compact"><thead><tr><th>Severity</th><th>Scanner</th><th>Description</th><th>Details</th></tr></thead><tbody>';
+        scan.findings.forEach(function(f) {
+            var sevClass = f.severity === 'critical' || f.severity === 'high' ? 'status-inactive' :
+                           f.severity === 'medium' ? 'status-draft' : 'status-active';
+            html += '<tr><td><span class="status-badge ' + sevClass + '">' + f.severity.toUpperCase() + '</span></td>' +
+                '<td>' + escapeHtml(f.scanner) + '</td>' +
+                '<td>' + escapeHtml(f.description) + '</td>' +
+                '<td><small>' + escapeHtml(f.details || '') + '</small></td></tr>';
+        });
+        html += '</tbody></table>';
+    }
+    document.getElementById('scanFindings').innerHTML = html;
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function loadScannerHealth() {
+    fetchJSON('/api/v1/builder/scanner/health').then(function(d) {
+        var el = document.getElementById('scannerHealth');
+        if (!el) return;
+        var html = '<div class="col-grid">';
+        (d.scanners || []).forEach(function(name) {
+            html += '<div class="col-chip col-type-string"><strong>' + escapeHtml(name) + '</strong><br><small>Active</small></div>';
+        });
+        html += '</div><p style="margin-top:8px;color:#888">Total scans performed: ' + (d.total_scans || 0) + '</p>';
+        el.innerHTML = html;
+    }).catch(function() {
+        var el = document.getElementById('scannerHealth');
+        if (el) el.innerHTML = '<div class="empty-state">Could not load scanner status</div>';
+    });
+}
+
+function loadScanHistory() {
+    fetchJSON('/api/v1/builder/scanner/scans').then(function(d) {
+        var list = d.scans || [];
+        var el = document.getElementById('scanHistory');
+        if (!el) return;
+        if (list.length === 0) {
+            el.innerHTML = '<div class="empty-state">No scans yet</div>';
+            return;
+        }
+        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Size</th><th>Result</th><th>Findings</th><th>Date</th></tr></thead><tbody>';
+        list.forEach(function(s) {
+            var resultBadge = s.safe
+                ? '<span class="status-badge status-active">Safe</span>'
+                : '<span class="status-badge status-inactive">Unsafe</span>';
+            html += '<tr><td>' + escapeHtml(s.filename) + '</td>' +
+                '<td>' + formatFileSize(s.file_size) + '</td>' +
+                '<td>' + resultBadge + '</td>' +
+                '<td>' + s.findings.length + '</td>' +
+                '<td>' + new Date(s.scanned_at).toLocaleString() + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    }).catch(function() {});
+}
+
+// ===================================================================
+// Dashboard Deletion
+// ===================================================================
+function deleteDashboard(dashId) {
+    if (!confirm('Delete this dashboard? This cannot be undone.')) return;
+    deleteJSON('/api/v1/builder/dashboards/' + dashId).then(function(d) {
+        if (d.status === 'success') {
+            addLog('Deleted dashboard: ' + dashId, 'warn');
+            loadCSVHistory();
+        } else {
+            alert(d.error || 'Failed to delete dashboard');
+        }
+    });
 }
 
 // Close modals on outside click

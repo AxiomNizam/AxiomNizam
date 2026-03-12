@@ -558,6 +558,14 @@ func main() {
 		builderAPI.POST("/convert/dashboard-to-gis", apiBuilderHandler.ConvertDashboardToGIS)
 		builderAPI.POST("/convert/gis-to-dashboard", apiBuilderHandler.ConvertGISToDashboard)
 		builderAPI.GET("/conversions", apiBuilderHandler.ListConversions)
+
+		// File Scanner (SafeGate Pipeline)
+		builderAPI.POST("/scanner/scan", apiBuilderHandler.ScanFile)
+		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
+		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
+
+		// Dashboard Deletion
+		builderAPI.DELETE("/dashboards/:id", apiBuilderHandler.DeleteDashboard)
 	}
 
 	// ====================================

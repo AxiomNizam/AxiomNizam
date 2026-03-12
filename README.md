@@ -786,11 +786,11 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
-## GUI API Builder, CSV-to-Dashboard & Dashboard↔GIS Converter
+## GUI API Builder, File-to-Dashboard, Dashboard↔GIS Converter & SafeGate File Scanner
 
 ### Overview
 
-The Admin Dashboard (`/admin`) provides three powerful GUI-based features that let administrators create APIs, ingest CSV data, and convert between dashboard and GIS views — all without writing code.
+The Admin Dashboard (`/admin`) provides powerful GUI-based features that let administrators create APIs, ingest data files, convert between dashboard types, and scan files for security threats — all without writing code.
 
 ### 1. GUI API Builder
 
@@ -799,9 +799,10 @@ Create, test, and manage custom APIs visually from the admin interface.
 **Features:**
 - Create APIs with name, method (GET/POST/PUT/DELETE/PATCH), path, category, and description
 - Set authentication requirements and rate limits per API
+- **Configurable response caching** — enable per-API caching with custom TTL (1–86400 seconds, default 300s)
 - Define mock JSON responses for rapid prototyping
 - Add query parameters with type and required/optional flags
-- Test APIs directly from the GUI with one click
+- Test APIs directly from the GUI with one click — cached responses returned instantly
 - Track hit counts and status (active/draft/archived)
 - Filter APIs by category and status
 
@@ -810,18 +811,20 @@ Create, test, and manage custom APIs visually from the admin interface.
 |--------|----------|-------------|
 | GET | `/api/v1/builder/summary` | Builder dashboard summary |
 | GET | `/api/v1/builder/apis` | List all custom APIs (filter by category, status) |
-| POST | `/api/v1/builder/apis` | Create a new custom API |
+| POST | `/api/v1/builder/apis` | Create a new custom API (supports `cache_enabled`, `cache_ttl`) |
 | GET | `/api/v1/builder/apis/:id` | Get API details |
-| PUT | `/api/v1/builder/apis/:id` | Update an API |
+| PUT | `/api/v1/builder/apis/:id` | Update an API (including cache settings) |
 | DELETE | `/api/v1/builder/apis/:id` | Delete an API |
-| POST | `/api/v1/builder/apis/:id/test` | Test API (returns mock response) |
+| POST | `/api/v1/builder/apis/:id/test` | Test API (returns cached or mock response) |
 
-### 2. CSV Upload → Auto Analytics Dashboard
+### 2. File Upload → Auto Analytics Dashboard
 
-Upload a CSV file and automatically generate a full analytics dashboard with appropriate widgets, charts, and tables.
+Upload CSV, JSON, or Excel (.xlsx) files and automatically generate a full analytics dashboard with appropriate widgets, charts, and tables.
 
 **Features:**
-- Drag-and-drop CSV upload zone
+- Drag-and-drop file upload zone supporting **CSV**, **JSON**, and **Excel (.xlsx/.xls)** formats
+- JSON support: array of objects or object containing a data array
+- Excel support: reads first sheet, header row + data rows
 - Automatic column type detection: string, number, date, geo_lat, geo_lng, geo_name
 - Sample data preview table
 - Auto-generates dashboard with:
@@ -831,17 +834,19 @@ Upload a CSV file and automatically generate a full analytics dashboard with app
   - Line charts (date vs. numeric trends)
   - Full data table widget
 - If geo data (lat/lng) is detected, also generate a GIS map dataset with markers
-- Upload history with status tracking
+- **Dashboard deletion** — delete generated dashboards from the upload history
+- Upload history with file type tracking and status
 
 **Backend Endpoints:**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/builder/csv/upload` | Upload CSV file (multipart form) |
-| GET | `/api/v1/builder/csv/uploads` | List all CSV uploads |
-| GET | `/api/v1/builder/csv/uploads/:id` | Get CSV upload details |
-| DELETE | `/api/v1/builder/csv/uploads/:id` | Delete a CSV upload |
-| POST | `/api/v1/builder/csv/uploads/:id/generate-dashboard` | Generate analytics dashboard from CSV |
-| POST | `/api/v1/builder/csv/uploads/:id/generate-gis` | Generate GIS dataset from CSV (requires geo columns) |
+| POST | `/api/v1/builder/csv/upload` | Upload file (CSV, JSON, or Excel — multipart form) |
+| GET | `/api/v1/builder/csv/uploads` | List all file uploads |
+| GET | `/api/v1/builder/csv/uploads/:id` | Get upload details |
+| DELETE | `/api/v1/builder/csv/uploads/:id` | Delete an upload |
+| POST | `/api/v1/builder/csv/uploads/:id/generate-dashboard` | Generate analytics dashboard |
+| POST | `/api/v1/builder/csv/uploads/:id/generate-gis` | Generate GIS dataset (requires geo columns) |
+| DELETE | `/api/v1/builder/dashboards/:id` | Delete a generated dashboard |
 
 ### 3. Dashboard ↔ GIS Converter
 
@@ -866,13 +871,58 @@ Convert between analytics dashboards and GIS map views bidirectionally, with aut
 | POST | `/api/v1/builder/convert/gis-to-dashboard` | Convert GIS dataset to dashboard |
 | GET | `/api/v1/builder/conversions` | List all conversion history |
 
+### 4. SafeGate File Scanner
+
+Integrated security file scanner with a 6-stage detection pipeline. Scan any uploaded file for malware, macro exploits, XSS payloads, archive bombs, and more.
+
+**Scanner Pipeline (6 stages):**
+
+| Scanner | Detection |
+|---------|-----------|
+| **Metadata Scanner** | File size limits, empty files, null bytes in text files, double-extension spoofing |
+| **MIME Type Scanner** | Magic byte detection, MIME type spoofing (claimed vs detected), executable signatures (PE/ELF/Mach-O) |
+| **SVG XSS Scanner** | Script tags, event handlers, javascript: URIs, data: URIs, foreignObject, external xlink, base64 injection |
+| **Macro Scanner** | PDF JavaScript/auto-actions/launch/embedded/encrypted, Office VBA macros/auto-exec/shell commands |
+| **Archive Bomb Scanner** | Zip bomb detection (>100:1 ratio), nesting depth limits, path traversal, executables inside archives |
+| **ClamAV Antivirus** | TCP INSTREAM protocol to ClamAV daemon for full virus/malware detection |
+
+**Features:**
+- Drag-and-drop scan zone in the admin interface
+- SHA256 file fingerprinting
+- Severity classification: Critical, High, Medium, Low, Info
+- Scan history with results tracking
+- Scanner health monitoring
+
+**Backend Endpoints:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/builder/scanner/scan` | Scan a file (multipart form upload) |
+| GET | `/api/v1/builder/scanner/scans` | List all scan records |
+| GET | `/api/v1/builder/scanner/health` | Scanner pipeline health status |
+
+**Docker Compose:**
+ClamAV runs as a dedicated container service on port 3310:
+```yaml
+clamav:
+  image: clamav/clamav:latest
+  ports:
+    - "3310:3310"
+```
+
+**Environment Variables:**
+```env
+SAFEGATE_CLAMAV_ADDR=clamav:3310
+SAFEGATE_MAX_FILE_SIZE=104857600
+```
+
 ### Admin Interface Tabs
 
 | Tab | Description |
 |-----|-------------|
-| **API Builder** | Summary cards, API list with filters, create/test/delete APIs |
-| **CSV → Dashboard** | Drag-drop upload, column analysis, generate dashboard or GIS |
+| **API Builder** | Summary cards, API list with filters, create/test/delete APIs, cache configuration |
+| **File → Dashboard** | Drag-drop upload (CSV/JSON/Excel), column analysis, generate dashboard or GIS, delete dashboards |
 | **Dashboard ↔ GIS** | Select source, analyze confidence, convert with field mapping |
+| **File Scanner** | SafeGate 6-stage security scan, drag-drop scan zone, scan history, scanner health |
 | **API Testing** | Original API testing with method filters |
 | **Logs** | Real-time activity log viewer |
 | **Settings** | System configuration |

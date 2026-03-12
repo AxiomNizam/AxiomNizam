@@ -5,7 +5,7 @@
     <div class="admin-header">
         <div class="header-left">
             <h1>🔧 Admin Dashboard</h1>
-            <p class="subtitle">API Builder · CSV Analytics · Dashboard Converter</p>
+            <p class="subtitle">API Builder · File Analytics · Dashboard Converter · File Scanner</p>
         </div>
         <div class="header-right">
             <div class="user-info">
@@ -21,10 +21,13 @@
             <span class="tab-icon">🏗️</span> API Builder
         </button>
         <button class="tab-btn" onclick="switchTab('csv-upload')">
-            <span class="tab-icon">📄</span> CSV → Dashboard
+            <span class="tab-icon">📄</span> File → Dashboard
         </button>
         <button class="tab-btn" onclick="switchTab('converter')">
             <span class="tab-icon">🔄</span> Dashboard ↔ GIS
+        </button>
+        <button class="tab-btn" onclick="switchTab('file-scanner')">
+            <span class="tab-icon">🛡️</span> File Scanner
         </button>
         <button class="tab-btn" onclick="switchTab('api-testing')">
             <span class="tab-icon">🧪</span> API Testing
@@ -76,11 +79,12 @@
         <div class="csv-section">
             <div class="csv-upload-area" id="csvDropZone">
                 <div class="upload-icon">📄</div>
-                <h3>Upload CSV File</h3>
-                <p>Drop a CSV file here or click to browse</p>
-                <p class="upload-hint">Auto-generates Analytics Dashboard with charts, graphs, and tables.<br>
-                If CSV contains lat/lng columns, you can also generate a GIS dashboard.</p>
-                <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCSVUpload()">
+                <h3>Upload Data File</h3>
+                <p>Drop a CSV, JSON, or Excel file here or click to browse</p>
+                <p class="upload-hint">Supports <strong>.csv</strong>, <strong>.json</strong>, and <strong>.xlsx</strong> files.<br>
+                Auto-generates Analytics Dashboard with charts, graphs, and tables.<br>
+                If data contains lat/lng columns, you can also generate a GIS dashboard.</p>
+                <input type="file" id="csvFileInput" accept=".csv,.json,.xlsx,.xls" style="display:none" onchange="handleFileUpload()">
                 <button class="btn-primary" onclick="document.getElementById('csvFileInput').click()">Browse Files</button>
             </div>
 
@@ -144,6 +148,41 @@
             <div class="conversion-history">
                 <h3>Conversion History</h3>
                 <div id="conversionHistoryList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== FILE SCANNER TAB ===================== -->
+    <div id="file-scanner" class="tab-content">
+        <div class="csv-section">
+            <div class="csv-upload-area" id="scanDropZone">
+                <div class="upload-icon">🛡️</div>
+                <h3>SafeGate File Scanner</h3>
+                <p>Drop any file here to scan for security threats</p>
+                <p class="upload-hint">6-stage pipeline: Metadata · MIME Type · SVG XSS · Macro/Script · Archive Bomb · ClamAV Antivirus</p>
+                <input type="file" id="scanFileInput" style="display:none" onchange="handleFileScan()">
+                <button class="btn-primary" onclick="document.getElementById('scanFileInput').click()">Select File to Scan</button>
+            </div>
+
+            <!-- Scan Result -->
+            <div id="scanResult" style="display:none;">
+                <div class="analysis-header">
+                    <h3 id="scanFilenameDisplay"></h3>
+                    <div class="analysis-badges" id="scanBadges"></div>
+                </div>
+                <div id="scanFindings"></div>
+            </div>
+
+            <!-- Scanner Health -->
+            <div class="csv-history">
+                <h3>Scanner Status</h3>
+                <div id="scannerHealth"></div>
+            </div>
+
+            <!-- Scan History -->
+            <div class="csv-history">
+                <h3>Scan History</h3>
+                <div id="scanHistory"></div>
             </div>
         </div>
     </div>
@@ -271,6 +310,15 @@
                     <div class="form-group">
                         <label>Rate Limit (req/min)</label>
                         <input type="number" id="apiRateLimitInput" value="60" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="apiCacheInput" onchange="toggleCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="cacheTTLGroup" style="display:none">
+                        <label>Cache TTL (seconds)</label>
+                        <input type="number" id="apiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
                     </div>
                 </div>
                 <div class="form-group">

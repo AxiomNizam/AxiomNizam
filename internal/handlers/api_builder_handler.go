@@ -1,10 +1,16 @@
 package handlers
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +19,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/xuri/excelize/v2"
+
+	"example.com/axiomnizam/internal/scanner"
 )
 
 // =====================================================================
@@ -32,6 +41,8 @@ type CustomAPI struct {
 	Category       string            `json:"category"`
 	AuthRequired   bool              `json:"auth_required"`
 	RateLimit      int               `json:"rate_limit"` // requests per minute, 0=unlimited
+	CacheEnabled   bool              `json:"cache_enabled"`
+	CacheTTL       int               `json:"cache_ttl"` // seconds, 0=default(300)
 	RequestSchema  *SchemaDefinition `json:"request_schema,omitempty"`
 	ResponseSchema *SchemaDefinition `json:"response_schema,omitempty"`
 	MockResponse   interface{}       `json:"mock_response,omitempty"`
@@ -42,6 +53,8 @@ type CustomAPI struct {
 	CreatedAt      time.Time         `json:"created_at"`
 	UpdatedAt      time.Time         `json:"updated_at"`
 	HitCount       int64             `json:"hit_count"`
+	cachedResult   interface{}       // in-memory cache of last test result
+	cachedAt       time.Time         // when the cache was last set
 }
 
 type SchemaDefinition struct {
@@ -68,10 +81,11 @@ type ParamDef struct {
 
 // ---------- CSV Dashboard Models ----------
 
-// CSVUpload tracks a CSV file upload that was converted to a dashboard
+// CSVUpload tracks a file upload that was converted to a dashboard
 type CSVUpload struct {
 	ID             string                   `json:"id"`
 	Filename       string                   `json:"filename"`
+	FileType       string                   `json:"file_type"` // csv, json, xlsx
 	Rows           int                      `json:"rows"`
 	Columns        int                      `json:"columns"`
 	ColumnNames    []string                 `json:"column_names"`
@@ -82,6 +96,17 @@ type CSVUpload struct {
 	HasGeoData     bool                     `json:"has_geo_data"`
 	Status         string                   `json:"status"` // uploaded, analyzed, dashboard_created, gis_created
 	CreatedAt      time.Time                `json:"created_at"`
+}
+
+// ScanResult tracks file scan results
+type FileScanRecord struct {
+	ID        string            `json:"id"`
+	Filename  string            `json:"filename"`
+	FileSize  int64             `json:"file_size"`
+	SHA256    string            `json:"sha256"`
+	Safe      bool              `json:"safe"`
+	Findings  []scanner.Finding `json:"findings"`
+	ScannedAt time.Time         `json:"scanned_at"`
 }
 
 // ---------- Dashboard <-> GIS Conversion ----------
@@ -112,25 +137,45 @@ type APIBuilderHandler struct {
 	customAPIs  map[string]*CustomAPI
 	csvUploads  map[string]*CSVUpload
 	conversions map[string]*ConversionResult
+	scanRecords map[string]*FileScanRecord
 	apiData     map[string][]map[string]interface{} // stores mock data per API
 	csvData     map[string][][]string               // raw CSV data per upload
+	scanOrch    *scanner.Orchestrator
 	// reference to analytics & GIS handlers for conversion
 	analyticsHandler *AnalyticsHandler
 	gisHandler       *GISHandler
 }
 
 func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler) *APIBuilderHandler {
+	// Build scanner pipeline
+	orchestrator := scanner.NewOrchestrator(
+		scanner.NewMetadataScanner(100*1024*1024),
+		&scanner.MIMEScanner{},
+		&scanner.SVGScanner{},
+		&scanner.MacroScanner{},
+		scanner.NewArchiveScanner(5, 1024*1024*1024),
+		scanner.NewClamAVScanner(getClamAVAddr()),
+	)
 	h := &APIBuilderHandler{
 		customAPIs:       make(map[string]*CustomAPI),
 		csvUploads:       make(map[string]*CSVUpload),
 		conversions:      make(map[string]*ConversionResult),
+		scanRecords:      make(map[string]*FileScanRecord),
 		apiData:          make(map[string][]map[string]interface{}),
 		csvData:          make(map[string][][]string),
+		scanOrch:         orchestrator,
 		analyticsHandler: ah,
 		gisHandler:       gh,
 	}
 	h.seedData()
 	return h
+}
+
+func getClamAVAddr() string {
+	if v := strings.TrimSpace(os.Getenv("SAFEGATE_CLAMAV_ADDR")); v != "" {
+		return v
+	}
+	return "clamav:3310"
 }
 
 // ===================================================================
@@ -189,6 +234,8 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		MockResponse   interface{}       `json:"mock_response"`
 		Headers        map[string]string `json:"headers"`
 		QueryParams    []ParamDef        `json:"query_params"`
+		CacheEnabled   bool              `json:"cache_enabled"`
+		CacheTTL       int               `json:"cache_ttl"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -204,6 +251,11 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 	id := "api-" + uuid.New().String()[:8]
 	now := time.Now()
 
+	ttl := req.CacheTTL
+	if req.CacheEnabled && ttl <= 0 {
+		ttl = 300 // default 5 minutes
+	}
+
 	api := &CustomAPI{
 		ID:             id,
 		Name:           req.Name,
@@ -213,6 +265,8 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Category:       req.Category,
 		AuthRequired:   req.AuthRequired,
 		RateLimit:      req.RateLimit,
+		CacheEnabled:   req.CacheEnabled,
+		CacheTTL:       ttl,
 		RequestSchema:  req.RequestSchema,
 		ResponseSchema: req.ResponseSchema,
 		MockResponse:   req.MockResponse,
@@ -264,6 +318,15 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["rate_limit"].(float64); ok {
 		api.RateLimit = int(v)
 	}
+	if v, ok := req["cache_enabled"].(bool); ok {
+		api.CacheEnabled = v
+		if !v {
+			api.cachedResult = nil
+		}
+	}
+	if v, ok := req["cache_ttl"].(float64); ok {
+		api.CacheTTL = int(v)
+	}
 	api.UpdatedAt = time.Now()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "api": api})
@@ -286,8 +349,8 @@ func (h *APIBuilderHandler) DeleteAPI(c *gin.Context) {
 
 // TestAPI executes a mock call against a custom API and returns the mock response
 func (h *APIBuilderHandler) TestAPI(c *gin.Context) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	id := c.Param("id")
 	api, ok := h.customAPIs[id]
@@ -297,24 +360,50 @@ func (h *APIBuilderHandler) TestAPI(c *gin.Context) {
 	}
 	api.HitCount++
 
+	// Cache check
+	if api.CacheEnabled && api.cachedResult != nil {
+		ttl := time.Duration(api.CacheTTL) * time.Second
+		if ttl <= 0 {
+			ttl = 300 * time.Second
+		}
+		if time.Since(api.cachedAt) < ttl {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "success",
+				"api_id":    api.ID,
+				"method":    api.Method,
+				"path":      api.Path,
+				"cached":    true,
+				"cache_ttl": api.CacheTTL,
+				"response":  api.cachedResult,
+			})
+			return
+		}
+	}
+
+	var response interface{}
 	if api.MockResponse != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status":   "success",
-			"api_id":   api.ID,
-			"method":   api.Method,
-			"path":     api.Path,
-			"response": api.MockResponse,
-		})
-		return
+		response = api.MockResponse
+	} else {
+		response = gin.H{
+			"message": "API endpoint active, no mock response configured",
+			"data":    h.apiData[id],
+		}
+	}
+
+	// Store in cache if enabled
+	if api.CacheEnabled {
+		api.cachedResult = response
+		api.cachedAt = time.Now()
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"api_id":  api.ID,
-		"method":  api.Method,
-		"path":    api.Path,
-		"message": "API endpoint active, no mock response configured",
-		"data":    h.apiData[id],
+		"status":    "success",
+		"api_id":    api.ID,
+		"method":    api.Method,
+		"path":      api.Path,
+		"cached":    false,
+		"cache_ttl": api.CacheTTL,
+		"response":  response,
 	})
 }
 
@@ -367,22 +456,115 @@ func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
 	}
 	defer file.Close()
 
-	reader := csv.NewReader(file)
-	reader.LazyQuotes = true
-	reader.TrimLeadingSpace = true
-
-	records, err := reader.ReadAll()
+	// Read file bytes for multi-format parsing
+	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid CSV: " + err.Error()})
-		return
-	}
-	if len(records) < 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "CSV must have header row and at least one data row"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read file: " + err.Error()})
 		return
 	}
 
-	headers := records[0]
-	dataRows := records[1:]
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	var headers []string
+	var dataRows [][]string
+
+	switch ext {
+	case ".csv":
+		reader := csv.NewReader(bytes.NewReader(fileBytes))
+		reader.LazyQuotes = true
+		reader.TrimLeadingSpace = true
+		records, err := reader.ReadAll()
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid CSV: " + err.Error()})
+			return
+		}
+		if len(records) < 2 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "CSV must have header row and at least one data row"})
+			return
+		}
+		headers = records[0]
+		dataRows = records[1:]
+
+	case ".json":
+		var jsonData []map[string]interface{}
+		if err := json.Unmarshal(fileBytes, &jsonData); err != nil {
+			// Try object with data array
+			var wrapper map[string]interface{}
+			if err2 := json.Unmarshal(fileBytes, &wrapper); err2 != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: must be an array of objects or an object with a data array"})
+				return
+			}
+			// Look for array fields
+			found := false
+			for _, v := range wrapper {
+				if arr, ok := v.([]interface{}); ok && len(arr) > 0 {
+					for _, item := range arr {
+						if obj, ok := item.(map[string]interface{}); ok {
+							jsonData = append(jsonData, obj)
+						}
+					}
+					found = true
+					break
+				}
+			}
+			if !found || len(jsonData) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "JSON must contain an array of objects"})
+				return
+			}
+		}
+		if len(jsonData) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "JSON array is empty"})
+			return
+		}
+		// Extract headers from all keys
+		keySet := map[string]bool{}
+		for _, obj := range jsonData {
+			for k := range obj {
+				keySet[k] = true
+			}
+		}
+		for k := range keySet {
+			headers = append(headers, k)
+		}
+		sort.Strings(headers)
+		// Convert to string rows
+		for _, obj := range jsonData {
+			row := make([]string, len(headers))
+			for i, h := range headers {
+				if v, ok := obj[h]; ok {
+					row[i] = fmt.Sprintf("%v", v)
+				}
+			}
+			dataRows = append(dataRows, row)
+		}
+
+	case ".xlsx", ".xls":
+		f, err := excelize.OpenReader(bytes.NewReader(fileBytes))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid Excel file: " + err.Error()})
+			return
+		}
+		defer f.Close()
+		sheetName := f.GetSheetName(0)
+		if sheetName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Excel file has no sheets"})
+			return
+		}
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read Excel sheet: " + err.Error()})
+			return
+		}
+		if len(rows) < 2 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Excel sheet must have header row and at least one data row"})
+			return
+		}
+		headers = rows[0]
+		dataRows = rows[1:]
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported file type: " + ext + ". Supported: .csv, .json, .xlsx, .xls"})
+		return
+	}
 
 	// Analyze column types
 	colTypes := analyzeColumnTypes(headers, dataRows)
@@ -415,9 +597,17 @@ func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
 	id := "csv-" + uuid.New().String()[:8]
 	now := time.Now()
 
+	fileType := "csv"
+	if ext == ".json" {
+		fileType = "json"
+	} else if ext == ".xlsx" || ext == ".xls" {
+		fileType = "xlsx"
+	}
+
 	upload := &CSVUpload{
 		ID:          id,
 		Filename:    header.Filename,
+		FileType:    fileType,
 		Rows:        len(dataRows),
 		Columns:     len(headers),
 		ColumnNames: headers,
@@ -428,16 +618,20 @@ func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
 		CreatedAt:   now,
 	}
 
+	// Reconstruct records in CSV format for internal storage
+	records := make([][]string, 0, len(dataRows)+1)
+	records = append(records, headers)
+	records = append(records, dataRows...)
+
 	h.mu.Lock()
 	h.csvUploads[id] = upload
-	// Store raw data for dashboard generation
 	h.csvData[id] = records
 	h.mu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":          "success",
 		"upload":          upload,
-		"message":         "CSV analyzed. Call POST /generate-dashboard to create an analytics dashboard.",
+		"message":         fmt.Sprintf("%s file analyzed. Call POST /generate-dashboard to create an analytics dashboard.", strings.ToUpper(fileType)),
 		"can_convert_gis": hasGeo,
 	})
 }
@@ -938,6 +1132,122 @@ func (h *APIBuilderHandler) ListConversions(c *gin.Context) {
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt.After(result[j].CreatedAt) })
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "count": len(result), "conversions": result})
+}
+
+// ===================================================================
+// File Scanner (SafeGate Pipeline)
+// ===================================================================
+
+// ScanFile scans an uploaded file through the SafeGate security pipeline
+func (h *APIBuilderHandler) ScanFile(c *gin.Context) {
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file required: " + err.Error()})
+		return
+	}
+	defer file.Close()
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read file: " + err.Error()})
+		return
+	}
+
+	// Build SHA256
+	hash := sha256.Sum256(fileBytes)
+	sha := fmt.Sprintf("%x", hash)
+
+	// Build FileInfo for scanner
+	claimedType := header.Header.Get("Content-Type")
+	info := &scanner.FileInfo{
+		Filename:  header.Filename,
+		Extension: strings.ToLower(filepath.Ext(header.Filename)),
+		MIMEType:  claimedType,
+		Size:      int64(len(fileBytes)),
+		SHA256:    sha,
+		Content:   fileBytes,
+	}
+
+	result := h.scanOrch.Scan(info)
+
+	record := &FileScanRecord{
+		ID:        "scan-" + uuid.New().String()[:8],
+		Filename:  header.Filename,
+		FileSize:  int64(len(fileBytes)),
+		SHA256:    sha,
+		Safe:      result.Safe,
+		Findings:  result.Findings,
+		ScannedAt: time.Now(),
+	}
+
+	h.mu.Lock()
+	h.scanRecords[record.ID] = record
+	h.mu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "success",
+		"scan":     record,
+		"safe":     result.Safe,
+		"findings": len(result.Findings),
+	})
+}
+
+// ListScans returns all file scan records
+func (h *APIBuilderHandler) ListScans(c *gin.Context) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	result := make([]*FileScanRecord, 0, len(h.scanRecords))
+	for _, r := range h.scanRecords {
+		result = append(result, r)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ScannedAt.After(result[j].ScannedAt) })
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "count": len(result), "scans": result})
+}
+
+// GetScannerHealth returns the scanner pipeline status
+func (h *APIBuilderHandler) GetScannerHealth(c *gin.Context) {
+	scanners := h.scanOrch.ScannerNames()
+	c.JSON(http.StatusOK, gin.H{
+		"status":        "success",
+		"scanner_count": len(scanners),
+		"scanners":      scanners,
+		"total_scans":   len(h.scanRecords),
+	})
+}
+
+// ===================================================================
+// Dashboard Deletion
+// ===================================================================
+
+// DeleteDashboard removes a generated analytics dashboard
+func (h *APIBuilderHandler) DeleteDashboard(c *gin.Context) {
+	dashID := c.Param("id")
+
+	h.analyticsHandler.mu.Lock()
+	_, ok := h.analyticsHandler.dashboards[dashID]
+	if !ok {
+		h.analyticsHandler.mu.Unlock()
+		c.JSON(http.StatusNotFound, gin.H{"error": "dashboard not found"})
+		return
+	}
+	delete(h.analyticsHandler.dashboards, dashID)
+	h.analyticsHandler.mu.Unlock()
+
+	// Clear references in CSV uploads
+	h.mu.Lock()
+	for _, u := range h.csvUploads {
+		if u.DashboardID == dashID {
+			u.DashboardID = ""
+			if u.Status == "dashboard_created" {
+				u.Status = "analyzed"
+			}
+		}
+	}
+	h.mu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "dashboard deleted", "id": dashID})
 }
 
 // ===================================================================
@@ -1498,6 +1808,7 @@ func (h *APIBuilderHandler) seedData() {
 	h.csvUploads["csv-demo-001"] = &CSVUpload{
 		ID:          "csv-demo-001",
 		Filename:    "sales_data_2025.csv",
+		FileType:    "csv",
 		Rows:        250,
 		Columns:     6,
 		ColumnNames: []string{"Region", "Product", "Sales", "Revenue", "Latitude", "Longitude"},
