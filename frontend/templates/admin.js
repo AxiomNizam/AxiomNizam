@@ -53,6 +53,7 @@ window.addEventListener('DOMContentLoaded', function() {
     setupCSVDropZone();
     setupScanDropZone();
     loadScannerHealth();
+    applyRoleRestrictions();
 });
 
 function switchTab(tabName) {
@@ -109,6 +110,10 @@ function loadCustomAPIs() {
             '</tr></thead><tbody>';
         list.forEach(function(api) {
             var safeId = api.id.replace(/'/g, "\\'");
+            var actionsHtml = '<button class="btn-sm btn-test" onclick="testCustomAPI(\'' + safeId + '\')">Test</button> ';
+            if (canModify()) {
+                actionsHtml += '<button class="btn-sm btn-del" onclick="deleteCustomAPI(\'' + safeId + '\')">Del</button>';
+            }
             html += '<tr>' +
                 '<td><span class="method-badge method-' + api.method.toLowerCase() + '">' + api.method + '</span></td>' +
                 '<td>' + escapeHtml(api.name) + '</td>' +
@@ -116,10 +121,7 @@ function loadCustomAPIs() {
                 '<td>' + escapeHtml(api.category || '-') + '</td>' +
                 '<td><span class="status-badge status-' + api.status + '">' + api.status + '</span></td>' +
                 '<td>' + (api.hit_count || 0) + '</td>' +
-                '<td>' +
-                    '<button class="btn-sm btn-test" onclick="testCustomAPI(\'' + safeId + '\')">Test</button> ' +
-                    '<button class="btn-sm btn-del" onclick="deleteCustomAPI(\'' + safeId + '\')">Del</button>' +
-                '</td></tr>';
+                '<td>' + actionsHtml + '</td></tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
@@ -135,9 +137,6 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
-function openCreateAPIModal() {
-    document.getElementById('createAPIModal').style.display = 'flex';
-}
 function closeCreateAPIModal() {
     document.getElementById('createAPIModal').style.display = 'none';
     document.getElementById('createAPIForm').reset();
@@ -202,15 +201,6 @@ function testCustomAPI(id) {
     });
 }
 
-function deleteCustomAPI(id) {
-    if (!confirm('Delete this API?')) return;
-    deleteJSON('/api/v1/builder/apis/' + id).then(function() {
-        loadBuilderSummary();
-        loadCustomAPIs();
-        addLog('Deleted API: ' + id, 'warn');
-    });
-}
-
 // ===================================================================
 // CSV Upload & Dashboard Generation
 // ===================================================================
@@ -248,10 +238,17 @@ function handleFileUpload() {
         if (d.status === 'success') {
             currentCSVUploadId = d.upload.id;
             showCSVAnalysis(d.upload, d.can_convert_gis);
-            addLog('Uploaded CSV: ' + d.upload.filename, 'info');
+            var scanMsg = d.scan_safe ? ' (Security scan: PASSED)' : '';
+            addLog('Uploaded file: ' + d.upload.filename + scanMsg, 'info');
             loadCSVHistory();
         } else {
-            alert(d.error || 'Upload failed');
+            // Show scan failure details
+            if (d.findings && d.findings.length > 0) {
+                var msgs = d.findings.map(function(f) { return f.severity.toUpperCase() + ': ' + f.description; });
+                alert('File rejected by security scanner:\\n\\n' + msgs.join('\\n'));
+            } else {
+                alert(d.error || 'Upload failed');
+            }
         }
     }).catch(function(err) {
         alert('Upload error: ' + err.message);
@@ -742,21 +739,6 @@ function loadScanHistory() {
     }).catch(function() {});
 }
 
-// ===================================================================
-// Dashboard Deletion
-// ===================================================================
-function deleteDashboard(dashId) {
-    if (!confirm('Delete this dashboard? This cannot be undone.')) return;
-    deleteJSON('/api/v1/builder/dashboards/' + dashId).then(function(d) {
-        if (d.status === 'success') {
-            addLog('Deleted dashboard: ' + dashId, 'warn');
-            loadCSVHistory();
-        } else {
-            alert(d.error || 'Failed to delete dashboard');
-        }
-    });
-}
-
 // Close modals on outside click
 window.onclick = function(event) {
     var responseModal = document.getElementById('responseModal');
@@ -764,3 +746,66 @@ window.onclick = function(event) {
     var createModal = document.getElementById('createAPIModal');
     if (event.target === createModal) createModal.style.display = 'none';
 };
+
+// ===================================================================
+// Role-Based Access Control
+// ===================================================================
+function canModify() {
+    var role = localStorage.getItem('userRole') || 'user';
+    return role === 'admin' || role === 'manager';
+}
+
+function applyRoleRestrictions() {
+    var role = localStorage.getItem('userRole') || 'user';
+    if (role === 'admin' || role === 'manager') return; // full access
+
+    // Normal users: hide create/delete/modify controls
+    var hideSelectors = [
+        '.btn-create-api',         // Create API button
+        '#createAPIBtn',           // Create API button by id
+        '.btn-del',                // Delete buttons in API table
+        '.btn-danger',             // Danger buttons
+    ];
+
+    // Hide "Create API" button 
+    var createBtns = document.querySelectorAll('button');
+    createBtns.forEach(function(btn) {
+        var text = btn.textContent.trim().toLowerCase();
+        if (text.includes('create api') || text.includes('+ create') || text.includes('delete')) {
+            btn.style.display = 'none';
+        }
+    });
+
+    // Add a read-only banner
+    var container = document.querySelector('.admin-container') || document.querySelector('.manager-header');
+    if (container) {
+        var banner = document.createElement('div');
+        banner.style.cssText = 'background:rgba(59,130,246,0.15);color:#3b82f6;padding:10px 20px;border-radius:8px;margin-bottom:16px;text-align:center;font-weight:600;';
+        banner.textContent = '👁️ View-Only Mode — Your role (' + role + ') allows viewing and calling APIs only';
+        container.insertBefore(banner, container.firstChild);
+    }
+}
+
+// Override delete/create functions for role checks
+function deleteCustomAPI(id) {
+    if (!canModify()) { alert('You do not have permission to delete APIs. Contact an admin or manager.'); return; }
+    if (!confirm('Delete this API?')) return;
+    deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); }
+        else { alert(d.error || 'Failed to delete API'); }
+    });
+}
+
+function deleteDashboard(dashId) {
+    if (!canModify()) { alert('You do not have permission to delete dashboards. Contact an admin or manager.'); return; }
+    if (!confirm('Delete this dashboard? This cannot be undone.')) return;
+    deleteJSON('/api/v1/builder/dashboards/' + dashId).then(function(d) {
+        if (d.status === 'success') { addLog('Deleted dashboard: ' + dashId, 'warn'); loadCSVHistory(); }
+        else { alert(d.error || 'Failed to delete dashboard'); }
+    });
+}
+
+function openCreateAPIModal() {
+    if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin or manager.'); return; }
+    document.getElementById('createAPIModal').style.display = 'flex';
+}

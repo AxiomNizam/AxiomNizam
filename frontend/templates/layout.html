@@ -49,13 +49,17 @@
                         <span>NetIntel</span>
                     </a>
                     {{ if .isAuth }}
-                    <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}">
+                    <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
                         <span class="nav-icon">🔧</span>
                         <span>Admin</span>
                     </a>
-                    <a href="/system-manager" class="nav-link {{ if eq .page "system-manager" }}active{{ end }}">
+                    <a href="/system-manager" class="nav-link {{ if eq .page "system-manager" }}active{{ end }}" id="nav-sysmanager" style="display:none">
                         <span class="nav-icon">🖥️</span>
                         <span>System Manager</span>
+                    </a>
+                    <a href="/manager" class="nav-link {{ if eq .page "manager" }}active{{ end }}" id="nav-manager" style="display:none">
+                        <span class="nav-icon">📋</span>
+                        <span>Manager</span>
                     </a>
                     {{ end }}
                 </div>
@@ -85,6 +89,8 @@
                 {{ template "admin" . }}
             {{ else if eq .pageName "system-manager" }}
                 {{ template "system-manager" . }}
+            {{ else if eq .pageName "manager" }}
+                {{ template "manager" . }}
             {{ else if eq .pageName "gis-dashboard" }}
                 {{ template "gis-dashboard" . }}
             {{ else if eq .pageName "analytics-dashboard" }}
@@ -128,7 +134,7 @@
                     </div>
                     <button type="submit" class="btn-primary btn-large">Login with Keycloak</button>
                 </form>
-                <p class="login-hint">Demo: Use admin/admin credentials</p>
+                <p class="login-hint">Demo accounts: admin/admin | sysadmin/sysadmin | manager/manager | user/user</p>
             </div>
         </div>
     </div>
@@ -185,6 +191,15 @@
             if (!token && window.location.pathname !== '/') {
                 window.location.href = '/';
             }
+
+            // Show only role-appropriate nav links
+            const role = localStorage.getItem('userRole') || 'user';
+            const navAdmin = document.getElementById('nav-admin');
+            const navSysManager = document.getElementById('nav-sysmanager');
+            const navManager = document.getElementById('nav-manager');
+            if (navAdmin) navAdmin.style.display = (role === 'admin') ? '' : 'none';
+            if (navSysManager) navSysManager.style.display = (role === 'system-manager') ? '' : 'none';
+            if (navManager) navManager.style.display = (role === 'manager') ? '' : 'none';
         });
 
         function openLoginModal() {

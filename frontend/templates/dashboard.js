@@ -233,6 +233,53 @@ function loadAPIs() {
     if (apisContent) {
         apisContent.innerHTML = html;
     }
+
+    // Also load custom APIs from API Builder (visible after login)
+    loadCustomBuilderAPIs();
+}
+
+function loadCustomBuilderAPIs() {
+    var token = localStorage.getItem('authToken');
+    var headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    headers['Content-Type'] = 'application/json';
+
+    fetch(BACKEND_URL + '/api/v1/builder/apis', { headers: headers })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            var apis = data.apis || [];
+            if (apis.length === 0) return;
+
+            var apisContent = document.getElementById('apisContent');
+            if (!apisContent) return;
+
+            var html = '<div style="margin-bottom: 20px; margin-top: 20px;">' +
+                '<strong style="font-size: 1.1em;">🏗️ Custom APIs (API Builder)</strong>';
+            html += '<div class="api-grid">';
+            
+            for (var i = 0; i < apis.length; i++) {
+                var api = apis[i];
+                if (api.status !== 'active') continue;
+                var methodClass = api.method.toLowerCase();
+                var cacheBadge = api.cache_enabled ? ' <span style="background:#d4edda;color:#155724;padding:2px 6px;border-radius:3px;font-size:0.7em;">CACHED</span>' : '';
+                html += '<div class="api-item">' +
+                    '<span class="api-method ' + methodClass + '">' + api.method + '</span>' + cacheBadge +
+                    '<div class="api-path">' + escapeHtmlDash(api.path) + '</div>' +
+                    '<div class="api-description">' + escapeHtmlDash(api.description || api.name) + '</div>' +
+                    '<span class="api-auth" style="background: rgba(239, 68, 68, 0.2); color: #e74c3c; padding: 3px 8px; border-radius: 3px; font-size: 0.75em;">Category: ' + escapeHtmlDash(api.category || 'custom') + '</span>' +
+                    '</div>';
+            }
+            html += '</div></div>';
+            apisContent.innerHTML += html;
+        })
+        .catch(function() { /* silently fail if builder not available */ });
+}
+
+function escapeHtmlDash(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
 
 function showErrorMessage(message) {

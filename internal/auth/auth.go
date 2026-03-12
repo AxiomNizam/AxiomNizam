@@ -130,7 +130,46 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 	return nil
 }
 
-// ValidateToken validates a JWT token
+// DemoJWTSecret is the HMAC secret used for demo account tokens
+const DemoJWTSecret = "axiomnizam-demo-secret-key-2024"
+
+// ValidateDemoToken validates an HMAC-signed demo token
+func (tv *TokenValidator) ValidateDemoToken(tokenString string) (*Claims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(DemoJWTSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid demo token")
+	}
+
+	mapClaims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid demo token claims")
+	}
+
+	claims := &Claims{}
+	if v, ok := mapClaims["preferred_username"].(string); ok {
+		claims.PreferredUsername = v
+	}
+	if v, ok := mapClaims["email"].(string); ok {
+		claims.Email = v
+	}
+	if ra, ok := mapClaims["realm_access"].(map[string]interface{}); ok {
+		if roles, ok := ra["roles"].([]interface{}); ok {
+			for _, r := range roles {
+				if s, ok := r.(string); ok {
+					claims.RealmAccess.Roles = append(claims.RealmAccess.Roles, s)
+				}
+			}
+		}
+	}
+	return claims, nil
+}
+
+// ValidateToken validates a JWT token (Keycloak RSA first, demo HMAC fallback)
 func (tv *TokenValidator) ValidateToken(tokenString string) (*Claims, error) {
 	// Parse the token
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{},
@@ -138,6 +177,10 @@ func (tv *TokenValidator) ValidateToken(tokenString string) (*Claims, error) {
 			// Get the key ID from the token header
 			kid, ok := token.Header["kid"].(string)
 			if !ok {
+				// No kid — try demo HMAC validation
+				if claims, demoErr := tv.ValidateDemoToken(tokenString); demoErr == nil {
+					return nil, fmt.Errorf("demo:ok:%s", claims.PreferredUsername)
+				}
 				return nil, fmt.Errorf("kid not found in token header")
 			}
 
@@ -164,6 +207,11 @@ func (tv *TokenValidator) ValidateToken(tokenString string) (*Claims, error) {
 		})
 
 	if err != nil {
+		// Check if it's a demo token (no kid header)
+		if demoClaims, demoErr := tv.ValidateDemoToken(tokenString); demoErr == nil {
+			log.Printf("✅ Demo token validated for user: %s (roles: %v)", demoClaims.PreferredUsername, demoClaims.RealmAccess.Roles)
+			return demoClaims, nil
+		}
 		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
 

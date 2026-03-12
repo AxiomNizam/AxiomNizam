@@ -30,7 +30,7 @@ window.addEventListener('DOMContentLoaded', function() {
     if (!authToken) {
         // Redirect to dashboard if trying to access protected page
         const path = window.location.pathname;
-        if (path !== '/' && path !== '/admin' && path !== '/system-manager') {
+        if (path !== '/' && path !== '/admin' && path !== '/system-manager' && path !== '/manager') {
             window.location.href = '/';
         }
     }
@@ -80,9 +80,20 @@ function handleLogin(event) {
         }
         localStorage.setItem('userName', userName);
         
-        // Decode JWT to get user roles
-        const userRole = extractUserRole(authToken);
-        console.log('👤 User role:', userRole);
+        // Use server-returned role if available (most reliable), else decode JWT
+        const serverRole = data.role || '';
+        let userRole = serverRole || extractUserRole(authToken);
+
+        // Safety net: map known demo usernames to their expected roles when the
+        // server role is missing or fell back to generic 'user' (e.g. Keycloak
+        // intercepted a demo-username login without the matching realm role).
+        const knownRoles = { 'sysadmin': 'system-manager', 'admin': 'admin', 'manager': 'manager' };
+        if ((!serverRole || userRole === 'user') && knownRoles[data.username]) {
+            userRole = knownRoles[data.username];
+            console.log('🔄 Role overridden by username mapping:', data.username, '→', userRole);
+        }
+
+        console.log('👤 User role:', userRole, '(source:', serverRole ? 'server' : 'jwt-decode', ')');
         localStorage.setItem('userRole', userRole);
         
         closeLoginModal();
@@ -90,8 +101,13 @@ function handleLogin(event) {
         // Redirect based on user role
         if (userRole === 'system-manager') {
             window.location.href = '/system-manager';
-        } else {
+        } else if (userRole === 'admin') {
             window.location.href = '/admin';
+        } else if (userRole === 'manager') {
+            window.location.href = '/manager';
+        } else {
+            // Normal users go to dashboard (view-only)
+            window.location.href = '/';
         }
     })
     .catch(function(error) {
@@ -148,9 +164,15 @@ function extractUserRole(token) {
                 
                 // Check for system-manager role (various formats)
                 if (role === 'system-manager' || role === 'system_manager' || 
-                    role.includes('manager') || role === 'system-admin') {
+                    role === 'system-admin') {
                     console.log('✅ Detected as SYSTEM-MANAGER role');
                     return 'system-manager';
+                }
+
+                // Check for manager role (must come AFTER system-manager check)
+                if (role === 'manager' || role === 'api-manager' || role === 'api_manager') {
+                    console.log('✅ Detected as MANAGER role');
+                    return 'manager';
                 }
             }
         }

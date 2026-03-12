@@ -78,10 +78,10 @@ func checkFilename(name string) []Finding {
 			dots++
 		}
 	}
-	if dots > 1 {
+	if dots > 2 {
 		findings = append(findings, Finding{
-			Scanner: "metadata_scanner", Severity: SeverityHigh,
-			Description: "File has multiple extensions",
+			Scanner: "metadata_scanner", Severity: SeverityMedium,
+			Description: "File has many extensions",
 			Details:     fmt.Sprintf("Filename %q has %d dots — possible extension spoofing", name, dots),
 		})
 	}

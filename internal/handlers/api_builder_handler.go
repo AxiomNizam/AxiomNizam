@@ -150,7 +150,17 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler) *APIBuilderHandl
 	// Build scanner pipeline
 	orchestrator := scanner.NewOrchestrator(
 		scanner.NewMetadataScanner(100*1024*1024),
-		&scanner.MIMEScanner{},
+		scanner.NewMIMEScanner([]string{
+			"text/plain", "text/csv", "text/html", "text/xml",
+			"application/json", "application/xml", "application/pdf",
+			"application/zip", "application/gzip",
+			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			"application/vnd.ms-excel",
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			"application/msword",
+			"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp",
+			"audio/mpeg", "video/mp4",
+		}),
 		&scanner.SVGScanner{},
 		&scanner.MacroScanner{},
 		scanner.NewArchiveScanner(5, 1024*1024*1024),
@@ -464,6 +474,27 @@ func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
+
+	// Run SafeGate scanner pipeline on the uploaded file
+	claimedType := header.Header.Get("Content-Type")
+	scanInfo := &scanner.FileInfo{
+		Filename:  header.Filename,
+		Extension: ext,
+		MIMEType:  claimedType,
+		Size:      int64(len(fileBytes)),
+		SHA256:    fmt.Sprintf("%x", sha256.Sum256(fileBytes)),
+		Content:   fileBytes,
+	}
+	scanResult := h.scanOrch.Scan(scanInfo)
+	if !scanResult.Safe {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":    "File failed security scan — upload rejected",
+			"safe":     false,
+			"findings": scanResult.Findings,
+		})
+		return
+	}
+
 	var headers []string
 	var dataRows [][]string
 
@@ -633,6 +664,8 @@ func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
 		"upload":          upload,
 		"message":         fmt.Sprintf("%s file analyzed. Call POST /generate-dashboard to create an analytics dashboard.", strings.ToUpper(fileType)),
 		"can_convert_gis": hasGeo,
+		"scan_safe":       scanResult.Safe,
+		"scan_findings":   len(scanResult.Findings),
 	})
 }
 

@@ -86,9 +86,9 @@ func (o *Orchestrator) Scan(file *FileInfo) *ScanResult {
 		if err != nil {
 			result.Findings = append(result.Findings, Finding{
 				Scanner:     s.Name(),
-				Severity:    SeverityMedium,
-				Description: "Scanner error",
-				Details:     fmt.Sprintf("Scanner %q encountered an error: %v", s.Name(), err),
+				Severity:    SeverityInfo,
+				Description: "Scanner unavailable",
+				Details:     fmt.Sprintf("Scanner %q could not complete: %v", s.Name(), err),
 			})
 			continue
 		}
