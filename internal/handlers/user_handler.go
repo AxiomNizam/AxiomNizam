@@ -222,3 +222,20 @@ func (h *PlatformUserHandler) DeletePlatformUser(c *gin.Context) {
 		"message": fmt.Sprintf("User '%s' deleted successfully", username),
 	})
 }
+
+// ValidateCredentials checks username+password against platform users.
+// Returns the matched user and true on success, nil and false otherwise.
+func (h *PlatformUserHandler) ValidateCredentials(username, password string) (*PlatformUser, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, u := range h.users {
+		if strings.EqualFold(u.Username, username) && u.Status == "active" {
+			if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password)); err == nil {
+				return u, true
+			}
+			return nil, false
+		}
+	}
+	return nil, false
+}

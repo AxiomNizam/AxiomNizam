@@ -154,6 +154,7 @@ func main() {
 	// Authentication endpoints (no auth required for login/refresh)
 	authHandler := handlers.NewAuthHandler()
 	authHandler.SetRateLimiter(rateLimiter)
+	authHandler.SetPlatformUserHandler(platformUserHandler)
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)

@@ -25,6 +25,7 @@ type AuthHandler struct {
 	keycloakClient string
 	clientSecret   string
 	rateLimiter    *auth.RateLimiter
+	platformUsers  *PlatformUserHandler
 }
 
 // NewAuthHandler creates a new auth handler
@@ -46,6 +47,12 @@ func NewAuthHandler() *AuthHandler {
 // SetRateLimiter sets the rate limiter for the auth handler
 func (h *AuthHandler) SetRateLimiter(limiter *auth.RateLimiter) {
 	h.rateLimiter = limiter
+}
+
+// SetPlatformUserHandler wires the platform user store into the auth handler
+// so that users created via the sysadmin UI can log in.
+func (h *AuthHandler) SetPlatformUserHandler(puh *PlatformUserHandler) {
+	h.platformUsers = puh
 }
 
 // getEnv gets environment variable with fallback
@@ -179,6 +186,29 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				return
 			}
 			log.Printf("⚠️  Demo token generation failed for %s: %v — falling through to Keycloak\n", req.Username, err)
+		}
+	}
+
+	// Check platform users created via the sysadmin UI (second priority, before Keycloak).
+	// These are stored in-memory — no Keycloak account required.
+	if h.platformUsers != nil {
+		if platformUser, ok := h.platformUsers.ValidateCredentials(req.Username, req.Password); ok {
+			platformToken, err := generateDemoToken(platformUser.Username, platformUser.Role)
+			if err == nil {
+				log.Printf("✅ Platform user login for user: %s (role: %s)\n", platformUser.Username, platformUser.Role)
+				c.JSON(http.StatusOK, gin.H{
+					"status":        "ok",
+					"access_token":  platformToken,
+					"expires_in":    28800,
+					"refresh_token": "",
+					"token_type":    "Bearer",
+					"username":      platformUser.Username,
+					"role":          platformUser.Role,
+					"demo_mode":     true,
+				})
+				return
+			}
+			log.Printf("⚠️  Token generation failed for platform user %s: %v\n", platformUser.Username, err)
 		}
 	}
 
