@@ -1,391 +1,57 @@
 {
   "info": {
-    "_postman_id": "dynamic-queries-collection",
     "name": "AxiomNizam - Dynamic Queries",
-    "description": "Dynamic SQL Query Examples for AxiomNizam",
+    "description": "Dynamic SQL query endpoints for all 5 SQL databases: MySQL, MariaDB, PostgreSQL, Percona, and Oracle. Supports GET/POST queries, batch operations, and schema inspection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{token}}",
-        "type": "string"
-      }
-    ]
-  },
+  "variable": [
+    { "key": "BASE_URL", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
   "item": [
     {
-      "name": "MySQL Dynamic Queries",
+      "name": "MySQL Queries",
       "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query?q=SELECT * FROM users",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "GET - Select by Age",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query?q=SELECT * FROM users WHERE age > ?&params=25",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users WHERE age > ?"
-                },
-                {
-                  "key": "params",
-                  "value": "25"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "POST - Select with Multiple Parameters",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ? AND name LIKE ?\",\n  \"params\": [25, \"%John%\"]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST - Insert User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"INSERT INTO users (name, email, age) VALUES (?, ?, ?)\",\n  \"params\": [\"Alice Smith\", \"alice@example.com\", 28]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST - Update User Age",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"UPDATE users SET age = ? WHERE id = ?\",\n  \"params\": [30, 1]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST - Delete User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"DELETE FROM users WHERE id = ?\",\n  \"params\": [1]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "GET - Table Schema",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/schema?table=users",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "schema"],
-              "query": [
-                {
-                  "key": "table",
-                  "value": "users"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "POST - Batch Queries",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "[\n  {\n    \"query\": \"SELECT COUNT(*) as total FROM users\",\n    \"params\": []\n  },\n  {\n    \"query\": \"SELECT * FROM users WHERE age > ? LIMIT ?\",\n    \"params\": [25, 5]\n  },\n  {\n    \"query\": \"INSERT INTO users (name, email, age) VALUES (?, ?, ?)\",\n    \"params\": [\"Bob Johnson\", \"bob@example.com\", 27]\n  }\n]"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query/batch",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query", "batch"]
-            }
-          }
-        }
+        { "name": "GET Query", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/query?q=SELECT * FROM users LIMIT 10", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users LIMIT 10" }] } }, "response": [] },
+        { "name": "POST Query (Parameterized)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ? AND name LIKE ?\",\n  \"params\": [25, \"%john%\"]\n}" }, "url": { "raw": "{{BASE_URL}}/api/mysql/query", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) as total FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > ?\", \"params\": [25]},\n  {\"query\": \"SELECT AVG(age) as avg_age FROM users\", \"params\": []}\n]" }, "url": { "raw": "{{BASE_URL}}/api/mysql/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "query", "batch"] } }, "response": [] },
+        { "name": "Get Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
       ]
     },
     {
-      "name": "PostgreSQL Dynamic Queries",
+      "name": "MariaDB Queries",
       "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8000/api/postgres/query?q=SELECT * FROM users",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "postgres", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "POST - Select with Parameters",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ?\",\n  \"params\": [25]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/postgres/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "postgres", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST - Insert User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"INSERT INTO users (name, email, age) VALUES (?, ?, ?)\",\n  \"params\": [\"Charlie Davis\", \"charlie@example.com\", 26]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/postgres/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "postgres", "query"]
-            }
-          }
-        },
-        {
-          "name": "GET - Table Schema",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8000/api/postgres/schema?table=users",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "postgres", "schema"],
-              "query": [
-                {
-                  "key": "table",
-                  "value": "users"
-                }
-              ]
-            }
-          }
-        }
+        { "name": "GET Query", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/query?q=SELECT * FROM users LIMIT 10", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users LIMIT 10" }] } }, "response": [] },
+        { "name": "POST Query (Parameterized)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ? AND name LIKE ?\",\n  \"params\": [25, \"%jane%\"]\n}" }, "url": { "raw": "{{BASE_URL}}/api/mariadb/query", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) as total FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > ?\", \"params\": [30]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/mariadb/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "query", "batch"] } }, "response": [] },
+        { "name": "Get Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
       ]
     },
     {
-      "name": "Advanced Query Examples",
+      "name": "PostgreSQL Queries",
       "item": [
-        {
-          "name": "Count Users by Age",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT age, COUNT(*) as count FROM users GROUP BY age HAVING COUNT(*) > ?\",\n  \"params\": [1]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "Pagination Example",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users ORDER BY id DESC LIMIT ? OFFSET ?\",\n  \"params\": [10, 0]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "Search with Wildcards",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE name LIKE ? OR email LIKE ?\",\n  \"params\": [\"%john%\", \"%@example.com\"]\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        },
-        {
-          "name": "Aggregate Data",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT MIN(age) as min_age, MAX(age) as max_age, AVG(age) as avg_age FROM users\",\n  \"params\": []\n}"
-            },
-            "url": {
-              "raw": "http://localhost:8000/api/mysql/query",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "8000",
-              "path": ["api", "mysql", "query"]
-            }
-          }
-        }
+        { "name": "GET Query", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/query?q=SELECT * FROM users LIMIT 10", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users LIMIT 10" }] } }, "response": [] },
+        { "name": "POST Query (Parameterized)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > $1 AND name ILIKE $2\",\n  \"params\": [25, \"%john%\"]\n}" }, "url": { "raw": "{{BASE_URL}}/api/postgres/query", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) as total FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > $1\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/postgres/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "query", "batch"] } }, "response": [] },
+        { "name": "Get Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Percona Queries",
+      "item": [
+        { "name": "GET Query", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/query?q=SELECT * FROM users LIMIT 10", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users LIMIT 10" }] } }, "response": [] },
+        { "name": "POST Query (Parameterized)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ?\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/percona/query", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) as total FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > ?\", \"params\": [30]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/percona/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "query", "batch"] } }, "response": [] },
+        { "name": "Get Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Oracle Queries",
+      "item": [
+        { "name": "GET Query", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/query?q=SELECT * FROM users WHERE ROWNUM <= 10", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users WHERE ROWNUM <= 10" }] } }, "response": [] },
+        { "name": "POST Query (Parameterized)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > :1\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/oracle/query", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) as total FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > :1\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/oracle/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "query", "batch"] } }, "response": [] },
+        { "name": "Get Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
       ]
     }
   ]

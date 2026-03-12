@@ -1,0 +1,190 @@
+{{ define "manager" }}
+<!-- Manager Portal -->
+<div class="admin-container">
+    <!-- Header -->
+    <div class="admin-header">
+        <div class="header-left">
+            <h1>📋 Manager Portal</h1>
+            <p class="subtitle">APIs · GIS · Analytics · NetIntel · Dashboards — View &amp; Edit</p>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <span id="managerUserName">Manager</span>
+                <button class="logout-btn" onclick="logout()" title="Logout">🚪 Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-navigation">
+        <button class="tab-btn active" onclick="mgr_switchTab('mgr-apis')">
+            <span class="tab-icon">🏗️</span> APIs
+        </button>
+        <button class="tab-btn" onclick="mgr_switchTab('mgr-dashboards')">
+            <span class="tab-icon">📊</span> Dashboards
+        </button>
+        <button class="tab-btn" onclick="mgr_switchTab('mgr-gis')">
+            <span class="tab-icon">🌍</span> GIS
+        </button>
+        <button class="tab-btn" onclick="mgr_switchTab('mgr-analytics')">
+            <span class="tab-icon">📈</span> Analytics
+        </button>
+        <button class="tab-btn" onclick="mgr_switchTab('mgr-netintel')">
+            <span class="tab-icon">📡</span> NetIntel
+        </button>
+    </div>
+
+    <!-- ===================== APIS TAB ===================== -->
+    <div id="mgr-apis" class="tab-content active">
+        <div class="builder-summary" id="mgrApiSummary"></div>
+
+        <div class="builder-toolbar">
+            <div class="toolbar-left">
+                <h3>Custom APIs</h3>
+                <select id="mgrApiCategoryFilter" onchange="mgrLoadAPIs()">
+                    <option value="">All Categories</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="external">External</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="iot">IoT</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <select id="mgrApiStatusFilter" onchange="mgrLoadAPIs()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+            <!-- No Create button for manager -->
+        </div>
+
+        <div class="api-builder-list" id="mgrApiList">
+            <div class="loading">Loading APIs...</div>
+        </div>
+    </div>
+
+    <!-- ===================== DASHBOARDS TAB ===================== -->
+    <div id="mgr-dashboards" class="tab-content">
+        <div class="builder-toolbar">
+            <div class="toolbar-left">
+                <h3>Generated Dashboards</h3>
+            </div>
+            <!-- No Create button for manager -->
+        </div>
+        <div id="mgrDashboardList" class="dashboard-list">
+            <div class="loading">Loading dashboards...</div>
+        </div>
+    </div>
+
+    <!-- ===================== GIS TAB ===================== -->
+    <div id="mgr-gis" class="tab-content">
+        <div class="iframe-wrapper">
+            <iframe src="/gis" title="GIS Dashboard" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+        </div>
+    </div>
+
+    <!-- ===================== ANALYTICS TAB ===================== -->
+    <div id="mgr-analytics" class="tab-content">
+        <div class="iframe-wrapper">
+            <iframe src="/analytics" title="Analytics Dashboard" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+        </div>
+    </div>
+
+    <!-- ===================== NETINTEL TAB ===================== -->
+    <div id="mgr-netintel" class="tab-content">
+        <div class="iframe-wrapper">
+            <iframe src="/netintel" title="Network Intelligence" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- Edit API Modal -->
+<div id="mgrEditAPIModal" class="modal">
+    <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+            <h2>✏️ Edit API</h2>
+            <button class="modal-close" onclick="mgrCloseEditAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="mgrEditAPIId">
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="mgrEditAPIName" class="form-control" placeholder="API name">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="mgrEditAPIDescription" class="form-control" rows="2" placeholder="Description"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Endpoint</label>
+                <input type="text" id="mgrEditAPIEndpoint" class="form-control" placeholder="/api/v1/...">
+            </div>
+            <div class="form-group">
+                <label>Method</label>
+                <select id="mgrEditAPIMethod" class="form-control">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <select id="mgrEditAPICategory" class="form-control">
+                    <option value="custom">Custom</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="external">External</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="iot">IoT</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="mgrEditAPIStatus" class="form-control">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+            <div class="form-actions" style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end;">
+                <button class="btn-secondary" onclick="mgrCloseEditAPIModal()">Cancel</button>
+                <button class="btn-primary" onclick="mgrSaveAPIEdit()">💾 Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test API Modal -->
+<div id="mgrTestAPIModal" class="modal">
+    <div class="modal-content" style="max-width:700px;">
+        <div class="modal-header">
+            <h2>🧪 Test API</h2>
+            <button class="modal-close" onclick="mgrCloseTestAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+                <span id="mgrTestMethod" class="method-badge" style="padding:0.4rem 0.8rem;background:var(--accent-primary);border-radius:4px;font-weight:bold;"></span>
+                <input type="text" id="mgrTestEndpoint" class="form-control" readonly style="flex:1;">
+            </div>
+            <div class="form-group">
+                <label>Request Body (JSON)</label>
+                <textarea id="mgrTestBody" class="form-control" rows="5" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <div class="form-actions" style="display:flex;gap:0.5rem;justify-content:flex-end;margin-bottom:1rem;">
+                <button class="btn-secondary" onclick="mgrCloseTestAPIModal()">Cancel</button>
+                <button class="btn-primary" onclick="mgrRunAPITest()">▶ Run</button>
+            </div>
+            <div id="mgrTestResult" style="display:none;">
+                <label>Response</label>
+                <pre id="mgrTestResultBody" style="background:var(--bg-secondary);padding:1rem;border-radius:6px;overflow:auto;max-height:300px;font-size:0.85rem;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/manager.js"></script>
+{{ end }}

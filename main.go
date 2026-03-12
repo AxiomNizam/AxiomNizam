@@ -124,6 +124,9 @@ func main() {
 	}
 	adminHandler := handlers.NewAdminHandler(dbConnections)
 
+	// User management handler
+	platformUserHandler := handlers.NewPlatformUserHandler()
+
 	// Dynamic Query handlers for each database
 	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL, queryLogger)
 	mariadbDynamicHandler := handlers.NewDynamicQueryHandler(conns.MariaDB, queryLogger)
@@ -151,6 +154,7 @@ func main() {
 	// Authentication endpoints (no auth required for login/refresh)
 	authHandler := handlers.NewAuthHandler()
 	authHandler.SetRateLimiter(rateLimiter)
+	authHandler.SetPlatformUserHandler(platformUserHandler)
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)
@@ -367,6 +371,13 @@ func main() {
 	router.POST("/api/admin/table/create", adminMiddleware, adminHandler.CreateTable)
 	router.GET("/api/admin/table/list", adminMiddleware, adminHandler.ListTables)
 
+	// User management endpoints (admin only)
+	router.GET("/api/v1/users", adminMiddleware, platformUserHandler.ListPlatformUsers)
+	router.GET("/api/v1/users/:id", adminMiddleware, platformUserHandler.GetPlatformUser)
+	router.POST("/api/v1/users", adminMiddleware, platformUserHandler.CreatePlatformUser)
+	router.PUT("/api/v1/users/:id", adminMiddleware, platformUserHandler.UpdatePlatformUser)
+	router.DELETE("/api/v1/users/:id", adminMiddleware, platformUserHandler.DeletePlatformUser)
+
 	// API Metrics endpoints (admin only)
 	router.GET("/api/admin/metrics/all", adminMiddleware, apiMetricsTracker.GetAllAPIMetrics)
 	router.GET("/api/admin/metrics/count", adminMiddleware, apiMetricsTracker.GetAPICount)
@@ -528,6 +539,47 @@ func main() {
 	router.GET("/api/v1/data-platform/overview", cdcEtlHandler.GetPlatformOverview)
 
 	// ====================================
+	// API BUILDER, CSV DASHBOARD & CONVERSION
+	// ====================================
+	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler)
+
+	builderAPI := router.Group("/api/v1/builder")
+	{
+		// Summary
+		builderAPI.GET("/summary", apiBuilderHandler.GetSummary)
+
+		// Custom API CRUD
+		builderAPI.GET("/apis", apiBuilderHandler.ListAPIs)
+		builderAPI.GET("/apis/:id", apiBuilderHandler.GetAPI)
+		builderAPI.POST("/apis", apiBuilderHandler.CreateAPI)
+		builderAPI.PUT("/apis/:id", apiBuilderHandler.UpdateAPI)
+		builderAPI.DELETE("/apis/:id", apiBuilderHandler.DeleteAPI)
+		builderAPI.POST("/apis/:id/test", apiBuilderHandler.TestAPI)
+
+		// CSV Upload & Dashboard Generation
+		builderAPI.POST("/csv/upload", apiBuilderHandler.UploadCSV)
+		builderAPI.GET("/csv/uploads", apiBuilderHandler.ListCSVUploads)
+		builderAPI.GET("/csv/uploads/:id", apiBuilderHandler.GetCSVUpload)
+		builderAPI.DELETE("/csv/uploads/:id", apiBuilderHandler.DeleteCSVUpload)
+		builderAPI.POST("/csv/uploads/:id/generate-dashboard", apiBuilderHandler.GenerateDashboard)
+		builderAPI.POST("/csv/uploads/:id/generate-gis", apiBuilderHandler.GenerateGISFromCSV)
+
+		// Dashboard <-> GIS Conversion
+		builderAPI.POST("/convert/analyze", apiBuilderHandler.AnalyzeConversion)
+		builderAPI.POST("/convert/dashboard-to-gis", apiBuilderHandler.ConvertDashboardToGIS)
+		builderAPI.POST("/convert/gis-to-dashboard", apiBuilderHandler.ConvertGISToDashboard)
+		builderAPI.GET("/conversions", apiBuilderHandler.ListConversions)
+
+		// File Scanner (SafeGate Pipeline)
+		builderAPI.POST("/scanner/scan", apiBuilderHandler.ScanFile)
+		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
+		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
+
+		// Dashboard Deletion
+		builderAPI.DELETE("/dashboards/:id", apiBuilderHandler.DeleteDashboard)
+	}
+
+	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS
 	// ====================================
 	netIntelHandler := handlers.NewNetIntelHandler()
@@ -645,6 +697,13 @@ func main() {
 	fmt.Println("  GET  /api/admin/database/list   - List all databases")
 	fmt.Println("  POST /api/admin/table/create    - Create a new table")
 	fmt.Println("  GET  /api/admin/table/list      - List all tables")
+	fmt.Println()
+	fmt.Println("User Management endpoints (admin only):")
+	fmt.Println("  GET    /api/v1/users            - List all platform users")
+	fmt.Println("  GET    /api/v1/users/:id        - Get a platform user")
+	fmt.Println("  POST   /api/v1/users            - Create a platform user")
+	fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
+	fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
 	fmt.Println()
 	fmt.Println("Dynamic Query endpoints (authenticated users):")
 	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")

@@ -5,7 +5,7 @@
     <div class="admin-header">
         <div class="header-left">
             <h1>🔧 Admin Dashboard</h1>
-            <p class="subtitle">API Testing & System Configuration</p>
+            <p class="subtitle">API Builder · File Analytics · Dashboard Converter · File Scanner</p>
         </div>
         <div class="header-right">
             <div class="user-info">
@@ -17,7 +17,19 @@
 
     <!-- Tabs -->
     <div class="tab-navigation">
-        <button class="tab-btn active" onclick="switchTab('api-testing')">
+        <button class="tab-btn active" onclick="switchTab('api-builder')">
+            <span class="tab-icon">🏗️</span> API Builder
+        </button>
+        <button class="tab-btn" onclick="switchTab('csv-upload')">
+            <span class="tab-icon">📄</span> File → Dashboard
+        </button>
+        <button class="tab-btn" onclick="switchTab('converter')">
+            <span class="tab-icon">🔄</span> Dashboard ↔ GIS
+        </button>
+        <button class="tab-btn" onclick="switchTab('file-scanner')">
+            <span class="tab-icon">🛡️</span> File Scanner
+        </button>
+        <button class="tab-btn" onclick="switchTab('api-testing')">
             <span class="tab-icon">🧪</span> API Testing
         </button>
         <button class="tab-btn" onclick="switchTab('logs')">
@@ -28,8 +40,155 @@
         </button>
     </div>
 
-    <!-- API Testing Tab -->
-    <div id="api-testing" class="tab-content active">
+    <!-- ===================== API BUILDER TAB ===================== -->
+    <div id="api-builder" class="tab-content active">
+        <!-- Summary Cards -->
+        <div class="builder-summary" id="builderSummary"></div>
+
+        <!-- Toolbar -->
+        <div class="builder-toolbar">
+            <div class="toolbar-left">
+                <h3>Custom APIs</h3>
+                <select id="apiCategoryFilter" onchange="loadCustomAPIs()">
+                    <option value="">All Categories</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="external">External</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="iot">IoT</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <select id="apiStatusFilter" onchange="loadCustomAPIs()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="openCreateAPIModal()">+ Create API</button>
+        </div>
+
+        <!-- API List -->
+        <div class="api-builder-list" id="apiBuilderList">
+            <div class="loading">Loading APIs...</div>
+        </div>
+    </div>
+
+    <!-- ===================== CSV UPLOAD TAB ===================== -->
+    <div id="csv-upload" class="tab-content">
+        <div class="csv-section">
+            <div class="csv-upload-area" id="csvDropZone">
+                <div class="upload-icon">📄</div>
+                <h3>Upload Data File</h3>
+                <p>Drop a CSV, JSON, or Excel file here or click to browse</p>
+                <p class="upload-hint">Supports <strong>.csv</strong>, <strong>.json</strong>, and <strong>.xlsx</strong> files.<br>
+                Auto-generates Analytics Dashboard with charts, graphs, and tables.<br>
+                If data contains lat/lng columns, you can also generate a GIS dashboard.</p>
+                <input type="file" id="csvFileInput" accept=".csv,.json,.xlsx,.xls" style="display:none" onchange="handleFileUpload()">
+                <button class="btn-primary" onclick="document.getElementById('csvFileInput').click()">Browse Files</button>
+            </div>
+
+            <!-- Upload Analysis Result -->
+            <div id="csvAnalysisResult" style="display:none;">
+                <div class="analysis-header">
+                    <h3 id="csvFilenameDisplay"></h3>
+                    <div class="analysis-badges" id="csvAnalysisBadges"></div>
+                </div>
+                <div class="analysis-columns" id="csvColumnAnalysis"></div>
+                <div class="analysis-sample" id="csvSampleTable"></div>
+                <div class="analysis-actions">
+                    <button class="btn-primary" id="btnGenerateDashboard" onclick="generateCSVDashboard()">📊 Generate Analytics Dashboard</button>
+                    <button class="btn-secondary" id="btnGenerateGIS" onclick="generateCSVGIS()" style="display:none">🌍 Generate GIS Dashboard</button>
+                </div>
+            </div>
+
+            <!-- Previous Uploads -->
+            <div class="csv-history">
+                <h3>Previous Uploads</h3>
+                <div id="csvUploadHistory"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== CONVERTER TAB ===================== -->
+    <div id="converter" class="tab-content">
+        <div class="converter-section">
+            <div class="converter-header">
+                <h3>🔄 Dashboard ↔ GIS Converter</h3>
+                <p>Convert Analytics dashboards to GIS map views, or GIS datasets to Analytics dashboards.</p>
+            </div>
+
+            <div class="converter-panels">
+                <!-- Dashboard → GIS -->
+                <div class="converter-panel">
+                    <div class="panel-icon">📊 → 🌍</div>
+                    <h4>Dashboard → GIS</h4>
+                    <p>Convert an analytics dashboard with geographic data into a GIS map dataset with markers.</p>
+                    <select id="dashboardSelect" onchange="analyzeDashToGIS()">
+                        <option value="">Select a dashboard...</option>
+                    </select>
+                    <div id="dashToGISAnalysis" class="analysis-result" style="display:none;"></div>
+                    <button class="btn-primary" id="btnConvertToGIS" onclick="convertDashboardToGIS()" style="display:none">Convert to GIS</button>
+                </div>
+
+                <!-- GIS → Dashboard -->
+                <div class="converter-panel">
+                    <div class="panel-icon">🌍 → 📊</div>
+                    <h4>GIS → Dashboard</h4>
+                    <p>Convert a GIS dataset into an analytics dashboard with auto-generated charts and tables.</p>
+                    <select id="gisDatasetSelect" onchange="analyzeGISToDash()">
+                        <option value="">Select a GIS dataset...</option>
+                    </select>
+                    <div id="gisToDashAnalysis" class="analysis-result" style="display:none;"></div>
+                    <button class="btn-primary" id="btnConvertToDash" onclick="convertGISToDashboard()" style="display:none">Convert to Dashboard</button>
+                </div>
+            </div>
+
+            <!-- Conversion History -->
+            <div class="conversion-history">
+                <h3>Conversion History</h3>
+                <div id="conversionHistoryList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== FILE SCANNER TAB ===================== -->
+    <div id="file-scanner" class="tab-content">
+        <div class="csv-section">
+            <div class="csv-upload-area" id="scanDropZone">
+                <div class="upload-icon">🛡️</div>
+                <h3>SafeGate File Scanner</h3>
+                <p>Drop any file here to scan for security threats</p>
+                <p class="upload-hint">6-stage pipeline: Metadata · MIME Type · SVG XSS · Macro/Script · Archive Bomb · ClamAV Antivirus</p>
+                <input type="file" id="scanFileInput" style="display:none" onchange="handleFileScan()">
+                <button class="btn-primary" onclick="document.getElementById('scanFileInput').click()">Select File to Scan</button>
+            </div>
+
+            <!-- Scan Result -->
+            <div id="scanResult" style="display:none;">
+                <div class="analysis-header">
+                    <h3 id="scanFilenameDisplay"></h3>
+                    <div class="analysis-badges" id="scanBadges"></div>
+                </div>
+                <div id="scanFindings"></div>
+            </div>
+
+            <!-- Scanner Health -->
+            <div class="csv-history">
+                <h3>Scanner Status</h3>
+                <div id="scannerHealth"></div>
+            </div>
+
+            <!-- Scan History -->
+            <div class="csv-history">
+                <h3>Scan History</h3>
+                <div id="scanHistory"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== API TESTING TAB ===================== -->
+    <div id="api-testing" class="tab-content">
         <div class="api-testing-section">
             <!-- API Search & Filter -->
             <div class="api-controls">
@@ -52,7 +211,7 @@
         </div>
     </div>
 
-    <!-- Logs Tab -->
+    <!-- ===================== LOGS TAB ===================== -->
     <div id="logs" class="tab-content">
         <div class="logs-section">
             <div class="logs-header">
@@ -69,7 +228,7 @@
         </div>
     </div>
 
-    <!-- Settings Tab -->
+    <!-- ===================== SETTINGS TAB ===================== -->
     <div id="settings" class="tab-content">
         <div class="settings-section">
             <h3>System Settings</h3>
@@ -94,6 +253,86 @@
                     </label>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create API Modal -->
+<div id="createAPIModal" class="modal">
+    <div class="modal-content" style="max-width:700px;">
+        <div class="modal-header">
+            <h2>🏗️ Create Custom API</h2>
+            <button class="modal-close" onclick="closeCreateAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="createAPIForm" onsubmit="submitCreateAPI(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>API Name</label>
+                        <input type="text" id="apiNameInput" placeholder="e.g. List Products" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="apiCategoryInput">
+                            <option value="custom">Custom</option>
+                            <option value="e-commerce">E-Commerce</option>
+                            <option value="analytics">Analytics</option>
+                            <option value="external">External</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="iot">IoT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>HTTP Method</label>
+                        <select id="apiMethodInput">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Path</label>
+                        <input type="text" id="apiPathInput" placeholder="/api/custom/..." required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="apiDescInput" rows="2" placeholder="What does this API do?"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="apiAuthInput"> Requires Authentication</label>
+                    </div>
+                    <div class="form-group">
+                        <label>Rate Limit (req/min)</label>
+                        <input type="number" id="apiRateLimitInput" value="60" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="apiCacheInput" onchange="toggleCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="cacheTTLGroup" style="display:none">
+                        <label>Cache TTL (seconds)</label>
+                        <input type="number" id="apiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Mock Response (JSON)</label>
+                    <textarea id="apiMockResponseInput" rows="4" placeholder='{"data": [], "total": 0}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Query Parameters (one per line: name:type:required)</label>
+                    <textarea id="apiQueryParamsInput" rows="3" placeholder="page:number:false
+limit:number:false
+search:string:false"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Create API</button>
+            </form>
         </div>
     </div>
 </div>

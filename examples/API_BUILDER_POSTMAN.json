@@ -1,0 +1,50 @@
+{
+  "info": {
+    "name": "AxiomNizam - API Builder",
+    "description": "API Builder endpoints: custom API CRUD & testing, CSV-to-Dashboard pipeline (upload/list/generate), Dashboard-GIS converter, and conversion history.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Overview",
+      "item": [
+        { "name": "Get Builder Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/summary", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "summary"] }, "description": "API Builder overview with counts and recent activity" }, "response": [] }
+      ]
+    },
+    {
+      "name": "Custom APIs",
+      "item": [
+        { "name": "List Custom APIs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis"] } }, "response": [] },
+        { "name": "Create Custom API", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product Lookup\",\n  \"description\": \"REST API for product catalog\",\n  \"method\": \"GET\",\n  \"path\": \"/products/:id\",\n  \"datasource\": \"postgres-main\",\n  \"query\": \"SELECT id, name, price, category FROM products WHERE id = $1\",\n  \"params\": [{\"name\": \"id\", \"type\": \"string\", \"required\": true}],\n  \"auth_required\": true,\n  \"rate_limit\": 100\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis"] } }, "response": [] },
+        { "name": "Get Custom API", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001"] } }, "response": [] },
+        { "name": "Update Custom API", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product Lookup v2\",\n  \"rate_limit\": 200,\n  \"query\": \"SELECT id, name, price, category, stock FROM products WHERE id = $1\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001"] } }, "response": [] },
+        { "name": "Delete Custom API", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001"] } }, "response": [] },
+        { "name": "Test Custom API", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"params\": {\"id\": \"prod-123\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001/test", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001", "test"] }, "description": "Execute the custom API with test parameters and return result" }, "response": [] }
+      ]
+    },
+    {
+      "name": "CSV to Dashboard",
+      "item": [
+        { "name": "Upload CSV File", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "/path/to/data.csv", "description": "CSV file to upload" }] }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/upload", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "upload"] }, "description": "Upload a CSV file for dashboard or GIS generation" }, "response": [] },
+        { "name": "List Uploaded CSVs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv"] } }, "response": [] },
+        { "name": "Get CSV Details", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/csv-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "csv-001"] } }, "response": [] },
+        { "name": "Delete CSV", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/csv-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "csv-001"] } }, "response": [] },
+        { "name": "Generate Dashboard from CSV", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"title\": \"Sales Dashboard\",\n  \"chart_types\": [\"bar\", \"line\", \"pie\"],\n  \"columns\": [\"revenue\", \"region\", \"quarter\"]\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/csv-001/generate-dashboard", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "csv-001", "generate-dashboard"] }, "description": "Auto-generate an analytics dashboard from uploaded CSV data" }, "response": [] },
+        { "name": "Generate GIS from CSV", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"title\": \"Store Locations Map\",\n  \"lat_column\": \"latitude\",\n  \"lng_column\": \"longitude\",\n  \"label_column\": \"store_name\",\n  \"value_column\": \"revenue\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/csv-001/generate-gis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "csv-001", "generate-gis"] }, "description": "Auto-generate a GIS dashboard from CSV with lat/lng data" }, "response": [] }
+      ]
+    },
+    {
+      "name": "Dashboard-GIS Converter",
+      "item": [
+        { "name": "Analyze Dashboard for Conversion", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"dashboard_id\": \"dash-001\",\n  \"target_format\": \"gis\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/converter/analyze", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "converter", "analyze"] }, "description": "Analyze a dashboard or GIS config to determine conversion feasibility" }, "response": [] },
+        { "name": "Dashboard to GIS", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"dashboard_id\": \"dash-001\",\n  \"geo_mapping\": {\"lat_field\": \"latitude\", \"lng_field\": \"longitude\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/converter/dashboard-to-gis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "converter", "dashboard-to-gis"] }, "description": "Convert an analytics dashboard to a GIS dashboard" }, "response": [] },
+        { "name": "GIS to Dashboard", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"gis_id\": \"gis-001\",\n  \"chart_types\": [\"bar\", \"line\"]\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/converter/gis-to-dashboard", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "converter", "gis-to-dashboard"] }, "description": "Convert a GIS dashboard to an analytics dashboard" }, "response": [] },
+        { "name": "List Conversions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/converter/conversions", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "converter", "conversions"] }, "description": "List all past conversion operations" }, "response": [] }
+      ]
+    }
+  ]
+}

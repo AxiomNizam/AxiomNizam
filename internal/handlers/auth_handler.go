@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
+	gojwt "github.com/golang-jwt/jwt/v5"
 )
 
 // AuthHandler handles authentication requests
@@ -23,6 +25,7 @@ type AuthHandler struct {
 	keycloakClient string
 	clientSecret   string
 	rateLimiter    *auth.RateLimiter
+	platformUsers  *PlatformUserHandler
 }
 
 // NewAuthHandler creates a new auth handler
@@ -46,6 +49,12 @@ func (h *AuthHandler) SetRateLimiter(limiter *auth.RateLimiter) {
 	h.rateLimiter = limiter
 }
 
+// SetPlatformUserHandler wires the platform user store into the auth handler
+// so that users created via the sysadmin UI can log in.
+func (h *AuthHandler) SetPlatformUserHandler(puh *PlatformUserHandler) {
+	h.platformUsers = puh
+}
+
 // getEnv gets environment variable with fallback
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
@@ -58,6 +67,76 @@ func getEnv(key, fallback string) string {
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+}
+
+// demoAccounts maps username → {password, role} for local dev fallback
+// admin   / admin    → /admin        (full admin access)
+// sysadmin/ sysadmin → /system-manager (user management, system ops)
+// manager / manager  → /manager      (view+edit APIs/dashboards, no delete/create)
+// user    / user     → /             (view only)
+var demoAccounts = map[string]struct {
+	password string
+	role     string
+}{
+	"admin":    {password: "admin", role: "admin"},
+	"sysadmin": {password: "sysadmin", role: "system-manager"},
+	"manager":  {password: "manager", role: "manager"},
+	"user":     {password: "user", role: "user"},
+}
+
+// generateDemoToken creates an HMAC-HS256 JWT for a demo account
+func generateDemoToken(username, role string) (string, error) {
+	now := time.Now()
+	claims := gojwt.MapClaims{
+		"preferred_username": username,
+		"email":              username + "@demo.local",
+		"realm_access": map[string]interface{}{
+			"roles": []string{role, "uma_authorization"},
+		},
+		"demo": true,
+		"iat":  now.Unix(),
+		"exp":  now.Add(8 * time.Hour).Unix(),
+	}
+	token := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(auth.DemoJWTSecret))
+}
+
+// extractRoleFromToken decodes the JWT payload and determines the user role
+func extractRoleFromToken(tokenString string) string {
+	parts := strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return "user"
+	}
+	payload := parts[1]
+	// Add padding
+	padded := payload + strings.Repeat("=", (4-len(payload)%4)%4)
+	padded = strings.ReplaceAll(padded, "-", "+")
+	padded = strings.ReplaceAll(padded, "_", "/")
+	decoded, err := base64.StdEncoding.DecodeString(padded)
+	if err != nil {
+		return "user"
+	}
+	var payload2 struct {
+		RealmAccess struct {
+			Roles []string `json:"roles"`
+		} `json:"realm_access"`
+	}
+	if err := json.Unmarshal(decoded, &payload2); err != nil {
+		return "user"
+	}
+	for _, r := range payload2.RealmAccess.Roles {
+		rl := strings.ToLower(r)
+		if strings.Contains(rl, "admin") && !strings.Contains(rl, "account") {
+			return "admin"
+		}
+		if rl == "system-manager" || rl == "system_manager" || rl == "system-admin" {
+			return "system-manager"
+		}
+		if rl == "manager" || rl == "api-manager" || rl == "api_manager" {
+			return "manager"
+		}
+	}
+	return "user"
 }
 
 // TokenResponse is the response from Keycloak
@@ -81,6 +160,56 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			Error:  "Invalid request: " + err.Error(),
 		})
 		return
+	}
+
+	// Check demo accounts FIRST — always takes priority over Keycloak for known demo credentials.
+	// This ensures local dev accounts always work regardless of Keycloak state.
+	// Set ENABLE_DEMO_ACCOUNTS=false to disable (e.g. in production when you want to remove these accounts).
+	demoEnabled := getEnv("ENABLE_DEMO_ACCOUNTS", "true") == "true"
+	if demo, ok := demoAccounts[req.Username]; ok && demo.password == req.Password {
+		if !demoEnabled {
+			log.Printf("⚠️  Demo account '%s' matched but ENABLE_DEMO_ACCOUNTS=false — falling through to Keycloak\n", req.Username)
+		} else {
+			demoToken, err := generateDemoToken(req.Username, demo.role)
+			if err == nil {
+				log.Printf("✅ Demo login for user: %s (role: %s)\n", req.Username, demo.role)
+				c.JSON(http.StatusOK, gin.H{
+					"status":        "ok",
+					"access_token":  demoToken,
+					"expires_in":    28800,
+					"refresh_token": "",
+					"token_type":    "Bearer",
+					"username":      req.Username,
+					"role":          demo.role,
+					"demo_mode":     true,
+				})
+				return
+			}
+			log.Printf("⚠️  Demo token generation failed for %s: %v — falling through to Keycloak\n", req.Username, err)
+		}
+	}
+
+	// Check platform users created via the sysadmin UI (second priority, before Keycloak).
+	// These are stored in-memory — no Keycloak account required.
+	if h.platformUsers != nil {
+		if platformUser, ok := h.platformUsers.ValidateCredentials(req.Username, req.Password); ok {
+			platformToken, err := generateDemoToken(platformUser.Username, platformUser.Role)
+			if err == nil {
+				log.Printf("✅ Platform user login for user: %s (role: %s)\n", platformUser.Username, platformUser.Role)
+				c.JSON(http.StatusOK, gin.H{
+					"status":        "ok",
+					"access_token":  platformToken,
+					"expires_in":    28800,
+					"refresh_token": "",
+					"token_type":    "Bearer",
+					"username":      platformUser.Username,
+					"role":          platformUser.Role,
+					"demo_mode":     true,
+				})
+				return
+			}
+			log.Printf("⚠️  Token generation failed for platform user %s: %v\n", platformUser.Username, err)
+		}
 	}
 
 	// Prepare the Keycloak token request
@@ -169,8 +298,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		log.Printf("✅ Token registered in rate limiter for user: %s (500 calls available)", req.Username)
 	}
 
+	// Determine role from the Keycloak JWT payload (server-side) for reliable redirect
+	keycloakRole := extractRoleFromToken(tokenResp.AccessToken)
+
 	// Success - return token info with rate limit info
 	c.JSON(http.StatusOK, gin.H{
+		"role":          keycloakRole,
 		"status":        "ok",
 		"access_token":  tokenResp.AccessToken,
 		"expires_in":    tokenResp.ExpiresIn,

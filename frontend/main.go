@@ -63,6 +63,7 @@ func main() {
 	router.GET("/", dashboardHandler)
 	router.GET("/admin", adminHandler)
 	router.GET("/system-manager", systemManagerHandler)
+	router.GET("/manager", managerHandler)
 	router.GET("/gis", gisHandler)
 	router.GET("/analytics", analyticsHandler)
 	router.GET("/cdc-etl", cdcEtlHandler)
@@ -80,6 +81,7 @@ func main() {
 	fmt.Printf("📊 Dashboard: http://localhost:%s\n", port)
 	fmt.Printf("🔧 Admin: http://localhost:%s/admin\n", port)
 	fmt.Printf("🖥️  System Manager: http://localhost:%s/system-manager\n", port)
+	fmt.Printf("📋 Manager Portal: http://localhost:%s/manager\n", port)
 	fmt.Printf("🌍 GIS Dashboard: http://localhost:%s/gis\n", port)
 	fmt.Printf("📊 Analytics Dashboard: http://localhost:%s/analytics\n", port)
 	fmt.Printf("🔄 CDC/ETL Dashboard: http://localhost:%s/cdc-etl\n", port)
@@ -123,6 +125,26 @@ func adminHandler(c *gin.Context) {
 		"title":      "AxiomNizam - Admin",
 		"pageName":   "admin",
 		"page":       "admin",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// managerHandler serves the manager portal
+func managerHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Manager"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Manager Portal",
+		"pageName":   "manager",
+		"page":       "manager",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,

@@ -1,2055 +1,387 @@
 {
   "info": {
-    "_postman_id": "axiom-nizam-complete",
     "name": "AxiomNizam - Complete API Collection",
-    "description": "Complete and comprehensive API testing collection for AxiomNizam - covering all endpoints including health, auth, CRUD, dynamic queries, transformations, admin, and notifications",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "1.0.0"
+    "description": "Complete collection of ALL AxiomNizam API endpoints covering 200+ routes across 17 categories: Health, Auth, CRUD (7 databases), Dynamic Queries (5 databases), Query Logging, Data Transformation, Admin, Notifications, CLI Auth, K8s Resources, DataSources, Jobs, GIS, Analytics, CDC/ETL, API Builder, and Network Intelligence.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {
-      "key": "BASE_URL",
-      "value": "http://localhost:8000",
-      "type": "string"
-    },
-    {
-      "key": "token",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "admin_token",
-      "value": "",
-      "type": "string"
-    }
+    { "key": "BASE_URL", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "admin_token", "value": "", "type": "string" }
   ],
   "item": [
     {
       "name": "Health & Status",
       "item": [
-        {
-          "name": "Health Check",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{BASE_URL}}/health",
-              "host": ["{{BASE_URL}}"],
-              "path": ["health"]
-            },
-            "description": "Check if the service is healthy (no auth required)"
-          },
-          "response": []
-        },
-        {
-          "name": "Status - All Connections",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{BASE_URL}}/status",
-              "host": ["{{BASE_URL}}"],
-              "path": ["status"]
-            },
-            "description": "Check status of all database connections (no auth required)"
-          },
-          "response": []
-        }
+        { "name": "Health Check", "request": { "method": "GET", "header": [], "url": { "raw": "{{BASE_URL}}/health", "host": ["{{BASE_URL}}"], "path": ["health"] }, "description": "Basic health check (no auth required)" }, "response": [] },
+        { "name": "Status Check", "request": { "method": "GET", "header": [], "url": { "raw": "{{BASE_URL}}/status", "host": ["{{BASE_URL}}"], "path": ["status"] }, "description": "Detailed status of all database connections (no auth required)" }, "response": [] },
+        { "name": "Distributed Status", "request": { "method": "GET", "header": [], "url": { "raw": "{{BASE_URL}}/distributed", "host": ["{{BASE_URL}}"], "path": ["distributed"] }, "description": "Distributed system status (no auth required)" }, "response": [] }
       ]
     },
     {
       "name": "Authentication",
       "item": [
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "  var jsonData = pm.response.json();",
-                  "  if (jsonData.token) {",
-                  "    pm.environment.set('token', jsonData.token);",
-                  "    console.log('Token saved successfully');",
-                  "  }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password\"\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/auth/login",
-              "host": ["{{BASE_URL}}"],
-              "path": ["auth", "login"]
-            },
-            "description": "Login with username and password to get JWT token"
-          },
-          "response": []
-        },
-        {
-          "name": "Refresh Token",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"token\": \"{{token}}\"\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/auth/refresh",
-              "host": ["{{BASE_URL}}"],
-              "path": ["auth", "refresh"]
-            },
-            "description": "Refresh an existing JWT token"
-          },
-          "response": []
-        },
-        {
-          "name": "Validate Token",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/auth/validate",
-              "host": ["{{BASE_URL}}"],
-              "path": ["auth", "validate"]
-            },
-            "description": "Validate if current token is valid"
-          },
-          "response": []
-        },
-        {
-          "name": "Token Status",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/auth/token-status",
-              "host": ["{{BASE_URL}}"],
-              "path": ["auth", "token-status"]
-            },
-            "description": "Get current token status (auth required)"
-          },
-          "response": []
-        },
-        {
-          "name": "All Tokens Status (Admin Only)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/auth/admin/tokens-status",
-              "host": ["{{BASE_URL}}"],
-              "path": ["auth", "admin", "tokens-status"]
-            },
-            "description": "Get status of all tokens (admin only)"
-          },
-          "response": []
-        }
+        { "name": "Login", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}" }, "url": { "raw": "{{BASE_URL}}/auth/login", "host": ["{{BASE_URL}}"], "path": ["auth", "login"] }, "description": "Login to get JWT token" }, "response": [] },
+        { "name": "Refresh Token", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"your-refresh-token-here\"\n}" }, "url": { "raw": "{{BASE_URL}}/auth/refresh", "host": ["{{BASE_URL}}"], "path": ["auth", "refresh"] }, "description": "Refresh an expired token" }, "response": [] },
+        { "name": "Validate Token", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/auth/validate", "host": ["{{BASE_URL}}"], "path": ["auth", "validate"] }, "description": "Validate a JWT token" }, "response": [] },
+        { "name": "Get Token Status", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/auth/token-status", "host": ["{{BASE_URL}}"], "path": ["auth", "token-status"] }, "description": "Get status of current token (auth required)" }, "response": [] },
+        { "name": "Get All Tokens Status (Admin)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/auth/admin/tokens-status", "host": ["{{BASE_URL}}"], "path": ["auth", "admin", "tokens-status"] }, "description": "Get status of all issued tokens (admin only)" }, "response": [] }
       ]
     },
     {
       "name": "MySQL CRUD",
       "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "users"]
-            },
-            "description": "List all users from MySQL"
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "users", "1"]
-            },
-            "description": "Get a specific user from MySQL by ID"
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"username\": \"johndoe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 30\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "users"]
-            },
-            "description": "Create a new user in MySQL (admin only)"
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"username\": \"janedoe\",\n  \"email\": \"jane@example.com\",\n  \"age\": 28\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "users", "1"]
-            },
-            "description": "Update an existing user in MySQL (admin only)"
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "users", "1"]
-            },
-            "description": "Delete a user from MySQL (admin only)"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "PostgreSQL CRUD",
-      "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Smith\",\n  \"username\": \"janesmith\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 25\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Smith Updated\",\n  \"email\": \"jane.updated@example.com\",\n  \"age\": 26\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "users", "1"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/users", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"username\": \"johndoe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 30\n}" }, "url": { "raw": "{{BASE_URL}}/api/mysql/users", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Doe\",\n  \"username\": \"janedoe\",\n  \"email\": \"jane@example.com\",\n  \"age\": 28\n}" }, "url": { "raw": "{{BASE_URL}}/api/mysql/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "users", "1"] } }, "response": [] }
       ]
     },
     {
       "name": "MariaDB CRUD",
       "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Bob Johnson\",\n  \"username\": \"bobjohnson\",\n  \"email\": \"bob@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 35\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Bob Johnson Updated\",\n  \"email\": \"bob.updated@example.com\",\n  \"age\": 36\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "users", "1"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/users", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Bob Johnson\",\n  \"username\": \"bobjohnson\",\n  \"email\": \"bob@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 35\n}" }, "url": { "raw": "{{BASE_URL}}/api/mariadb/users", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Bob Updated\",\n  \"email\": \"bob.updated@example.com\",\n  \"age\": 36\n}" }, "url": { "raw": "{{BASE_URL}}/api/mariadb/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "users", "1"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "PostgreSQL CRUD",
+      "item": [
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/users", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Smith\",\n  \"username\": \"janesmith\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 25\n}" }, "url": { "raw": "{{BASE_URL}}/api/postgres/users", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Updated\",\n  \"email\": \"jane.updated@example.com\",\n  \"age\": 26\n}" }, "url": { "raw": "{{BASE_URL}}/api/postgres/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "users", "1"] } }, "response": [] }
       ]
     },
     {
       "name": "Percona CRUD",
       "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Alice Williams\",\n  \"username\": \"alicew\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 28\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Alice Williams Updated\",\n  \"email\": \"alice.updated@example.com\",\n  \"age\": 29\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "users", "1"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/users", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Alice Percona\",\n  \"username\": \"alicep\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 29\n}" }, "url": { "raw": "{{BASE_URL}}/api/percona/users", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Alice Updated\",\n  \"email\": \"alice.updated@example.com\",\n  \"age\": 30\n}" }, "url": { "raw": "{{BASE_URL}}/api/percona/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "users", "1"] } }, "response": [] }
       ]
     },
     {
       "name": "MongoDB CRUD",
       "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mongodb/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mongodb", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mongodb/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mongodb", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Charlie Brown\",\n  \"username\": \"charlieb\",\n  \"email\": \"charlie@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 32\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mongodb/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mongodb", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Charlie Brown Updated\",\n  \"email\": \"charlie.updated@example.com\",\n  \"age\": 33\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mongodb/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mongodb", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mongodb/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mongodb", "users", "1"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mongodb/users", "host": ["{{BASE_URL}}"], "path": ["api", "mongodb", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mongodb/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mongodb", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mongo User\",\n  \"username\": \"mongouser\",\n  \"email\": \"mongo@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 27\n}" }, "url": { "raw": "{{BASE_URL}}/api/mongodb/users", "host": ["{{BASE_URL}}"], "path": ["api", "mongodb", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mongo Updated\",\n  \"email\": \"mongo.updated@example.com\",\n  \"age\": 28\n}" }, "url": { "raw": "{{BASE_URL}}/api/mongodb/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mongodb", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/mongodb/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "mongodb", "users", "1"] } }, "response": [] }
       ]
     },
     {
       "name": "Firebase CRUD",
       "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/firebase/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "firebase", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/firebase/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "firebase", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Diana Davis\",\n  \"username\": \"dianad\",\n  \"email\": \"diana@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 27\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/firebase/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "firebase", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Diana Davis Updated\",\n  \"email\": \"diana.updated@example.com\",\n  \"age\": 28\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/firebase/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "firebase", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/firebase/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "firebase", "users", "1"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/firebase/users", "host": ["{{BASE_URL}}"], "path": ["api", "firebase", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/firebase/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "firebase", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Firebase User\",\n  \"username\": \"fireuser\",\n  \"email\": \"fire@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 24\n}" }, "url": { "raw": "{{BASE_URL}}/api/firebase/users", "host": ["{{BASE_URL}}"], "path": ["api", "firebase", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Firebase Updated\",\n  \"email\": \"fire.updated@example.com\",\n  \"age\": 25\n}" }, "url": { "raw": "{{BASE_URL}}/api/firebase/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "firebase", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/firebase/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "firebase", "users", "1"] } }, "response": [] }
       ]
     },
     {
       "name": "Oracle CRUD",
       "item": [
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Eve Miller\",\n  \"username\": \"evem\",\n  \"email\": \"eve@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 31\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Eve Miller Updated\",\n  \"email\": \"eve.updated@example.com\",\n  \"age\": 32\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "users", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/users/1",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "users", "1"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Get All Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/users", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "users"] } }, "response": [] },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "users", "1"] } }, "response": [] },
+        { "name": "Create User", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Oracle User\",\n  \"username\": \"oracleuser\",\n  \"email\": \"oracle@example.com\",\n  \"password\": \"secure123\",\n  \"age\": 32\n}" }, "url": { "raw": "{{BASE_URL}}/api/oracle/users", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "users"] } }, "response": [] },
+        { "name": "Update User", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Oracle Updated\",\n  \"email\": \"oracle.updated@example.com\",\n  \"age\": 33\n}" }, "url": { "raw": "{{BASE_URL}}/api/oracle/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "users", "1"] } }, "response": [] },
+        { "name": "Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/users/1", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "users", "1"] } }, "response": [] }
       ]
     },
     {
       "name": "Dynamic Queries - MySQL",
       "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/query?q=SELECT * FROM users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET - Select with Parameters",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/query?q=SELECT * FROM users WHERE age > ?&params=25",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users WHERE age > ?"
-                },
-                {
-                  "key": "params",
-                  "value": "25"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST - Execute Query with Body",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE name LIKE ?\",\n  \"params\": [\"%John%\"]\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/query",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "query"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST - Batch Queries",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "[\n  {\n    \"query\": \"SELECT COUNT(*) as total FROM users\",\n    \"params\": []\n  },\n  {\n    \"query\": \"SELECT * FROM users WHERE age > ?\",\n    \"params\": [25]\n  }\n]"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/query/batch",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "query", "batch"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Table Schema",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/schema?table=users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "schema"],
-              "query": [
-                {
-                  "key": "table",
-                  "value": "users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/logs",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "logs"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mysql/stats",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mysql", "stats"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Dynamic Queries - PostgreSQL",
-      "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/query?q=SELECT * FROM users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST - Execute Query",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"INSERT INTO users (name, email, age) VALUES ($1, $2, $3)\",\n  \"params\": [\"Frank Wilson\", \"frank@example.com\", 40]\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/query",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "query"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Table Schema",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/schema?table=users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "schema"],
-              "query": [
-                {
-                  "key": "table",
-                  "value": "users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/logs",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "logs"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/postgres/stats",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "postgres", "stats"]
-            }
-          },
-          "response": []
-        }
+        { "name": "GET Query (SELECT)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/query?q=SELECT * FROM users&limit=10", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users" }, { "key": "limit", "value": "10" }] } }, "response": [] },
+        { "name": "POST Query (Any SQL)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ?\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/mysql/query", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > ?\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/mysql/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "query", "batch"] } }, "response": [] },
+        { "name": "Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
       ]
     },
     {
       "name": "Dynamic Queries - MariaDB",
       "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/query?q=SELECT * FROM users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST - Execute Query",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age BETWEEN ? AND ?\",\n  \"params\": [25, 35]\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/query",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "query"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/logs",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "logs"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/mariadb/stats",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "mariadb", "stats"]
-            }
-          },
-          "response": []
-        }
+        { "name": "GET Query (SELECT)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/query?q=SELECT * FROM users&limit=10", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users" }, { "key": "limit", "value": "10" }] } }, "response": [] },
+        { "name": "POST Query (Any SQL)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ?\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/mariadb/query", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > ?\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/mariadb/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "query", "batch"] } }, "response": [] },
+        { "name": "Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Dynamic Queries - PostgreSQL",
+      "item": [
+        { "name": "GET Query (SELECT)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/query?q=SELECT * FROM users&limit=10", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users" }, { "key": "limit", "value": "10" }] } }, "response": [] },
+        { "name": "POST Query (Any SQL)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > $1\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/postgres/query", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > $1\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/postgres/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "query", "batch"] } }, "response": [] },
+        { "name": "Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
       ]
     },
     {
       "name": "Dynamic Queries - Percona",
       "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/query?q=SELECT * FROM users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST - Execute Query",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT name, email FROM users ORDER BY name\",\n  \"params\": []\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/query",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "query"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/logs",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "logs"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/percona/stats",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "percona", "stats"]
-            }
-          },
-          "response": []
-        }
+        { "name": "GET Query (SELECT)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/query?q=SELECT * FROM users&limit=10", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users" }, { "key": "limit", "value": "10" }] } }, "response": [] },
+        { "name": "POST Query (Any SQL)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > ?\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/percona/query", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > ?\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/percona/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "query", "batch"] } }, "response": [] },
+        { "name": "Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
       ]
     },
     {
       "name": "Dynamic Queries - Oracle",
       "item": [
-        {
-          "name": "GET - Select All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/query?q=SELECT * FROM users",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "query"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "SELECT * FROM users"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST - Execute Query",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"SELECT * FROM users WHERE email LIKE :email\",\n  \"params\": [\"%@example.com\"]\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/query",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "query"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/logs",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "logs"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Query Statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/oracle/stats",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "oracle", "stats"]
-            }
-          },
-          "response": []
-        }
+        { "name": "GET Query (SELECT)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/query?q=SELECT * FROM users&limit=10", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "query"], "query": [{ "key": "q", "value": "SELECT * FROM users" }, { "key": "limit", "value": "10" }] } }, "response": [] },
+        { "name": "POST Query (Any SQL)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"SELECT * FROM users WHERE age > :1\",\n  \"params\": [25]\n}" }, "url": { "raw": "{{BASE_URL}}/api/oracle/query", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "query"] } }, "response": [] },
+        { "name": "Batch Queries", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "[\n  {\"query\": \"SELECT COUNT(*) FROM users\", \"params\": []},\n  {\"query\": \"SELECT * FROM users WHERE age > :1\", \"params\": [25]}\n]" }, "url": { "raw": "{{BASE_URL}}/api/oracle/query/batch", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "query", "batch"] } }, "response": [] },
+        { "name": "Table Schema", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/schema?table=users", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "schema"], "query": [{ "key": "table", "value": "users" }] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Query Logging & Statistics",
+      "item": [
+        { "name": "MySQL - Query Logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/logs", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "logs"] } }, "response": [] },
+        { "name": "MySQL - Query Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mysql/stats", "host": ["{{BASE_URL}}"], "path": ["api", "mysql", "stats"] } }, "response": [] },
+        { "name": "MariaDB - Query Logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/logs", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "logs"] } }, "response": [] },
+        { "name": "MariaDB - Query Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/mariadb/stats", "host": ["{{BASE_URL}}"], "path": ["api", "mariadb", "stats"] } }, "response": [] },
+        { "name": "PostgreSQL - Query Logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/logs", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "logs"] } }, "response": [] },
+        { "name": "PostgreSQL - Query Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/postgres/stats", "host": ["{{BASE_URL}}"], "path": ["api", "postgres", "stats"] } }, "response": [] },
+        { "name": "Percona - Query Logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/logs", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "logs"] } }, "response": [] },
+        { "name": "Percona - Query Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/percona/stats", "host": ["{{BASE_URL}}"], "path": ["api", "percona", "stats"] } }, "response": [] },
+        { "name": "Oracle - Query Logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/logs", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "logs"] } }, "response": [] },
+        { "name": "Oracle - Query Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/oracle/stats", "host": ["{{BASE_URL}}"], "path": ["api", "oracle", "stats"] } }, "response": [] }
       ]
     },
     {
       "name": "Data Transformation",
       "item": [
-        {
-          "name": "Register Transformation Rule",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"user_to_profile\",\n  \"description\": \"Convert user data to profile format\",\n  \"field_mappings\": {\n    \"id\": \"user_id\",\n    \"name\": \"full_name\",\n    \"email\": \"contact_email\"\n  },\n  \"type_conversions\": {\n    \"id\": \"string\",\n    \"age\": \"string\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/rules",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "rules"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List Transformation Rules",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/rules",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "rules"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Specific Rule",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/rules/user_to_profile",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "rules", "user_to_profile"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Apply Transformation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"rule_name\": \"user_to_profile\",\n  \"data\": {\n    \"id\": 123,\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"age\": 30\n  }\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/apply",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "apply"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Batch Transformations",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"rule_name\": \"user_to_profile\",\n  \"data\": [\n    {\"id\": 1, \"name\": \"User1\", \"email\": \"user1@example.com\", \"age\": 25},\n    {\"id\": 2, \"name\": \"User2\", \"email\": \"user2@example.com\", \"age\": 30}\n  ]\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/batch",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "batch"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Preview Transformation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"data\": {\"id\": 123, \"name\": \"John Doe\", \"email\": \"john@example.com\"},\n  \"field_mappings\": {\"id\": \"user_id\", \"name\": \"full_name\"},\n  \"type_conversions\": {\"id\": \"string\"}\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/preview",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "preview"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Test Field Rename",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"data\": {\"firstName\": \"John\", \"lastName\": \"Doe\", \"userEmail\": \"john@example.com\"},\n  \"mappings\": {\"firstName\": \"first_name\", \"lastName\": \"last_name\", \"userEmail\": \"email\"}\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/test/rename",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "test", "rename"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Test Type Conversion",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"data\": {\"id\": 123, \"age\": \"30\", \"active\": \"true\", \"price\": \"99.99\"},\n  \"conversions\": {\"id\": \"string\", \"age\": \"int\", \"active\": \"bool\", \"price\": \"float\"}\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/test/types",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "test", "types"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Test JSON Flatten",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"data\": {\n    \"user\": {\n      \"name\": \"John\",\n      \"contact\": {\n        \"email\": \"john@example.com\",\n        \"phone\": \"555-1234\"\n      }\n    },\n    \"settings\": {\n      \"theme\": \"dark\"\n    }\n  },\n  \"config\": {\n    \"enabled\": true,\n    \"separator\": \".\",\n    \"prefix\": \"\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/test/flatten",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "test", "flatten"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Transformation Rule",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/rules/user_to_profile",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "rules", "user_to_profile"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Export Transformation Rules",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/rules/export",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "rules", "export"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Import Transformation Rules",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "[\n  {\n    \"name\": \"imported_rule\",\n    \"description\": \"Imported transformation rule\",\n    \"field_mappings\": {\"source\": \"destination\"},\n    \"type_conversions\": {}\n  }\n]"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/transform/rules/import",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "transform", "rules", "import"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Register Rule", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"rename_fields\",\n  \"type\": \"rename\",\n  \"description\": \"Rename user fields\",\n  \"config\": {\"mappings\": {\"first_name\": \"firstName\", \"last_name\": \"lastName\"}}\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/rules", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "rules"] } }, "response": [] },
+        { "name": "List Rules", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/transform/rules", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "rules"] } }, "response": [] },
+        { "name": "Get Rule by Name", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/transform/rules/rename_fields", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "rules", "rename_fields"] } }, "response": [] },
+        { "name": "Delete Rule", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/transform/rules/rename_fields", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "rules", "rename_fields"] } }, "response": [] },
+        { "name": "Apply Transformation", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"rule\": \"rename_fields\",\n  \"data\": {\"first_name\": \"John\", \"last_name\": \"Doe\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/apply", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "apply"] } }, "response": [] },
+        { "name": "Batch Transform", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"rule\": \"rename_fields\",\n  \"data\": [{\"first_name\": \"John\", \"last_name\": \"Doe\"}, {\"first_name\": \"Jane\", \"last_name\": \"Smith\"}]\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/batch", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "batch"] } }, "response": [] },
+        { "name": "Preview Transformation", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"rule\": \"rename_fields\",\n  \"data\": {\"first_name\": \"Test\", \"last_name\": \"User\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/preview", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "preview"] } }, "response": [] },
+        { "name": "Test Field Rename", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"data\": {\"old_field\": \"value\"},\n  \"mappings\": {\"old_field\": \"new_field\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/test/rename", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "test", "rename"] } }, "response": [] },
+        { "name": "Test Type Conversion", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"data\": {\"age\": \"30\", \"active\": \"true\"},\n  \"conversions\": {\"age\": \"int\", \"active\": \"bool\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/test/types", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "test", "types"] } }, "response": [] },
+        { "name": "Test Flattening", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"data\": {\"user\": {\"name\": \"John\", \"address\": {\"city\": \"NYC\"}}}\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/test/flatten", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "test", "flatten"] } }, "response": [] },
+        { "name": "Export Rules", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/transform/rules/export", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "rules", "export"] } }, "response": [] },
+        { "name": "Import Rules", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"rules\": [{\"name\": \"imported_rule\", \"type\": \"rename\", \"description\": \"Imported\", \"config\": {\"mappings\": {\"old\": \"new\"}}}]\n}" }, "url": { "raw": "{{BASE_URL}}/api/transform/rules/import", "host": ["{{BASE_URL}}"], "path": ["api", "transform", "rules", "import"] } }, "response": [] }
       ]
     },
     {
       "name": "Admin Operations",
       "item": [
-        {
-          "name": "Create Database",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"database_name\": \"test_db\",\n  \"db_type\": \"mysql\"\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/database/create",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "database", "create"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List Databases",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/database/list",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "database", "list"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create Table",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"database\": \"test_db\",\n  \"table_name\": \"products\",\n  \"db_type\": \"mysql\",\n  \"columns\": [\n    {\"name\": \"id\", \"type\": \"INT\", \"primary_key\": true},\n    {\"name\": \"name\", \"type\": \"VARCHAR(255)\"},\n    {\"name\": \"price\", \"type\": \"DECIMAL(10,2)\"}\n  ]\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/table/create",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "table", "create"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List Tables",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/table/list",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "table", "list"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get All API Metrics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/metrics/all",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "metrics", "all"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get API Count",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/metrics/count",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "metrics", "count"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get API Statistics",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/admin/metrics/stats",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "admin", "metrics", "stats"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Create Database", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"database\": \"mysql\",\n  \"name\": \"new_db\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/admin/database/create", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "database", "create"] } }, "response": [] },
+        { "name": "List Databases", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/admin/database/list", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "database", "list"] } }, "response": [] },
+        { "name": "Create Table", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{admin_token}}" }], "body": { "mode": "raw", "raw": "{\n  \"database\": \"mysql\",\n  \"table_name\": \"products\",\n  \"columns\": [\n    {\"name\": \"id\", \"type\": \"INT\", \"primary_key\": true, \"auto_increment\": true},\n    {\"name\": \"name\", \"type\": \"VARCHAR(255)\"},\n    {\"name\": \"price\", \"type\": \"DECIMAL(10,2)\"}\n  ]\n}" }, "url": { "raw": "{{BASE_URL}}/api/admin/table/create", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "table", "create"] } }, "response": [] },
+        { "name": "List Tables", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/admin/table/list", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "table", "list"] } }, "response": [] },
+        { "name": "Get All API Metrics", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/admin/metrics/all", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "metrics", "all"] } }, "response": [] },
+        { "name": "Get API Count", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/admin/metrics/count", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "metrics", "count"] } }, "response": [] },
+        { "name": "Get API Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }], "url": { "raw": "{{BASE_URL}}/api/admin/metrics/stats", "host": ["{{BASE_URL}}"], "path": ["api", "admin", "metrics", "stats"] } }, "response": [] }
       ]
     },
     {
       "name": "Notifications",
       "item": [
-        {
-          "name": "Send Custom Notification",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Test Notification\",\n  \"message\": \"This is a test notification from AxiomNizam\",\n  \"severity\": \"info\"\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/notifications/send",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "notifications", "send"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Send Health Notification",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/notifications/health",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "notifications", "health"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Send Status Notification",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/api/notifications/status",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "notifications", "status"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Notification Status",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{BASE_URL}}/api/notifications/status",
-              "host": ["{{BASE_URL}}"],
-              "path": ["api", "notifications", "status"]
-            }
-          },
-          "response": []
-        }
+        { "name": "Send Notification", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"message\": \"Test notification from AxiomNizam\",\n  \"level\": \"info\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/notifications/send", "host": ["{{BASE_URL}}"], "path": ["api", "notifications", "send"] } }, "response": [] },
+        { "name": "Send Health Notification", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{BASE_URL}}/api/notifications/health", "host": ["{{BASE_URL}}"], "path": ["api", "notifications", "health"] } }, "response": [] },
+        { "name": "Send Status Notification", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{BASE_URL}}/api/notifications/status", "host": ["{{BASE_URL}}"], "path": ["api", "notifications", "status"] } }, "response": [] },
+        { "name": "Get Notification Status", "request": { "method": "GET", "header": [], "url": { "raw": "{{BASE_URL}}/api/notifications/status", "host": ["{{BASE_URL}}"], "path": ["api", "notifications", "status"] }, "description": "No auth required" }, "response": [] }
+      ]
+    },
+    {
+      "name": "CLI Authentication",
+      "item": [
+        { "name": "CLI Login", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/auth/login", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "auth", "login"] } }, "response": [] },
+        { "name": "CLI Verify", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/auth/verify", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "auth", "verify"] } }, "response": [] },
+        { "name": "CLI WhoAmI", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/auth/whoami", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "auth", "whoami"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Kubernetes-Style Resources",
+      "item": [
+        { "name": "Create Resource", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"apiVersion\": \"v1\",\n  \"kind\": \"workloads\",\n  \"metadata\": {\"name\": \"my-workload\", \"namespace\": \"default\"},\n  \"spec\": {\"replicas\": 3, \"image\": \"nginx:latest\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads"] } }, "response": [] },
+        { "name": "List Resources", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads"] } }, "response": [] },
+        { "name": "Get Resource", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads/my-workload", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads", "my-workload"] } }, "response": [] },
+        { "name": "Update Resource", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"apiVersion\": \"v1\",\n  \"kind\": \"workloads\",\n  \"metadata\": {\"name\": \"my-workload\", \"namespace\": \"default\"},\n  \"spec\": {\"replicas\": 5, \"image\": \"nginx:1.25\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads/my-workload", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads", "my-workload"] } }, "response": [] },
+        { "name": "Delete Resource", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads/my-workload", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads", "my-workload"] } }, "response": [] },
+        { "name": "Get Resource Status", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads/my-workload/status", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads", "my-workload", "status"] } }, "response": [] },
+        { "name": "Get Resource Events", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/namespaces/default/workloads/my-workload/events", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "namespaces", "default", "workloads", "my-workload", "events"] } }, "response": [] },
+        { "name": "Create API (Non-namespaced)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"apiVersion\": \"v1\",\n  \"kind\": \"apis\",\n  \"metadata\": {\"name\": \"my-api\"},\n  \"spec\": {\"path\": \"/my-endpoint\", \"method\": \"GET\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/apis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "apis"] } }, "response": [] },
+        { "name": "List APIs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/apis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "apis"] } }, "response": [] },
+        { "name": "Create Policy", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"apiVersion\": \"v1\",\n  \"kind\": \"policies\",\n  \"metadata\": {\"name\": \"rate-limit-policy\"},\n  \"spec\": {\"maxRequests\": 100, \"window\": \"1m\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/policies", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "policies"] } }, "response": [] },
+        { "name": "List Policies", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/policies", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "policies"] } }, "response": [] },
+        { "name": "Create Workflow", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"apiVersion\": \"v1\",\n  \"kind\": \"workflows\",\n  \"metadata\": {\"name\": \"data-pipeline\"},\n  \"spec\": {\"steps\": [{\"name\": \"extract\", \"action\": \"fetch\"}, {\"name\": \"transform\", \"action\": \"process\"}]}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/workflows", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "workflows"] } }, "response": [] },
+        { "name": "List Workflows", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/workflows", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "workflows"] } }, "response": [] },
+        { "name": "Run Workflow", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/workflows/data-pipeline/run", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "workflows", "data-pipeline", "run"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "DataSources",
+      "item": [
+        { "name": "Create DataSource", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"my-postgres\",\n  \"type\": \"postgresql\",\n  \"host\": \"localhost\",\n  \"port\": 5432,\n  \"database\": \"mydb\",\n  \"username\": \"user\",\n  \"password\": \"pass\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/datasources", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "datasources"] } }, "response": [] },
+        { "name": "List DataSources", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/datasources", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "datasources"] } }, "response": [] },
+        { "name": "Get DataSource", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/datasources/my-postgres", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "datasources", "my-postgres"] } }, "response": [] },
+        { "name": "Update DataSource", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"my-postgres\",\n  \"type\": \"postgresql\",\n  \"host\": \"db.example.com\",\n  \"port\": 5432,\n  \"database\": \"production\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/datasources/my-postgres", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "datasources", "my-postgres"] } }, "response": [] },
+        { "name": "Delete DataSource", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/datasources/my-postgres", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "datasources", "my-postgres"] } }, "response": [] },
+        { "name": "Test DataSource Connection", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/datasources/my-postgres/test", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "datasources", "my-postgres", "test"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        { "name": "Create Job", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"data-sync-job\",\n  \"type\": \"sync\",\n  \"schedule\": \"*/5 * * * *\",\n  \"config\": {\"source\": \"mysql\", \"target\": \"postgres\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/jobs", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs"] } }, "response": [] },
+        { "name": "List Jobs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/jobs", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs"] } }, "response": [] },
+        { "name": "Get Job", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/jobs/job-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs", "job-001"] } }, "response": [] },
+        { "name": "Run Job", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/jobs/job-001/run", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs", "job-001", "run"] } }, "response": [] },
+        { "name": "Get Job Logs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/jobs/job-001/logs", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs", "job-001", "logs"] } }, "response": [] },
+        { "name": "Cancel Job", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/jobs/job-001/cancel", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs", "job-001", "cancel"] } }, "response": [] },
+        { "name": "Delete Job", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/jobs/job-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "jobs", "job-001"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "GIS Dashboard",
+      "item": [
+        { "name": "Get GIS Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/summary", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "summary"] } }, "response": [] },
+        { "name": "List Layers", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/layers", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "layers"] } }, "response": [] },
+        { "name": "Create Layer", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Agriculture Zone\",\n  \"type\": \"polygon\",\n  \"visible\": true,\n  \"color\": \"#00ff00\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/layers", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "layers"] } }, "response": [] },
+        { "name": "Update Layer", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Agriculture Zone Updated\",\n  \"visible\": false\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/layers/layer-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "layers", "layer-001"] } }, "response": [] },
+        { "name": "Delete Layer", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/layers/layer-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "layers", "layer-001"] } }, "response": [] },
+        { "name": "List Regions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/regions", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "regions"] } }, "response": [] },
+        { "name": "Get Region", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/regions/region-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "regions", "region-001"] } }, "response": [] },
+        { "name": "Create Region", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Dhaka Division\",\n  \"type\": \"administrative\",\n  \"coordinates\": [[23.8103, 90.4125]],\n  \"properties\": {\"population\": 21000000}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/regions", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "regions"] } }, "response": [] },
+        { "name": "Update Region", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Dhaka Division Updated\",\n  \"properties\": {\"population\": 22000000}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/regions/region-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "regions", "region-001"] } }, "response": [] },
+        { "name": "Delete Region", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/regions/region-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "regions", "region-001"] } }, "response": [] },
+        { "name": "List Markers", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/markers", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "markers"] } }, "response": [] },
+        { "name": "Create Marker", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Headquarters\",\n  \"lat\": 23.8103,\n  \"lng\": 90.4125,\n  \"icon\": \"building\",\n  \"description\": \"Main office\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/markers", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "markers"] } }, "response": [] },
+        { "name": "Delete Marker", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/markers/marker-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "markers", "marker-001"] } }, "response": [] },
+        { "name": "List Datasets", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/datasets", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "datasets"] } }, "response": [] },
+        { "name": "Get Dataset", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/datasets/ds-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "datasets", "ds-001"] } }, "response": [] },
+        { "name": "Create Dataset", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Crop Yields 2024\",\n  \"type\": \"agriculture\",\n  \"data\": [{\"region\": \"dhaka\", \"yield\": 4500}]\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/datasets", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "datasets"] } }, "response": [] },
+        { "name": "Update Dataset", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Crop Yields 2024 Updated\",\n  \"data\": [{\"region\": \"dhaka\", \"yield\": 4800}]\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/gis/datasets/ds-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "datasets", "ds-001"] } }, "response": [] },
+        { "name": "Delete Dataset", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/datasets/ds-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "datasets", "ds-001"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "GIS Specialized Dashboards",
+      "item": [
+        { "name": "List Dashboard Types", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards"] } }, "response": [] },
+        { "name": "Get Agriculture Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/agriculture", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "agriculture"] } }, "response": [] },
+        { "name": "Get Agriculture Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/agriculture/summary", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "agriculture", "summary"] } }, "response": [] },
+        { "name": "Get Industries Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/industries", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "industries"] } }, "response": [] },
+        { "name": "Get Medical Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/medical", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "medical"] } }, "response": [] },
+        { "name": "Get Satellite Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/satellite", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "satellite"] } }, "response": [] },
+        { "name": "Get Airplane Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/airplane", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "airplane"] } }, "response": [] },
+        { "name": "Get Ship Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/gis/dashboards/ship", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "gis", "dashboards", "ship"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Analytics Dashboards",
+      "item": [
+        { "name": "List Dashboards", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/analytics/dashboards", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "analytics", "dashboards"] } }, "response": [] },
+        { "name": "Get Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/analytics/dashboards/dashboard-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "analytics", "dashboards", "dashboard-001"] } }, "response": [] },
+        { "name": "Update Widget", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"title\": \"Updated Widget\",\n  \"type\": \"bar_chart\",\n  \"config\": {\"color\": \"#3498db\"}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/analytics/dashboards/dashboard-001/widgets/widget-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "analytics", "dashboards", "dashboard-001", "widgets", "widget-001"] } }, "response": [] },
+        { "name": "Reorder Widgets (Layout)", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"widget_order\": [\"widget-003\", \"widget-001\", \"widget-002\"]\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/analytics/dashboards/dashboard-001/layout", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "analytics", "dashboards", "dashboard-001", "layout"] } }, "response": [] },
+        { "name": "Export Widget as CSV", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/analytics/dashboards/dashboard-001/widgets/widget-001/export", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "analytics", "dashboards", "dashboard-001", "widgets", "widget-001", "export"] } }, "response": [] },
+        { "name": "Get Widget Types", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/analytics/widget-types", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "analytics", "widget-types"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "ETL Pipelines",
+      "item": [
+        { "name": "List ETL Pipelines", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/pipelines", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "pipelines"] } }, "response": [] },
+        { "name": "Get ETL Pipeline", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/pipelines/etl-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "pipelines", "etl-001"] } }, "response": [] },
+        { "name": "Create ETL Pipeline", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"MySQL to PostgreSQL Sync\",\n  \"source\": {\"type\": \"mysql\", \"config\": {\"table\": \"users\"}},\n  \"destination\": {\"type\": \"postgresql\", \"config\": {\"table\": \"users_copy\"}},\n  \"schedule\": \"0 */6 * * *\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/etl/pipelines", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "pipelines"] } }, "response": [] },
+        { "name": "Update ETL Pipeline", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"MySQL to PostgreSQL Sync (Updated)\",\n  \"schedule\": \"0 */12 * * *\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/etl/pipelines/etl-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "pipelines", "etl-001"] } }, "response": [] },
+        { "name": "Delete ETL Pipeline", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/pipelines/etl-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "pipelines", "etl-001"] } }, "response": [] },
+        { "name": "Run ETL Pipeline", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/pipelines/etl-001/run", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "pipelines", "etl-001", "run"] } }, "response": [] },
+        { "name": "List ETL Runs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/runs", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "runs"] } }, "response": [] },
+        { "name": "Get ETL Run", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/runs/run-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "runs", "run-001"] } }, "response": [] },
+        { "name": "Get ETL Connectors", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/connectors", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "connectors"] } }, "response": [] },
+        { "name": "Get ETL Observability", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/etl/observability", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "etl", "observability"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "CDC Pipelines",
+      "item": [
+        { "name": "List CDC Pipelines", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines"] } }, "response": [] },
+        { "name": "Get CDC Pipeline", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines/cdc-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines", "cdc-001"] } }, "response": [] },
+        { "name": "Create CDC Pipeline", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"MySQL CDC Stream\",\n  \"source\": {\"type\": \"mysql-binlog\", \"config\": {\"tables\": [\"users\", \"orders\"]}},\n  \"sink\": {\"type\": \"kafka\", \"config\": {\"topic\": \"cdc-events\"}}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines"] } }, "response": [] },
+        { "name": "Update CDC Pipeline", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"MySQL CDC Stream (Updated)\",\n  \"sink\": {\"type\": \"kafka\", \"config\": {\"topic\": \"cdc-events-v2\"}}\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines/cdc-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines", "cdc-001"] } }, "response": [] },
+        { "name": "Delete CDC Pipeline", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines/cdc-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines", "cdc-001"] } }, "response": [] },
+        { "name": "Start CDC Pipeline", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines/cdc-001/start", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines", "cdc-001", "start"] } }, "response": [] },
+        { "name": "Pause CDC Pipeline", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines/cdc-001/pause", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines", "cdc-001", "pause"] } }, "response": [] },
+        { "name": "Stop CDC Pipeline", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/pipelines/cdc-001/stop", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "pipelines", "cdc-001", "stop"] } }, "response": [] },
+        { "name": "Get CDC Source Types", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/sources", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "sources"] } }, "response": [] },
+        { "name": "Get CDC Sink Types", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/sinks", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "sinks"] } }, "response": [] },
+        { "name": "Get CDC Observability", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/cdc/observability", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "cdc", "observability"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Data Platform",
+      "item": [
+        { "name": "Platform Overview", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/data-platform/overview", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "data-platform", "overview"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "API Builder",
+      "item": [
+        { "name": "Get Builder Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/summary", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "summary"] } }, "response": [] },
+        { "name": "List Custom APIs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis"] } }, "response": [] },
+        { "name": "Get Custom API", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001"] } }, "response": [] },
+        { "name": "Create Custom API", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product API\",\n  \"method\": \"GET\",\n  \"path\": \"/products\",\n  \"description\": \"List all products\",\n  \"response_type\": \"json\",\n  \"mock_response\": {\"products\": [{\"id\": 1, \"name\": \"Widget\"}]},\n  \"headers\": {\"X-Custom\": \"value\"},\n  \"auth_required\": true\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis"] } }, "response": [] },
+        { "name": "Update Custom API", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product API v2\",\n  \"description\": \"Updated product list\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001"] } }, "response": [] },
+        { "name": "Delete Custom API", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001"] } }, "response": [] },
+        { "name": "Test Custom API", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/apis/api-001/test", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "apis", "api-001", "test"] } }, "response": [] },
+        { "name": "Upload CSV", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "/path/to/data.csv" }, { "key": "name", "value": "Sales Data 2024", "type": "text" }] }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/upload", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "upload"] } }, "response": [] },
+        { "name": "List CSV Uploads", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/uploads", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "uploads"] } }, "response": [] },
+        { "name": "Get CSV Upload", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/uploads/csv-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "uploads", "csv-001"] } }, "response": [] },
+        { "name": "Delete CSV Upload", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/uploads/csv-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "uploads", "csv-001"] } }, "response": [] },
+        { "name": "Generate Dashboard from CSV", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/uploads/csv-001/generate-dashboard", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "uploads", "csv-001", "generate-dashboard"] } }, "response": [] },
+        { "name": "Generate GIS from CSV", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/csv/uploads/csv-001/generate-gis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "csv", "uploads", "csv-001", "generate-gis"] } }, "response": [] },
+        { "name": "Analyze Conversion", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"source_type\": \"dashboard\",\n  \"source_id\": \"dashboard-001\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/convert/analyze", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "convert", "analyze"] } }, "response": [] },
+        { "name": "Convert Dashboard to GIS", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"dashboard_id\": \"dashboard-001\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/convert/dashboard-to-gis", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "convert", "dashboard-to-gis"] } }, "response": [] },
+        { "name": "Convert GIS to Dashboard", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"gis_id\": \"gis-001\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/builder/convert/gis-to-dashboard", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "convert", "gis-to-dashboard"] } }, "response": [] },
+        { "name": "List Conversions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/builder/conversions", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "builder", "conversions"] } }, "response": [] }
+      ]
+    },
+    {
+      "name": "Network Intelligence",
+      "item": [
+        { "name": "Get Summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/summary", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "summary"] } }, "response": [] },
+        { "name": "Get Observability", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/observability", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "observability"] } }, "response": [] },
+        { "name": "Get Log Types", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/log-types", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "log-types"] } }, "response": [] },
+        { "name": "List Parsers", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/parsers", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "parsers"] } }, "response": [] },
+        { "name": "Get Parser", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/parsers/parser-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "parsers", "parser-001"] } }, "response": [] },
+        { "name": "Create Parser", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Syslog Parser\",\n  \"type\": \"syslog\",\n  \"pattern\": \"<priority>timestamp hostname app: message\",\n  \"enabled\": true\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/netintel/parsers", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "parsers"] } }, "response": [] },
+        { "name": "Update Parser", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Syslog Parser v2\",\n  \"enabled\": false\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/netintel/parsers/parser-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "parsers", "parser-001"] } }, "response": [] },
+        { "name": "Delete Parser", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/parsers/parser-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "parsers", "parser-001"] } }, "response": [] },
+        { "name": "List Log Entries", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/logs", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "logs"] } }, "response": [] },
+        { "name": "Ingest Log", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"source\": \"192.168.1.1\",\n  \"type\": \"syslog\",\n  \"raw\": \"<134>Oct 11 22:14:15 mymachine su: 'su root' failed\",\n  \"severity\": \"warning\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/netintel/logs", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "logs"] } }, "response": [] },
+        { "name": "Get Log Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/logs/stats", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "logs", "stats"] } }, "response": [] },
+        { "name": "Get Topology", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/topology", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "topology"] } }, "response": [] },
+        { "name": "Get Topology Node", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/topology/nodes/node-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "topology", "nodes", "node-001"] } }, "response": [] },
+        { "name": "Update Topology Node", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "raw", "raw": "{\n  \"label\": \"Core Router Updated\",\n  \"status\": \"maintenance\"\n}" }, "url": { "raw": "{{BASE_URL}}/api/v1/netintel/topology/nodes/node-001", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "topology", "nodes", "node-001"] } }, "response": [] },
+        { "name": "Get Heatmap", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/heatmap", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "heatmap"] } }, "response": [] },
+        { "name": "Get Trends", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/trends", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "trends"] } }, "response": [] },
+        { "name": "Get Predictions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/predictions", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "predictions"] } }, "response": [] },
+        { "name": "List Tracks", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/tracks", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "tracks"] } }, "response": [] },
+        { "name": "Get Track by MAC", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/tracks/AA:BB:CC:DD:EE:FF", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "tracks", "AA:BB:CC:DD:EE:FF"] } }, "response": [] },
+        { "name": "List Anomalies", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/anomalies", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "anomalies"] } }, "response": [] },
+        { "name": "Acknowledge Anomaly", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/anomalies/anomaly-001/acknowledge", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "anomalies", "anomaly-001", "acknowledge"] } }, "response": [] },
+        { "name": "Resolve Anomaly", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/anomalies/anomaly-001/resolve", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "anomalies", "anomaly-001", "resolve"] } }, "response": [] },
+        { "name": "List Alerts", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/alerts", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "alerts"] } }, "response": [] },
+        { "name": "Acknowledge Alert", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/alerts/alert-001/acknowledge", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "alerts", "alert-001", "acknowledge"] } }, "response": [] },
+        { "name": "Resolve Alert", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/alerts/alert-001/resolve", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "alerts", "alert-001", "resolve"] } }, "response": [] },
+        { "name": "List Forecasts", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/forecasts", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "forecasts"] } }, "response": [] },
+        { "name": "Get Forecast by Metric", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{BASE_URL}}/api/v1/netintel/forecasts/bandwidth", "host": ["{{BASE_URL}}"], "path": ["api", "v1", "netintel", "forecasts", "bandwidth"] } }, "response": [] }
       ]
     }
   ]

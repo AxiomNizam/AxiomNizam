@@ -14,6 +14,7 @@ services:
       # - mysql
       # - mariadb
       - postgres
+      - clamav
       # - mongodb
       # - percona
       # - firebase
@@ -176,18 +177,18 @@ services:
       - mongodb-data:/data/db
 
   # Percona MySQL
-  # percona:
-  #   image: percona:latest
-  #   container_name: percona
-  #   ports:
-  #     - "3308:3306"
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: root
-  #     MYSQL_DATABASE: app_db
-  #   networks:
-  #     - app-network
-  #   volumes:
-  #     - percona-data:/var/lib/mysql
+  percona:
+    image: percona:latest
+    container_name: percona
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_db
+    networks:
+      - app-network
+    volumes:
+      - percona-data:/var/lib/mysql
 
   # Elasticsearch
   # elasticsearch:
@@ -266,6 +267,23 @@ services:
   #     timeout: 5s
   #     retries: 3
 
+  # ClamAV Antivirus (SafeGate Scanner)
+  clamav:
+    image: clamav/clamav:latest
+    container_name: clamav
+    ports:
+      - "3310:3310"
+    networks:
+      - app-network
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
 networks:
   app-network:
     driver: bridge
@@ -282,4 +300,5 @@ volumes:
   keycloak-data:
   valkey-data:
   etcd-data:
+  clamav-data:
   query_logs:
