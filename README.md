@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Version** | 1.0.0 |
-| **Language** | Go 1.23 |
+| **Language** | Go 1.25 |
 | **Framework** | Gin HTTP + GORM ORM |
 | **Architecture** | Kubernetes-style declarative control plane |
 | **Go Files** | 323 files · ~82,400 lines of code |
@@ -783,3 +783,96 @@ Key Go modules (`go.mod`):
 ## License
 
 See [LICENSE](LICENSE) for details.
+
+---
+
+## GUI API Builder, CSV-to-Dashboard & Dashboard↔GIS Converter
+
+### Overview
+
+The Admin Dashboard (`/admin`) provides three powerful GUI-based features that let administrators create APIs, ingest CSV data, and convert between dashboard and GIS views — all without writing code.
+
+### 1. GUI API Builder
+
+Create, test, and manage custom APIs visually from the admin interface.
+
+**Features:**
+- Create APIs with name, method (GET/POST/PUT/DELETE/PATCH), path, category, and description
+- Set authentication requirements and rate limits per API
+- Define mock JSON responses for rapid prototyping
+- Add query parameters with type and required/optional flags
+- Test APIs directly from the GUI with one click
+- Track hit counts and status (active/draft/archived)
+- Filter APIs by category and status
+
+**Backend Endpoints:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/builder/summary` | Builder dashboard summary |
+| GET | `/api/v1/builder/apis` | List all custom APIs (filter by category, status) |
+| POST | `/api/v1/builder/apis` | Create a new custom API |
+| GET | `/api/v1/builder/apis/:id` | Get API details |
+| PUT | `/api/v1/builder/apis/:id` | Update an API |
+| DELETE | `/api/v1/builder/apis/:id` | Delete an API |
+| POST | `/api/v1/builder/apis/:id/test` | Test API (returns mock response) |
+
+### 2. CSV Upload → Auto Analytics Dashboard
+
+Upload a CSV file and automatically generate a full analytics dashboard with appropriate widgets, charts, and tables.
+
+**Features:**
+- Drag-and-drop CSV upload zone
+- Automatic column type detection: string, number, date, geo_lat, geo_lng, geo_name
+- Sample data preview table
+- Auto-generates dashboard with:
+  - KPI widgets (average of numeric columns)
+  - Bar charts (string vs. numeric aggregation)
+  - Doughnut charts (string frequency distribution)
+  - Line charts (date vs. numeric trends)
+  - Full data table widget
+- If geo data (lat/lng) is detected, also generate a GIS map dataset with markers
+- Upload history with status tracking
+
+**Backend Endpoints:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/builder/csv/upload` | Upload CSV file (multipart form) |
+| GET | `/api/v1/builder/csv/uploads` | List all CSV uploads |
+| GET | `/api/v1/builder/csv/uploads/:id` | Get CSV upload details |
+| DELETE | `/api/v1/builder/csv/uploads/:id` | Delete a CSV upload |
+| POST | `/api/v1/builder/csv/uploads/:id/generate-dashboard` | Generate analytics dashboard from CSV |
+| POST | `/api/v1/builder/csv/uploads/:id/generate-gis` | Generate GIS dataset from CSV (requires geo columns) |
+
+### 3. Dashboard ↔ GIS Converter
+
+Convert between analytics dashboards and GIS map views bidirectionally, with automatic field mapping and confidence scoring.
+
+**Dashboard → GIS:**
+- Analyzes dashboard widgets for geographic data (lat, lng, region, city columns)
+- Calculates conversion confidence score (0-100%)
+- Extracts markers from table widget rows
+- Creates a new GIS dataset with markers placed at detected coordinates
+
+**GIS → Dashboard:**
+- Creates analytics widgets from GIS dataset markers
+- Generates KPI cards, marker distribution charts, and data tables
+- Preserves all original marker metadata
+
+**Backend Endpoints:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/builder/convert/analyze` | Analyze conversion feasibility and confidence |
+| POST | `/api/v1/builder/convert/dashboard-to-gis` | Convert dashboard to GIS dataset |
+| POST | `/api/v1/builder/convert/gis-to-dashboard` | Convert GIS dataset to dashboard |
+| GET | `/api/v1/builder/conversions` | List all conversion history |
+
+### Admin Interface Tabs
+
+| Tab | Description |
+|-----|-------------|
+| **API Builder** | Summary cards, API list with filters, create/test/delete APIs |
+| **CSV → Dashboard** | Drag-drop upload, column analysis, generate dashboard or GIS |
+| **Dashboard ↔ GIS** | Select source, analyze confidence, convert with field mapping |
+| **API Testing** | Original API testing with method filters |
+| **Logs** | Real-time activity log viewer |
+| **Settings** | System configuration |

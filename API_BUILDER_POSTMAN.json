@@ -1,0 +1,218 @@
+{
+  "info": {
+    "name": "AxiomNizam - API Builder, CSV & Converter",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "GUI API Builder, CSV-to-Dashboard, and Dashboard↔GIS Converter"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "api_id", "value": "" },
+    { "key": "csv_upload_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Builder Summary",
+      "item": [
+        {
+          "name": "Get Builder Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Custom APIs",
+      "item": [
+        {
+          "name": "List Custom APIs",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/apis"
+          }
+        },
+        {
+          "name": "List APIs by Category",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/apis?category=products"
+          }
+        },
+        {
+          "name": "Create Custom API",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/apis",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"List Customers\",\n  \"method\": \"GET\",\n  \"path\": \"/api/custom/customers\",\n  \"description\": \"Retrieve all customers\",\n  \"category\": \"customers\",\n  \"auth_required\": true,\n  \"rate_limit\": 100,\n  \"mock_response\": {\"customers\": [{\"id\": 1, \"name\": \"Acme Corp\"}], \"total\": 1},\n  \"query_params\": [{\"name\": \"page\", \"type\": \"number\", \"required\": false}]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Custom API",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/apis/{{api_id}}"
+          }
+        },
+        {
+          "name": "Update Custom API",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/builder/apis/{{api_id}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"List Customers v2\",\n  \"status\": \"active\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Test Custom API",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/apis/{{api_id}}/test",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Delete Custom API",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/v1/builder/apis/{{api_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CSV Upload",
+      "item": [
+        {
+          "name": "Upload CSV File",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/csv/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List CSV Uploads",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/csv/uploads"
+          }
+        },
+        {
+          "name": "Get CSV Upload",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/csv/uploads/{{csv_upload_id}}"
+          }
+        },
+        {
+          "name": "Generate Dashboard from CSV",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/csv/uploads/{{csv_upload_id}}/generate-dashboard",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Generate GIS from CSV",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/csv/uploads/{{csv_upload_id}}/generate-gis",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Delete CSV Upload",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/v1/builder/csv/uploads/{{csv_upload_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard GIS Converter",
+      "item": [
+        {
+          "name": "Analyze Conversion (Dashboard to GIS)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/convert/analyze",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_type\": \"dashboard\",\n  \"source_id\": \"dash-1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Analyze Conversion (GIS to Dashboard)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/convert/analyze",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_type\": \"gis\",\n  \"source_id\": \"dataset-1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Convert Dashboard to GIS",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/convert/dashboard-to-gis",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dashboard_id\": \"dash-1\",\n  \"field_mappings\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Convert GIS to Dashboard",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/builder/convert/gis-to-dashboard",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataset_id\": \"dataset-1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Conversions",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/builder/conversions"
+          }
+        }
+      ]
+    }
+  ]
+}

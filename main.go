@@ -528,6 +528,39 @@ func main() {
 	router.GET("/api/v1/data-platform/overview", cdcEtlHandler.GetPlatformOverview)
 
 	// ====================================
+	// API BUILDER, CSV DASHBOARD & CONVERSION
+	// ====================================
+	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler)
+
+	builderAPI := router.Group("/api/v1/builder")
+	{
+		// Summary
+		builderAPI.GET("/summary", apiBuilderHandler.GetSummary)
+
+		// Custom API CRUD
+		builderAPI.GET("/apis", apiBuilderHandler.ListAPIs)
+		builderAPI.GET("/apis/:id", apiBuilderHandler.GetAPI)
+		builderAPI.POST("/apis", apiBuilderHandler.CreateAPI)
+		builderAPI.PUT("/apis/:id", apiBuilderHandler.UpdateAPI)
+		builderAPI.DELETE("/apis/:id", apiBuilderHandler.DeleteAPI)
+		builderAPI.POST("/apis/:id/test", apiBuilderHandler.TestAPI)
+
+		// CSV Upload & Dashboard Generation
+		builderAPI.POST("/csv/upload", apiBuilderHandler.UploadCSV)
+		builderAPI.GET("/csv/uploads", apiBuilderHandler.ListCSVUploads)
+		builderAPI.GET("/csv/uploads/:id", apiBuilderHandler.GetCSVUpload)
+		builderAPI.DELETE("/csv/uploads/:id", apiBuilderHandler.DeleteCSVUpload)
+		builderAPI.POST("/csv/uploads/:id/generate-dashboard", apiBuilderHandler.GenerateDashboard)
+		builderAPI.POST("/csv/uploads/:id/generate-gis", apiBuilderHandler.GenerateGISFromCSV)
+
+		// Dashboard <-> GIS Conversion
+		builderAPI.POST("/convert/analyze", apiBuilderHandler.AnalyzeConversion)
+		builderAPI.POST("/convert/dashboard-to-gis", apiBuilderHandler.ConvertDashboardToGIS)
+		builderAPI.POST("/convert/gis-to-dashboard", apiBuilderHandler.ConvertGISToDashboard)
+		builderAPI.GET("/conversions", apiBuilderHandler.ListConversions)
+	}
+
+	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS
 	// ====================================
 	netIntelHandler := handlers.NewNetIntelHandler()
