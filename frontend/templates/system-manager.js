@@ -20,6 +20,8 @@ const BACKEND_URL = (() => {
 
 console.log('System Manager - Backend URL:', BACKEND_URL);
 
+var availableDbServers = [];
+
 window.addEventListener('DOMContentLoaded', function() {
     // Set user name from localStorage
     const userName = localStorage.getItem('userName');
@@ -31,6 +33,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     loadStatusData();
     loadDatabases();
+    loadDatabaseServers();
     setInterval(loadStatusData, 30000);
 });
 
@@ -48,7 +51,9 @@ function switchManagerTab(tabName) {
     if (selectedTab) selectedTab.classList.add('active');
     
     // Add active to clicked button
-    event.target.classList.add('active');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+    }
     
     if (tabName === 'databases') {
         loadDatabases();
@@ -150,8 +155,10 @@ function refreshDatabases() {
 function createDatabase() {
     document.getElementById('createDbModal').style.display = 'flex';
     document.getElementById('newDbType').value = '';
+    document.getElementById('newDbServer').value = '';
     document.getElementById('newDbName').value = '';
     document.getElementById('createDbResult').style.display = 'none';
+    populateCreateDbServers();
 }
 
 function closeCreateDbModal() {
@@ -161,6 +168,7 @@ function closeCreateDbModal() {
 function submitCreateDatabase(event) {
     event.preventDefault();
     var dbType = document.getElementById('newDbType').value;
+    var dbServer = document.getElementById('newDbServer').value;
     var dbName = document.getElementById('newDbName').value.trim();
     var btn = document.getElementById('createDbBtn');
     var resultDiv = document.getElementById('createDbResult');
@@ -172,7 +180,7 @@ function submitCreateDatabase(event) {
     fetch(BACKEND_URL + '/api/admin/database/create', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ db_type: dbType, database_name: dbName })
+        body: JSON.stringify({ db_type: dbType, db_server: dbServer, database_name: dbName })
     })
     .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
     .then(function(result) {
@@ -182,8 +190,9 @@ function submitCreateDatabase(event) {
         if (result.ok) {
             resultDiv.style.background = 'rgba(16,185,129,0.15)';
             resultDiv.style.color = '#10b981';
-            resultDiv.textContent = 'Database "' + dbName + '" created successfully on ' + dbType;
-            addOperationLog('Database "' + dbName + '" created on ' + dbType, 'success');
+            var serverLabel = result.data.server_name || result.data.db_server || 'default';
+            resultDiv.textContent = 'Database "' + dbName + '" created successfully on ' + dbType + ' (' + serverLabel + ')';
+            addOperationLog('Database "' + dbName + '" created on ' + dbType + ' via ' + serverLabel, 'success');
             loadDatabases();
         } else {
             resultDiv.style.background = 'rgba(239,68,68,0.15)';
@@ -195,6 +204,144 @@ function submitCreateDatabase(event) {
     .catch(function(err) {
         btn.disabled = false;
         btn.textContent = 'Create Database';
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(239,68,68,0.15)';
+        resultDiv.style.color = '#ef4444';
+        resultDiv.textContent = 'Connection error: ' + err.message;
+    });
+}
+
+function loadDatabaseServers() {
+    fetch(BACKEND_URL + '/api/admin/database/servers', {
+        headers: getAuthHeaders()
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        availableDbServers = data.servers || [];
+        populateCreateDbServers();
+    })
+    .catch(function() {
+        availableDbServers = [];
+        populateCreateDbServers();
+    });
+}
+
+function populateCreateDbServers() {
+    var serverSelect = document.getElementById('newDbServer');
+    var dbType = (document.getElementById('newDbType').value || '').toLowerCase();
+    if (!serverSelect) return;
+
+    var selected = serverSelect.value;
+    serverSelect.innerHTML = '<option value="">Default server for selected database type</option>';
+
+    var filtered = availableDbServers.filter(function(server) {
+        if (!dbType) return true;
+        return (server.db_type || '').toLowerCase() === dbType;
+    });
+
+    filtered.forEach(function(server) {
+        var option = document.createElement('option');
+        option.value = server.key;
+        option.disabled = server.connected === false;
+        option.textContent = (server.name || server.key) + ' [' + (server.db_type || '').toUpperCase() + ']' + (server.connected === false ? ' (disconnected)' : '');
+        serverSelect.appendChild(option);
+    });
+
+    if (selected && filtered.some(function(s) { return s.key === selected; })) {
+        serverSelect.value = selected;
+    }
+}
+
+function openConnectDbServerModal() {
+    var modal = document.getElementById('connectDbServerModal');
+    if (!modal) return;
+
+    document.getElementById('serverName').value = '';
+    document.getElementById('serverDbType').value = document.getElementById('newDbType').value || 'mysql';
+    document.getElementById('serverHost').value = '127.0.0.1';
+    document.getElementById('serverUsername').value = 'root';
+    document.getElementById('serverPassword').value = '';
+    document.getElementById('serverDefaultDatabase').value = '';
+    document.getElementById('serverSSLMode').value = 'disable';
+    document.getElementById('connectServerResult').style.display = 'none';
+
+    updateConnectServerPortDefault();
+    modal.style.display = 'flex';
+}
+
+function closeConnectDbServerModal() {
+    var modal = document.getElementById('connectDbServerModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function updateConnectServerPortDefault() {
+    var dbType = (document.getElementById('serverDbType').value || '').toLowerCase();
+    var portEl = document.getElementById('serverPort');
+    if (!portEl) return;
+    portEl.value = dbType === 'postgres' ? 5432 : 3306;
+}
+
+function submitConnectDbServer(event) {
+    event.preventDefault();
+
+    var btn = document.getElementById('connectServerBtn');
+    var resultDiv = document.getElementById('connectServerResult');
+    var payload = {
+        server_name: document.getElementById('serverName').value.trim(),
+        db_type: document.getElementById('serverDbType').value,
+        host: document.getElementById('serverHost').value.trim(),
+        port: parseInt(document.getElementById('serverPort').value, 10) || 0,
+        username: document.getElementById('serverUsername').value.trim(),
+        password: document.getElementById('serverPassword').value,
+        default_database: document.getElementById('serverDefaultDatabase').value.trim(),
+        ssl_mode: document.getElementById('serverSSLMode').value
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+    resultDiv.style.display = 'none';
+
+    fetch(BACKEND_URL + '/api/admin/database/connect', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+    })
+    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.textContent = 'Connect Server';
+        resultDiv.style.display = 'block';
+
+        if (result.ok) {
+            resultDiv.style.background = 'rgba(16,185,129,0.15)';
+            resultDiv.style.color = '#10b981';
+            resultDiv.textContent = 'Server connected: ' + (result.data.server && result.data.server.name ? result.data.server.name : payload.server_name);
+
+            addOperationLog('Connected database server: ' + payload.server_name + ' (' + payload.db_type + ')', 'success');
+            loadDatabaseServers();
+
+            var newDbType = document.getElementById('newDbType');
+            if (newDbType && !newDbType.value) {
+                newDbType.value = payload.db_type;
+            }
+
+            setTimeout(function() {
+                closeConnectDbServerModal();
+                populateCreateDbServers();
+                if (result.data.server && result.data.server.key) {
+                    document.getElementById('newDbServer').value = result.data.server.key;
+                }
+            }, 500);
+        } else {
+            resultDiv.style.background = 'rgba(239,68,68,0.15)';
+            resultDiv.style.color = '#ef4444';
+            resultDiv.textContent = result.data.error || 'Failed to connect server';
+            addOperationLog('Database server connection failed: ' + (result.data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Connect Server';
         resultDiv.style.display = 'block';
         resultDiv.style.background = 'rgba(239,68,68,0.15)';
         resultDiv.style.color = '#ef4444';
@@ -496,3 +643,14 @@ function escapeHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+
+window.addEventListener('click', function(event) {
+    var createDbModal = document.getElementById('createDbModal');
+    if (createDbModal && event.target === createDbModal) {
+        closeCreateDbModal();
+    }
+    var connectModal = document.getElementById('connectDbServerModal');
+    if (connectModal && event.target === connectModal) {
+        closeConnectDbServerModal();
+    }
+});

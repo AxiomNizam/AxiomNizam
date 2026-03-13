@@ -2291,3 +2291,145 @@ code {
     border: 1px solid var(--border-color) !important;
 }
 .btn-cancel:hover { color: var(--text-primary); }
+
+/* ===================================================================
+   Standard Role UI Polish (Admin/Manager/System Manager/User)
+   =================================================================== */
+
+:root,
+[data-theme="dark"] {
+    --secondary-color: #0ea5e9;
+}
+
+body {
+    font-family: "Aptos", "Segoe UI", Tahoma, sans-serif;
+    background:
+        radial-gradient(circle at 12% 8%, rgba(14, 165, 233, 0.14), transparent 40%),
+        radial-gradient(circle at 84% 4%, rgba(16, 185, 129, 0.1), transparent 34%),
+        linear-gradient(140deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
+}
+
+.navbar {
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+}
+
+.dashboard-header,
+.admin-header,
+.manager-header {
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.24);
+}
+
+.tab-navigation {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 8px;
+    gap: 8px;
+}
+
+.tab-btn {
+    border-bottom: none;
+    border-radius: 8px;
+}
+
+.tab-btn.active {
+    color: var(--text-primary);
+    background: rgba(14, 165, 233, 0.18);
+    border: 1px solid rgba(14, 165, 233, 0.35);
+}
+
+.api-testing-section,
+.logs-section,
+.settings-section,
+.overview-card,
+.database-item,
+.operation-card,
+.chart-item,
+.metrics-table,
+.overview-section-large,
+.service-item,
+.summary-card,
+.api-category,
+.modal-content {
+    border-radius: 12px;
+}
+
+.form-control,
+.form-group input,
+.form-group select,
+.form-group textarea {
+    border-radius: 8px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+.api-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    transition: var(--transition);
+}
+
+.api-card:hover {
+    border-color: rgba(14, 165, 233, 0.45);
+    box-shadow: 0 10px 22px rgba(2, 6, 23, 0.2);
+    transform: translateY(-1px);
+}
+
+.api-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.api-card-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.api-card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.api-endpoint {
+    font-size: 0.82rem;
+    color: var(--primary-light);
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+
+.api-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}

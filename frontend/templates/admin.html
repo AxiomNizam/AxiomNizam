@@ -299,6 +299,25 @@
                         <input type="text" id="apiPathInput" placeholder="/api/custom/..." required>
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Source Database</label>
+                        <select id="apiSourceDatabaseInput" onchange="updateBuilderSourceServers()">
+                            <option value="">Select database...</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="mariadb">MariaDB</option>
+                            <option value="percona">Percona</option>
+                            <option value="oracle">Oracle</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Source Server</label>
+                        <select id="apiSourceServerInput">
+                            <option value="">Default server for selected database</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>Description</label>
                     <textarea id="apiDescInput" rows="2" placeholder="What does this API do?"></textarea>

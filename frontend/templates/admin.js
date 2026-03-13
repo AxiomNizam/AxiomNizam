@@ -14,6 +14,9 @@ const BACKEND_URL = (() => {
 let filteredMethod = 'ALL';
 let currentCSVUploadId = null;
 let currentDashMappings = [];
+let builderDataServers = [];
+
+const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
 console.log('Admin - Backend URL:', BACKEND_URL);
 
@@ -48,6 +51,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     loadBuilderSummary();
     loadCustomAPIs();
+    loadBuilderDataSources();
     loadCSVHistory();
     loadAPIs();
     setupCSVDropZone();
@@ -106,7 +110,7 @@ function loadCustomAPIs() {
             return;
         }
         var html = '<table class="admin-table"><thead><tr>' +
-            '<th>Method</th><th>Name</th><th>Path</th><th>Category</th><th>Status</th><th>Hits</th><th>Actions</th>' +
+            '<th>Method</th><th>Name</th><th>Path</th><th>Category</th><th>Source DB</th><th>Source Server</th><th>Status</th><th>Hits</th><th>Actions</th>' +
             '</tr></thead><tbody>';
         list.forEach(function(api) {
             var safeId = api.id.replace(/'/g, "\\'");
@@ -119,6 +123,8 @@ function loadCustomAPIs() {
                 '<td>' + escapeHtml(api.name) + '</td>' +
                 '<td><code>' + escapeHtml(api.path) + '</code></td>' +
                 '<td>' + escapeHtml(api.category || '-') + '</td>' +
+                '<td>' + escapeHtml(api.source_database || '-') + '</td>' +
+                '<td>' + escapeHtml(api.source_server || 'default') + '</td>' +
                 '<td><span class="status-badge status-' + api.status + '">' + api.status + '</span></td>' +
                 '<td>' + (api.hit_count || 0) + '</td>' +
                 '<td>' + actionsHtml + '</td></tr>';
@@ -142,6 +148,7 @@ function closeCreateAPIModal() {
     document.getElementById('createAPIForm').reset();
     var ttlGroup = document.getElementById('cacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
+    updateBuilderSourceServers();
 }
 
 function toggleCacheTTL() {
@@ -174,6 +181,8 @@ function submitCreateAPI(e) {
         path: document.getElementById('apiPathInput').value,
         description: document.getElementById('apiDescInput').value,
         category: document.getElementById('apiCategoryInput').value,
+        source_database: (document.getElementById('apiSourceDatabaseInput').value || '').trim(),
+        source_server: (document.getElementById('apiSourceServerInput').value || '').trim(),
         auth_required: document.getElementById('apiAuthInput').checked,
         rate_limit: parseInt(document.getElementById('apiRateLimitInput').value) || 0,
         cache_enabled: document.getElementById('apiCacheInput').checked,
@@ -192,6 +201,67 @@ function submitCreateAPI(e) {
             alert(d.error || 'Failed to create API');
         }
     });
+}
+
+function loadBuilderDataSources() {
+    fetchJSON('/api/admin/database/servers').then(function(d) {
+        builderDataServers = d.servers || [];
+
+        var dbSelect = document.getElementById('apiSourceDatabaseInput');
+        if (!dbSelect) return;
+
+        var existing = {};
+        DEFAULT_BUILDER_DATABASES.forEach(function(db) { existing[db] = true; });
+        (builderDataServers || []).forEach(function(s) {
+            if (s && s.db_type) existing[s.db_type] = true;
+        });
+
+        var selectedDB = dbSelect.value;
+        dbSelect.innerHTML = '<option value="">Select database...</option>';
+        Object.keys(existing).sort().forEach(function(dbType) {
+            dbSelect.innerHTML += '<option value="' + dbType + '">' + dbType.toUpperCase() + '</option>';
+        });
+
+        if (selectedDB && existing[selectedDB]) {
+            dbSelect.value = selectedDB;
+        }
+
+        updateBuilderSourceServers();
+    }).catch(function() {
+        var dbSelect = document.getElementById('apiSourceDatabaseInput');
+        if (!dbSelect) return;
+        var selectedDB = dbSelect.value;
+        dbSelect.innerHTML = '<option value="">Select database...</option>';
+        DEFAULT_BUILDER_DATABASES.forEach(function(dbType) {
+            dbSelect.innerHTML += '<option value="' + dbType + '">' + dbType.toUpperCase() + '</option>';
+        });
+        if (selectedDB) {
+            dbSelect.value = selectedDB;
+        }
+        updateBuilderSourceServers();
+    });
+}
+
+function updateBuilderSourceServers() {
+    var dbTypeEl = document.getElementById('apiSourceDatabaseInput');
+    var serverEl = document.getElementById('apiSourceServerInput');
+    if (!dbTypeEl || !serverEl) return;
+
+    var selectedDB = (dbTypeEl.value || '').trim();
+    var previouslySelected = serverEl.value;
+    var filtered = (builderDataServers || []).filter(function(s) {
+        return !selectedDB || s.db_type === selectedDB;
+    });
+
+    serverEl.innerHTML = '<option value="">Default server for selected database</option>';
+    filtered.forEach(function(s) {
+        var name = (s.name || s.key || 'server') + (s.connected ? '' : ' (disconnected)');
+        serverEl.innerHTML += '<option value="' + escapeHtml(s.key || '') + '">' + escapeHtml(name) + '</option>';
+    });
+
+    if (previouslySelected && filtered.some(function(s) { return s.key === previouslySelected; })) {
+        serverEl.value = previouslySelected;
+    }
 }
 
 function testCustomAPI(id) {
@@ -807,5 +877,6 @@ function deleteDashboard(dashId) {
 
 function openCreateAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin or manager.'); return; }
+    loadBuilderDataSources();
     document.getElementById('createAPIModal').style.display = 'flex';
 }

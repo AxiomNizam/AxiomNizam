@@ -639,6 +639,8 @@ DELETE /api/v1/jobs/:id       # Delete
 ```
 POST /api/admin/database/create
 GET  /api/admin/database/list
+GET  /api/admin/database/servers
+POST /api/admin/database/connect
 POST /api/admin/table/create
 GET  /api/admin/table/list
 GET  /api/admin/metrics/{all|count|stats}
@@ -798,6 +800,7 @@ Create, test, and manage custom APIs visually from the admin interface.
 
 **Features:**
 - Create APIs with name, method (GET/POST/PUT/DELETE/PATCH), path, category, and description
+- Select source database and source server for each API definition
 - Set authentication requirements and rate limits per API
 - **Configurable response caching** — enable per-API caching with custom TTL (1–86400 seconds, default 300s)
 - Define mock JSON responses for rapid prototyping
@@ -811,7 +814,7 @@ Create, test, and manage custom APIs visually from the admin interface.
 |--------|----------|-------------|
 | GET | `/api/v1/builder/summary` | Builder dashboard summary |
 | GET | `/api/v1/builder/apis` | List all custom APIs (filter by category, status) |
-| POST | `/api/v1/builder/apis` | Create a new custom API (supports `cache_enabled`, `cache_ttl`) |
+| POST | `/api/v1/builder/apis` | Create a new custom API (supports `source_database`, `source_server`, `cache_enabled`, `cache_ttl`) |
 | GET | `/api/v1/builder/apis/:id` | Get API details |
 | PUT | `/api/v1/builder/apis/:id` | Update an API (including cache settings) |
 | DELETE | `/api/v1/builder/apis/:id` | Delete an API |

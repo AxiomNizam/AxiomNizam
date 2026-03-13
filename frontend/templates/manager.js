@@ -76,17 +76,19 @@ async function mgrLoadAPIs() {
                     <div class="api-card-title">
                         <span class="method-badge method-${(api.method || 'GET').toLowerCase()}">${api.method || 'GET'}</span>
                         <strong>${escapeHtml(api.name || '')}</strong>
-                        <code class="api-endpoint">${escapeHtml(api.endpoint || '')}</code>
+                        <code class="api-endpoint">${escapeHtml(api.path || api.endpoint || '')}</code>
                     </div>
                     <div class="api-card-actions">
                         <span class="status-badge status-${api.status || 'draft'}">${api.status || 'draft'}</span>
-                        <button class="btn-sm btn-secondary" onclick="mgrOpenTestModal('${escapeAttr(api.id)}', '${escapeAttr(api.method || 'GET')}', '${escapeAttr(api.endpoint || '')}')">🧪 Test</button>
+                        <button class="btn-sm btn-secondary" onclick="mgrOpenTestModal('${escapeAttr(api.id)}', '${escapeAttr(api.method || 'GET')}', '${escapeAttr(api.path || api.endpoint || '')}')">🧪 Test</button>
                         <button class="btn-sm btn-primary" onclick="mgrOpenEditAPIModal('${escapeAttr(api.id)}')">✏️ Edit</button>
                     </div>
                 </div>
                 ${api.description ? `<p class="api-description">${escapeHtml(api.description)}</p>` : ''}
                 <div class="api-meta">
                     <span>📁 ${escapeHtml(api.category || 'custom')}</span>
+                    <span>🗄️ ${escapeHtml(api.source_database || 'n/a')}</span>
+                    <span>🖧 ${escapeHtml(api.source_server || 'default')}</span>
                     ${api.created_at ? `<span>🕐 ${new Date(api.created_at).toLocaleDateString()}</span>` : ''}
                 </div>
             </div>
@@ -112,7 +114,7 @@ async function mgrOpenEditAPIModal(apiId) {
         document.getElementById('mgrEditAPIId').value = api.id || apiId;
         document.getElementById('mgrEditAPIName').value = api.name || '';
         document.getElementById('mgrEditAPIDescription').value = api.description || '';
-        document.getElementById('mgrEditAPIEndpoint').value = api.endpoint || '';
+        document.getElementById('mgrEditAPIEndpoint').value = api.path || api.endpoint || '';
         document.getElementById('mgrEditAPIMethod').value = api.method || 'GET';
         document.getElementById('mgrEditAPICategory').value = api.category || 'custom';
         document.getElementById('mgrEditAPIStatus').value = api.status || 'active';
@@ -136,7 +138,7 @@ async function mgrSaveAPIEdit() {
     const payload = {
         name: document.getElementById('mgrEditAPIName').value,
         description: document.getElementById('mgrEditAPIDescription').value,
-        endpoint: document.getElementById('mgrEditAPIEndpoint').value,
+        path: document.getElementById('mgrEditAPIEndpoint').value,
         method: document.getElementById('mgrEditAPIMethod').value,
         category: document.getElementById('mgrEditAPICategory').value,
         status: document.getElementById('mgrEditAPIStatus').value,

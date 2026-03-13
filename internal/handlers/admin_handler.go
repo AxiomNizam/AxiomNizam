@@ -4,28 +4,81 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
 
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+var dbIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+var serverKeySanitizer = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+
 // AdminHandler handles admin operations like database and table creation
 type AdminHandler struct {
-	connections map[string]*gorm.DB
+	mu              sync.RWMutex
+	connections     map[string]*gorm.DB
+	connectionTypes map[string]string
+	serverMeta      map[string]DatabaseServerInfo
 }
 
 // NewAdminHandler creates a new admin handler
 func NewAdminHandler(connections map[string]*gorm.DB) *AdminHandler {
-	return &AdminHandler{
-		connections: connections,
+	h := &AdminHandler{
+		connections:     connections,
+		connectionTypes: make(map[string]string, len(connections)),
+		serverMeta:      make(map[string]DatabaseServerInfo, len(connections)),
 	}
+
+	for key, db := range connections {
+		h.connectionTypes[key] = key
+		h.serverMeta[key] = DatabaseServerInfo{
+			Key:       key,
+			Name:      strings.ToUpper(key) + " (default)",
+			DBType:    key,
+			Host:      "configured",
+			Port:      0,
+			Source:    "default",
+			Connected: db != nil,
+		}
+	}
+
+	return h
 }
 
 // CreateDatabaseRequest represents a request to create a database
 type CreateDatabaseRequest struct {
 	DatabaseName string `json:"database_name" binding:"required"`
 	DBType       string `json:"db_type" binding:"required"` // mysql, postgres, mongodb, etc.
+	DBServer     string `json:"db_server,omitempty"`        // optional server key (default/custom)
+}
+
+// ConnectDatabaseServerRequest represents a request to connect a new database server.
+type ConnectDatabaseServerRequest struct {
+	ServerName      string `json:"server_name" binding:"required"`
+	DBType          string `json:"db_type" binding:"required"`
+	Host            string `json:"host" binding:"required"`
+	Port            int    `json:"port"`
+	Username        string `json:"username" binding:"required"`
+	Password        string `json:"password"`
+	DefaultDatabase string `json:"default_database"`
+	SSLMode         string `json:"ssl_mode"`
+}
+
+// DatabaseServerInfo describes a database server entry exposed to UI clients.
+type DatabaseServerInfo struct {
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	DBType    string `json:"db_type"`
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+	Source    string `json:"source"` // default, custom
+	Connected bool   `json:"connected"`
 }
 
 // CreateTableRequest represents a request to create a table
@@ -52,12 +105,35 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 		return
 	}
 
-	// Validate database type
-	db, exists := h.connections[req.DBType]
+	req.DBType = strings.ToLower(strings.TrimSpace(req.DBType))
+	req.DBServer = strings.TrimSpace(req.DBServer)
+	if !dbIdentifierPattern.MatchString(req.DatabaseName) {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Invalid database_name. Use letters, numbers, and underscores only (must start with letter or underscore)",
+		})
+		return
+	}
+
+	// Resolve target connection: explicit server key when provided, otherwise db type default.
+	targetKey := req.DBType
+	if req.DBServer != "" {
+		targetKey = req.DBServer
+	}
+
+	h.mu.RLock()
+	db, exists := h.connections[targetKey]
+	resolvedDBType := req.DBType
+	if t, ok := h.connectionTypes[targetKey]; ok && t != "" {
+		resolvedDBType = t
+	}
+	serverInfo, hasServerInfo := h.serverMeta[targetKey]
+	h.mu.RUnlock()
+
 	if !exists {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("Database type '%s' not supported", req.DBType),
+			Error:  fmt.Sprintf("Database server '%s' not supported", targetKey),
 		})
 		return
 	}
@@ -65,14 +141,22 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 	if db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("Database '%s' is not connected", req.DBType),
+			Error:  fmt.Sprintf("Database server '%s' is not connected", targetKey),
+		})
+		return
+	}
+
+	if req.DBType != "" && resolvedDBType != "" && req.DBType != resolvedDBType {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  fmt.Sprintf("Server '%s' is configured for '%s', but request asked for '%s'", targetKey, resolvedDBType, req.DBType),
 		})
 		return
 	}
 
 	// Create database based on type
 	var createSQL string
-	switch req.DBType {
+	switch resolvedDBType {
 	case "mysql", "mariadb", "percona":
 		createSQL = fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", req.DatabaseName)
 	case "postgres":
@@ -80,14 +164,14 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("Database creation not supported for '%s'", req.DBType),
+			Error:  fmt.Sprintf("Database creation not supported for '%s'", resolvedDBType),
 		})
 		return
 	}
 
 	// Execute create database query
 	if result := db.Exec(createSQL); result.Error != nil {
-		log.Printf("❌ Failed to create database '%s' on %s: %v", req.DatabaseName, req.DBType, result.Error)
+		log.Printf("❌ Failed to create database '%s' on server=%s (%s): %v", req.DatabaseName, targetKey, resolvedDBType, result.Error)
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  fmt.Sprintf("Failed to create database: %v", result.Error),
@@ -95,12 +179,160 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 		return
 	}
 
-	log.Printf("✅ Database '%s' created successfully on %s", req.DatabaseName, req.DBType)
+	serverName := targetKey
+	if hasServerInfo && serverInfo.Name != "" {
+		serverName = serverInfo.Name
+	}
+
+	log.Printf("✅ Database '%s' created successfully on server=%s (%s)", req.DatabaseName, targetKey, resolvedDBType)
 	c.JSON(http.StatusCreated, gin.H{
-		"status":   "success",
-		"message":  fmt.Sprintf("Database '%s' created successfully", req.DatabaseName),
-		"database": req.DatabaseName,
-		"db_type":  req.DBType,
+		"status":      "success",
+		"message":     fmt.Sprintf("Database '%s' created successfully", req.DatabaseName),
+		"database":    req.DatabaseName,
+		"db_type":     resolvedDBType,
+		"db_server":   targetKey,
+		"server_name": serverName,
+	})
+}
+
+// ConnectDatabaseServer establishes a connection to a new database server and stores it for admin operations.
+func (h *AdminHandler) ConnectDatabaseServer(c *gin.Context) {
+	var req ConnectDatabaseServerRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  fmt.Sprintf("Invalid request: %v", err),
+		})
+		return
+	}
+
+	serverName := strings.TrimSpace(req.ServerName)
+	dbType := strings.ToLower(strings.TrimSpace(req.DBType))
+	host := strings.TrimSpace(req.Host)
+	if serverName == "" || host == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server_name and host are required"})
+		return
+	}
+	if dbType != "mysql" && dbType != "mariadb" && dbType != "percona" && dbType != "postgres" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "db_type must be mysql, mariadb, percona, or postgres"})
+		return
+	}
+
+	serverKey := normalizeServerKey(serverName)
+	if serverKey == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server_name contains no valid characters"})
+		return
+	}
+
+	defaultPort := defaultPortForDBType(dbType)
+	port := req.Port
+	if port <= 0 {
+		port = defaultPort
+	}
+
+	h.mu.RLock()
+	if existing, ok := h.serverMeta[serverKey]; ok && existing.Source == "default" {
+		h.mu.RUnlock()
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server_name conflicts with a default server key; choose another name"})
+		return
+	}
+	h.mu.RUnlock()
+
+	defaultDB := strings.TrimSpace(req.DefaultDatabase)
+	if defaultDB == "" {
+		if dbType == "postgres" {
+			defaultDB = "postgres"
+		} else {
+			defaultDB = "mysql"
+		}
+	}
+
+	var (
+		db  *gorm.DB
+		err error
+	)
+
+	switch dbType {
+	case "mysql", "mariadb", "percona":
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", req.Username, req.Password, host, port, defaultDB)
+		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	case "postgres":
+		sslMode := strings.TrimSpace(req.SSLMode)
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", host, req.Username, req.Password, defaultDB, port, sslMode)
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	}
+
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to open DB connection: %v", err)})
+		return
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to initialize DB connection: %v", err)})
+		return
+	}
+	if err := sqlDB.Ping(); err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to connect to database server: %v", err)})
+		return
+	}
+
+	h.mu.Lock()
+	h.connections[serverKey] = db
+	h.connectionTypes[serverKey] = dbType
+	h.serverMeta[serverKey] = DatabaseServerInfo{
+		Key:       serverKey,
+		Name:      serverName,
+		DBType:    dbType,
+		Host:      host,
+		Port:      port,
+		Source:    "custom",
+		Connected: true,
+	}
+	h.mu.Unlock()
+
+	log.Printf("✅ Connected custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
+	c.JSON(http.StatusCreated, gin.H{
+		"status":  "success",
+		"message": "Database server connected",
+		"server": gin.H{
+			"key":       serverKey,
+			"name":      serverName,
+			"db_type":   dbType,
+			"host":      host,
+			"port":      port,
+			"source":    "custom",
+			"connected": true,
+		},
+	})
+}
+
+// ListDatabaseServers lists default and custom database server connections.
+func (h *AdminHandler) ListDatabaseServers(c *gin.Context) {
+	h.mu.RLock()
+	servers := make([]DatabaseServerInfo, 0, len(h.serverMeta))
+	for key, info := range h.serverMeta {
+		if db, ok := h.connections[key]; ok {
+			info.Connected = db != nil
+		}
+		servers = append(servers, info)
+	}
+	h.mu.RUnlock()
+
+	sort.Slice(servers, func(i, j int) bool {
+		if servers[i].DBType == servers[j].DBType {
+			return servers[i].Name < servers[j].Name
+		}
+		return servers[i].DBType < servers[j].DBType
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"count":   len(servers),
+		"servers": servers,
 	})
 }
 
@@ -239,7 +471,9 @@ func (h *AdminHandler) ListDatabases(c *gin.Context) {
 		return
 	}
 
+	h.mu.RLock()
 	db, exists := h.connections[dbType]
+	h.mu.RUnlock()
 	if !exists {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -326,7 +560,9 @@ func (h *AdminHandler) ListTables(c *gin.Context) {
 		return
 	}
 
+	h.mu.RLock()
 	db, exists := h.connections[dbType]
+	h.mu.RUnlock()
 	if !exists {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -400,4 +636,21 @@ func (h *AdminHandler) ListTables(c *gin.Context) {
 		"tables":  tables,
 		"count":   len(tables),
 	})
+}
+
+func normalizeServerKey(serverName string) string {
+	key := strings.TrimSpace(strings.ToLower(serverName))
+	key = strings.ReplaceAll(key, " ", "-")
+	key = serverKeySanitizer.ReplaceAllString(key, "")
+	key = strings.Trim(key, "-")
+	return key
+}
+
+func defaultPortForDBType(dbType string) int {
+	switch dbType {
+	case "postgres":
+		return 5432
+	default:
+		return 3306
+	}
 }

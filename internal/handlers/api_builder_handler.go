@@ -39,6 +39,8 @@ type CustomAPI struct {
 	Path           string            `json:"path"`
 	Description    string            `json:"description"`
 	Category       string            `json:"category"`
+	SourceDatabase string            `json:"source_database,omitempty"`
+	SourceServer   string            `json:"source_server,omitempty"`
 	AuthRequired   bool              `json:"auth_required"`
 	RateLimit      int               `json:"rate_limit"` // requests per minute, 0=unlimited
 	CacheEnabled   bool              `json:"cache_enabled"`
@@ -237,6 +239,8 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Path           string            `json:"path" binding:"required"`
 		Description    string            `json:"description"`
 		Category       string            `json:"category"`
+		SourceDatabase string            `json:"source_database"`
+		SourceServer   string            `json:"source_server"`
 		AuthRequired   bool              `json:"auth_required"`
 		RateLimit      int               `json:"rate_limit"`
 		RequestSchema  *SchemaDefinition `json:"request_schema"`
@@ -273,6 +277,8 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Path:           req.Path,
 		Description:    req.Description,
 		Category:       req.Category,
+		SourceDatabase: strings.TrimSpace(req.SourceDatabase),
+		SourceServer:   strings.TrimSpace(req.SourceServer),
 		AuthRequired:   req.AuthRequired,
 		RateLimit:      req.RateLimit,
 		CacheEnabled:   req.CacheEnabled,
@@ -313,6 +319,20 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["name"].(string); ok && v != "" {
 		api.Name = v
 	}
+	if v, ok := req["method"].(string); ok && strings.TrimSpace(v) != "" {
+		method := strings.ToUpper(strings.TrimSpace(v))
+		if method != "GET" && method != "POST" && method != "PUT" && method != "DELETE" && method != "PATCH" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET, POST, PUT, DELETE, or PATCH"})
+			return
+		}
+		api.Method = method
+	}
+	if v, ok := req["path"].(string); ok && strings.TrimSpace(v) != "" {
+		api.Path = strings.TrimSpace(v)
+	}
+	if v, ok := req["endpoint"].(string); ok && strings.TrimSpace(v) != "" {
+		api.Path = strings.TrimSpace(v)
+	}
 	if v, ok := req["description"].(string); ok {
 		api.Description = v
 	}
@@ -321,6 +341,12 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	}
 	if v, ok := req["category"].(string); ok {
 		api.Category = v
+	}
+	if v, ok := req["source_database"].(string); ok {
+		api.SourceDatabase = strings.TrimSpace(v)
+	}
+	if v, ok := req["source_server"].(string); ok {
+		api.SourceServer = strings.TrimSpace(v)
 	}
 	if v, ok := req["auth_required"].(bool); ok {
 		api.AuthRequired = v
