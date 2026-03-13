@@ -14,6 +14,9 @@
         <button class="cdc-etl-tab" onclick="switchTab('connectors')" id="tab-conn">
             <span>🔌</span> Connectors
         </button>
+        <button class="cdc-etl-tab" onclick="switchTab('orchestration')" id="tab-orch">
+            <span>🧠</span> Orchestration
+        </button>
     </div>
 
     <!-- ===================== ETL Tab ===================== -->
@@ -131,6 +134,86 @@
 
     <!-- ===================== Connectors Tab ===================== -->
     <div class="panel-tab-content" id="panel-connectors">
+        <div class="connector-toolbar">
+            <div class="connector-toolbar-left">
+                <label for="connector-search" class="sr-only">Search connectors</label>
+                <input type="text" id="connector-search" placeholder="Search by connector name, id, or description" oninput="refreshConnectorView()">
+                <label for="connector-category" class="sr-only">Filter by category</label>
+                <select id="connector-category" onchange="refreshConnectorView()">
+                    <option value="">All Categories</option>
+                    <option value="database">Database</option>
+                    <option value="file">File</option>
+                    <option value="api">API</option>
+                    <option value="stream">Stream</option>
+                    <option value="queue">Queue</option>
+                    <option value="storage">Storage</option>
+                    <option value="search">Search</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="lakehouse">Lakehouse</option>
+                </select>
+            </div>
+            <button class="btn-create" onclick="loadConnectors()">Refresh</button>
+        </div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Add ETL Connector</h3>
+            </div>
+            <div class="connector-form-grid">
+                <div class="modal-form-group">
+                    <label for="new-connector-id">Connector ID</label>
+                    <input type="text" id="new-connector-id" placeholder="snowflake">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-name">Display Name</label>
+                    <input type="text" id="new-connector-name" placeholder="Snowflake">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-category">Category</label>
+                    <select id="new-connector-category">
+                        <option value="database">Database</option>
+                        <option value="warehouse">Warehouse</option>
+                        <option value="lakehouse">Lakehouse</option>
+                        <option value="api">API</option>
+                        <option value="stream">Stream</option>
+                        <option value="storage">Storage</option>
+                    </select>
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-icon">Icon</label>
+                    <input type="text" id="new-connector-icon" placeholder="❄️">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-version">Version</label>
+                    <input type="text" id="new-connector-version" placeholder="1.0">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-supported-as">Supported As (comma separated)</label>
+                    <input type="text" id="new-connector-supported-as" placeholder="extract,load">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-auth">Auth Modes (comma separated)</label>
+                    <input type="text" id="new-connector-auth" placeholder="apikey,oauth2">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-config">Config Keys (comma separated)</label>
+                    <input type="text" id="new-connector-config" placeholder="account,warehouse,database,role">
+                </div>
+                <div class="modal-form-group connector-form-span-2">
+                    <label for="new-connector-description">Description</label>
+                    <textarea id="new-connector-description" placeholder="Connector details, usage and constraints"></textarea>
+                </div>
+                <div class="connector-flags connector-form-span-2">
+                    <label><input type="checkbox" id="new-connector-incremental"> Supports Incremental Loads</label>
+                    <label><input type="checkbox" id="new-connector-schema"> Supports Schema Discovery</label>
+                    <label><input type="checkbox" id="new-connector-cdc"> Supports CDC</label>
+                </div>
+            </div>
+            <div class="modal-actions connector-actions">
+                <button class="btn-submit" onclick="submitNewConnector()">Add Connector</button>
+            </div>
+        </div>
+
         <h3 class="section-title">🔌 ETL Connectors</h3>
         <div class="connector-grid" id="etl-connectors"></div>
 
@@ -140,6 +223,26 @@
         <h3 class="section-title">📤 CDC Sinks</h3>
         <div class="connector-grid" id="cdc-sinks"></div>
     </div>
+
+    <!-- ===================== Orchestration Tab ===================== -->
+    <div class="panel-tab-content" id="panel-orchestration">
+        <h3 class="section-title">🧠 Airflow-Style Orchestration Capabilities</h3>
+        <div class="feature-grid" id="orchestration-feature-grid"></div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Pipeline Blueprints</h3>
+            </div>
+            <div class="blueprint-grid" id="etl-blueprints"></div>
+        </div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Orchestration Health</h3>
+            </div>
+            <div class="orchestration-health" id="etl-orchestration-health"></div>
+        </div>
+    </div>
 </div>
 
 <!-- Create Pipeline Modal -->
@@ -147,24 +250,87 @@
     <div class="cdc-etl-modal">
         <h3 id="modal-title">Create Pipeline</h3>
         <div class="modal-form-group">
-            <label>Name</label>
+            <label for="modal-name">Name</label>
             <input type="text" id="modal-name" placeholder="Pipeline name">
         </div>
         <div class="modal-form-group">
-            <label>Description</label>
+            <label for="modal-desc">Description</label>
             <textarea id="modal-desc" placeholder="Describe this pipeline"></textarea>
         </div>
         <div class="modal-form-group" id="modal-schedule-group">
-            <label>Schedule (cron)</label>
+            <label for="modal-schedule">Schedule (cron)</label>
             <input type="text" id="modal-schedule" placeholder="*/30 * * * *">
         </div>
+        <div class="modal-form-group" id="modal-blueprint-group">
+            <label for="modal-blueprint">Blueprint</label>
+            <select id="modal-blueprint" onchange="previewBlueprintSelection()">
+                <option value="">Custom Pipeline</option>
+            </select>
+        </div>
+        <div class="modal-form-group" id="modal-etl-connector-group">
+            <label for="modal-etl-extract-connector">Extract Connector</label>
+            <select id="modal-etl-extract-connector"></select>
+            <label for="modal-etl-load-connector" style="margin-top:8px;">Load Connector</label>
+            <select id="modal-etl-load-connector"></select>
+            <label style="margin-top:8px;"><input type="checkbox" id="modal-etl-quality-gate"> Add Quality Gate (validate + dedupe)</label>
+        </div>
         <div class="modal-form-group" id="modal-source-group" style="display:none">
-            <label>Source Type</label>
+            <label for="modal-source-type">Source Type</label>
             <select id="modal-source-type"></select>
         </div>
         <div class="modal-form-group" id="modal-sink-group" style="display:none">
-            <label>Sink Type</label>
+            <label for="modal-sink-type">Sink Type</label>
             <select id="modal-sink-type"></select>
+        </div>
+        <div class="advanced-grid" id="modal-orchestration-group">
+            <div class="modal-form-group">
+                <label for="modal-owner">Owner</label>
+                <input type="text" id="modal-owner" placeholder="data-platform">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-queue">Queue</label>
+                <input type="text" id="modal-queue" placeholder="default">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-retries">Retries</label>
+                <input type="number" id="modal-retries" min="0" value="2">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-retry-delay">Retry Delay (sec)</label>
+                <input type="number" id="modal-retry-delay" min="1" value="60">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-timeout">Timeout (sec)</label>
+                <input type="number" id="modal-timeout" min="30" value="1800">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-sla-seconds">SLA (sec)</label>
+                <input type="number" id="modal-sla-seconds" min="60" value="3600">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-max-active-runs">Max Active Runs</label>
+                <input type="number" id="modal-max-active-runs" min="1" value="1">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-concurrency">Concurrency</label>
+                <input type="number" id="modal-concurrency" min="1" value="4">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-priority">Priority Weight</label>
+                <input type="number" id="modal-priority" min="1" value="5">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-alert-channels">Alert Channels (comma separated)</label>
+                <input type="text" id="modal-alert-channels" placeholder="slack,email">
+            </div>
+        </div>
+        <div class="connector-flags" id="modal-orchestration-flags">
+            <label><input type="checkbox" id="modal-catchup"> Catchup Enabled</label>
+            <label><input type="checkbox" id="modal-depends-past"> Depends On Past</label>
+        </div>
+        <div class="modal-form-group">
+            <label for="modal-tags">Tags (comma separated)</label>
+            <input type="text" id="modal-tags" placeholder="critical,warehouse,nightly">
         </div>
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closeCreateModal()">Cancel</button>

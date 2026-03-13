@@ -546,7 +546,11 @@ func main() {
 		etlAPI.POST("/pipelines/:id/run", cdcEtlHandler.RunETLPipeline)
 		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
 		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
+		etlAPI.POST("/connectors", cdcEtlHandler.CreateETLConnector)
 		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
+		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
+		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)
+		etlAPI.GET("/blueprints", cdcEtlHandler.GetETLBlueprints)
 		etlAPI.GET("/observability", cdcEtlHandler.GetETLObservability)
 	}
 
