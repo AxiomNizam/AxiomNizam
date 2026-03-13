@@ -225,7 +225,7 @@ func main() {
 		adminOrSysMiddleware = func(c *gin.Context) {
 			authMiddleware(c)
 			if !c.IsAborted() {
-				auth.RequireAnyRole("admin", "system-manager")(c)
+				auth.RequireAnyRole("admin", "system-manager", "sysadmin", "system_admin", "system-admin")(c)
 			}
 		}
 	} else {
@@ -410,9 +410,9 @@ func main() {
 	router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
 
 	// API Metrics endpoints (admin only)
-	router.GET("/api/admin/metrics/all", adminMiddleware, apiMetricsTracker.GetAllAPIMetrics)
-	router.GET("/api/admin/metrics/count", adminMiddleware, apiMetricsTracker.GetAPICount)
-	router.GET("/api/admin/metrics/stats", adminMiddleware, apiMetricsTracker.GetAPIStats)
+	router.GET("/api/admin/metrics/all", adminOrSysMiddleware, apiMetricsTracker.GetAllAPIMetrics)
+	router.GET("/api/admin/metrics/count", adminOrSysMiddleware, apiMetricsTracker.GetAPICount)
+	router.GET("/api/admin/metrics/stats", adminOrSysMiddleware, apiMetricsTracker.GetAPIStats)
 
 	// ====================================
 	// NOTIFICATION ENDPOINTS (Auth Required)

@@ -20,6 +20,9 @@
         <button class="tab-btn active" onclick="switchTab('api-builder')">
             <span class="tab-icon">🏗️</span> API Builder
         </button>
+        <button class="tab-btn" onclick="switchTab('graphql-api-builder')">
+            <span class="tab-icon">🧩</span> GraphQL API Builder
+        </button>
         <button class="tab-btn" onclick="switchTab('csv-upload')">
             <span class="tab-icon">📄</span> File → Dashboard
         </button>
@@ -80,6 +83,37 @@
         </div>
     </div>
 
+    <!-- ===================== GRAPHQL API BUILDER TAB ===================== -->
+    <div id="graphql-api-builder" class="tab-content">
+        <div class="builder-summary" id="graphqlBuilderSummary"></div>
+
+        <div class="builder-toolbar">
+            <div class="toolbar-left">
+                <h3>GraphQL APIs</h3>
+                <select id="graphqlApiCategoryFilter" onchange="loadGraphQLCustomAPIs()">
+                    <option value="">All Categories</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="external">External</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="iot">IoT</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <select id="graphqlApiStatusFilter" onchange="loadGraphQLCustomAPIs()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="openCreateGraphQLAPIModal()">+ Create GraphQL API</button>
+        </div>
+
+        <div class="api-builder-list" id="graphqlApiBuilderList">
+            <div class="loading">Loading GraphQL APIs...</div>
+        </div>
+    </div>
+
     <!-- ===================== CSV UPLOAD TAB ===================== -->
     <div id="csv-upload" class="tab-content">
         <div class="csv-section">
@@ -97,7 +131,7 @@
             <!-- Upload Analysis Result -->
             <div id="csvAnalysisResult" style="display:none;">
                 <div class="analysis-header">
-                    <h3 id="csvFilenameDisplay"></h3>
+                    <h3 id="csvFilenameDisplay">Selected file</h3>
                     <div class="analysis-badges" id="csvAnalysisBadges"></div>
                 </div>
                 <div class="analysis-columns" id="csvColumnAnalysis"></div>
@@ -173,7 +207,7 @@
             <!-- Scan Result -->
             <div id="scanResult" style="display:none;">
                 <div class="analysis-header">
-                    <h3 id="scanFilenameDisplay"></h3>
+                    <h3 id="scanFilenameDisplay">Scanned file</h3>
                     <div class="analysis-badges" id="scanBadges"></div>
                 </div>
                 <div id="scanFindings"></div>
@@ -380,10 +414,10 @@
                 </div>
                 <div class="setting-item">
                     <div class="setting-label">Auto-refresh</div>
-                    <label class="toggle">
-                        <input type="checkbox" checked>
+                    <div class="toggle">
+                        <input type="checkbox" id="autoRefreshToggle" aria-label="Auto-refresh" checked>
                         <span class="toggle-switch"></span>
-                    </label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -401,11 +435,11 @@
             <form id="createAPIForm" onsubmit="submitCreateAPI(event)">
                 <div class="form-row">
                     <div class="form-group">
-                        <label>API Name</label>
+                        <label for="apiNameInput">API Name</label>
                         <input type="text" id="apiNameInput" placeholder="e.g. List Products" required>
                     </div>
                     <div class="form-group">
-                        <label>Category</label>
+                        <label for="apiCategoryInput">Category</label>
                         <select id="apiCategoryInput">
                             <option value="custom">Custom</option>
                             <option value="e-commerce">E-Commerce</option>
@@ -418,7 +452,7 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>HTTP Method</label>
+                        <label for="apiMethodInput">HTTP Method</label>
                         <select id="apiMethodInput">
                             <option value="GET">GET</option>
                             <option value="POST">POST</option>
@@ -428,13 +462,13 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Path</label>
+                        <label for="apiPathInput">Path</label>
                         <input type="text" id="apiPathInput" placeholder="/api/custom/..." required>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Source Database</label>
+                        <label for="apiSourceDatabaseInput">Source Database</label>
                         <select id="apiSourceDatabaseInput" onchange="updateBuilderSourceServers()">
                             <option value="">Select database...</option>
                             <option value="mysql">MySQL</option>
@@ -445,14 +479,14 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Source Server</label>
+                        <label for="apiSourceServerInput">Source Server</label>
                         <select id="apiSourceServerInput">
                             <option value="">Default server for selected database</option>
                         </select>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Description</label>
+                    <label for="apiDescInput">Description</label>
                     <textarea id="apiDescInput" rows="2" placeholder="What does this API do?"></textarea>
                 </div>
                 <div class="form-row">
@@ -460,7 +494,7 @@
                         <label><input type="checkbox" id="apiAuthInput"> Requires Authentication</label>
                     </div>
                     <div class="form-group">
-                        <label>Rate Limit (req/min)</label>
+                        <label for="apiRateLimitInput">Rate Limit (req/min)</label>
                         <input type="number" id="apiRateLimitInput" value="60" min="0">
                     </div>
                 </div>
@@ -469,21 +503,111 @@
                         <label><input type="checkbox" id="apiCacheInput" onchange="toggleCacheTTL()"> Enable Response Cache</label>
                     </div>
                     <div class="form-group" id="cacheTTLGroup" style="display:none">
-                        <label>Cache TTL (seconds)</label>
+                        <label for="apiCacheTTLInput">Cache TTL (seconds)</label>
                         <input type="number" id="apiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Mock Response (JSON)</label>
+                    <label for="apiMockResponseInput">Mock Response (JSON)</label>
                     <textarea id="apiMockResponseInput" rows="4" placeholder='{"data": [], "total": 0}'></textarea>
                 </div>
                 <div class="form-group">
-                    <label>Query Parameters (one per line: name:type:required)</label>
+                    <label for="apiQueryParamsInput">Query Parameters (one per line: name:type:required)</label>
                     <textarea id="apiQueryParamsInput" rows="3" placeholder="page:number:false
 limit:number:false
 search:string:false"></textarea>
                 </div>
                 <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Create API</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create GraphQL API Modal -->
+<div id="createGraphQLAPIModal" class="modal">
+    <div class="modal-content" style="max-width:760px;">
+        <div class="modal-header">
+            <h2>🧩 Create GraphQL API</h2>
+            <button class="modal-close" onclick="closeCreateGraphQLAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="createGraphQLAPIForm" onsubmit="submitCreateGraphQLAPI(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="gqlApiNameInput">API Name</label>
+                        <input type="text" id="gqlApiNameInput" placeholder="e.g. Get Customer Insights" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlApiCategoryInput">Category</label>
+                        <select id="gqlApiCategoryInput">
+                            <option value="custom">Custom</option>
+                            <option value="e-commerce">E-Commerce</option>
+                            <option value="analytics">Analytics</option>
+                            <option value="external">External</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="iot">IoT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="gqlOperationNameInput">Operation Name</label>
+                        <input type="text" id="gqlOperationNameInput" placeholder="GetCustomerInsights">
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlPathInput">GraphQL Endpoint</label>
+                        <input type="text" id="gqlPathInput" value="/api/graphql" placeholder="/api/graphql" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="gqlSourceDatabaseInput">Source Database</label>
+                        <select id="gqlSourceDatabaseInput" onchange="updateGraphQLBuilderSourceServers()">
+                            <option value="">Select database...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlSourceServerInput">Source Server</label>
+                        <select id="gqlSourceServerInput">
+                            <option value="">Default server for selected database</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="gqlDescInput">Description</label>
+                    <textarea id="gqlDescInput" rows="2" placeholder="What does this GraphQL API do?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="gqlQueryInput">GraphQL Query</label>
+                    <textarea id="gqlQueryInput" rows="7" placeholder="query GetSomething {\n  users { id name }\n}" required></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="gqlAuthInput"> Requires Authentication</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlRateLimitInput">Rate Limit (req/min)</label>
+                        <input type="number" id="gqlRateLimitInput" value="60" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="gqlCacheInput" onchange="toggleGraphQLCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="gqlCacheTTLGroup" style="display:none">
+                        <label for="gqlCacheTTLInput">Cache TTL (seconds)</label>
+                        <input type="number" id="gqlCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="gqlMockResponseInput">Mock Response (JSON)</label>
+                    <textarea id="gqlMockResponseInput" rows="4" placeholder='{"data": {"users": []}}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="gqlQueryParamsInput">Variables (one per line: name:type:required)</label>
+                    <textarea id="gqlQueryParamsInput" rows="3" placeholder="userId:string:true\nlimit:number:false"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Create GraphQL API</button>
             </form>
         </div>
     </div>

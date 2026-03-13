@@ -44,6 +44,9 @@
         <button class="tab-btn" onclick="switchManagerTab('operations')">
             <span class="tab-icon">⚙️</span> Operations
         </button>
+        <button class="tab-btn" onclick="switchManagerTab('admin-console')">
+            <span class="tab-icon">🔧</span> Admin Console
+        </button>
         <button class="tab-btn" onclick="switchManagerTab('graphql-studio')">
             <span class="tab-icon">🧬</span> GraphQL Studio
         </button>
@@ -252,6 +255,25 @@
             <div class="database-grid" id="userList">
                 <div class="loading">Loading users...</div>
             </div>
+        </div>
+    </div>
+
+    <!-- Admin Console Tab -->
+    <div id="admin-console" class="tab-content">
+        <div class="operations-section">
+            <div class="section-header">
+                <h3>Admin Console</h3>
+                <button class="btn-secondary" onclick="window.open('/admin', '_blank')">Open In New Tab</button>
+            </div>
+            <p style="margin: 0 0 12px 0; color: var(--text-secondary, #94a3b8);">
+                Full admin features are available below while keeping all system-manager tools in this dashboard.
+            </p>
+            <iframe
+                id="systemManagerAdminFrame"
+                src="/admin"
+                title="Admin Console"
+                style="width:100%;min-height:78vh;border:1px solid var(--border-color, #334155);border-radius:12px;background:var(--card-bg, #1e293b);"
+            ></iframe>
         </div>
     </div>
 

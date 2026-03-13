@@ -225,5 +225,5 @@ function isAuthenticated() {
 }
 
 function isAdmin() {
-    return userRole === 'admin';
+    return userRole === 'admin' || userRole === 'system-manager';
 }
