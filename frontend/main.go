@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,67 @@ type StatusResponse struct {
 }
 
 var backendURL string
+
+func normalizeFrontendRole(role string) string {
+	value := strings.ToLower(strings.TrimSpace(role))
+	switch value {
+	case "sysadmin", "system-admin", "system_admin":
+		return "system-manager"
+	case "superadmin", "super-admin":
+		return "admin"
+	case "api-manager", "api_manager":
+		return "manager"
+	case "admin", "manager", "system-manager":
+		return value
+	default:
+		return "user"
+	}
+}
+
+func defaultPathForRole(role string) string {
+	switch normalizeFrontendRole(role) {
+	case "system-manager":
+		return "/system-manager"
+	case "admin":
+		return "/admin"
+	case "manager":
+		return "/manager"
+	default:
+		return "/"
+	}
+}
+
+func requireFrontendRoles(allowed ...string) gin.HandlerFunc {
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, role := range allowed {
+		allowedSet[normalizeFrontendRole(role)] = true
+	}
+
+	return func(c *gin.Context) {
+		authToken := c.GetHeader("Authorization")
+		if authToken == "" {
+			authToken, _ = c.Cookie("authToken")
+		}
+		if authToken == "" {
+			c.Redirect(http.StatusFound, "/")
+			c.Abort()
+			return
+		}
+
+		role := c.GetHeader("X-User-Role")
+		if role == "" {
+			role, _ = c.Cookie("userRole")
+		}
+		normalized := normalizeFrontendRole(role)
+		if !allowedSet[normalized] {
+			c.Redirect(http.StatusFound, defaultPathForRole(normalized))
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 
 func main() {
 	// Load environment variables
@@ -68,9 +130,9 @@ func main() {
 	router.GET("/analytics", analyticsHandler)
 	router.GET("/cdc-etl", cdcEtlHandler)
 	router.GET("/netintel", netintelHandler)
-	router.GET("/governance", governanceHandler)
-	router.GET("/operations-center", operationsCenterHandler)
-	router.GET("/lineage-version", versionLineageHandler)
+	router.GET("/governance", requireFrontendRoles("admin", "system-manager"), governanceHandler)
+	router.GET("/operations-center", requireFrontendRoles("admin", "system-manager", "manager"), operationsCenterHandler)
+	router.GET("/lineage-version", requireFrontendRoles("admin", "system-manager"), versionLineageHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)

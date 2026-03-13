@@ -1,4 +1,4 @@
-package main
+package platform
 
 import (
 	"fmt"
@@ -13,7 +13,14 @@ import (
 
 // exportManagerAdapter bridges handler interface to in-memory export manager.
 type exportManagerAdapter struct {
-	base *export.InMemoryExportManager
+	base interface {
+		SubmitExport(job *export.ExportJob) (*export.ExportJob, error)
+		GetExport(id string) (*export.ExportJob, error)
+		ListExports(tenantID string) ([]*export.ExportJob, error)
+		CancelExport(id string) error
+		CreateTemplate(template *export.ExportTemplate) (*export.ExportTemplate, error)
+		ListTemplates(tenantID string) ([]*export.ExportTemplate, error)
+	}
 }
 
 func (a *exportManagerAdapter) SubmitExport(job *export.ExportJob) (*export.ExportJob, error) {
@@ -58,7 +65,21 @@ func (a *exportManagerAdapter) ListTemplates(tenantID string) ([]*export.ExportT
 
 // rbacManagerAdapter bridges handler interface to in-memory RBAC manager.
 type rbacManagerAdapter struct {
-	base *rbac.InMemoryRBACManager
+	base interface {
+		CreateRole(role *rbac.Role) (*rbac.Role, error)
+		GetRole(id string) (*rbac.Role, error)
+		ListRoles(tenantID string) ([]*rbac.Role, error)
+		UpdateRole(role *rbac.Role) (*rbac.Role, error)
+		DeleteRole(id string) error
+		CreateRoleBinding(binding *rbac.RoleBinding) (*rbac.RoleBinding, error)
+		ListRoleBindings(roleID, subjectID string) ([]*rbac.RoleBinding, error)
+		DeleteRoleBinding(id string) error
+		CheckPermission(subjectID, resource, action string) (bool, error)
+		ListPermissions(roleID string) ([]*rbac.Permission, error)
+		CreateAccessRequest(request *rbac.AccessRequest) (*rbac.AccessRequest, error)
+		ApproveAccessRequest(requestID, approverID string) error
+		GetAccessRequest(id string) (*rbac.AccessRequest, error)
+	}
 }
 
 func (a *rbacManagerAdapter) CreateRole(role *rbac.Role) (*rbac.Role, error) {
@@ -156,7 +177,16 @@ func (a *rbacManagerAdapter) ApproveAccessRequest(id, approvedBy string) (*rbac.
 
 // lineageManagerAdapter bridges handler interface to in-memory lineage manager.
 type lineageManagerAdapter struct {
-	base *lineage.InMemoryLineageManager
+	base interface {
+		GetNode(id string) (*lineage.LineageNode, error)
+		ListNodes(nodeType string) ([]*lineage.LineageNode, error)
+		BuildGraph(startNodeID string, direction string, depth int) (*lineage.LineageGraph, error)
+		GetUpstream(nodeID string, depth int) ([]*lineage.LineageNode, error)
+		GetDownstream(nodeID string, depth int) ([]*lineage.LineageNode, error)
+		AnalyzeImpact(nodeID string) ([]*lineage.ImpactAnalysis, error)
+		GetColumnLineage(nodeID, columnName string) ([]*lineage.ColumnLineage, error)
+		GetLineageStatistics() (*lineage.LineageStatistics, error)
+	}
 }
 
 func (a *lineageManagerAdapter) GetNode(id string) (*lineage.LineageNode, error) {
@@ -305,7 +335,15 @@ func (a *lineageManagerAdapter) GetStatistics(tenantID string) (*lineage.Lineage
 
 // tracingManagerAdapter bridges handler interface to in-memory tracing manager.
 type tracingManagerAdapter struct {
-	base *tracing.InMemoryTracingManager
+	base interface {
+		GetTrace(id string) (*tracing.Trace, error)
+		SearchTraces(req *tracing.TraceSearchRequest) ([]*tracing.Trace, error)
+		GetSpan(id string) (*tracing.Span, error)
+		GetServiceMap() (map[string][]*tracing.DependencyMetrics, error)
+		GetServiceMetrics(service string) (*tracing.TraceMetrics, error)
+		GetOperationMetrics(service, operation string) (*tracing.SpanMetrics, error)
+		AnalyzeErrors(service string) ([]*tracing.ErrorAnalysis, error)
+	}
 }
 
 func (a *tracingManagerAdapter) GetTrace(traceID string) (*tracing.Trace, error) {

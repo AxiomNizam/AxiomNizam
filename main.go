@@ -20,6 +20,7 @@ import (
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/lineage"
 	"example.com/axiomnizam/internal/models"
+	"example.com/axiomnizam/internal/platform"
 	"example.com/axiomnizam/internal/rbac"
 	"example.com/axiomnizam/internal/runtime"
 	"example.com/axiomnizam/internal/streaming"
@@ -492,27 +493,21 @@ func main() {
 	// ====================================
 	// PLATFORM FEATURE APIs (PHASE 1)
 	// ====================================
-	bulkManager := bulk.NewInMemoryBulkManager()
-	eventBusManager := eventbus.NewInMemoryEventBusManager()
-	exportManager := &exportManagerAdapter{base: exportpkg.NewInMemoryExportManager()}
-	streamManager := streaming.NewInMemoryStreamManager()
-	webhookManager := webhooks.NewInMemoryWebhookManager()
-	tenantManager := tenant.NewInMemoryTenantManager()
-	rbacManager := &rbacManagerAdapter{base: rbac.NewInMemoryRBACManager()}
-	versionManager := versioning.NewInMemoryVersionManager()
-	lineageManager := &lineageManagerAdapter{base: lineage.NewInMemoryLineageManager()}
-	tracingManager := &tracingManagerAdapter{base: tracing.NewInMemoryTracingManager()}
+	platformManagers, err := platform.NewManagers(conns)
+	if err != nil {
+		log.Fatalf("failed to initialize etcd-backed platform managers: %v", err)
+	}
 
-	bulkHandler := bulk.NewBulkHandler(bulkManager)
-	eventBusHandler := eventbus.NewEventBusHandler(eventBusManager)
-	exportHandler := exportpkg.NewExportHandler(exportManager)
-	streamHandler := streaming.NewStreamHandler(streamManager)
-	webhookHandler := webhooks.NewWebhookHandler(webhookManager)
-	tenantHandler := tenant.NewTenantHandler(tenantManager)
-	rbacHandler := rbac.NewRBACHandler(rbacManager)
-	versionHandler := versioning.NewVersionHandler(versionManager)
-	lineageHandler := lineage.NewLineageHandler(lineageManager)
-	tracingHandler := tracing.NewTracingHandler(tracingManager)
+	bulkHandler := bulk.NewBulkHandler(platformManagers.Bulk)
+	eventBusHandler := eventbus.NewEventBusHandler(platformManagers.EventBus)
+	exportHandler := exportpkg.NewExportHandler(platformManagers.Export)
+	streamHandler := streaming.NewStreamHandler(platformManagers.Stream)
+	webhookHandler := webhooks.NewWebhookHandler(platformManagers.Webhook)
+	tenantHandler := tenant.NewTenantHandler(platformManagers.Tenant)
+	rbacHandler := rbac.NewRBACHandler(platformManagers.RBAC)
+	versionHandler := versioning.NewVersionHandler(platformManagers.Version)
+	lineageHandler := lineage.NewLineageHandler(platformManagers.Lineage)
+	tracingHandler := tracing.NewTracingHandler(platformManagers.Tracing)
 
 	// Bulk operations
 	bulkAPI := router.Group("/api/v1/bulk/operations", authMiddleware)

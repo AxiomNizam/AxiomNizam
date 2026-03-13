@@ -35,19 +35,90 @@ function normalizeRole(role) {
     return value;
 }
 
+function readCookie(name) {
+    const prefix = name + '=';
+    const parts = document.cookie.split(';');
+    for (let i = 0; i < parts.length; i++) {
+        const item = parts[i].trim();
+        if (item.startsWith(prefix)) {
+            return decodeURIComponent(item.substring(prefix.length));
+        }
+    }
+    return '';
+}
+
+function setAuthCookies(token, role, name) {
+    const maxAge = 60 * 60 * 12;
+    document.cookie = 'authToken=' + encodeURIComponent(token || '') + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+    document.cookie = 'userRole=' + encodeURIComponent(normalizeRole(role)) + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+    document.cookie = 'userName=' + encodeURIComponent(name || '') + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+}
+
+function clearAuthCookies() {
+    document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie = 'userRole=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie = 'userName=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+}
+
+function defaultPathForRole(role) {
+    const normalized = normalizeRole(role);
+    if (normalized === 'system-manager') return '/system-manager';
+    if (normalized === 'admin') return '/admin';
+    if (normalized === 'manager') return '/manager';
+    return '/';
+}
+
+function canAccessPath(path, role) {
+    const normalized = normalizeRole(role);
+    if (path === '/governance') return normalized === 'admin' || normalized === 'system-manager';
+    if (path === '/operations-center') return normalized === 'admin' || normalized === 'system-manager' || normalized === 'manager';
+    if (path === '/lineage-version') return normalized === 'admin' || normalized === 'system-manager';
+    if (path === '/admin') return normalized === 'admin' || normalized === 'system-manager';
+    if (path === '/system-manager') return normalized === 'system-manager';
+    if (path === '/manager') return normalized === 'manager';
+    return true;
+}
+
+function isProtectedPath(path) {
+    return path === '/admin' ||
+        path === '/system-manager' ||
+        path === '/manager' ||
+        path === '/governance' ||
+        path === '/operations-center' ||
+        path === '/lineage-version';
+}
+
 // Initialize authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
     authToken = localStorage.getItem('authToken');
     refreshToken = localStorage.getItem('refreshToken');
     userName = localStorage.getItem('userName');
-    userRole = localStorage.getItem('userRole') || 'user';
-    
+    userRole = normalizeRole(localStorage.getItem('userRole') || 'user');
+
     if (!authToken) {
-        // Redirect to dashboard if trying to access protected page
-        const path = window.location.pathname;
-        if (path !== '/' && path !== '/admin' && path !== '/system-manager' && path !== '/manager') {
-            window.location.href = '/';
+        authToken = readCookie('authToken');
+        userRole = normalizeRole(readCookie('userRole') || userRole);
+        userName = readCookie('userName') || userName;
+
+        if (authToken) {
+            localStorage.setItem('authToken', authToken);
+            localStorage.setItem('userRole', userRole);
+            if (userName) {
+                localStorage.setItem('userName', userName);
+            }
         }
+    } else {
+        setAuthCookies(authToken, userRole, userName);
+    }
+
+    const path = window.location.pathname;
+    if (!authToken && isProtectedPath(path)) {
+        window.location.href = '/';
+        return;
+    }
+
+    if (authToken && !canAccessPath(path, userRole)) {
+        window.location.href = defaultPathForRole(userRole);
     }
 });
 
@@ -110,6 +181,7 @@ function handleLogin(event) {
 
         console.log('👤 User role:', userRole, '(source:', serverRole ? 'server' : 'jwt-decode', ')');
         localStorage.setItem('userRole', userRole);
+        setAuthCookies(authToken, userRole, userName);
         
         closeLoginModal();
         
@@ -140,6 +212,7 @@ function logout() {
     localStorage.removeItem('userName');
     localStorage.removeItem('userRole');
     localStorage.removeItem('refreshToken');
+    clearAuthCookies();
     window.location.href = '/';
 }
 

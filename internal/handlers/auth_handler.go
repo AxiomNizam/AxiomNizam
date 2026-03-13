@@ -172,6 +172,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		} else {
 			demoToken, err := generateDemoToken(req.Username, demo.role)
 			if err == nil {
+				if h.rateLimiter != nil {
+					h.rateLimiter.RegisterToken(demoToken, req.Username)
+					log.Printf("✅ Demo token registered in rate limiter for user: %s", req.Username)
+				}
 				log.Printf("✅ Demo login for user: %s (role: %s)\n", req.Username, demo.role)
 				c.JSON(http.StatusOK, gin.H{
 					"status":        "ok",
@@ -195,6 +199,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		if platformUser, ok := h.platformUsers.ValidateCredentials(req.Username, req.Password); ok {
 			platformToken, err := generateDemoToken(platformUser.Username, platformUser.Role)
 			if err == nil {
+				if h.rateLimiter != nil {
+					h.rateLimiter.RegisterToken(platformToken, platformUser.Username)
+					log.Printf("✅ Platform token registered in rate limiter for user: %s", platformUser.Username)
+				}
 				log.Printf("✅ Platform user login for user: %s (role: %s)\n", platformUser.Username, platformUser.Role)
 				c.JSON(http.StatusOK, gin.H{
 					"status":        "ok",
