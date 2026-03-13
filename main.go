@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"example.com/axiomnizam/internal/agents"
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/database"
@@ -449,6 +450,26 @@ func main() {
 	router.DELETE("/api/v1/jobs/:id", jobHandler.Delete)
 
 	// ====================================
+	// CLOUD AGENT ENDPOINTS
+	// ====================================
+
+	// Register the "cloud-agent" workflow step handler
+	agents.RegisterCloudAgentHandler()
+
+	agentHandler := handlers.NewAgentHandler()
+	agentsAPI := router.Group("/api/v1/agents")
+	{
+		agentsAPI.POST("", authMiddleware, agentHandler.RegisterAgent)
+		agentsAPI.GET("", authMiddleware, agentHandler.ListAgents)
+		agentsAPI.GET("/:id", authMiddleware, agentHandler.GetAgent)
+		agentsAPI.DELETE("/:id", adminMiddleware, agentHandler.UnregisterAgent)
+		agentsAPI.GET("/:id/health", authMiddleware, agentHandler.AgentHealth)
+		agentsAPI.POST("/:id/tasks", authMiddleware, agentHandler.DelegateTask)
+		agentsAPI.GET("/:id/tasks", authMiddleware, agentHandler.ListAgentTasks)
+		agentsAPI.GET("/:id/tasks/:taskId", authMiddleware, agentHandler.GetTask)
+	}
+
+	// ====================================
 	// GIS DASHBOARD ENDPOINTS
 	// ====================================
 	gisHandler := handlers.NewGISHandler()
@@ -729,6 +750,16 @@ func main() {
 	fmt.Println("  DELETE /api/v1/{namespace}/{kind}/{name}     - Delete resource")
 	fmt.Println("  GET  /api/v1/{namespace}/{kind}              - List resources")
 	fmt.Println("  Supported kinds: workloads, pipelines, schedules")
+	fmt.Println()
+	fmt.Println("Cloud Agent endpoints:")
+	fmt.Println("  POST   /api/v1/agents                        - Register a cloud agent")
+	fmt.Println("  GET    /api/v1/agents                        - List registered agents")
+	fmt.Println("  GET    /api/v1/agents/:id                    - Get agent details")
+	fmt.Println("  DELETE /api/v1/agents/:id                    - Unregister agent (admin only)")
+	fmt.Println("  GET    /api/v1/agents/:id/health             - Check agent health")
+	fmt.Println("  POST   /api/v1/agents/:id/tasks              - Delegate a task to agent")
+	fmt.Println("  GET    /api/v1/agents/:id/tasks              - List tasks for agent")
+	fmt.Println("  GET    /api/v1/agents/:id/tasks/:taskId      - Poll task status")
 	fmt.Println()
 
 	// Start runtime in background

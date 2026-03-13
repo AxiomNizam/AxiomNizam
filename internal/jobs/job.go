@@ -44,6 +44,7 @@ const (
 	JobTypeBackup          JobType = "backup"
 	JobTypeExport          JobType = "export"
 	JobTypeImport          JobType = "import"
+	JobTypeCloudAgent      JobType = "cloud_agent"
 )
 
 // Job represents a background job
