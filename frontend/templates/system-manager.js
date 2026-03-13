@@ -61,6 +61,12 @@ function switchManagerTab(tabName) {
     if (tabName === 'users') {
         loadUsers();
     }
+    if (tabName === 'graphql-studio') {
+        loadManagerGraphQLSchemaInfo();
+    }
+    if (tabName === 'control-plane') {
+        refreshManagerControlPlaneData();
+    }
 }
 
 function loadStatusData() {
@@ -635,6 +641,313 @@ function deleteUser(userId, username) {
         }
     })
     .catch(function(err) { alert('Connection error: ' + err.message); });
+}
+
+// ====================================
+// GraphQL Studio + Control Plane (System Manager)
+// ====================================
+function managerApiCall(method, path, body) {
+    var options = {
+        method: method,
+        headers: getAuthHeaders()
+    };
+    if (body !== undefined && body !== null) {
+        options.body = JSON.stringify(body);
+    }
+
+    return fetch(BACKEND_URL + path, options).then(function(response) {
+        return response.text().then(function(text) {
+            var parsed;
+            try {
+                parsed = text ? JSON.parse(text) : {};
+            } catch (e) {
+                parsed = { raw: text };
+            }
+
+            if (!response.ok) {
+                var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed with status ' + response.status);
+                var err = new Error(msg);
+                err.status = response.status;
+                err.response = parsed;
+                throw err;
+            }
+
+            return { status: response.status, data: parsed };
+        });
+    });
+}
+
+function managerParseJSONInput(elementId, fallback) {
+    var el = document.getElementById(elementId);
+    if (!el) return fallback;
+    var raw = (el.value || '').trim();
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+}
+
+function setManagerControlPlaneOutput(title, payload) {
+    var el = document.getElementById('managerControlPlaneOutput');
+    if (!el) return;
+    el.textContent = title + '\n\n' + JSON.stringify(payload, null, 2);
+}
+
+function setManagerGraphQLOutput(payload) {
+    var el = document.getElementById('managerGraphQLResult');
+    if (!el) return;
+    el.textContent = JSON.stringify(payload, null, 2);
+}
+
+function getManagerControlPlaneInput() {
+    var namespace = (document.getElementById('managerCpNamespace').value || 'default').trim() || 'default';
+    var kind = (document.getElementById('managerCpKind').value || 'workflows').trim().toLowerCase();
+    var name = (document.getElementById('managerCpName').value || '').trim();
+    return { namespace: namespace, kind: kind, name: name };
+}
+
+function canManagerWriteControlPlane() {
+    var role = (localStorage.getItem('userRole') || '').toLowerCase();
+    return role === 'admin' || role === 'system-manager';
+}
+
+function ensureManagerWrite(actionLabel) {
+    if (canManagerWriteControlPlane()) return true;
+    alert('RBAC: only admin or system-manager can ' + actionLabel + '.');
+    return false;
+}
+
+function runManagerGraphQLQuery() {
+    var queryEl = document.getElementById('managerGraphQLQuery');
+    var opEl = document.getElementById('managerGraphQLOperation');
+    if (!queryEl) return;
+
+    var query = (queryEl.value || '').trim();
+    if (!query) {
+        alert('GraphQL query is required.');
+        return;
+    }
+
+    var variables;
+    try {
+        variables = managerParseJSONInput('managerGraphQLVariables', {});
+    } catch (e) {
+        alert('Invalid JSON in GraphQL variables: ' + e.message);
+        return;
+    }
+
+    setManagerGraphQLOutput({ status: 'running' });
+    managerApiCall('POST', '/api/graphql', {
+        query: query,
+        variables: variables,
+        operationName: (opEl && opEl.value ? opEl.value.trim() : '') || undefined
+    }).then(function(result) {
+        setManagerGraphQLOutput(result.data);
+        addOperationLog('GraphQL query executed', 'info');
+    }).catch(function(err) {
+        setManagerGraphQLOutput({ error: err.message, status: err.status || 'n/a', details: err.response || {} });
+        addOperationLog('GraphQL query failed: ' + err.message, 'error');
+    });
+}
+
+function loadManagerGraphQLSchemaInfo() {
+    managerApiCall('GET', '/api/graphql/schema').then(function(result) {
+        setManagerGraphQLOutput(result.data);
+    }).catch(function(err) {
+        setManagerGraphQLOutput({ error: err.message, details: err.response || {} });
+    });
+}
+
+function managerApplyResource() {
+    if (!ensureManagerWrite('apply resources')) return;
+    var meta = getManagerControlPlaneInput();
+    var body;
+    try {
+        body = managerParseJSONInput('managerCpBody', {});
+    } catch (e) {
+        alert('Invalid JSON in resource body: ' + e.message);
+        return;
+    }
+
+    if (!body.metadata) body.metadata = {};
+    if (!body.metadata.name && meta.name) body.metadata.name = meta.name;
+
+    managerApiCall('POST', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind), body)
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource applied', result.data);
+            addOperationLog('Applied resource ' + (body.metadata.name || ''), 'success');
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Apply failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerListResources() {
+    var meta = getManagerControlPlaneInput();
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind))
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource list', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('List failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerGetResource() {
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name))
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource detail', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Get failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerGetResourceStatus() {
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name) + '/status')
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource status', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Status failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerGetResourceEvents() {
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name) + '/events')
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource events', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Events failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerDeleteResource() {
+    if (!ensureManagerWrite('delete resources')) return;
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('DELETE', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name))
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource deleted', result.data);
+            addOperationLog('Deleted resource ' + meta.name, 'success');
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Delete failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerRunWorkflow() {
+    if (!ensureManagerWrite('run workflows')) return;
+    var name = (document.getElementById('managerWorkflowName').value || '').trim();
+    if (!name) { alert('Workflow name is required.'); return; }
+    managerApiCall('POST', '/api/v1/workflows/' + encodeURIComponent(name) + '/run', {})
+        .then(function(result) {
+            setManagerControlPlaneOutput('Workflow run requested', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Workflow run failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerListDatasources() {
+    managerApiCall('GET', '/api/v1/datasources').then(function(result) {
+        setManagerControlPlaneOutput('Datasources', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('List datasources failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerGetDatasource() {
+    var name = (document.getElementById('managerDatasourceName').value || '').trim();
+    if (!name) { alert('Datasource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/datasources/' + encodeURIComponent(name)).then(function(result) {
+        setManagerControlPlaneOutput('Datasource detail', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Get datasource failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerTestDatasource() {
+    if (!ensureManagerWrite('test datasources')) return;
+    var name = (document.getElementById('managerDatasourceName').value || '').trim();
+    if (!name) { alert('Datasource name is required.'); return; }
+    managerApiCall('POST', '/api/v1/datasources/' + encodeURIComponent(name) + '/test', {}).then(function(result) {
+        setManagerControlPlaneOutput('Datasource test result', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Test datasource failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerListJobs() {
+    managerApiCall('GET', '/api/v1/jobs').then(function(result) {
+        setManagerControlPlaneOutput('Jobs', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('List jobs failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerGetJob() {
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('GET', '/api/v1/jobs/' + encodeURIComponent(id)).then(function(result) {
+        setManagerControlPlaneOutput('Job detail', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Get job failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerRunJob() {
+    if (!ensureManagerWrite('run jobs')) return;
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('POST', '/api/v1/jobs/' + encodeURIComponent(id) + '/run', {}).then(function(result) {
+        setManagerControlPlaneOutput('Job run requested', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Run job failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerGetJobLogs() {
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('GET', '/api/v1/jobs/' + encodeURIComponent(id) + '/logs').then(function(result) {
+        setManagerControlPlaneOutput('Job logs', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Get job logs failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerCancelJob() {
+    if (!ensureManagerWrite('cancel jobs')) return;
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('POST', '/api/v1/jobs/' + encodeURIComponent(id) + '/cancel', {}).then(function(result) {
+        setManagerControlPlaneOutput('Job cancel requested', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Cancel job failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function refreshManagerControlPlaneData() {
+    var meta = getManagerControlPlaneInput();
+    Promise.all([
+        managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind)),
+        managerApiCall('GET', '/api/v1/datasources'),
+        managerApiCall('GET', '/api/v1/jobs')
+    ]).then(function(results) {
+        setManagerControlPlaneOutput('Control plane snapshot', {
+            resources: results[0].data,
+            datasources: results[1].data,
+            jobs: results[2].data
+        });
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Refresh failed', { error: err.message, details: err.response || {} });
+    });
 }
 
 function escapeHtml(str) {

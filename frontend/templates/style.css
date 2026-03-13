@@ -2433,3 +2433,43 @@ body {
     font-size: 0.82rem;
     color: var(--text-secondary);
 }
+
+.cp-grid-two {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.cp-card {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.cp-card h4 {
+    margin-bottom: 12px;
+    color: var(--primary-light);
+}
+
+.cp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cp-output {
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 220px;
+    max-height: 520px;
+    overflow: auto;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 0.86rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}

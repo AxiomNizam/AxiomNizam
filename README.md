@@ -575,6 +575,14 @@ GET  /api/{db}/logs            # Query logs
 GET  /api/{db}/stats           # Query statistics
 ```
 
+### GraphQL (auth required)
+
+```
+POST /api/graphql             # Execute GraphQL query
+GET  /api/graphql/schema      # Schema availability/metadata
+GET  /api/graphql/playground  # GraphQL playground endpoint
+```
+
 ### Kubernetes-Style Resources
 
 ```
@@ -634,7 +642,7 @@ GET    /api/v1/jobs/:id/logs  # Logs
 DELETE /api/v1/jobs/:id       # Delete
 ```
 
-### Admin (admin role required)
+### Admin & System Manager (RBAC)
 
 ```
 POST /api/admin/database/create
@@ -643,7 +651,12 @@ GET  /api/admin/database/servers
 POST /api/admin/database/connect
 POST /api/admin/table/create
 GET  /api/admin/table/list
-GET  /api/admin/metrics/{all|count|stats}
+```
+
+### Admin-only Metrics
+
+```
+GET /api/admin/metrics/{all|count|stats}
 ```
 
 ### Notifications
@@ -927,5 +940,19 @@ SAFEGATE_MAX_FILE_SIZE=104857600
 | **Dashboard ↔ GIS** | Select source, analyze confidence, convert with field mapping |
 | **File Scanner** | SafeGate 6-stage security scan, drag-drop scan zone, scan history, scanner health |
 | **API Testing** | Original API testing with method filters |
+| **GraphQL Studio** | Execute GraphQL queries with variables and view JSON responses in-browser |
+| **Control Plane** | kubectl-style resource apply/list/get/status/events + DataSource and Job operations |
 | **Logs** | Real-time activity log viewer |
 | **Settings** | System configuration |
+
+### System Manager Interface Tabs
+
+| Tab | Description |
+|-----|-------------|
+| **Overview** | Live system health and synthetic performance indicators |
+| **Databases** | Server-aware database create/list and DB server connection workflow |
+| **Users** | User CRUD with role assignment |
+| **Monitoring** | Metrics and performance overview |
+| **Operations** | Operational maintenance actions and operation log |
+| **GraphQL Studio** | Execute GraphQL queries as system-manager/admin |
+| **Control Plane** | Resource/DataSource/Job/workflow operational commands with RBAC enforcement |

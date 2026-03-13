@@ -44,6 +44,12 @@
         <button class="tab-btn" onclick="switchManagerTab('operations')">
             <span class="tab-icon">⚙️</span> Operations
         </button>
+        <button class="tab-btn" onclick="switchManagerTab('graphql-studio')">
+            <span class="tab-icon">🧬</span> GraphQL Studio
+        </button>
+        <button class="tab-btn" onclick="switchManagerTab('control-plane')">
+            <span class="tab-icon">☸️</span> Control Plane
+        </button>
     </div>
 
     <!-- Overview Tab -->
@@ -245,6 +251,134 @@
 
             <div class="database-grid" id="userList">
                 <div class="loading">Loading users...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GraphQL Studio Tab -->
+    <div id="graphql-studio" class="tab-content">
+        <div class="operations-section">
+            <div class="section-header">
+                <h3>GraphQL Studio</h3>
+                <button class="btn-secondary" onclick="loadManagerGraphQLSchemaInfo()">Refresh Schema Info</button>
+            </div>
+            <div class="cp-grid-two">
+                <div class="cp-card">
+                    <h4>Query</h4>
+                    <div class="form-group">
+                        <label for="managerGraphQLOperation">Operation Name (optional)</label>
+                        <input type="text" id="managerGraphQLOperation" placeholder="e.g. ListJobs">
+                    </div>
+                    <div class="form-group">
+                        <label for="managerGraphQLQuery">GraphQL Query</label>
+                        <textarea id="managerGraphQLQuery" rows="10" spellcheck="false">query {
+  jobs {
+    metadata {
+      id
+      name
+    }
+    status {
+      phase
+    }
+  }
+}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="managerGraphQLVariables">Variables (JSON)</label>
+                        <textarea id="managerGraphQLVariables" rows="6" spellcheck="false">{}</textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-primary" onclick="runManagerGraphQLQuery()">Run Query</button>
+                    </div>
+                </div>
+                <div class="cp-card">
+                    <h4>Response</h4>
+                    <pre id="managerGraphQLResult" class="cp-output">Waiting for query execution...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Plane Tab -->
+    <div id="control-plane" class="tab-content">
+        <div class="operations-section">
+            <div class="section-header">
+                <h3>Control Plane Console</h3>
+                <button class="btn-secondary" onclick="refreshManagerControlPlaneData()">Refresh All</button>
+            </div>
+            <div class="cp-grid-two">
+                <div class="cp-card">
+                    <h4>Resource Commands</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="managerCpNamespace">Namespace</label>
+                            <input type="text" id="managerCpNamespace" value="default">
+                        </div>
+                        <div class="form-group">
+                            <label for="managerCpKind">Kind</label>
+                            <input type="text" id="managerCpKind" value="workflows" placeholder="apis, policies, workflows">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="managerCpName">Resource Name</label>
+                        <input type="text" id="managerCpName" placeholder="daily-etl">
+                    </div>
+                    <div class="form-group">
+                        <label for="managerCpBody">Resource Body (JSON)</label>
+                        <textarea id="managerCpBody" rows="8" spellcheck="false">{
+  "apiVersion": "axiom-nizam.io/v1",
+  "kind": "Workflow",
+  "metadata": {
+    "name": "daily-etl"
+  },
+  "spec": {
+    "schedule": "0 * * * *"
+  }
+}</textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-primary" onclick="managerApplyResource()">Apply</button>
+                        <button class="btn-secondary" onclick="managerListResources()">List</button>
+                        <button class="btn-secondary" onclick="managerGetResource()">Get</button>
+                        <button class="btn-secondary" onclick="managerGetResourceStatus()">Status</button>
+                        <button class="btn-secondary" onclick="managerGetResourceEvents()">Events</button>
+                        <button class="btn-danger" onclick="managerDeleteResource()">Delete</button>
+                    </div>
+                    <div class="form-row" style="margin-top:12px;">
+                        <div class="form-group">
+                            <label for="managerWorkflowName">Workflow Name</label>
+                            <input type="text" id="managerWorkflowName" placeholder="daily-etl">
+                        </div>
+                        <div class="form-group" style="display:flex;align-items:flex-end;">
+                            <button class="btn-warning" onclick="managerRunWorkflow()">Run Workflow</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cp-card">
+                    <h4>DataSource & Job Commands</h4>
+                    <div class="form-group">
+                        <label for="managerDatasourceName">DataSource Name</label>
+                        <input type="text" id="managerDatasourceName" placeholder="etl-postgres">
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-secondary" onclick="managerListDatasources()">List DataSources</button>
+                        <button class="btn-secondary" onclick="managerGetDatasource()">Get DataSource</button>
+                        <button class="btn-secondary" onclick="managerTestDatasource()">Test DataSource</button>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="managerJobId">Job ID or Name</label>
+                        <input type="text" id="managerJobId" placeholder="job-123 or 8-char-id">
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-secondary" onclick="managerListJobs()">List Jobs</button>
+                        <button class="btn-secondary" onclick="managerGetJob()">Get Job</button>
+                        <button class="btn-warning" onclick="managerRunJob()">Run Job</button>
+                        <button class="btn-warning" onclick="managerGetJobLogs()">Job Logs</button>
+                        <button class="btn-danger" onclick="managerCancelJob()">Cancel Job</button>
+                    </div>
+                    <pre id="managerControlPlaneOutput" class="cp-output">Ready. Execute GraphQL or control-plane commands.</pre>
+                </div>
             </div>
         </div>
     </div>

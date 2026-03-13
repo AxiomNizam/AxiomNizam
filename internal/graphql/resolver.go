@@ -3,6 +3,7 @@ package graphql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/graphql-go/graphql"
 	"gorm.io/gorm"
@@ -19,16 +20,18 @@ func NewQueryResolver(db *gorm.DB) *QueryResolver {
 }
 
 // ResolveQuery executes a GraphQL query
-func (qr *QueryResolver) ResolveQuery(ctx context.Context, query string) (interface{}, error) {
+func (qr *QueryResolver) ResolveQuery(ctx context.Context, query string, variables map[string]interface{}, operationName string) (interface{}, error) {
 	schema, err := BuildDatabaseSchema(qr.db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build schema: %w", err)
 	}
 
 	result := graphql.Do(graphql.Params{
-		Schema:        *schema,
-		RequestString: query,
-		Context:       ctx,
+		Schema:         *schema,
+		RequestString:  query,
+		VariableValues: variables,
+		OperationName:  operationName,
+		Context:        ctx,
 	})
 
 	if len(result.Errors) > 0 {
@@ -38,24 +41,25 @@ func (qr *QueryResolver) ResolveQuery(ctx context.Context, query string) (interf
 	return result.Data, nil
 }
 
+// BuildSchema builds a GraphQL schema from the configured database connection.
+func (qr *QueryResolver) BuildSchema() (*graphql.Schema, error) {
+	return BuildDatabaseSchema(qr.db)
+}
+
 // BuildDatabaseSchema builds a GraphQL schema from database
 func BuildDatabaseSchema(db *gorm.DB) (*graphql.Schema, error) {
+	if db == nil {
+		return nil, fmt.Errorf("no SQL database connection available for GraphQL schema generation")
+	}
+
 	builder := NewSchemaBuilder()
 
-	// Get all tables
-	tables := []string{}
-	rows, err := db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'").Rows()
+	tables, err := listTables(db)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
-			continue
-		}
-		tables = append(tables, tableName)
+	if len(tables) == 0 {
+		return nil, fmt.Errorf("no database tables available for GraphQL schema generation")
 	}
 
 	// Add schemas for each table
@@ -65,6 +69,39 @@ func BuildDatabaseSchema(db *gorm.DB) (*graphql.Schema, error) {
 	}
 
 	return builder.BuildSchema()
+}
+
+func listTables(db *gorm.DB) ([]string, error) {
+	var (
+		query string
+		args  []interface{}
+	)
+
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+	case "mysql", "mariadb":
+		query = "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+	default:
+		query = "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'"
+	}
+
+	rows, err := db.Raw(query, args...).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tables := make([]string, 0)
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			continue
+		}
+		tables = append(tables, tableName)
+	}
+
+	return tables, nil
 }
 
 // getTableColumns retrieves columns for a table
@@ -77,10 +114,17 @@ func getTableColumns(db *gorm.DB, tableName string) map[string]string {
 	}
 
 	var colInfos []ColumnInfo
-	db.Raw(fmt.Sprintf("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '%s'", tableName)).Scan(&colInfos)
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ?", tableName).Scan(&colInfos)
+	case "mysql", "mariadb":
+		db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?", tableName).Scan(&colInfos)
+	default:
+		db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ?", tableName).Scan(&colInfos)
+	}
 
 	for _, col := range colInfos {
-		columns[col.ColumnName] = col.DataType
+		columns[col.ColumnName] = strings.ToUpper(col.DataType)
 	}
 
 	return columns
@@ -88,11 +132,11 @@ func getTableColumns(db *gorm.DB, tableName string) map[string]string {
 
 // QueryMetrics tracks query performance
 type QueryMetrics struct {
-	Query       string
-	Duration    int64 // milliseconds
-	RowsScanned int64
+	Query        string
+	Duration     int64 // milliseconds
+	RowsScanned  int64
 	RowsReturned int64
-	CacheHit    bool
+	CacheHit     bool
 }
 
 // MetricsCollector collects GraphQL query metrics

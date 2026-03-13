@@ -32,6 +32,12 @@
         <button class="tab-btn" onclick="switchTab('api-testing')">
             <span class="tab-icon">🧪</span> API Testing
         </button>
+        <button class="tab-btn" onclick="switchTab('graphql-studio')">
+            <span class="tab-icon">🧬</span> GraphQL Studio
+        </button>
+        <button class="tab-btn" onclick="switchTab('control-plane')">
+            <span class="tab-icon">☸️</span> Control Plane
+        </button>
         <button class="tab-btn" onclick="switchTab('logs')">
             <span class="tab-icon">📝</span> Logs
         </button>
@@ -207,6 +213,133 @@
             <!-- API Categories with Test Buttons -->
             <div class="api-categories" id="apiCategories">
                 <div class="loading">Loading APIs...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== GRAPHQL STUDIO TAB ===================== -->
+    <div id="graphql-studio" class="tab-content">
+        <div class="api-testing-section">
+            <div class="section-header">
+                <h3>GraphQL Studio</h3>
+                <button class="btn-secondary" onclick="loadAdminGraphQLSchemaInfo()">Refresh Schema Info</button>
+            </div>
+
+            <div class="cp-grid-two">
+                <div class="cp-card">
+                    <h4>Query</h4>
+                    <div class="form-group">
+                        <label for="adminGraphQLOperation">Operation Name (optional)</label>
+                        <input type="text" id="adminGraphQLOperation" placeholder="e.g. ListUsers">
+                    </div>
+                    <div class="form-group">
+                        <label for="adminGraphQLQuery">GraphQL Query</label>
+                        <textarea id="adminGraphQLQuery" rows="10" spellcheck="false">query {
+  users {
+    id
+    name
+  }
+}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminGraphQLVariables">Variables (JSON)</label>
+                        <textarea id="adminGraphQLVariables" rows="6" spellcheck="false">{}</textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-primary" onclick="runAdminGraphQLQuery()">Run Query</button>
+                    </div>
+                </div>
+
+                <div class="cp-card">
+                    <h4>Response</h4>
+                    <pre id="adminGraphQLResult" class="cp-output">Waiting for query execution...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== CONTROL PLANE TAB ===================== -->
+    <div id="control-plane" class="tab-content">
+        <div class="api-testing-section">
+            <div class="section-header">
+                <h3>Control Plane Console</h3>
+                <button class="btn-secondary" onclick="refreshAdminControlPlaneData()">Refresh All</button>
+            </div>
+
+            <div class="cp-grid-two">
+                <div class="cp-card">
+                    <h4>Resource Commands (kubectl-style)</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="adminCpNamespace">Namespace</label>
+                            <input type="text" id="adminCpNamespace" value="default">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminCpKind">Kind</label>
+                            <input type="text" id="adminCpKind" value="apis" placeholder="apis, policies, workflows">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminCpName">Resource Name</label>
+                        <input type="text" id="adminCpName" placeholder="users-api">
+                    </div>
+                    <div class="form-group">
+                        <label for="adminCpBody">Resource Body (JSON)</label>
+                        <textarea id="adminCpBody" rows="8" spellcheck="false">{
+  "apiVersion": "axiom-nizam.io/v1",
+  "kind": "API",
+  "metadata": {
+    "name": "users-api"
+  },
+  "spec": {
+    "path": "/api/users",
+    "method": "GET"
+  }
+}</textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-primary" onclick="adminApplyResource()">Apply</button>
+                        <button class="btn-secondary" onclick="adminListResources()">List</button>
+                        <button class="btn-secondary" onclick="adminGetResource()">Get</button>
+                        <button class="btn-secondary" onclick="adminGetResourceStatus()">Status</button>
+                        <button class="btn-secondary" onclick="adminGetResourceEvents()">Events</button>
+                        <button class="btn-danger" onclick="adminDeleteResource()">Delete</button>
+                    </div>
+                    <div class="form-row" style="margin-top:12px;">
+                        <div class="form-group">
+                            <label for="adminWorkflowName">Workflow Name</label>
+                            <input type="text" id="adminWorkflowName" placeholder="daily-etl">
+                        </div>
+                        <div class="form-group" style="display:flex;align-items:flex-end;">
+                            <button class="btn-warning" onclick="adminRunWorkflow()">Run Workflow</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cp-card">
+                    <h4>DataSource & Job Commands</h4>
+                    <div class="form-group">
+                        <label for="adminDatasourceName">DataSource Name</label>
+                        <input type="text" id="adminDatasourceName" placeholder="reporting-postgres">
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-secondary" onclick="adminListDatasources()">List DataSources</button>
+                        <button class="btn-secondary" onclick="adminGetDatasource()">Get DataSource</button>
+                        <button class="btn-secondary" onclick="adminTestDatasource()">Test DataSource</button>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="adminJobId">Job ID or Name</label>
+                        <input type="text" id="adminJobId" placeholder="job-123 or 8-char-id">
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-secondary" onclick="adminListJobs()">List Jobs</button>
+                        <button class="btn-secondary" onclick="adminGetJob()">Get Job</button>
+                        <button class="btn-warning" onclick="adminRunJob()">Run Job</button>
+                        <button class="btn-warning" onclick="adminGetJobLogs()">Job Logs</button>
+                        <button class="btn-danger" onclick="adminCancelJob()">Cancel Job</button>
+                    </div>
+                    <pre id="adminControlPlaneOutput" class="cp-output">Ready. Execute GraphQL or control-plane commands.</pre>
+                </div>
             </div>
         </div>
     </div>
