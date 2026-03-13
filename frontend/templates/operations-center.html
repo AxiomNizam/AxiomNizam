@@ -1,0 +1,59 @@
+{{ define "operations-center" }}
+<div class="platform-console">
+    <div class="platform-hero">
+        <h1>🛠️ Operations Center</h1>
+        <p>Unified incidents view with webhooks, streams, exports, and bulk operation monitors.</p>
+    </div>
+
+    <div class="platform-grid">
+        <section class="platform-card platform-col-12">
+            <h3>Incident Snapshot</h3>
+            <div class="platform-metrics">
+                <div class="metric"><span class="label">Alerts</span><span class="value" id="metricAlerts">0</span></div>
+                <div class="metric"><span class="label">Anomalies</span><span class="value" id="metricAnomalies">0</span></div>
+                <div class="metric"><span class="label">Webhooks</span><span class="value" id="metricWebhooks">0</span></div>
+                <div class="metric"><span class="label">Open Streams</span><span class="value" id="metricStreams">0</span></div>
+            </div>
+            <div class="platform-actions" style="margin-top:12px">
+                <button class="platform-btn primary" onclick="loadOperationsData()">Refresh Snapshot</button>
+            </div>
+        </section>
+
+        <section class="platform-card platform-col-6">
+            <h3>Webhooks</h3>
+            <form class="platform-form" id="webhookCreateForm">
+                <input id="webhookName" type="text" placeholder="Webhook name" required>
+                <input id="webhookURL" type="url" placeholder="Webhook URL" required>
+                <button class="platform-btn secondary" type="submit">Create Webhook</button>
+            </form>
+            <div class="platform-list" id="opsWebhookList"></div>
+        </section>
+
+        <section class="platform-card platform-col-6">
+            <h3>Streams</h3>
+            <form class="platform-form" id="streamCreateForm">
+                <input id="streamTenantId" type="text" placeholder="Tenant ID">
+                <input id="streamTopic" type="text" placeholder="Topic" required>
+                <button class="platform-btn secondary" type="submit">Create Stream</button>
+            </form>
+            <div class="platform-list" id="opsStreamList"></div>
+        </section>
+
+        <section class="platform-card platform-col-6">
+            <h3>Exports</h3>
+            <div class="platform-list" id="opsExportList"></div>
+        </section>
+
+        <section class="platform-card platform-col-6">
+            <h3>Bulk Operations</h3>
+            <div class="platform-list" id="opsBulkList"></div>
+        </section>
+
+        <section class="platform-card platform-col-12">
+            <h3>Raw Incident Feed</h3>
+            <pre class="platform-json" id="operationsResponse">No data yet.</pre>
+        </section>
+    </div>
+</div>
+<script src="/static/operations-center.js"></script>
+{{ end }}

@@ -126,6 +126,16 @@ func init() {
 	// Data platform commands
 	RootCmd.AddCommand(ApiBankCmd)
 	RootCmd.AddCommand(MeshCmd)
+	RootCmd.AddCommand(TenantCmd)
+	RootCmd.AddCommand(RBACCmd)
+	RootCmd.AddCommand(WebhookCmd)
+	RootCmd.AddCommand(StreamCmd)
+	RootCmd.AddCommand(ExportCmd)
+	RootCmd.AddCommand(BulkCmd)
+	RootCmd.AddCommand(VersioningCmd)
+	RootCmd.AddCommand(TraceCmd)
+	RootCmd.AddCommand(LineageAPICmd)
+	RootCmd.AddCommand(IncidentCmd)
 
 	// Integration & monitoring commands
 	RootCmd.AddCommand(healthCmd)

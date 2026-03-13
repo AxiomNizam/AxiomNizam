@@ -12,11 +12,21 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/auth"
+	"example.com/axiomnizam/internal/bulk"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/database"
+	"example.com/axiomnizam/internal/eventbus"
+	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
+	"example.com/axiomnizam/internal/lineage"
 	"example.com/axiomnizam/internal/models"
+	"example.com/axiomnizam/internal/rbac"
 	"example.com/axiomnizam/internal/runtime"
+	"example.com/axiomnizam/internal/streaming"
+	"example.com/axiomnizam/internal/tenant"
+	"example.com/axiomnizam/internal/tracing"
+	"example.com/axiomnizam/internal/versioning"
+	"example.com/axiomnizam/internal/webhooks"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
@@ -478,6 +488,168 @@ func main() {
 	router.GET("/api/v1/jobs/:id/logs", authMiddleware, jobHandler.GetLogs)
 	router.POST("/api/v1/jobs/:id/cancel", adminOrSysMiddleware, jobHandler.Cancel)
 	router.DELETE("/api/v1/jobs/:id", adminOrSysMiddleware, jobHandler.Delete)
+
+	// ====================================
+	// PLATFORM FEATURE APIs (PHASE 1)
+	// ====================================
+	bulkManager := bulk.NewInMemoryBulkManager()
+	eventBusManager := eventbus.NewInMemoryEventBusManager()
+	exportManager := &exportManagerAdapter{base: exportpkg.NewInMemoryExportManager()}
+	streamManager := streaming.NewInMemoryStreamManager()
+	webhookManager := webhooks.NewInMemoryWebhookManager()
+	tenantManager := tenant.NewInMemoryTenantManager()
+	rbacManager := &rbacManagerAdapter{base: rbac.NewInMemoryRBACManager()}
+	versionManager := versioning.NewInMemoryVersionManager()
+	lineageManager := &lineageManagerAdapter{base: lineage.NewInMemoryLineageManager()}
+	tracingManager := &tracingManagerAdapter{base: tracing.NewInMemoryTracingManager()}
+
+	bulkHandler := bulk.NewBulkHandler(bulkManager)
+	eventBusHandler := eventbus.NewEventBusHandler(eventBusManager)
+	exportHandler := exportpkg.NewExportHandler(exportManager)
+	streamHandler := streaming.NewStreamHandler(streamManager)
+	webhookHandler := webhooks.NewWebhookHandler(webhookManager)
+	tenantHandler := tenant.NewTenantHandler(tenantManager)
+	rbacHandler := rbac.NewRBACHandler(rbacManager)
+	versionHandler := versioning.NewVersionHandler(versionManager)
+	lineageHandler := lineage.NewLineageHandler(lineageManager)
+	tracingHandler := tracing.NewTracingHandler(tracingManager)
+
+	// Bulk operations
+	bulkAPI := router.Group("/api/v1/bulk/operations", authMiddleware)
+	{
+		bulkAPI.POST("", adminOrSysMiddleware, bulkHandler.SubmitBulkOperation)
+		bulkAPI.GET("", bulkHandler.ListOperations)
+		bulkAPI.GET("/:id", bulkHandler.GetOperation)
+		bulkAPI.GET("/:id/progress", bulkHandler.GetProgress)
+		bulkAPI.DELETE("/:id", adminOrSysMiddleware, bulkHandler.CancelOperation)
+		bulkAPI.POST("/:id/retry-failed", adminOrSysMiddleware, bulkHandler.RetryFailed)
+		bulkAPI.GET("/:id/results", bulkHandler.GetResults)
+	}
+
+	// Event bus
+	eventBusAPI := router.Group("/api/v1/eventbus", authMiddleware)
+	{
+		eventBusAPI.POST("/events/publish", adminOrSysMiddleware, eventBusHandler.PublishEvent)
+		eventBusAPI.GET("/events", eventBusHandler.ListEvents)
+		eventBusAPI.POST("/topics", adminOrSysMiddleware, eventBusHandler.CreateTopic)
+		eventBusAPI.GET("/topics", eventBusHandler.ListTopics)
+		eventBusAPI.POST("/subscriptions", adminOrSysMiddleware, eventBusHandler.CreateSubscription)
+		eventBusAPI.GET("/subscriptions/:id", eventBusHandler.GetSubscription)
+		eventBusAPI.GET("/subscriptions", eventBusHandler.ListSubscriptions)
+		eventBusAPI.GET("/dlq", eventBusHandler.ListDLQ)
+	}
+
+	// Exports
+	exportAPI := router.Group("/api/v1/exports", authMiddleware)
+	{
+		exportAPI.POST("", adminOrSysMiddleware, exportHandler.SubmitExport)
+		exportAPI.GET("", exportHandler.ListExports)
+		exportAPI.GET("/:id", exportHandler.GetExport)
+		exportAPI.GET("/:id/progress", exportHandler.GetExportProgress)
+		exportAPI.GET("/:id/download", exportHandler.DownloadExport)
+		exportAPI.DELETE("/:id", adminOrSysMiddleware, exportHandler.CancelExport)
+	}
+	router.POST("/api/v1/export-templates", authMiddleware, adminOrSysMiddleware, exportHandler.CreateTemplate)
+	router.GET("/api/v1/export-templates", authMiddleware, exportHandler.ListTemplates)
+
+	// Webhooks
+	webhookAPI := router.Group("/api/v1/webhooks", authMiddleware)
+	{
+		webhookAPI.POST("", adminOrSysMiddleware, webhookHandler.CreateWebhook)
+		webhookAPI.GET("", webhookHandler.ListWebhooks)
+		webhookAPI.GET("/:id", webhookHandler.GetWebhook)
+		webhookAPI.PATCH("/:id", adminOrSysMiddleware, webhookHandler.UpdateWebhook)
+		webhookAPI.DELETE("/:id", adminOrSysMiddleware, webhookHandler.DeleteWebhook)
+		webhookAPI.POST("/:id/test", adminOrSysMiddleware, webhookHandler.TestWebhook)
+		webhookAPI.GET("/:id/deliveries", webhookHandler.GetDeliveryLogs)
+	}
+
+	// Streaming
+	router.GET("/ws/stream", authMiddleware, streamHandler.HandleStream)
+	streamsAPI := router.Group("/api/v1/streams", authMiddleware)
+	{
+		streamsAPI.POST("", adminOrSysMiddleware, streamHandler.CreateStreamRequest)
+		streamsAPI.GET("", streamHandler.ListStreams)
+		streamsAPI.GET("/:id", streamHandler.GetStreamStatus)
+		streamsAPI.DELETE("/:id", adminOrSysMiddleware, streamHandler.CancelStream)
+	}
+	streamSubscriptionsAPI := router.Group("/api/v1/streaming/subscriptions", authMiddleware)
+	{
+		streamSubscriptionsAPI.POST("", adminOrSysMiddleware, streamHandler.Subscribe)
+		streamSubscriptionsAPI.DELETE("/:id", adminOrSysMiddleware, streamHandler.Unsubscribe)
+	}
+
+	// Tenants
+	tenantAPI := router.Group("/api/v1/tenants", authMiddleware)
+	{
+		tenantAPI.POST("", adminOrSysMiddleware, tenantHandler.CreateTenant)
+		tenantAPI.GET("", tenantHandler.ListTenants)
+		tenantAPI.GET("/:id", tenantHandler.GetTenant)
+		tenantAPI.PATCH("/:id", adminOrSysMiddleware, tenantHandler.UpdateTenant)
+		tenantAPI.DELETE("/:id", adminOrSysMiddleware, tenantHandler.DeleteTenant)
+		tenantAPI.POST("/:id/members", adminOrSysMiddleware, tenantHandler.AddMember)
+		tenantAPI.DELETE("/:id/members/:userId", adminOrSysMiddleware, tenantHandler.RemoveMember)
+		tenantAPI.GET("/:id/quota", tenantHandler.GetQuota)
+		tenantAPI.POST("/:id/quota/check", tenantHandler.CheckQuota)
+	}
+
+	// RBAC
+	rbacAPI := router.Group("/api/v1/rbac", authMiddleware)
+	{
+		rbacAPI.POST("/roles", adminOrSysMiddleware, rbacHandler.CreateRole)
+		rbacAPI.GET("/roles", rbacHandler.ListRoles)
+		rbacAPI.GET("/roles/:id", rbacHandler.GetRole)
+		rbacAPI.PATCH("/roles/:id", adminOrSysMiddleware, rbacHandler.UpdateRole)
+		rbacAPI.DELETE("/roles/:id", adminOrSysMiddleware, rbacHandler.DeleteRole)
+
+		rbacAPI.POST("/role-bindings", adminOrSysMiddleware, rbacHandler.BindRole)
+		rbacAPI.GET("/role-bindings", rbacHandler.ListBindings)
+		rbacAPI.DELETE("/role-bindings/:id", adminOrSysMiddleware, rbacHandler.DeleteBinding)
+
+		rbacAPI.GET("/permissions", rbacHandler.ListPermissions)
+		rbacAPI.POST("/permissions/check", rbacHandler.CheckPermission)
+
+		rbacAPI.POST("/access-requests", rbacHandler.CreateAccessRequest)
+		rbacAPI.POST("/access-requests/:id/approve", adminOrSysMiddleware, rbacHandler.ApproveAccessRequest)
+	}
+
+	// Versioning
+	versionAPI := router.Group("/api/v1/versioning", authMiddleware)
+	{
+		versionAPI.GET("/versions/:resourceType/:resourceId/:version", versionHandler.GetVersion)
+		versionAPI.GET("/versions/:resourceType/:resourceId", versionHandler.ListVersions)
+		versionAPI.GET("/history/:resourceType/:resourceId", versionHandler.GetHistory)
+		versionAPI.GET("/diff/:resourceType/:resourceId", versionHandler.GetDiff)
+		versionAPI.POST("/snapshots/:resourceType/:resourceId", adminOrSysMiddleware, versionHandler.CreateSnapshot)
+		versionAPI.POST("/versions/:resourceType/:resourceId/rollback", adminOrSysMiddleware, versionHandler.Rollback)
+	}
+
+	// Lineage
+	lineageAPI := router.Group("/api/v1/lineage", authMiddleware)
+	{
+		lineageAPI.GET("/nodes/:id", lineageHandler.GetNode)
+		lineageAPI.GET("/nodes", lineageHandler.ListNodes)
+		lineageAPI.GET("/:resourceType/:resourceId", lineageHandler.GetLineageGraph)
+		lineageAPI.GET("/upstream/:resourceType/:resourceId", lineageHandler.GetUpstreamLineage)
+		lineageAPI.GET("/downstream/:resourceType/:resourceId", lineageHandler.GetDownstreamLineage)
+		lineageAPI.GET("/impact/:resourceType/:resourceId", lineageHandler.GetImpactAnalysis)
+		lineageAPI.GET("/columns", lineageHandler.GetColumnLineage)
+		lineageAPI.GET("/trace", lineageHandler.TraceDataFlow)
+		lineageAPI.GET("/statistics", lineageHandler.GetStatistics)
+	}
+
+	// Tracing
+	tracingAPI := router.Group("/api/v1/tracing", authMiddleware)
+	{
+		tracingAPI.GET("/traces/:traceId", tracingHandler.GetTrace)
+		tracingAPI.GET("/traces/search", tracingHandler.SearchTraces)
+		tracingAPI.GET("/spans/:spanId", tracingHandler.GetSpan)
+		tracingAPI.GET("/service-map", tracingHandler.GetServiceMap)
+		tracingAPI.GET("/services", tracingHandler.ListServices)
+		tracingAPI.GET("/services/:service/metrics", tracingHandler.GetServiceMetrics)
+		tracingAPI.GET("/services/:service/operations/:operation/metrics", tracingHandler.GetOperationMetrics)
+		tracingAPI.GET("/errors/analysis", tracingHandler.GetErrorAnalysis)
+	}
 
 	// ====================================
 	// GIS DASHBOARD ENDPOINTS

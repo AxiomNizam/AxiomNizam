@@ -68,6 +68,9 @@ func main() {
 	router.GET("/analytics", analyticsHandler)
 	router.GET("/cdc-etl", cdcEtlHandler)
 	router.GET("/netintel", netintelHandler)
+	router.GET("/governance", governanceHandler)
+	router.GET("/operations-center", operationsCenterHandler)
+	router.GET("/lineage-version", versionLineageHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -86,6 +89,9 @@ func main() {
 	fmt.Printf("📊 Analytics Dashboard: http://localhost:%s/analytics\n", port)
 	fmt.Printf("🔄 CDC/ETL Dashboard: http://localhost:%s/cdc-etl\n", port)
 	fmt.Printf("📡 Network Intelligence: http://localhost:%s/netintel\n", port)
+	fmt.Printf("🏛️ Governance Console: http://localhost:%s/governance\n", port)
+	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
+	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
 	fmt.Printf("📡 Backend: %s\n\n", backendURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
@@ -226,6 +232,66 @@ func netintelHandler(c *gin.Context) {
 		"title":      "AxiomNizam - Network Intelligence",
 		"pageName":   "netintel-dashboard",
 		"page":       "netintel-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// governanceHandler serves the governance dashboard
+func governanceHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Governance"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Governance Console",
+		"pageName":   "governance-dashboard",
+		"page":       "governance-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// operationsCenterHandler serves incidents and operations center
+func operationsCenterHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Operations"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Operations Center",
+		"pageName":   "operations-center",
+		"page":       "operations-center",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// versionLineageHandler serves version and lineage explorer
+func versionLineageHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Explorer"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Version & Lineage Explorer",
+		"pageName":   "version-lineage-dashboard",
+		"page":       "version-lineage-dashboard",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,
