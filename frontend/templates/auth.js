@@ -20,6 +20,21 @@ let refreshToken = null;
 let userName = null;
 let userRole = 'user';
 
+function normalizeRole(role) {
+    const value = String(role || '').toLowerCase().trim();
+    if (!value) return 'user';
+    if (value === 'sysadmin' || value === 'system-admin' || value === 'system_admin' || value === 'system-manager') {
+        return 'system-manager';
+    }
+    if (value === 'manager' || value === 'api-manager' || value === 'api_manager') {
+        return 'manager';
+    }
+    if (value === 'admin' || value === 'superadmin' || value === 'super-admin') {
+        return 'admin';
+    }
+    return value;
+}
+
 // Initialize authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
     authToken = localStorage.getItem('authToken');
@@ -81,8 +96,8 @@ function handleLogin(event) {
         localStorage.setItem('userName', userName);
         
         // Use server-returned role if available (most reliable), else decode JWT
-        const serverRole = data.role || '';
-        let userRole = serverRole || extractUserRole(authToken);
+        const serverRole = normalizeRole(data.role || '');
+        let userRole = normalizeRole(serverRole || extractUserRole(authToken));
 
         // Safety net: map known demo usernames to their expected roles when the
         // server role is missing or fell back to generic 'user' (e.g. Keycloak
@@ -157,16 +172,15 @@ function extractUserRole(token) {
                 console.log(`  - Checking role: "${role}"`);
                 
                 // Check for admin role
+                // Check for system-manager role (various formats)
+                if (role === 'system-manager' || role === 'system_manager' || role === 'system-admin' || role === 'sysadmin') {
+                    console.log('✅ Detected as SYSTEM-MANAGER role');
+                    return 'system-manager';
+                }
+
                 if (role.includes('admin') && !role.includes('account')) {
                     console.log('✅ Detected as ADMIN role');
                     return 'admin';
-                }
-                
-                // Check for system-manager role (various formats)
-                if (role === 'system-manager' || role === 'system_manager' || 
-                    role === 'system-admin') {
-                    console.log('✅ Detected as SYSTEM-MANAGER role');
-                    return 'system-manager';
                 }
 
                 // Check for manager role (must come AFTER system-manager check)
@@ -185,8 +199,8 @@ function extractUserRole(token) {
                 
                 for (let i = 0; i < clientRoles.roles.length; i++) {
                     const role = clientRoles.roles[i].toLowerCase();
+                    if (role === 'system-manager' || role === 'system_manager' || role === 'sysadmin') return 'system-manager';
                     if (role.includes('admin')) return 'admin';
-                    if (role === 'system-manager' || role === 'system_manager') return 'system-manager';
                 }
             }
         }
@@ -211,5 +225,5 @@ function isAuthenticated() {
 }
 
 function isAdmin() {
-    return userRole === 'admin';
+    return userRole === 'admin' || userRole === 'system-manager';
 }

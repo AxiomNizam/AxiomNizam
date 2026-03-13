@@ -197,7 +197,7 @@
             const navAdmin = document.getElementById('nav-admin');
             const navSysManager = document.getElementById('nav-sysmanager');
             const navManager = document.getElementById('nav-manager');
-            if (navAdmin) navAdmin.style.display = (role === 'admin') ? '' : 'none';
+            if (navAdmin) navAdmin.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
             if (navSysManager) navSysManager.style.display = (role === 'system-manager') ? '' : 'none';
             if (navManager) navManager.style.display = (role === 'manager') ? '' : 'none';
         });

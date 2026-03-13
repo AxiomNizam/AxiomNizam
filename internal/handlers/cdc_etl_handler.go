@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"example.com/axiomnizam/internal/cdc"
 	"example.com/axiomnizam/internal/etl"
@@ -126,7 +127,85 @@ func (h *CDCETLHandler) GetETLRun(c *gin.Context) {
 
 // GetETLConnectors GET /api/v1/etl/connectors
 func (h *CDCETLHandler) GetETLConnectors(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "success", "connectors": h.etlEngine.GetConnectors()})
+	connectors := h.etlEngine.GetConnectors()
+	q := strings.TrimSpace(strings.ToLower(c.Query("q")))
+	category := strings.TrimSpace(strings.ToLower(c.Query("category")))
+
+	filtered := make([]etl.ConnectorType, 0, len(connectors))
+	for _, connector := range connectors {
+		if category != "" && strings.ToLower(connector.Category) != category {
+			continue
+		}
+		if q != "" {
+			name := strings.ToLower(connector.Name)
+			id := strings.ToLower(connector.ID)
+			desc := strings.ToLower(connector.Description)
+			if !strings.Contains(name, q) && !strings.Contains(id, q) && !strings.Contains(desc, q) {
+				continue
+			}
+		}
+		filtered = append(filtered, connector)
+	}
+
+	categories := map[string]int{}
+	for _, connector := range connectors {
+		categories[connector.Category]++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":     "success",
+		"connectors": filtered,
+		"total":      len(filtered),
+		"categories": categories,
+	})
+}
+
+// CreateETLConnector POST /api/v1/etl/connectors
+func (h *CDCETLHandler) CreateETLConnector(c *gin.Context) {
+	var connector etl.ConnectorType
+	if err := c.ShouldBindJSON(&connector); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	if err := h.etlEngine.AddConnector(connector); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"status": "success", "connector": connector})
+}
+
+// GetETLConnectorCatalog GET /api/v1/etl/connectors/catalog
+func (h *CDCETLHandler) GetETLConnectorCatalog(c *gin.Context) {
+	connectors := h.etlEngine.GetConnectors()
+	byCategory := map[string][]etl.ConnectorType{}
+	for _, connector := range connectors {
+		byCategory[connector.Category] = append(byCategory[connector.Category], connector)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "success",
+		"connectors":  connectors,
+		"by_category": byCategory,
+		"total":       len(connectors),
+	})
+}
+
+// GetETLOrchestrationCapabilities GET /api/v1/etl/orchestration/capabilities
+func (h *CDCETLHandler) GetETLOrchestrationCapabilities(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":       "success",
+		"capabilities": h.etlEngine.GetOrchestrationCapabilities(),
+	})
+}
+
+// GetETLBlueprints GET /api/v1/etl/blueprints
+func (h *CDCETLHandler) GetETLBlueprints(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":     "success",
+		"blueprints": h.etlEngine.GetPipelineBlueprints(),
+	})
 }
 
 // GetETLObservability GET /api/v1/etl/observability

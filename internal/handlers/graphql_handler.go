@@ -54,7 +54,7 @@ func (h *GraphQLHandler) Query(c *gin.Context) {
 		return
 	}
 
-	data, err := h.resolver.ResolveQuery(c.Request.Context(), req.Query)
+	data, err := h.resolver.ResolveQuery(c.Request.Context(), req.Query, req.Variables, req.OperationName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
@@ -70,7 +70,7 @@ func (h *GraphQLHandler) Query(c *gin.Context) {
 
 // GetSchema handles GET /api/graphql/schema
 func (h *GraphQLHandler) GetSchema(c *gin.Context) {
-	_, err := graphql.BuildDatabaseSchema(nil)
+	_, err := h.resolver.BuildSchema()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
@@ -82,7 +82,9 @@ func (h *GraphQLHandler) GetSchema(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data: map[string]interface{}{
-			"schema": "GraphQL Schema Available",
+			"schema":         "GraphQL schema available",
+			"query_endpoint": "/api/graphql",
+			"playground":     "/api/graphql/playground",
 		},
 	})
 }

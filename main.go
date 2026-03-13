@@ -138,6 +138,22 @@ func main() {
 	discordWebhookURL := cfg.Discord.WebhookURL
 	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
 
+	// GraphQL handler (prefer PostgreSQL for schema introspection; fallback to available SQL engines)
+	graphQLDB := conns.PostgreSQL
+	if graphQLDB == nil {
+		graphQLDB = conns.MySQL
+	}
+	if graphQLDB == nil {
+		graphQLDB = conns.MariaDB
+	}
+	if graphQLDB == nil {
+		graphQLDB = conns.Percona
+	}
+	if graphQLDB == nil {
+		graphQLDB = conns.Oracle
+	}
+	graphQLHandler := handlers.NewGraphQLHandler(graphQLDB)
+
 	// Apply auth middleware to protected routes
 	var authMiddleware gin.HandlerFunc
 	if tokenValidator != nil {
@@ -198,6 +214,7 @@ func main() {
 
 	// Get admin middleware (requires admin role)
 	var adminMiddleware gin.HandlerFunc
+	var adminOrSysMiddleware gin.HandlerFunc
 	if tokenValidator != nil {
 		adminMiddleware = func(c *gin.Context) {
 			authMiddleware(c)
@@ -205,9 +222,21 @@ func main() {
 				auth.RequireAdmin()(c)
 			}
 		}
+		adminOrSysMiddleware = func(c *gin.Context) {
+			authMiddleware(c)
+			if !c.IsAborted() {
+				auth.RequireAnyRole("admin", "system-manager", "sysadmin", "system_admin", "system-admin")(c)
+			}
+		}
 	} else {
 		adminMiddleware = func(c *gin.Context) { c.Next() }
+		adminOrSysMiddleware = func(c *gin.Context) { c.Next() }
 	}
+
+	// GraphQL endpoints (auth required)
+	router.POST("/api/graphql", authMiddleware, graphQLHandler.Query)
+	router.GET("/api/graphql/schema", authMiddleware, graphQLHandler.GetSchema)
+	router.GET("/api/graphql/playground", authMiddleware, graphQLHandler.Playground)
 
 	// CRUD routes for MySQL
 	// Read operations (allowed for all authenticated users)
@@ -364,24 +393,26 @@ func main() {
 	// ====================================
 
 	// Database management endpoints (admin only)
-	router.POST("/api/admin/database/create", adminMiddleware, adminHandler.CreateDatabase)
-	router.GET("/api/admin/database/list", adminMiddleware, adminHandler.ListDatabases)
+	router.POST("/api/admin/database/create", adminOrSysMiddleware, adminHandler.CreateDatabase)
+	router.GET("/api/admin/database/list", adminOrSysMiddleware, adminHandler.ListDatabases)
+	router.GET("/api/admin/database/servers", adminOrSysMiddleware, adminHandler.ListDatabaseServers)
+	router.POST("/api/admin/database/connect", adminOrSysMiddleware, adminHandler.ConnectDatabaseServer)
 
 	// Table management endpoints (admin only)
-	router.POST("/api/admin/table/create", adminMiddleware, adminHandler.CreateTable)
-	router.GET("/api/admin/table/list", adminMiddleware, adminHandler.ListTables)
+	router.POST("/api/admin/table/create", adminOrSysMiddleware, adminHandler.CreateTable)
+	router.GET("/api/admin/table/list", adminOrSysMiddleware, adminHandler.ListTables)
 
 	// User management endpoints (admin only)
-	router.GET("/api/v1/users", adminMiddleware, platformUserHandler.ListPlatformUsers)
-	router.GET("/api/v1/users/:id", adminMiddleware, platformUserHandler.GetPlatformUser)
-	router.POST("/api/v1/users", adminMiddleware, platformUserHandler.CreatePlatformUser)
-	router.PUT("/api/v1/users/:id", adminMiddleware, platformUserHandler.UpdatePlatformUser)
-	router.DELETE("/api/v1/users/:id", adminMiddleware, platformUserHandler.DeletePlatformUser)
+	router.GET("/api/v1/users", adminOrSysMiddleware, platformUserHandler.ListPlatformUsers)
+	router.GET("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.GetPlatformUser)
+	router.POST("/api/v1/users", adminOrSysMiddleware, platformUserHandler.CreatePlatformUser)
+	router.PUT("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.UpdatePlatformUser)
+	router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
 
 	// API Metrics endpoints (admin only)
-	router.GET("/api/admin/metrics/all", adminMiddleware, apiMetricsTracker.GetAllAPIMetrics)
-	router.GET("/api/admin/metrics/count", adminMiddleware, apiMetricsTracker.GetAPICount)
-	router.GET("/api/admin/metrics/stats", adminMiddleware, apiMetricsTracker.GetAPIStats)
+	router.GET("/api/admin/metrics/all", adminOrSysMiddleware, apiMetricsTracker.GetAllAPIMetrics)
+	router.GET("/api/admin/metrics/count", adminOrSysMiddleware, apiMetricsTracker.GetAPICount)
+	router.GET("/api/admin/metrics/stats", adminOrSysMiddleware, apiMetricsTracker.GetAPIStats)
 
 	// ====================================
 	// NOTIFICATION ENDPOINTS (Auth Required)
@@ -409,44 +440,44 @@ func main() {
 	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
 	nsAPI := router.Group("/api/v1/namespaces")
 	{
-		nsAPI.POST("/:namespace/:kind", resourceHandler.CreateOrUpdate)
-		nsAPI.GET("/:namespace/:kind", resourceHandler.List)
-		nsAPI.GET("/:namespace/:kind/:name", resourceHandler.Get)
-		nsAPI.PUT("/:namespace/:kind/:name", resourceHandler.Update)
-		nsAPI.DELETE("/:namespace/:kind/:name", resourceHandler.Delete)
-		nsAPI.GET("/:namespace/:kind/:name/status", resourceHandler.GetStatus)
-		nsAPI.GET("/:namespace/:kind/:name/events", resourceHandler.Events)
+		nsAPI.POST("/:namespace/:kind", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+		nsAPI.GET("/:namespace/:kind", authMiddleware, resourceHandler.List)
+		nsAPI.GET("/:namespace/:kind/:name", authMiddleware, resourceHandler.Get)
+		nsAPI.PUT("/:namespace/:kind/:name", adminOrSysMiddleware, resourceHandler.Update)
+		nsAPI.DELETE("/:namespace/:kind/:name", adminOrSysMiddleware, resourceHandler.Delete)
+		nsAPI.GET("/:namespace/:kind/:name/status", authMiddleware, resourceHandler.GetStatus)
+		nsAPI.GET("/:namespace/:kind/:name/events", authMiddleware, resourceHandler.Events)
 	}
 
 	// Non-namespaced resource endpoints: /api/v1/{kind}
-	router.POST("/api/v1/apis", resourceHandler.CreateOrUpdate)
-	router.GET("/api/v1/apis", resourceHandler.ListAll)
-	router.POST("/api/v1/policies", resourceHandler.CreateOrUpdate)
-	router.GET("/api/v1/policies", resourceHandler.ListAll)
-	router.POST("/api/v1/workflows", resourceHandler.CreateOrUpdate)
-	router.GET("/api/v1/workflows", resourceHandler.ListAll)
-	router.POST("/api/v1/workflows/:name/run", func(c *gin.Context) {
+	router.POST("/api/v1/apis", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/apis", authMiddleware, resourceHandler.ListAll)
+	router.POST("/api/v1/policies", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/policies", authMiddleware, resourceHandler.ListAll)
+	router.POST("/api/v1/workflows", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+	router.GET("/api/v1/workflows", authMiddleware, resourceHandler.ListAll)
+	router.POST("/api/v1/workflows/:name/run", adminOrSysMiddleware, func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": fmt.Sprintf("Workflow '%s' started", c.Param("name")), "status": "Running"})
 	})
 
 	// DataSource endpoints
 	dsHandler := handlers.NewDataSourceHandler()
-	router.POST("/api/v1/datasources", dsHandler.Create)
-	router.GET("/api/v1/datasources", dsHandler.List)
-	router.GET("/api/v1/datasources/:name", dsHandler.Get)
-	router.PUT("/api/v1/datasources/:name", dsHandler.Update)
-	router.DELETE("/api/v1/datasources/:name", dsHandler.Delete)
-	router.POST("/api/v1/datasources/:name/test", dsHandler.Test)
+	router.POST("/api/v1/datasources", adminOrSysMiddleware, dsHandler.Create)
+	router.GET("/api/v1/datasources", authMiddleware, dsHandler.List)
+	router.GET("/api/v1/datasources/:name", authMiddleware, dsHandler.Get)
+	router.PUT("/api/v1/datasources/:name", adminOrSysMiddleware, dsHandler.Update)
+	router.DELETE("/api/v1/datasources/:name", adminOrSysMiddleware, dsHandler.Delete)
+	router.POST("/api/v1/datasources/:name/test", adminOrSysMiddleware, dsHandler.Test)
 
 	// Job endpoints
 	jobHandler := handlers.NewJobHandler()
-	router.POST("/api/v1/jobs", jobHandler.Create)
-	router.GET("/api/v1/jobs", jobHandler.List)
-	router.GET("/api/v1/jobs/:id", jobHandler.Get)
-	router.POST("/api/v1/jobs/:id/run", jobHandler.Run)
-	router.GET("/api/v1/jobs/:id/logs", jobHandler.GetLogs)
-	router.POST("/api/v1/jobs/:id/cancel", jobHandler.Cancel)
-	router.DELETE("/api/v1/jobs/:id", jobHandler.Delete)
+	router.POST("/api/v1/jobs", adminOrSysMiddleware, jobHandler.Create)
+	router.GET("/api/v1/jobs", authMiddleware, jobHandler.List)
+	router.GET("/api/v1/jobs/:id", authMiddleware, jobHandler.Get)
+	router.POST("/api/v1/jobs/:id/run", adminOrSysMiddleware, jobHandler.Run)
+	router.GET("/api/v1/jobs/:id/logs", authMiddleware, jobHandler.GetLogs)
+	router.POST("/api/v1/jobs/:id/cancel", adminOrSysMiddleware, jobHandler.Cancel)
+	router.DELETE("/api/v1/jobs/:id", adminOrSysMiddleware, jobHandler.Delete)
 
 	// ====================================
 	// GIS DASHBOARD ENDPOINTS
@@ -515,7 +546,11 @@ func main() {
 		etlAPI.POST("/pipelines/:id/run", cdcEtlHandler.RunETLPipeline)
 		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
 		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
+		etlAPI.POST("/connectors", cdcEtlHandler.CreateETLConnector)
 		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
+		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
+		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)
+		etlAPI.GET("/blueprints", cdcEtlHandler.GetETLBlueprints)
 		etlAPI.GET("/observability", cdcEtlHandler.GetETLObservability)
 	}
 
@@ -693,10 +728,12 @@ func main() {
 	fmt.Println("  DELETE /api/oracle/users/:id  - Delete user (admin only)")
 	fmt.Println()
 	fmt.Println("Admin endpoints (admin role required):")
-	fmt.Println("  POST /api/admin/database/create - Create a new database")
-	fmt.Println("  GET  /api/admin/database/list   - List all databases")
-	fmt.Println("  POST /api/admin/table/create    - Create a new table")
-	fmt.Println("  GET  /api/admin/table/list      - List all tables")
+	fmt.Println("  POST /api/admin/database/create  - Create a new database")
+	fmt.Println("  GET  /api/admin/database/list    - List all databases")
+	fmt.Println("  GET  /api/admin/database/servers - List default and connected DB servers")
+	fmt.Println("  POST /api/admin/database/connect - Connect a new DB server")
+	fmt.Println("  POST /api/admin/table/create     - Create a new table")
+	fmt.Println("  GET  /api/admin/table/list       - List all tables")
 	fmt.Println()
 	fmt.Println("User Management endpoints (admin only):")
 	fmt.Println("  GET    /api/v1/users            - List all platform users")

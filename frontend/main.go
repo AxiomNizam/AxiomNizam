@@ -160,7 +160,7 @@ func systemManagerHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
-	userName := "Manager"
+	userName := "System Manager"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
 		"title":      "AxiomNizam - System Manager",

@@ -20,6 +20,8 @@ const BACKEND_URL = (() => {
 
 console.log('System Manager - Backend URL:', BACKEND_URL);
 
+var availableDbServers = [];
+
 window.addEventListener('DOMContentLoaded', function() {
     // Set user name from localStorage
     const userName = localStorage.getItem('userName');
@@ -31,6 +33,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     loadStatusData();
     loadDatabases();
+    loadDatabaseServers();
     setInterval(loadStatusData, 30000);
 });
 
@@ -48,13 +51,21 @@ function switchManagerTab(tabName) {
     if (selectedTab) selectedTab.classList.add('active');
     
     // Add active to clicked button
-    event.target.classList.add('active');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+    }
     
     if (tabName === 'databases') {
         loadDatabases();
     }
     if (tabName === 'users') {
         loadUsers();
+    }
+    if (tabName === 'graphql-studio') {
+        loadManagerGraphQLSchemaInfo();
+    }
+    if (tabName === 'control-plane') {
+        refreshManagerControlPlaneData();
     }
 }
 
@@ -150,8 +161,10 @@ function refreshDatabases() {
 function createDatabase() {
     document.getElementById('createDbModal').style.display = 'flex';
     document.getElementById('newDbType').value = '';
+    document.getElementById('newDbServer').value = '';
     document.getElementById('newDbName').value = '';
     document.getElementById('createDbResult').style.display = 'none';
+    populateCreateDbServers();
 }
 
 function closeCreateDbModal() {
@@ -161,6 +174,7 @@ function closeCreateDbModal() {
 function submitCreateDatabase(event) {
     event.preventDefault();
     var dbType = document.getElementById('newDbType').value;
+    var dbServer = document.getElementById('newDbServer').value;
     var dbName = document.getElementById('newDbName').value.trim();
     var btn = document.getElementById('createDbBtn');
     var resultDiv = document.getElementById('createDbResult');
@@ -172,7 +186,7 @@ function submitCreateDatabase(event) {
     fetch(BACKEND_URL + '/api/admin/database/create', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ db_type: dbType, database_name: dbName })
+        body: JSON.stringify({ db_type: dbType, db_server: dbServer, database_name: dbName })
     })
     .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
     .then(function(result) {
@@ -182,8 +196,9 @@ function submitCreateDatabase(event) {
         if (result.ok) {
             resultDiv.style.background = 'rgba(16,185,129,0.15)';
             resultDiv.style.color = '#10b981';
-            resultDiv.textContent = 'Database "' + dbName + '" created successfully on ' + dbType;
-            addOperationLog('Database "' + dbName + '" created on ' + dbType, 'success');
+            var serverLabel = result.data.server_name || result.data.db_server || 'default';
+            resultDiv.textContent = 'Database "' + dbName + '" created successfully on ' + dbType + ' (' + serverLabel + ')';
+            addOperationLog('Database "' + dbName + '" created on ' + dbType + ' via ' + serverLabel, 'success');
             loadDatabases();
         } else {
             resultDiv.style.background = 'rgba(239,68,68,0.15)';
@@ -195,6 +210,144 @@ function submitCreateDatabase(event) {
     .catch(function(err) {
         btn.disabled = false;
         btn.textContent = 'Create Database';
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(239,68,68,0.15)';
+        resultDiv.style.color = '#ef4444';
+        resultDiv.textContent = 'Connection error: ' + err.message;
+    });
+}
+
+function loadDatabaseServers() {
+    fetch(BACKEND_URL + '/api/admin/database/servers', {
+        headers: getAuthHeaders()
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        availableDbServers = data.servers || [];
+        populateCreateDbServers();
+    })
+    .catch(function() {
+        availableDbServers = [];
+        populateCreateDbServers();
+    });
+}
+
+function populateCreateDbServers() {
+    var serverSelect = document.getElementById('newDbServer');
+    var dbType = (document.getElementById('newDbType').value || '').toLowerCase();
+    if (!serverSelect) return;
+
+    var selected = serverSelect.value;
+    serverSelect.innerHTML = '<option value="">Default server for selected database type</option>';
+
+    var filtered = availableDbServers.filter(function(server) {
+        if (!dbType) return true;
+        return (server.db_type || '').toLowerCase() === dbType;
+    });
+
+    filtered.forEach(function(server) {
+        var option = document.createElement('option');
+        option.value = server.key;
+        option.disabled = server.connected === false;
+        option.textContent = (server.name || server.key) + ' [' + (server.db_type || '').toUpperCase() + ']' + (server.connected === false ? ' (disconnected)' : '');
+        serverSelect.appendChild(option);
+    });
+
+    if (selected && filtered.some(function(s) { return s.key === selected; })) {
+        serverSelect.value = selected;
+    }
+}
+
+function openConnectDbServerModal() {
+    var modal = document.getElementById('connectDbServerModal');
+    if (!modal) return;
+
+    document.getElementById('serverName').value = '';
+    document.getElementById('serverDbType').value = document.getElementById('newDbType').value || 'mysql';
+    document.getElementById('serverHost').value = '127.0.0.1';
+    document.getElementById('serverUsername').value = 'root';
+    document.getElementById('serverPassword').value = '';
+    document.getElementById('serverDefaultDatabase').value = '';
+    document.getElementById('serverSSLMode').value = 'disable';
+    document.getElementById('connectServerResult').style.display = 'none';
+
+    updateConnectServerPortDefault();
+    modal.style.display = 'flex';
+}
+
+function closeConnectDbServerModal() {
+    var modal = document.getElementById('connectDbServerModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function updateConnectServerPortDefault() {
+    var dbType = (document.getElementById('serverDbType').value || '').toLowerCase();
+    var portEl = document.getElementById('serverPort');
+    if (!portEl) return;
+    portEl.value = dbType === 'postgres' ? 5432 : 3306;
+}
+
+function submitConnectDbServer(event) {
+    event.preventDefault();
+
+    var btn = document.getElementById('connectServerBtn');
+    var resultDiv = document.getElementById('connectServerResult');
+    var payload = {
+        server_name: document.getElementById('serverName').value.trim(),
+        db_type: document.getElementById('serverDbType').value,
+        host: document.getElementById('serverHost').value.trim(),
+        port: parseInt(document.getElementById('serverPort').value, 10) || 0,
+        username: document.getElementById('serverUsername').value.trim(),
+        password: document.getElementById('serverPassword').value,
+        default_database: document.getElementById('serverDefaultDatabase').value.trim(),
+        ssl_mode: document.getElementById('serverSSLMode').value
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+    resultDiv.style.display = 'none';
+
+    fetch(BACKEND_URL + '/api/admin/database/connect', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+    })
+    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.textContent = 'Connect Server';
+        resultDiv.style.display = 'block';
+
+        if (result.ok) {
+            resultDiv.style.background = 'rgba(16,185,129,0.15)';
+            resultDiv.style.color = '#10b981';
+            resultDiv.textContent = 'Server connected: ' + (result.data.server && result.data.server.name ? result.data.server.name : payload.server_name);
+
+            addOperationLog('Connected database server: ' + payload.server_name + ' (' + payload.db_type + ')', 'success');
+            loadDatabaseServers();
+
+            var newDbType = document.getElementById('newDbType');
+            if (newDbType && !newDbType.value) {
+                newDbType.value = payload.db_type;
+            }
+
+            setTimeout(function() {
+                closeConnectDbServerModal();
+                populateCreateDbServers();
+                if (result.data.server && result.data.server.key) {
+                    document.getElementById('newDbServer').value = result.data.server.key;
+                }
+            }, 500);
+        } else {
+            resultDiv.style.background = 'rgba(239,68,68,0.15)';
+            resultDiv.style.color = '#ef4444';
+            resultDiv.textContent = result.data.error || 'Failed to connect server';
+            addOperationLog('Database server connection failed: ' + (result.data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Connect Server';
         resultDiv.style.display = 'block';
         resultDiv.style.background = 'rgba(239,68,68,0.15)';
         resultDiv.style.color = '#ef4444';
@@ -490,9 +643,327 @@ function deleteUser(userId, username) {
     .catch(function(err) { alert('Connection error: ' + err.message); });
 }
 
+// ====================================
+// GraphQL Studio + Control Plane (System Manager)
+// ====================================
+function managerApiCall(method, path, body) {
+    var options = {
+        method: method,
+        headers: getAuthHeaders()
+    };
+    if (body !== undefined && body !== null) {
+        options.body = JSON.stringify(body);
+    }
+
+    return fetch(BACKEND_URL + path, options).then(function(response) {
+        return response.text().then(function(text) {
+            var parsed;
+            try {
+                parsed = text ? JSON.parse(text) : {};
+            } catch (e) {
+                parsed = { raw: text };
+            }
+
+            if (!response.ok) {
+                var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed with status ' + response.status);
+                var err = new Error(msg);
+                err.status = response.status;
+                err.response = parsed;
+                throw err;
+            }
+
+            return { status: response.status, data: parsed };
+        });
+    });
+}
+
+function managerParseJSONInput(elementId, fallback) {
+    var el = document.getElementById(elementId);
+    if (!el) return fallback;
+    var raw = (el.value || '').trim();
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+}
+
+function setManagerControlPlaneOutput(title, payload) {
+    var el = document.getElementById('managerControlPlaneOutput');
+    if (!el) return;
+    el.textContent = title + '\n\n' + JSON.stringify(payload, null, 2);
+}
+
+function setManagerGraphQLOutput(payload) {
+    var el = document.getElementById('managerGraphQLResult');
+    if (!el) return;
+    el.textContent = JSON.stringify(payload, null, 2);
+}
+
+function getManagerControlPlaneInput() {
+    var namespace = (document.getElementById('managerCpNamespace').value || 'default').trim() || 'default';
+    var kind = (document.getElementById('managerCpKind').value || 'workflows').trim().toLowerCase();
+    var name = (document.getElementById('managerCpName').value || '').trim();
+    return { namespace: namespace, kind: kind, name: name };
+}
+
+function canManagerWriteControlPlane() {
+    var role = (localStorage.getItem('userRole') || '').toLowerCase();
+    return role === 'admin' || role === 'system-manager';
+}
+
+function ensureManagerWrite(actionLabel) {
+    if (canManagerWriteControlPlane()) return true;
+    alert('RBAC: only admin or system-manager can ' + actionLabel + '.');
+    return false;
+}
+
+function runManagerGraphQLQuery() {
+    var queryEl = document.getElementById('managerGraphQLQuery');
+    var opEl = document.getElementById('managerGraphQLOperation');
+    if (!queryEl) return;
+
+    var query = (queryEl.value || '').trim();
+    if (!query) {
+        alert('GraphQL query is required.');
+        return;
+    }
+
+    var variables;
+    try {
+        variables = managerParseJSONInput('managerGraphQLVariables', {});
+    } catch (e) {
+        alert('Invalid JSON in GraphQL variables: ' + e.message);
+        return;
+    }
+
+    setManagerGraphQLOutput({ status: 'running' });
+    managerApiCall('POST', '/api/graphql', {
+        query: query,
+        variables: variables,
+        operationName: (opEl && opEl.value ? opEl.value.trim() : '') || undefined
+    }).then(function(result) {
+        setManagerGraphQLOutput(result.data);
+        addOperationLog('GraphQL query executed', 'info');
+    }).catch(function(err) {
+        setManagerGraphQLOutput({ error: err.message, status: err.status || 'n/a', details: err.response || {} });
+        addOperationLog('GraphQL query failed: ' + err.message, 'error');
+    });
+}
+
+function loadManagerGraphQLSchemaInfo() {
+    managerApiCall('GET', '/api/graphql/schema').then(function(result) {
+        setManagerGraphQLOutput(result.data);
+    }).catch(function(err) {
+        setManagerGraphQLOutput({ error: err.message, details: err.response || {} });
+    });
+}
+
+function managerApplyResource() {
+    if (!ensureManagerWrite('apply resources')) return;
+    var meta = getManagerControlPlaneInput();
+    var body;
+    try {
+        body = managerParseJSONInput('managerCpBody', {});
+    } catch (e) {
+        alert('Invalid JSON in resource body: ' + e.message);
+        return;
+    }
+
+    if (!body.metadata) body.metadata = {};
+    if (!body.metadata.name && meta.name) body.metadata.name = meta.name;
+
+    managerApiCall('POST', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind), body)
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource applied', result.data);
+            addOperationLog('Applied resource ' + (body.metadata.name || ''), 'success');
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Apply failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerListResources() {
+    var meta = getManagerControlPlaneInput();
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind))
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource list', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('List failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerGetResource() {
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name))
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource detail', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Get failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerGetResourceStatus() {
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name) + '/status')
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource status', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Status failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerGetResourceEvents() {
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name) + '/events')
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource events', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Events failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerDeleteResource() {
+    if (!ensureManagerWrite('delete resources')) return;
+    var meta = getManagerControlPlaneInput();
+    if (!meta.name) { alert('Resource name is required.'); return; }
+    managerApiCall('DELETE', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind) + '/' + encodeURIComponent(meta.name))
+        .then(function(result) {
+            setManagerControlPlaneOutput('Resource deleted', result.data);
+            addOperationLog('Deleted resource ' + meta.name, 'success');
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Delete failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerRunWorkflow() {
+    if (!ensureManagerWrite('run workflows')) return;
+    var name = (document.getElementById('managerWorkflowName').value || '').trim();
+    if (!name) { alert('Workflow name is required.'); return; }
+    managerApiCall('POST', '/api/v1/workflows/' + encodeURIComponent(name) + '/run', {})
+        .then(function(result) {
+            setManagerControlPlaneOutput('Workflow run requested', result.data);
+        })
+        .catch(function(err) {
+            setManagerControlPlaneOutput('Workflow run failed', { error: err.message, details: err.response || {} });
+        });
+}
+
+function managerListDatasources() {
+    managerApiCall('GET', '/api/v1/datasources').then(function(result) {
+        setManagerControlPlaneOutput('Datasources', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('List datasources failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerGetDatasource() {
+    var name = (document.getElementById('managerDatasourceName').value || '').trim();
+    if (!name) { alert('Datasource name is required.'); return; }
+    managerApiCall('GET', '/api/v1/datasources/' + encodeURIComponent(name)).then(function(result) {
+        setManagerControlPlaneOutput('Datasource detail', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Get datasource failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerTestDatasource() {
+    if (!ensureManagerWrite('test datasources')) return;
+    var name = (document.getElementById('managerDatasourceName').value || '').trim();
+    if (!name) { alert('Datasource name is required.'); return; }
+    managerApiCall('POST', '/api/v1/datasources/' + encodeURIComponent(name) + '/test', {}).then(function(result) {
+        setManagerControlPlaneOutput('Datasource test result', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Test datasource failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerListJobs() {
+    managerApiCall('GET', '/api/v1/jobs').then(function(result) {
+        setManagerControlPlaneOutput('Jobs', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('List jobs failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerGetJob() {
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('GET', '/api/v1/jobs/' + encodeURIComponent(id)).then(function(result) {
+        setManagerControlPlaneOutput('Job detail', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Get job failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerRunJob() {
+    if (!ensureManagerWrite('run jobs')) return;
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('POST', '/api/v1/jobs/' + encodeURIComponent(id) + '/run', {}).then(function(result) {
+        setManagerControlPlaneOutput('Job run requested', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Run job failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerGetJobLogs() {
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('GET', '/api/v1/jobs/' + encodeURIComponent(id) + '/logs').then(function(result) {
+        setManagerControlPlaneOutput('Job logs', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Get job logs failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function managerCancelJob() {
+    if (!ensureManagerWrite('cancel jobs')) return;
+    var id = (document.getElementById('managerJobId').value || '').trim();
+    if (!id) { alert('Job ID/name is required.'); return; }
+    managerApiCall('POST', '/api/v1/jobs/' + encodeURIComponent(id) + '/cancel', {}).then(function(result) {
+        setManagerControlPlaneOutput('Job cancel requested', result.data);
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Cancel job failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function refreshManagerControlPlaneData() {
+    var meta = getManagerControlPlaneInput();
+    Promise.all([
+        managerApiCall('GET', '/api/v1/namespaces/' + encodeURIComponent(meta.namespace) + '/' + encodeURIComponent(meta.kind)),
+        managerApiCall('GET', '/api/v1/datasources'),
+        managerApiCall('GET', '/api/v1/jobs')
+    ]).then(function(results) {
+        setManagerControlPlaneOutput('Control plane snapshot', {
+            resources: results[0].data,
+            datasources: results[1].data,
+            jobs: results[2].data
+        });
+    }).catch(function(err) {
+        setManagerControlPlaneOutput('Refresh failed', { error: err.message, details: err.response || {} });
+    });
+}
+
 function escapeHtml(str) {
     if (!str) return '';
     var div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
 }
+
+window.addEventListener('click', function(event) {
+    var createDbModal = document.getElementById('createDbModal');
+    if (createDbModal && event.target === createDbModal) {
+        closeCreateDbModal();
+    }
+    var connectModal = document.getElementById('connectDbServerModal');
+    if (connectModal && event.target === connectModal) {
+        closeConnectDbServerModal();
+    }
+});

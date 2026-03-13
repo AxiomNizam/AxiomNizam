@@ -322,6 +322,153 @@
     text-transform: uppercase;
 }
 
+.connector-card .connector-meta {
+    font-size: 11px;
+    color: var(--text-secondary, #777);
+    margin-top: 4px;
+}
+
+.connector-card .connector-desc {
+    font-size: 12px;
+    color: var(--text-secondary, #777);
+    margin-top: 8px;
+    min-height: 32px;
+}
+
+.connector-card .connector-flag-list {
+    margin-top: 8px;
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.connector-toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 16px;
+    align-items: center;
+}
+
+.connector-toolbar-left {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+}
+
+.connector-toolbar input,
+.connector-toolbar select {
+    border: 1px solid var(--border-color, #d6d6d6);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    background: var(--input-bg, #fff);
+    color: var(--text-primary, #222);
+}
+
+.connector-toolbar input {
+    flex: 1;
+}
+
+.connector-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 16px 20px 6px;
+}
+
+.connector-form-span-2 {
+    grid-column: span 2;
+}
+
+.connector-actions {
+    padding: 0 20px 20px;
+}
+
+.connector-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-primary, #333);
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.feature-card {
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 10px;
+    background: var(--card-bg, #fff);
+    padding: 14px;
+}
+
+.feature-category {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: #1d4ed8;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.feature-card h4 {
+    margin: 8px 0 6px;
+    font-size: 15px;
+}
+
+.feature-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary, #6b7280);
+}
+
+.blueprint-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    padding: 16px 20px 20px;
+}
+
+.blueprint-card {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    background: var(--card-bg, #fff);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.blueprint-card h4 {
+    margin: 0;
+}
+
+.blueprint-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary, #6b7280);
+}
+
+.blueprint-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+}
+
+.orchestration-health {
+    padding: 16px 20px 6px;
+}
+
 /* Panel sections */
 .panel-tab-content {
     display: none;
@@ -471,6 +618,23 @@
     margin-top: 20px;
 }
 
+.advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
 .btn-cancel {
     background: transparent;
     border: 1px solid var(--border-color, #e0e0e0);
@@ -509,4 +673,8 @@
     .connector-grid { grid-template-columns: repeat(2, 1fr); }
     .cdc-etl-tabs { overflow-x: auto; }
     .pipeline-table { display: block; overflow-x: auto; }
+    .connector-toolbar { flex-direction: column; align-items: stretch; }
+    .connector-toolbar-left { flex-direction: column; }
+    .connector-form-span-2 { grid-column: span 1; }
+    .advanced-grid { grid-template-columns: 1fr; }
 }

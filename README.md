@@ -575,6 +575,14 @@ GET  /api/{db}/logs            # Query logs
 GET  /api/{db}/stats           # Query statistics
 ```
 
+### GraphQL (auth required)
+
+```
+POST /api/graphql             # Execute GraphQL query
+GET  /api/graphql/schema      # Schema availability/metadata
+GET  /api/graphql/playground  # GraphQL playground endpoint
+```
+
 ### Kubernetes-Style Resources
 
 ```
@@ -634,14 +642,21 @@ GET    /api/v1/jobs/:id/logs  # Logs
 DELETE /api/v1/jobs/:id       # Delete
 ```
 
-### Admin (admin role required)
+### Admin & System Manager (RBAC)
 
 ```
 POST /api/admin/database/create
 GET  /api/admin/database/list
+GET  /api/admin/database/servers
+POST /api/admin/database/connect
 POST /api/admin/table/create
 GET  /api/admin/table/list
-GET  /api/admin/metrics/{all|count|stats}
+```
+
+### Admin-only Metrics
+
+```
+GET /api/admin/metrics/{all|count|stats}
 ```
 
 ### Notifications
@@ -792,16 +807,21 @@ See [LICENSE](LICENSE) for details.
 
 The Admin Dashboard (`/admin`) provides powerful GUI-based features that let administrators create APIs, ingest data files, convert between dashboard types, and scan files for security threats — all without writing code.
 
-### 1. GUI API Builder
+### 1. GUI API Builder (REST + GraphQL, separate builders)
 
 Create, test, and manage custom APIs visually from the admin interface.
 
+- REST API Builder remains dedicated to REST endpoint definitions.
+- GraphQL API Builder is a separate UI section and stores `api_type=graphql` APIs.
+
 **Features:**
 - Create APIs with name, method (GET/POST/PUT/DELETE/PATCH), path, category, and description
+- Select source database and source server for each API definition
 - Set authentication requirements and rate limits per API
 - **Configurable response caching** — enable per-API caching with custom TTL (1–86400 seconds, default 300s)
 - Define mock JSON responses for rapid prototyping
 - Add query parameters with type and required/optional flags
+- Create GraphQL APIs with operation name and GraphQL query body (kept separate from REST builder)
 - Test APIs directly from the GUI with one click — cached responses returned instantly
 - Track hit counts and status (active/draft/archived)
 - Filter APIs by category and status
@@ -809,9 +829,9 @@ Create, test, and manage custom APIs visually from the admin interface.
 **Backend Endpoints:**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/builder/summary` | Builder dashboard summary |
-| GET | `/api/v1/builder/apis` | List all custom APIs (filter by category, status) |
-| POST | `/api/v1/builder/apis` | Create a new custom API (supports `cache_enabled`, `cache_ttl`) |
+| GET | `/api/v1/builder/summary` | Builder summary (supports `api_type=rest|graphql`) |
+| GET | `/api/v1/builder/apis` | List custom APIs (filter by `api_type`, category, status) |
+| POST | `/api/v1/builder/apis` | Create a custom API (`api_type=rest|graphql`, supports `source_database`, `source_server`, `cache_enabled`, `cache_ttl`) |
 | GET | `/api/v1/builder/apis/:id` | Get API details |
 | PUT | `/api/v1/builder/apis/:id` | Update an API (including cache settings) |
 | DELETE | `/api/v1/builder/apis/:id` | Delete an API |
@@ -920,9 +940,26 @@ SAFEGATE_MAX_FILE_SIZE=104857600
 | Tab | Description |
 |-----|-------------|
 | **API Builder** | Summary cards, API list with filters, create/test/delete APIs, cache configuration |
+| **GraphQL API Builder** | Separate GraphQL API creation/testing with operation name, query body, and same policy/cache/rate-limit controls |
 | **File → Dashboard** | Drag-drop upload (CSV/JSON/Excel), column analysis, generate dashboard or GIS, delete dashboards |
 | **Dashboard ↔ GIS** | Select source, analyze confidence, convert with field mapping |
 | **File Scanner** | SafeGate 6-stage security scan, drag-drop scan zone, scan history, scanner health |
 | **API Testing** | Original API testing with method filters |
+| **GraphQL Studio** | Execute GraphQL queries with variables and view JSON responses in-browser |
+| **Control Plane** | kubectl-style resource apply/list/get/status/events + DataSource and Job operations |
 | **Logs** | Real-time activity log viewer |
 | **Settings** | System configuration |
+
+### System Manager Interface Tabs
+
+| Tab | Description |
+|-----|-------------|
+| **Overview** | Live system health and synthetic performance indicators |
+| **Databases** | Server-aware database create/list and DB server connection workflow |
+| **Users** | User CRUD with role assignment |
+| **Monitoring** | Metrics and performance overview |
+| **Operations** | Operational maintenance actions and operation log |
+| **GraphQL Studio** | Execute GraphQL queries as system-manager/admin |
+| **Control Plane** | Resource/DataSource/Job/workflow operational commands with RBAC enforcement |
+
+System-manager (sysadmin) role is allowed to use all admin UI capabilities and admin routes exposed by the dashboard, including both REST and GraphQL API Builder workflows.

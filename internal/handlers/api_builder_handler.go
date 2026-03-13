@@ -34,11 +34,16 @@ import (
 // CustomAPI represents an API endpoint created through the GUI builder
 type CustomAPI struct {
 	ID             string            `json:"id"`
+	APIType        string            `json:"api_type,omitempty"` // rest, graphql
 	Name           string            `json:"name"`
 	Method         string            `json:"method"` // GET, POST, PUT, DELETE
 	Path           string            `json:"path"`
+	GraphQLQuery   string            `json:"graphql_query,omitempty"`
+	GraphQLOpName  string            `json:"graphql_operation_name,omitempty"`
 	Description    string            `json:"description"`
 	Category       string            `json:"category"`
+	SourceDatabase string            `json:"source_database,omitempty"`
+	SourceServer   string            `json:"source_server,omitempty"`
 	AuthRequired   bool              `json:"auth_required"`
 	RateLimit      int               `json:"rate_limit"` // requests per minute, 0=unlimited
 	CacheEnabled   bool              `json:"cache_enabled"`
@@ -198,9 +203,17 @@ func (h *APIBuilderHandler) ListAPIs(c *gin.Context) {
 
 	category := c.Query("category")
 	status := c.Query("status")
+	apiType := strings.ToLower(strings.TrimSpace(c.Query("api_type")))
 
 	result := make([]*CustomAPI, 0, len(h.customAPIs))
 	for _, api := range h.customAPIs {
+		currentType := strings.ToLower(strings.TrimSpace(api.APIType))
+		if currentType == "" {
+			currentType = "rest"
+		}
+		if apiType != "" && currentType != apiType {
+			continue
+		}
 		if category != "" && api.Category != category {
 			continue
 		}
@@ -232,11 +245,16 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 	defer h.mu.Unlock()
 
 	var req struct {
+		APIType        string            `json:"api_type"`
 		Name           string            `json:"name" binding:"required"`
-		Method         string            `json:"method" binding:"required"`
-		Path           string            `json:"path" binding:"required"`
+		Method         string            `json:"method"`
+		Path           string            `json:"path"`
+		GraphQLQuery   string            `json:"graphql_query"`
+		GraphQLOpName  string            `json:"graphql_operation_name"`
 		Description    string            `json:"description"`
 		Category       string            `json:"category"`
+		SourceDatabase string            `json:"source_database"`
+		SourceServer   string            `json:"source_server"`
 		AuthRequired   bool              `json:"auth_required"`
 		RateLimit      int               `json:"rate_limit"`
 		RequestSchema  *SchemaDefinition `json:"request_schema"`
@@ -252,10 +270,38 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		return
 	}
 
-	method := strings.ToUpper(req.Method)
-	if method != "GET" && method != "POST" && method != "PUT" && method != "DELETE" && method != "PATCH" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET, POST, PUT, DELETE, or PATCH"})
+	apiType := strings.ToLower(strings.TrimSpace(req.APIType))
+	if apiType == "" {
+		apiType = "rest"
+	}
+	if apiType != "rest" && apiType != "graphql" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_type must be rest or graphql"})
 		return
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	path := strings.TrimSpace(req.Path)
+
+	if apiType == "rest" {
+		if method == "" || path == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "method and path are required for REST APIs"})
+			return
+		}
+		if method != "GET" && method != "POST" && method != "PUT" && method != "DELETE" && method != "PATCH" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET, POST, PUT, DELETE, or PATCH"})
+			return
+		}
+	} else {
+		if method == "" {
+			method = "POST"
+		}
+		if path == "" {
+			path = "/api/graphql"
+		}
+		if strings.TrimSpace(req.GraphQLQuery) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "graphql_query is required for GraphQL APIs"})
+			return
+		}
 	}
 
 	id := "api-" + uuid.New().String()[:8]
@@ -268,11 +314,16 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 
 	api := &CustomAPI{
 		ID:             id,
+		APIType:        apiType,
 		Name:           req.Name,
 		Method:         method,
-		Path:           req.Path,
+		Path:           path,
+		GraphQLQuery:   strings.TrimSpace(req.GraphQLQuery),
+		GraphQLOpName:  strings.TrimSpace(req.GraphQLOpName),
 		Description:    req.Description,
 		Category:       req.Category,
+		SourceDatabase: strings.TrimSpace(req.SourceDatabase),
+		SourceServer:   strings.TrimSpace(req.SourceServer),
 		AuthRequired:   req.AuthRequired,
 		RateLimit:      req.RateLimit,
 		CacheEnabled:   req.CacheEnabled,
@@ -303,6 +354,9 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "api not found"})
 		return
 	}
+	if strings.TrimSpace(api.APIType) == "" {
+		api.APIType = "rest"
+	}
 
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -313,6 +367,30 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["name"].(string); ok && v != "" {
 		api.Name = v
 	}
+	if v, ok := req["api_type"].(string); ok {
+		vt := strings.ToLower(strings.TrimSpace(v))
+		if vt != "" && vt != "rest" && vt != "graphql" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "api_type must be rest or graphql"})
+			return
+		}
+		if vt != "" {
+			api.APIType = vt
+		}
+	}
+	if v, ok := req["method"].(string); ok && strings.TrimSpace(v) != "" {
+		method := strings.ToUpper(strings.TrimSpace(v))
+		if method != "GET" && method != "POST" && method != "PUT" && method != "DELETE" && method != "PATCH" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET, POST, PUT, DELETE, or PATCH"})
+			return
+		}
+		api.Method = method
+	}
+	if v, ok := req["path"].(string); ok && strings.TrimSpace(v) != "" {
+		api.Path = strings.TrimSpace(v)
+	}
+	if v, ok := req["endpoint"].(string); ok && strings.TrimSpace(v) != "" {
+		api.Path = strings.TrimSpace(v)
+	}
 	if v, ok := req["description"].(string); ok {
 		api.Description = v
 	}
@@ -321,6 +399,18 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	}
 	if v, ok := req["category"].(string); ok {
 		api.Category = v
+	}
+	if v, ok := req["source_database"].(string); ok {
+		api.SourceDatabase = strings.TrimSpace(v)
+	}
+	if v, ok := req["source_server"].(string); ok {
+		api.SourceServer = strings.TrimSpace(v)
+	}
+	if v, ok := req["graphql_query"].(string); ok {
+		api.GraphQLQuery = strings.TrimSpace(v)
+	}
+	if v, ok := req["graphql_operation_name"].(string); ok {
+		api.GraphQLOpName = strings.TrimSpace(v)
 	}
 	if v, ok := req["auth_required"].(bool); ok {
 		api.AuthRequired = v
@@ -336,6 +426,14 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	}
 	if v, ok := req["cache_ttl"].(float64); ok {
 		api.CacheTTL = int(v)
+	}
+	if api.APIType == "graphql" {
+		if strings.TrimSpace(api.Path) == "" {
+			api.Path = "/api/graphql"
+		}
+		if strings.TrimSpace(api.Method) == "" {
+			api.Method = "POST"
+		}
 	}
 	api.UpdatedAt = time.Now()
 
@@ -380,8 +478,10 @@ func (h *APIBuilderHandler) TestAPI(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"status":    "success",
 				"api_id":    api.ID,
+				"api_type":  api.APIType,
 				"method":    api.Method,
 				"path":      api.Path,
+				"operation": api.GraphQLOpName,
 				"cached":    true,
 				"cache_ttl": api.CacheTTL,
 				"response":  api.cachedResult,
@@ -409,8 +509,10 @@ func (h *APIBuilderHandler) TestAPI(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "success",
 		"api_id":    api.ID,
+		"api_type":  api.APIType,
 		"method":    api.Method,
 		"path":      api.Path,
+		"operation": api.GraphQLOpName,
 		"cached":    false,
 		"cache_ttl": api.CacheTTL,
 		"response":  response,
@@ -421,12 +523,21 @@ func (h *APIBuilderHandler) GetSummary(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	apiTypeFilter := strings.ToLower(strings.TrimSpace(c.Query("api_type")))
 	active, inactive, draft := 0, 0, 0
 	byCategory := map[string]int{}
 	byMethod := map[string]int{}
+	byAPIType := map[string]int{}
 	var totalHits int64
 
 	for _, api := range h.customAPIs {
+		currentType := strings.ToLower(strings.TrimSpace(api.APIType))
+		if currentType == "" {
+			currentType = "rest"
+		}
+		if apiTypeFilter != "" && currentType != apiTypeFilter {
+			continue
+		}
 		switch api.Status {
 		case "active":
 			active++
@@ -437,18 +548,22 @@ func (h *APIBuilderHandler) GetSummary(c *gin.Context) {
 		}
 		byCategory[api.Category]++
 		byMethod[api.Method]++
+		byAPIType[currentType]++
 		totalHits += api.HitCount
 	}
 
+	totalAPIs := active + inactive + draft
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":            "success",
-		"total_apis":        len(h.customAPIs),
+		"total_apis":        totalAPIs,
 		"active":            active,
 		"inactive":          inactive,
 		"draft":             draft,
 		"total_hits":        totalHits,
 		"by_category":       byCategory,
 		"by_method":         byMethod,
+		"by_api_type":       byAPIType,
 		"total_csv_uploads": len(h.csvUploads),
 		"total_conversions": len(h.conversions),
 	})
@@ -1833,6 +1948,9 @@ func (h *APIBuilderHandler) seedData() {
 	}
 
 	for _, api := range sampleAPIs {
+		if strings.TrimSpace(api.APIType) == "" {
+			api.APIType = "rest"
+		}
 		h.customAPIs[api.ID] = api
 		h.apiData[api.ID] = []map[string]interface{}{}
 	}

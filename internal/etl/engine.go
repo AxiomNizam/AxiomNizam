@@ -43,18 +43,34 @@ const (
 )
 
 type Pipeline struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Steps       []Step                 `json:"steps"`
-	Schedule    string                 `json:"schedule,omitempty"` // cron expression
-	Config      map[string]interface{} `json:"config,omitempty"`
-	Status      PipelineStatus         `json:"status"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	LastRunAt   *time.Time             `json:"last_run_at,omitempty"`
-	RunCount    int                    `json:"run_count"`
-	Tags        []string               `json:"tags,omitempty"`
+	ID            string                 `json:"id"`
+	Name          string                 `json:"name"`
+	Description   string                 `json:"description"`
+	Steps         []Step                 `json:"steps"`
+	Schedule      string                 `json:"schedule,omitempty"` // cron expression
+	Orchestration OrchestrationConfig    `json:"orchestration,omitempty"`
+	Config        map[string]interface{} `json:"config,omitempty"`
+	Status        PipelineStatus         `json:"status"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
+	LastRunAt     *time.Time             `json:"last_run_at,omitempty"`
+	RunCount      int                    `json:"run_count"`
+	Tags          []string               `json:"tags,omitempty"`
+}
+
+type OrchestrationConfig struct {
+	Owner          string   `json:"owner,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	MaxActiveRuns  int      `json:"max_active_runs,omitempty"`
+	Concurrency    int      `json:"concurrency,omitempty"`
+	PriorityWeight int      `json:"priority_weight,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	RetryDelaySec  int      `json:"retry_delay_sec,omitempty"`
+	TimeoutSec     int      `json:"timeout_sec,omitempty"`
+	SLASeconds     int      `json:"sla_seconds,omitempty"`
+	Catchup        bool     `json:"catchup"`
+	DependsOnPast  bool     `json:"depends_on_past"`
+	AlertChannels  []string `json:"alert_channels,omitempty"`
 }
 
 type Step struct {
@@ -112,12 +128,41 @@ type StepMetrics struct {
 // --- Connector Registry ---
 
 type ConnectorType struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Category    string   `json:"category"`     // database, file, api, queue, stream
-	SupportedAs []string `json:"supported_as"` // extract, load, both
-	ConfigKeys  []string `json:"config_keys"`
-	Icon        string   `json:"icon"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Category            string   `json:"category"`     // database, file, api, queue, stream
+	SupportedAs         []string `json:"supported_as"` // extract, load, both
+	ConfigKeys          []string `json:"config_keys"`
+	Icon                string   `json:"icon"`
+	Description         string   `json:"description,omitempty"`
+	Version             string   `json:"version,omitempty"`
+	AuthModes           []string `json:"auth_modes,omitempty"`
+	SupportsCDC         bool     `json:"supports_cdc,omitempty"`
+	SupportsIncremental bool     `json:"supports_incremental,omitempty"`
+	SchemaDiscovery     bool     `json:"schema_discovery,omitempty"`
+}
+
+type OrchestrationCapability struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Category    string `json:"category"`
+	Description string `json:"description"`
+}
+
+type PipelineBlueprintStep struct {
+	Name      string   `json:"name"`
+	Type      StepType `json:"type"`
+	Connector string   `json:"connector,omitempty"`
+}
+
+type PipelineBlueprint struct {
+	ID              string                  `json:"id"`
+	Name            string                  `json:"name"`
+	Category        string                  `json:"category"`
+	Description     string                  `json:"description"`
+	DefaultSchedule string                  `json:"default_schedule,omitempty"`
+	Steps           []PipelineBlueprintStep `json:"steps"`
+	Tags            []string                `json:"tags"`
 }
 
 // --- Observability ---
@@ -175,23 +220,116 @@ func NewEngine() *Engine {
 
 func (e *Engine) registerConnectors() {
 	e.connectors = []ConnectorType{
-		{ID: "mysql", Name: "MySQL", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "database", "table", "query"}, Icon: "🐬"},
-		{ID: "postgres", Name: "PostgreSQL", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "database", "table", "query"}, Icon: "🐘"},
-		{ID: "mariadb", Name: "MariaDB", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "database", "table", "query"}, Icon: "🦭"},
-		{ID: "mongodb", Name: "MongoDB", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"uri", "database", "collection", "filter"}, Icon: "🍃"},
-		{ID: "oracle", Name: "Oracle", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "service_name", "table", "query"}, Icon: "🔴"},
-		{ID: "csv", Name: "CSV File", Category: "file", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"path", "delimiter", "encoding", "has_header"}, Icon: "📄"},
-		{ID: "json", Name: "JSON File", Category: "file", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"path", "json_path"}, Icon: "📋"},
-		{ID: "api", Name: "REST API", Category: "api", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"url", "method", "headers", "body", "auth"}, Icon: "🌐"},
-		{ID: "kafka", Name: "Apache Kafka", Category: "stream", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"brokers", "topic", "group_id", "offset"}, Icon: "📨"},
-		{ID: "redis", Name: "Redis/Valkey", Category: "queue", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "key", "type"}, Icon: "🔴"},
-		{ID: "elasticsearch", Name: "Elasticsearch", Category: "search", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"url", "index", "query"}, Icon: "🔍"},
-		{ID: "s3", Name: "S3/MinIO", Category: "storage", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"endpoint", "bucket", "key", "region"}, Icon: "☁️"},
+		{ID: "mysql", Name: "MySQL", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "database", "table", "query"}, Icon: "🐬", Description: "Operational MySQL datasets", Version: "8.x", AuthModes: []string{"password", "iam"}, SupportsIncremental: true, SchemaDiscovery: true, SupportsCDC: true},
+		{ID: "postgres", Name: "PostgreSQL", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "database", "table", "query"}, Icon: "🐘", Description: "Warehouse and OLTP PostgreSQL", Version: "15+", AuthModes: []string{"password", "ssl"}, SupportsIncremental: true, SchemaDiscovery: true, SupportsCDC: true},
+		{ID: "mariadb", Name: "MariaDB", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "database", "table", "query"}, Icon: "🦭", Description: "MariaDB transactional source/target", Version: "10.6+", AuthModes: []string{"password"}, SupportsIncremental: true, SchemaDiscovery: true, SupportsCDC: true},
+		{ID: "mongodb", Name: "MongoDB", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"uri", "database", "collection", "filter"}, Icon: "🍃", Description: "Document datasets and collections", Version: "6+", AuthModes: []string{"uri", "x509"}, SupportsIncremental: true, SchemaDiscovery: true, SupportsCDC: true},
+		{ID: "oracle", Name: "Oracle", Category: "database", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "service_name", "table", "query"}, Icon: "🔴", Description: "Enterprise Oracle workloads", Version: "19c+", AuthModes: []string{"password"}, SupportsIncremental: true, SchemaDiscovery: true, SupportsCDC: true},
+		{ID: "csv", Name: "CSV File", Category: "file", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"path", "delimiter", "encoding", "has_header"}, Icon: "📄", Description: "Flat-file ingestion/export", Version: "1.0", AuthModes: []string{"none"}, SupportsIncremental: false, SchemaDiscovery: false},
+		{ID: "json", Name: "JSON File", Category: "file", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"path", "json_path"}, Icon: "📋", Description: "JSON blob ingestion/export", Version: "1.0", AuthModes: []string{"none"}, SupportsIncremental: false, SchemaDiscovery: false},
+		{ID: "api", Name: "REST API", Category: "api", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"url", "method", "headers", "body", "auth"}, Icon: "🌐", Description: "HTTP data source and destination", Version: "v1", AuthModes: []string{"apikey", "oauth2", "basic"}, SupportsIncremental: true, SchemaDiscovery: false},
+		{ID: "kafka", Name: "Apache Kafka", Category: "stream", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"brokers", "topic", "group_id", "offset"}, Icon: "📨", Description: "Real-time event streaming", Version: "3.x", AuthModes: []string{"sasl", "tls"}, SupportsIncremental: true, SchemaDiscovery: true, SupportsCDC: true},
+		{ID: "redis", Name: "Redis/Valkey", Category: "queue", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"host", "port", "key", "type"}, Icon: "🔴", Description: "Low-latency cache and streams", Version: "7+", AuthModes: []string{"password"}, SupportsIncremental: true, SchemaDiscovery: false},
+		{ID: "elasticsearch", Name: "Elasticsearch", Category: "search", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"url", "index", "query"}, Icon: "🔍", Description: "Search and analytics indexing", Version: "8+", AuthModes: []string{"apikey", "basic"}, SupportsIncremental: true, SchemaDiscovery: true},
+		{ID: "s3", Name: "S3/MinIO", Category: "storage", SupportedAs: []string{"extract", "load"}, ConfigKeys: []string{"endpoint", "bucket", "key", "region"}, Icon: "☁️", Description: "Object storage lakehouse layer", Version: "v1", AuthModes: []string{"access_key", "iam"}, SupportsIncremental: true, SchemaDiscovery: false},
 	}
 }
 
 func (e *Engine) GetConnectors() []ConnectorType {
 	return e.connectors
+}
+
+func (e *Engine) AddConnector(connector ConnectorType) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	connector.ID = strings.TrimSpace(strings.ToLower(connector.ID))
+	connector.Name = strings.TrimSpace(connector.Name)
+	connector.Category = strings.TrimSpace(strings.ToLower(connector.Category))
+	if connector.ID == "" || connector.Name == "" || connector.Category == "" {
+		return fmt.Errorf("id, name and category are required")
+	}
+
+	for _, c := range e.connectors {
+		if c.ID == connector.ID {
+			return fmt.Errorf("connector already exists: %s", connector.ID)
+		}
+	}
+
+	if len(connector.SupportedAs) == 0 {
+		connector.SupportedAs = []string{"extract", "load"}
+	}
+	if connector.Icon == "" {
+		connector.Icon = "🔌"
+	}
+	if connector.Version == "" {
+		connector.Version = "1.0"
+	}
+
+	e.connectors = append(e.connectors, connector)
+	return nil
+}
+
+func (e *Engine) GetOrchestrationCapabilities() []OrchestrationCapability {
+	return []OrchestrationCapability{
+		{ID: "retries_backoff", Name: "Retries with Backoff", Category: "Reliability", Description: "Task-level retries, retry delay, and exponential backoff controls."},
+		{ID: "sla_management", Name: "SLA Management", Category: "Reliability", Description: "Define SLA thresholds per pipeline and monitor SLA misses."},
+		{ID: "catchup_backfill", Name: "Catchup and Backfill", Category: "Scheduling", Description: "Run historical intervals for missed schedules and backfill windows."},
+		{ID: "depends_on_past", Name: "Depends On Past", Category: "Scheduling", Description: "Enforce sequential dependency between historical pipeline runs."},
+		{ID: "concurrency_control", Name: "Concurrency and Pools", Category: "Execution", Description: "Cap active runs and task-level parallelism by queue/pool."},
+		{ID: "priority_queueing", Name: "Priority Queues", Category: "Execution", Description: "Set queue and priority weight for fair and urgent scheduling."},
+		{ID: "event_triggering", Name: "Event Triggers", Category: "Execution", Description: "Support manual, API, schedule, and event-driven triggers."},
+		{ID: "lineage_and_observability", Name: "Lineage and Observability", Category: "Observability", Description: "Track throughput, errors, step stats, and lineage-aligned metrics."},
+		{ID: "alert_channels", Name: "Alert Channels", Category: "Operations", Description: "Attach alert channels like email, slack, pagerduty, and webhook."},
+		{ID: "template_blueprints", Name: "Pipeline Blueprints", Category: "Authoring", Description: "Bootstrap common ETL patterns from curated templates."},
+	}
+}
+
+func (e *Engine) GetPipelineBlueprints() []PipelineBlueprint {
+	return []PipelineBlueprint{
+		{
+			ID:              "batch-incremental",
+			Name:            "Incremental Batch Sync",
+			Category:        "batch",
+			Description:     "Incremental extraction with validation, transform, and warehouse load.",
+			DefaultSchedule: "*/30 * * * *",
+			Tags:            []string{"incremental", "warehouse"},
+			Steps: []PipelineBlueprintStep{
+				{Name: "Extract Incremental", Type: StepExtract, Connector: "mysql"},
+				{Name: "Validate Schema", Type: StepValidate},
+				{Name: "Transform Fields", Type: StepTransform},
+				{Name: "Load Warehouse", Type: StepLoad, Connector: "postgres"},
+			},
+		},
+		{
+			ID:              "streaming-lakehouse",
+			Name:            "Streaming to Lakehouse",
+			Category:        "streaming",
+			Description:     "Consume stream events, enrich and write partitioned objects to S3/MinIO.",
+			DefaultSchedule: "",
+			Tags:            []string{"streaming", "lakehouse"},
+			Steps: []PipelineBlueprintStep{
+				{Name: "Consume Topic", Type: StepExtract, Connector: "kafka"},
+				{Name: "Filter Events", Type: StepFilter},
+				{Name: "Enrich Dimensions", Type: StepEnrich, Connector: "api"},
+				{Name: "Write Object Store", Type: StepLoad, Connector: "s3"},
+			},
+		},
+		{
+			ID:              "quality-gate",
+			Name:            "Quality Gate ETL",
+			Category:        "quality",
+			Description:     "Validation-first pattern with deduplication and SLA-aware loading.",
+			DefaultSchedule: "0 * * * *",
+			Tags:            []string{"quality", "dedupe", "sla"},
+			Steps: []PipelineBlueprintStep{
+				{Name: "Extract Source", Type: StepExtract, Connector: "api"},
+				{Name: "Validate Rules", Type: StepValidate},
+				{Name: "Deduplicate", Type: StepDedupe},
+				{Name: "Load Curated", Type: StepLoad, Connector: "elasticsearch"},
+			},
+		},
+	}
 }
 
 // --- Pipeline CRUD ---
@@ -204,6 +342,16 @@ func (e *Engine) CreatePipeline(p *Pipeline) error {
 		e.sequence++
 		p.ID = fmt.Sprintf("etl-pipe-%d", e.sequence)
 	}
+	if p.Config == nil {
+		p.Config = map[string]interface{}{}
+	}
+	if p.Steps == nil {
+		p.Steps = []Step{}
+	}
+	if p.Tags == nil {
+		p.Tags = []string{}
+	}
+	p.Orchestration = normalizeOrchestration(p.Orchestration)
 	p.Status = PipelineCreated
 	p.CreatedAt = time.Now()
 	p.UpdatedAt = time.Now()
@@ -247,8 +395,97 @@ func (e *Engine) UpdatePipeline(id string, updates map[string]interface{}) error
 	if sched, ok := updates["schedule"].(string); ok {
 		p.Schedule = sched
 	}
+	if tagsRaw, ok := updates["tags"].([]interface{}); ok {
+		tags := make([]string, 0, len(tagsRaw))
+		for _, t := range tagsRaw {
+			if tv, ok := t.(string); ok && strings.TrimSpace(tv) != "" {
+				tags = append(tags, strings.TrimSpace(tv))
+			}
+		}
+		p.Tags = tags
+	}
+	if cfg, ok := updates["config"].(map[string]interface{}); ok {
+		p.Config = cfg
+	}
+	if orchRaw, ok := updates["orchestration"].(map[string]interface{}); ok {
+		orch := p.Orchestration
+		if v, ok := orchRaw["owner"].(string); ok {
+			orch.Owner = strings.TrimSpace(v)
+		}
+		if v, ok := orchRaw["queue"].(string); ok {
+			orch.Queue = strings.TrimSpace(v)
+		}
+		if v, ok := orchRaw["max_active_runs"].(float64); ok {
+			orch.MaxActiveRuns = int(v)
+		}
+		if v, ok := orchRaw["concurrency"].(float64); ok {
+			orch.Concurrency = int(v)
+		}
+		if v, ok := orchRaw["priority_weight"].(float64); ok {
+			orch.PriorityWeight = int(v)
+		}
+		if v, ok := orchRaw["retries"].(float64); ok {
+			orch.Retries = int(v)
+		}
+		if v, ok := orchRaw["retry_delay_sec"].(float64); ok {
+			orch.RetryDelaySec = int(v)
+		}
+		if v, ok := orchRaw["timeout_sec"].(float64); ok {
+			orch.TimeoutSec = int(v)
+		}
+		if v, ok := orchRaw["sla_seconds"].(float64); ok {
+			orch.SLASeconds = int(v)
+		}
+		if v, ok := orchRaw["catchup"].(bool); ok {
+			orch.Catchup = v
+		}
+		if v, ok := orchRaw["depends_on_past"].(bool); ok {
+			orch.DependsOnPast = v
+		}
+		if channelsRaw, ok := orchRaw["alert_channels"].([]interface{}); ok {
+			channels := make([]string, 0, len(channelsRaw))
+			for _, c := range channelsRaw {
+				if cv, ok := c.(string); ok && strings.TrimSpace(cv) != "" {
+					channels = append(channels, strings.TrimSpace(cv))
+				}
+			}
+			orch.AlertChannels = channels
+		}
+		p.Orchestration = normalizeOrchestration(orch)
+	}
 	p.UpdatedAt = time.Now()
 	return nil
+}
+
+func normalizeOrchestration(o OrchestrationConfig) OrchestrationConfig {
+	if o.Queue == "" {
+		o.Queue = "default"
+	}
+	if o.MaxActiveRuns <= 0 {
+		o.MaxActiveRuns = 1
+	}
+	if o.Concurrency <= 0 {
+		o.Concurrency = 4
+	}
+	if o.PriorityWeight <= 0 {
+		o.PriorityWeight = 5
+	}
+	if o.Retries < 0 {
+		o.Retries = 0
+	}
+	if o.RetryDelaySec <= 0 {
+		o.RetryDelaySec = 60
+	}
+	if o.TimeoutSec <= 0 {
+		o.TimeoutSec = 1800
+	}
+	if o.SLASeconds <= 0 {
+		o.SLASeconds = 3600
+	}
+	if o.AlertChannels == nil {
+		o.AlertChannels = []string{"slack"}
+	}
+	return o
 }
 
 func (e *Engine) DeletePipeline(id string) error {
@@ -497,9 +734,34 @@ func (e *Engine) ListRuns(pipelineID string) []*PipelineRun {
 func (e *Engine) GetObservability() *ETLObservability {
 	e.observability.mu.RLock()
 	defer e.observability.mu.RUnlock()
-	// Return a snapshot
-	snap := *e.observability
-	return &snap
+
+	stepTypeStats := make(map[string]int, len(e.observability.StepTypeStats))
+	for key, value := range e.observability.StepTypeStats {
+		stepTypeStats[key] = value
+	}
+
+	errorsByType := make(map[string]int, len(e.observability.ErrorsByType))
+	for key, value := range e.observability.ErrorsByType {
+		errorsByType[key] = value
+	}
+
+	throughputLog := make([]ThroughputPoint, len(e.observability.ThroughputLog))
+	copy(throughputLog, e.observability.ThroughputLog)
+
+	return &ETLObservability{
+		PipelinesTotal: e.observability.PipelinesTotal,
+		RunsTotal:      e.observability.RunsTotal,
+		RunsSuccess:    e.observability.RunsSuccess,
+		RunsFailed:     e.observability.RunsFailed,
+		RunsRunning:    e.observability.RunsRunning,
+		TotalRowsRead:  e.observability.TotalRowsRead,
+		TotalRowsWrite: e.observability.TotalRowsWrite,
+		AvgDuration:    e.observability.AvgDuration,
+		StepTypeStats:  stepTypeStats,
+		ErrorsByType:   errorsByType,
+		ThroughputLog:  throughputLog,
+		LastUpdated:    e.observability.LastUpdated,
+	}
 }
 
 // --- Seed ---
@@ -520,13 +782,14 @@ func (e *Engine) seedPipelines() {
 			{ID: "s4", Name: "Deduplicate", Type: StepDedupe, Connector: "", Order: 4, Config: map[string]interface{}{"key": "email"}},
 			{ID: "s5", Name: "Load to PostgreSQL", Type: StepLoad, Connector: "postgres", Order: 5, Config: map[string]interface{}{"host": "localhost", "port": 5432, "database": "axiomnizam_dw", "table": "users_synced"}},
 		},
-		Schedule:  "*/30 * * * *",
-		Status:    PipelineSuccess,
-		CreatedAt: now.Add(-72 * time.Hour),
-		UpdatedAt: now,
-		LastRunAt: &pastRun,
-		RunCount:  145,
-		Tags:      []string{"sync", "users", "critical"},
+		Schedule:      "*/30 * * * *",
+		Status:        PipelineSuccess,
+		CreatedAt:     now.Add(-72 * time.Hour),
+		UpdatedAt:     now,
+		LastRunAt:     &pastRun,
+		RunCount:      145,
+		Tags:          []string{"sync", "users", "critical"},
+		Orchestration: OrchestrationConfig{Owner: "data-platform", Queue: "critical", MaxActiveRuns: 1, Concurrency: 4, PriorityWeight: 10, Retries: 3, RetryDelaySec: 120, TimeoutSec: 1800, SLASeconds: 2400, Catchup: true, DependsOnPast: true, AlertChannels: []string{"slack", "pagerduty"}},
 	}
 	e.pipelines[p1.ID] = p1
 
@@ -542,13 +805,14 @@ func (e *Engine) seedPipelines() {
 			{ID: "s4", Name: "Aggregate by Region", Type: StepAggregate, Connector: "", Order: 4, Config: map[string]interface{}{"group_by": "region", "functions": []string{"SUM(amount)", "COUNT(*)"}}},
 			{ID: "s5", Name: "Load to Warehouse", Type: StepLoad, Connector: "postgres", Order: 5, Config: map[string]interface{}{"host": "localhost", "port": 5432, "database": "axiomnizam_dw", "table": "order_aggregates"}},
 		},
-		Schedule:  "0 */6 * * *",
-		Status:    PipelineSuccess,
-		CreatedAt: now.Add(-48 * time.Hour),
-		UpdatedAt: now,
-		LastRunAt: &pastRun,
-		RunCount:  24,
-		Tags:      []string{"orders", "warehouse", "aggregation"},
+		Schedule:      "0 */6 * * *",
+		Status:        PipelineSuccess,
+		CreatedAt:     now.Add(-48 * time.Hour),
+		UpdatedAt:     now,
+		LastRunAt:     &pastRun,
+		RunCount:      24,
+		Tags:          []string{"orders", "warehouse", "aggregation"},
+		Orchestration: OrchestrationConfig{Owner: "analytics", Queue: "batch", MaxActiveRuns: 2, Concurrency: 6, PriorityWeight: 7, Retries: 2, RetryDelaySec: 90, TimeoutSec: 2400, SLASeconds: 3600, Catchup: false, DependsOnPast: false, AlertChannels: []string{"slack"}},
 	}
 	e.pipelines[p2.ID] = p2
 
@@ -563,12 +827,13 @@ func (e *Engine) seedPipelines() {
 			{ID: "s3", Name: "Map Fields", Type: StepMap, Connector: "", Order: 3, Config: map[string]interface{}{"mappings": map[string]string{"prod_id": "product_id", "amt": "amount", "dt": "created_at"}}},
 			{ID: "s4", Name: "Load to MongoDB", Type: StepLoad, Connector: "mongodb", Order: 4, Config: map[string]interface{}{"uri": "mongodb://localhost:27017", "database": "analytics", "collection": "reports"}},
 		},
-		Schedule:  "0 2 * * *",
-		Status:    PipelineCreated,
-		CreatedAt: now.Add(-24 * time.Hour),
-		UpdatedAt: now,
-		RunCount:  0,
-		Tags:      []string{"csv", "import", "analytics"},
+		Schedule:      "0 2 * * *",
+		Status:        PipelineCreated,
+		CreatedAt:     now.Add(-24 * time.Hour),
+		UpdatedAt:     now,
+		RunCount:      0,
+		Tags:          []string{"csv", "import", "analytics"},
+		Orchestration: OrchestrationConfig{Owner: "ops", Queue: "low", MaxActiveRuns: 1, Concurrency: 2, PriorityWeight: 3, Retries: 1, RetryDelaySec: 60, TimeoutSec: 1200, SLASeconds: 7200, Catchup: false, DependsOnPast: false, AlertChannels: []string{"email"}},
 	}
 	e.pipelines[p3.ID] = p3
 
@@ -583,12 +848,13 @@ func (e *Engine) seedPipelines() {
 			{ID: "s3", Name: "Transform to ES Doc", Type: StepTransform, Connector: "", Order: 3, Config: map[string]interface{}{"operations": []string{"flatten_json", "add_timestamp", "geo_resolve:ip"}}},
 			{ID: "s4", Name: "Index in Elasticsearch", Type: StepLoad, Connector: "elasticsearch", Order: 4, Config: map[string]interface{}{"url": "http://localhost:9200", "index": "user-events-2026"}},
 		},
-		Status:    PipelineRunning,
-		CreatedAt: now.Add(-96 * time.Hour),
-		UpdatedAt: now,
-		LastRunAt: &now,
-		RunCount:  1200,
-		Tags:      []string{"streaming", "events", "search"},
+		Status:        PipelineRunning,
+		CreatedAt:     now.Add(-96 * time.Hour),
+		UpdatedAt:     now,
+		LastRunAt:     &now,
+		RunCount:      1200,
+		Tags:          []string{"streaming", "events", "search"},
+		Orchestration: OrchestrationConfig{Owner: "streaming", Queue: "realtime", MaxActiveRuns: 3, Concurrency: 10, PriorityWeight: 9, Retries: 5, RetryDelaySec: 30, TimeoutSec: 900, SLASeconds: 600, Catchup: false, DependsOnPast: false, AlertChannels: []string{"slack", "webhook"}},
 	}
 	e.pipelines[p4.ID] = p4
 

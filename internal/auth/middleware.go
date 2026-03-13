@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -92,6 +93,57 @@ func RequireRole(requiredRole string) gin.HandlerFunc {
 // RequireAdmin returns a middleware that checks if the user has admin role
 func RequireAdmin() gin.HandlerFunc {
 	return RequireRole("admin")
+}
+
+// RequireAnyRole returns a middleware that authorizes if the user has any of the provided roles.
+func RequireAnyRole(requiredRoles ...string) gin.HandlerFunc {
+	normalized := make([]string, 0, len(requiredRoles))
+	for _, role := range requiredRoles {
+		r := strings.TrimSpace(strings.ToLower(role))
+		if r != "" {
+			normalized = append(normalized, r)
+		}
+	}
+
+	return func(c *gin.Context) {
+		if len(normalized) == 0 {
+			c.Next()
+			return
+		}
+
+		userInterface, exists := c.Get("user")
+		if !exists {
+			c.JSON(401, gin.H{
+				"error": "unauthorized: no user claims found",
+			})
+			c.Abort()
+			return
+		}
+
+		claims, ok := userInterface.(*Claims)
+		if !ok {
+			c.JSON(401, gin.H{
+				"error": "unauthorized: invalid user claims",
+			})
+			c.Abort()
+			return
+		}
+
+		for _, role := range normalized {
+			if claims.HasRole(role) {
+				log.Printf("✅ User %s authorized with role: %s", claims.PreferredUsername, role)
+				c.Next()
+				return
+			}
+		}
+
+		c.JSON(403, gin.H{
+			"error":      fmt.Sprintf("forbidden: user must have one of roles %v", normalized),
+			"user_roles": claims.RealmAccess.Roles,
+			"required":   normalized,
+		})
+		c.Abort()
+	}
 }
 
 // OptionalMiddleware returns a Gin middleware that doesn't block on missing tokens
