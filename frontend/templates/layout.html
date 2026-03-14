@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/static/analytics-dashboard.css">
     <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
     <link rel="stylesheet" href="/static/netintel-dashboard.css">
+    <link rel="stylesheet" href="/static/platform-console.css">
     <!-- Leaflet.js for GIS maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -47,6 +48,18 @@
                     <a href="/netintel" class="nav-link {{ if eq .page "netintel-dashboard" }}active{{ end }}">
                         <span class="nav-icon">📡</span>
                         <span>NetIntel</span>
+                    </a>
+                    <a href="/governance" class="nav-link {{ if eq .page "governance-dashboard" }}active{{ end }}" id="nav-governance" style="display:none">
+                        <span class="nav-icon">🏛️</span>
+                        <span>Governance</span>
+                    </a>
+                    <a href="/operations-center" class="nav-link {{ if eq .page "operations-center" }}active{{ end }}" id="nav-ops" style="display:none">
+                        <span class="nav-icon">🛠️</span>
+                        <span>Operations</span>
+                    </a>
+                    <a href="/lineage-version" class="nav-link {{ if eq .page "version-lineage-dashboard" }}active{{ end }}" id="nav-lineage" style="display:none">
+                        <span class="nav-icon">🧭</span>
+                        <span>Lineage</span>
                     </a>
                     {{ if .isAuth }}
                     <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
@@ -99,6 +112,12 @@
                 {{ template "cdc-etl-dashboard" . }}
             {{ else if eq .pageName "netintel-dashboard" }}
                 {{ template "netintel-dashboard" . }}
+            {{ else if eq .pageName "governance-dashboard" }}
+                {{ template "governance-dashboard" . }}
+            {{ else if eq .pageName "operations-center" }}
+                {{ template "operations-center" . }}
+            {{ else if eq .pageName "version-lineage-dashboard" }}
+                {{ template "version-lineage-dashboard" . }}
             {{ end }}
         </main>
 
@@ -197,9 +216,15 @@
             const navAdmin = document.getElementById('nav-admin');
             const navSysManager = document.getElementById('nav-sysmanager');
             const navManager = document.getElementById('nav-manager');
+            const navGovernance = document.getElementById('nav-governance');
+            const navOps = document.getElementById('nav-ops');
+            const navLineage = document.getElementById('nav-lineage');
             if (navAdmin) navAdmin.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
             if (navSysManager) navSysManager.style.display = (role === 'system-manager') ? '' : 'none';
             if (navManager) navManager.style.display = (role === 'manager') ? '' : 'none';
+            if (navGovernance) navGovernance.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
+            if (navOps) navOps.style.display = (role === 'admin' || role === 'system-manager' || role === 'manager') ? '' : 'none';
+            if (navLineage) navLineage.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
         });
 
         function openLoginModal() {

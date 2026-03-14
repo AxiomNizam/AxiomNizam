@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,67 @@ type StatusResponse struct {
 }
 
 var backendURL string
+
+func normalizeFrontendRole(role string) string {
+	value := strings.ToLower(strings.TrimSpace(role))
+	switch value {
+	case "sysadmin", "system-admin", "system_admin":
+		return "system-manager"
+	case "superadmin", "super-admin":
+		return "admin"
+	case "api-manager", "api_manager":
+		return "manager"
+	case "admin", "manager", "system-manager":
+		return value
+	default:
+		return "user"
+	}
+}
+
+func defaultPathForRole(role string) string {
+	switch normalizeFrontendRole(role) {
+	case "system-manager":
+		return "/system-manager"
+	case "admin":
+		return "/admin"
+	case "manager":
+		return "/manager"
+	default:
+		return "/"
+	}
+}
+
+func requireFrontendRoles(allowed ...string) gin.HandlerFunc {
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, role := range allowed {
+		allowedSet[normalizeFrontendRole(role)] = true
+	}
+
+	return func(c *gin.Context) {
+		authToken := c.GetHeader("Authorization")
+		if authToken == "" {
+			authToken, _ = c.Cookie("authToken")
+		}
+		if authToken == "" {
+			c.Redirect(http.StatusFound, "/")
+			c.Abort()
+			return
+		}
+
+		role := c.GetHeader("X-User-Role")
+		if role == "" {
+			role, _ = c.Cookie("userRole")
+		}
+		normalized := normalizeFrontendRole(role)
+		if !allowedSet[normalized] {
+			c.Redirect(http.StatusFound, defaultPathForRole(normalized))
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 
 func main() {
 	// Load environment variables
@@ -68,6 +130,9 @@ func main() {
 	router.GET("/analytics", analyticsHandler)
 	router.GET("/cdc-etl", cdcEtlHandler)
 	router.GET("/netintel", netintelHandler)
+	router.GET("/governance", requireFrontendRoles("admin", "system-manager"), governanceHandler)
+	router.GET("/operations-center", requireFrontendRoles("admin", "system-manager", "manager"), operationsCenterHandler)
+	router.GET("/lineage-version", requireFrontendRoles("admin", "system-manager"), versionLineageHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -86,6 +151,9 @@ func main() {
 	fmt.Printf("📊 Analytics Dashboard: http://localhost:%s/analytics\n", port)
 	fmt.Printf("🔄 CDC/ETL Dashboard: http://localhost:%s/cdc-etl\n", port)
 	fmt.Printf("📡 Network Intelligence: http://localhost:%s/netintel\n", port)
+	fmt.Printf("🏛️ Governance Console: http://localhost:%s/governance\n", port)
+	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
+	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
 	fmt.Printf("📡 Backend: %s\n\n", backendURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
@@ -226,6 +294,66 @@ func netintelHandler(c *gin.Context) {
 		"title":      "AxiomNizam - Network Intelligence",
 		"pageName":   "netintel-dashboard",
 		"page":       "netintel-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// governanceHandler serves the governance dashboard
+func governanceHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Governance"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Governance Console",
+		"pageName":   "governance-dashboard",
+		"page":       "governance-dashboard",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// operationsCenterHandler serves incidents and operations center
+func operationsCenterHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Operations"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Operations Center",
+		"pageName":   "operations-center",
+		"page":       "operations-center",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// versionLineageHandler serves version and lineage explorer
+func versionLineageHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Explorer"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Version & Lineage Explorer",
+		"pageName":   "version-lineage-dashboard",
+		"page":       "version-lineage-dashboard",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,

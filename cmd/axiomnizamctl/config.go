@@ -115,8 +115,8 @@ var ConfigRenameContextCmd = &cobra.Command{
 }
 
 func handleConfigView() error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	config := configManager.GetCurrentContext()
@@ -133,8 +133,8 @@ func handleConfigView() error {
 }
 
 func handleConfigCurrentContext() error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	context := configManager.GetCurrentContext()
@@ -147,8 +147,8 @@ func handleConfigCurrentContext() error {
 }
 
 func handleConfigUseContext(contextName string) error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	if err := configManager.SetCurrentContext(contextName); err != nil {
@@ -160,8 +160,8 @@ func handleConfigUseContext(contextName string) error {
 }
 
 func handleConfigGetClusters() error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	contexts := configManager.ListContexts()
@@ -187,8 +187,8 @@ func handleConfigGetClusters() error {
 }
 
 func handleConfigSetContext(contextName string, cmd *cobra.Command) error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	clusterName, _ := cmd.Flags().GetString("cluster")
@@ -240,8 +240,8 @@ func handleConfigSetContext(contextName string, cmd *cobra.Command) error {
 }
 
 func handleConfigSetCluster(clusterName string, cmd *cobra.Command) error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	server, _ := cmd.Flags().GetString("server")
@@ -262,8 +262,8 @@ func handleConfigSetCluster(clusterName string, cmd *cobra.Command) error {
 }
 
 func handleConfigDeleteContext(contextName string) error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	if err := configManager.DeleteContext(contextName); err != nil {
@@ -275,8 +275,8 @@ func handleConfigDeleteContext(contextName string) error {
 }
 
 func handleConfigRenameContext(oldName, newName string) error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	contexts := configManager.ListContexts()

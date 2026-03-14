@@ -221,7 +221,23 @@ function loadDatabaseServers() {
     fetch(BACKEND_URL + '/api/admin/database/servers', {
         headers: getAuthHeaders()
     })
-    .then(function(response) { return response.json(); })
+    .then(function(response) {
+        return response.text().then(function(text) {
+            var payload = {};
+            try {
+                payload = text ? JSON.parse(text) : {};
+            } catch (e) {
+                payload = { raw: text };
+            }
+
+            if (!response.ok) {
+                var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
+                throw new Error(message);
+            }
+
+            return payload;
+        });
+    })
     .then(function(data) {
         availableDbServers = data.servers || [];
         populateCreateDbServers();
@@ -469,7 +485,23 @@ function loadUsers() {
     userList.innerHTML = '<div class="loading">Loading users...</div>';
 
     fetch(BACKEND_URL + '/api/v1/users', { headers: getAuthHeaders() })
-        .then(function(response) { return response.json(); })
+        .then(function(response) {
+            return response.text().then(function(text) {
+                var payload = {};
+                try {
+                    payload = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    payload = { raw: text };
+                }
+
+                if (!response.ok) {
+                    var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
+                    throw new Error(message);
+                }
+
+                return payload;
+            });
+        })
         .then(function(data) {
             var users = data.users || [];
             if (users.length === 0) {

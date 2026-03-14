@@ -34,14 +34,48 @@ type Claims struct {
 
 // HasRole checks if the claims contain a specific role
 func (c *Claims) HasRole(role string) bool {
-	if c == nil || c.RealmAccess.Roles == nil {
+	if c == nil {
 		return false
 	}
+	targetRole := strings.ToLower(strings.TrimSpace(role))
+	if targetRole == "" {
+		return false
+	}
+
 	for _, r := range c.RealmAccess.Roles {
-		if r == role {
+		if strings.ToLower(strings.TrimSpace(r)) == targetRole {
 			return true
 		}
 	}
+
+	// Keycloak often stores app-specific roles under resource_access.<client>.roles.
+	for _, clientAccessRaw := range c.ResourceAccess {
+		clientAccess, ok := clientAccessRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		rolesRaw, ok := clientAccess["roles"]
+		if !ok {
+			continue
+		}
+
+		switch typedRoles := rolesRaw.(type) {
+		case []interface{}:
+			for _, rr := range typedRoles {
+				if roleStr, ok := rr.(string); ok && strings.ToLower(strings.TrimSpace(roleStr)) == targetRole {
+					return true
+				}
+			}
+		case []string:
+			for _, roleStr := range typedRoles {
+				if strings.ToLower(strings.TrimSpace(roleStr)) == targetRole {
+					return true
+				}
+			}
+		}
+	}
+
 	return false
 }
 

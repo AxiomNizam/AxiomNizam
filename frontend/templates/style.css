@@ -99,13 +99,14 @@ body {
 }
 
 .nav-container {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    max-width: 1400px;
+    max-width: 100%;
     margin: 0 auto;
     padding: 0 20px;
     height: 70px;
+    gap: 16px;
 }
 
 .nav-logo {
@@ -115,6 +116,7 @@ body {
     font-size: 24px;
     font-weight: bold;
     color: var(--primary-light);
+    flex-shrink: 0;
 }
 
 .logo-icon {
@@ -130,7 +132,15 @@ body {
 
 .nav-center {
     display: flex;
-    gap: 30px;
+    gap: 18px;
+    min-width: 0;
+    overflow-x: auto;
+    justify-content: center;
+    scrollbar-width: none;
+}
+
+.nav-center::-webkit-scrollbar {
+    display: none;
 }
 
 .nav-link {
@@ -144,6 +154,7 @@ body {
     border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -164,6 +175,7 @@ body {
     display: flex;
     align-items: center;
     gap: 20px;
+    flex-shrink: 0;
 }
 
 .theme-switcher {
@@ -332,7 +344,8 @@ body {
     gap: 20px;
 }
 
-.user-info {
+.admin-header .user-info,
+.manager-header .user-info {
     display: flex;
     align-items: center;
     gap: 15px;

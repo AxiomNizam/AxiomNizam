@@ -120,18 +120,34 @@ func extractRoleFromToken(tokenString string) string {
 		RealmAccess struct {
 			Roles []string `json:"roles"`
 		} `json:"realm_access"`
+		ResourceAccess map[string]struct {
+			Roles []string `json:"roles"`
+		} `json:"resource_access"`
 	}
 	if err := json.Unmarshal(decoded, &payload2); err != nil {
 		return "user"
 	}
-	for _, r := range payload2.RealmAccess.Roles {
-		rl := strings.ToLower(r)
+
+	allRoles := make([]string, 0, len(payload2.RealmAccess.Roles)+8)
+	allRoles = append(allRoles, payload2.RealmAccess.Roles...)
+	for _, access := range payload2.ResourceAccess {
+		allRoles = append(allRoles, access.Roles...)
+	}
+
+	for _, r := range allRoles {
+		rl := strings.ToLower(strings.TrimSpace(r))
+		if rl == "system-manager" || rl == "system_manager" || rl == "system-admin" || rl == "sysadmin" {
+			return "system-manager"
+		}
+	}
+	for _, r := range allRoles {
+		rl := strings.ToLower(strings.TrimSpace(r))
 		if strings.Contains(rl, "admin") && !strings.Contains(rl, "account") {
 			return "admin"
 		}
-		if rl == "system-manager" || rl == "system_manager" || rl == "system-admin" {
-			return "system-manager"
-		}
+	}
+	for _, r := range allRoles {
+		rl := strings.ToLower(strings.TrimSpace(r))
 		if rl == "manager" || rl == "api-manager" || rl == "api_manager" {
 			return "manager"
 		}
@@ -162,53 +178,65 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Check demo accounts FIRST — always takes priority over Keycloak for known demo credentials.
-	// This ensures local dev accounts always work regardless of Keycloak state.
-	// Set ENABLE_DEMO_ACCOUNTS=false to disable (e.g. in production when you want to remove these accounts).
-	demoEnabled := getEnv("ENABLE_DEMO_ACCOUNTS", "true") == "true"
-	if demo, ok := demoAccounts[req.Username]; ok && demo.password == req.Password {
-		if !demoEnabled {
-			log.Printf("⚠️  Demo account '%s' matched but ENABLE_DEMO_ACCOUNTS=false — falling through to Keycloak\n", req.Username)
-		} else {
-			demoToken, err := generateDemoToken(req.Username, demo.role)
-			if err == nil {
-				log.Printf("✅ Demo login for user: %s (role: %s)\n", req.Username, demo.role)
-				c.JSON(http.StatusOK, gin.H{
-					"status":        "ok",
-					"access_token":  demoToken,
-					"expires_in":    28800,
-					"refresh_token": "",
-					"token_type":    "Bearer",
-					"username":      req.Username,
-					"role":          demo.role,
-					"demo_mode":     true,
-				})
-				return
-			}
-			log.Printf("⚠️  Demo token generation failed for %s: %v — falling through to Keycloak\n", req.Username, err)
-		}
-	}
+	keycloakOnlyAuth := strings.EqualFold(getEnv("KEYCLOAK_ONLY_AUTH", "true"), "true")
 
-	// Check platform users created via the sysadmin UI (second priority, before Keycloak).
-	// These are stored in-memory — no Keycloak account required.
-	if h.platformUsers != nil {
-		if platformUser, ok := h.platformUsers.ValidateCredentials(req.Username, req.Password); ok {
-			platformToken, err := generateDemoToken(platformUser.Username, platformUser.Role)
-			if err == nil {
-				log.Printf("✅ Platform user login for user: %s (role: %s)\n", platformUser.Username, platformUser.Role)
-				c.JSON(http.StatusOK, gin.H{
-					"status":        "ok",
-					"access_token":  platformToken,
-					"expires_in":    28800,
-					"refresh_token": "",
-					"token_type":    "Bearer",
-					"username":      platformUser.Username,
-					"role":          platformUser.Role,
-					"demo_mode":     true,
-				})
-				return
+	if !keycloakOnlyAuth {
+		// Check demo accounts FIRST — always takes priority over Keycloak for known demo credentials.
+		// This ensures local dev accounts always work regardless of Keycloak state.
+		// Set ENABLE_DEMO_ACCOUNTS=false to disable (e.g. in production when you want to remove these accounts).
+		demoEnabled := getEnv("ENABLE_DEMO_ACCOUNTS", "true") == "true"
+		if demo, ok := demoAccounts[req.Username]; ok && demo.password == req.Password {
+			if !demoEnabled {
+				log.Printf("⚠️  Demo account '%s' matched but ENABLE_DEMO_ACCOUNTS=false — falling through to Keycloak\n", req.Username)
+			} else {
+				demoToken, err := generateDemoToken(req.Username, demo.role)
+				if err == nil {
+					if h.rateLimiter != nil {
+						h.rateLimiter.RegisterToken(demoToken, req.Username)
+						log.Printf("✅ Demo token registered in rate limiter for user: %s", req.Username)
+					}
+					log.Printf("✅ Demo login for user: %s (role: %s)\n", req.Username, demo.role)
+					c.JSON(http.StatusOK, gin.H{
+						"status":        "ok",
+						"access_token":  demoToken,
+						"expires_in":    28800,
+						"refresh_token": "",
+						"token_type":    "Bearer",
+						"username":      req.Username,
+						"role":          demo.role,
+						"demo_mode":     true,
+					})
+					return
+				}
+				log.Printf("⚠️  Demo token generation failed for %s: %v — falling through to Keycloak\n", req.Username, err)
 			}
-			log.Printf("⚠️  Token generation failed for platform user %s: %v\n", platformUser.Username, err)
+		}
+
+		// Check platform users created via the sysadmin UI (second priority, before Keycloak).
+		// These are stored in-memory — no Keycloak account required.
+		if h.platformUsers != nil {
+			if platformUser, ok := h.platformUsers.ValidateCredentials(req.Username, req.Password); ok {
+				platformToken, err := generateDemoToken(platformUser.Username, platformUser.Role)
+				if err == nil {
+					if h.rateLimiter != nil {
+						h.rateLimiter.RegisterToken(platformToken, platformUser.Username)
+						log.Printf("✅ Platform token registered in rate limiter for user: %s", platformUser.Username)
+					}
+					log.Printf("✅ Platform user login for user: %s (role: %s)\n", platformUser.Username, platformUser.Role)
+					c.JSON(http.StatusOK, gin.H{
+						"status":        "ok",
+						"access_token":  platformToken,
+						"expires_in":    28800,
+						"refresh_token": "",
+						"token_type":    "Bearer",
+						"username":      platformUser.Username,
+						"role":          platformUser.Role,
+						"demo_mode":     true,
+					})
+					return
+				}
+				log.Printf("⚠️  Token generation failed for platform user %s: %v\n", platformUser.Username, err)
+			}
 		}
 	}
 

@@ -204,8 +204,8 @@ func loginWithAPIKey(serverURL string) error {
 }
 
 func saveLoginContext(serverURL, token, user string) error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	// Determine context name
@@ -250,8 +250,8 @@ func saveLoginContext(serverURL, token, user string) error {
 }
 
 func handleLogout() error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	if err := configManager.DeleteToken(); err != nil {
@@ -265,8 +265,8 @@ func handleLogout() error {
 }
 
 func handleCurrentUser() error {
-	if configManager == nil {
-		configManager = client.NewConfigManager()
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	token := configManager.GetToken()

@@ -7,7 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/kubeplus/admission"
+	"example.com/axiomnizam/internal/kubeplus/crd"
+	"example.com/axiomnizam/internal/kubeplus/scheduler"
+	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/resources"
+	"example.com/axiomnizam/internal/reviewflow"
+	"example.com/axiomnizam/internal/vectorplus"
 	"github.com/gin-gonic/gin"
 )
 
@@ -200,15 +206,32 @@ const (
 
 // APIServer provides REST API for resources
 type APIServer struct {
-	store  *ResourceStore
-	router *gin.Engine
+	store          *ResourceStore
+	router         *gin.Engine
+	admission      *admission.Engine
+	scheduler      *scheduler.Scheduler
+	crdRegistry    *crd.Registry
+	modeManager    *modes.Manager
+	vectorIndex    *vectorplus.Index
+	reviewPipeline *reviewflow.Pipeline
 }
 
 // NewAPIServer creates a new API server
 func NewAPIServer(store *ResourceStore) *APIServer {
+	admissionEngine := admission.NewEngine()
+	admissionEngine.RegisterPolicy("template-001", 100, admission.PolicyTemplate001)
+	admissionEngine.RegisterPolicy("template-002", 90, admission.PolicyTemplate002)
+	admissionEngine.RegisterPolicy("template-003", 80, admission.PolicyTemplate003)
+
 	return &APIServer{
-		store:  store,
-		router: gin.New(),
+		store:          store,
+		router:         gin.New(),
+		admission:      admissionEngine,
+		scheduler:      scheduler.NewScheduler(),
+		crdRegistry:    crd.NewRegistry(),
+		modeManager:    modes.NewManager(),
+		vectorIndex:    vectorplus.NewIndex(4),
+		reviewPipeline: reviewflow.NewPipeline(),
 	}
 }
 
@@ -229,6 +252,324 @@ func (as *APIServer) RegisterRoutes() {
 	// Status subresource
 	api.GET(routeNsKindName+"/status", as.GetResourceStatus)
 	api.PUT(routeNsKindName+"/status", as.UpdateResourceStatus)
+
+	// Extended module routes for kubeplus, netintel modes, vectorplus, and reviewflow.
+	as.registerFeatureRoutes(api)
+}
+
+func (as *APIServer) registerFeatureRoutes(api *gin.RouterGroup) {
+	kubeplusAPI := api.Group("/kubeplus")
+	{
+		kubeplusAPI.GET("/admission/policies", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"policies": as.admission.ListPolicies()})
+		})
+		kubeplusAPI.POST("/admission/evaluate", func(c *gin.Context) {
+			var req admission.AdmissionRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if req.Timestamp.IsZero() {
+				req.Timestamp = time.Now().UTC()
+			}
+			c.JSON(http.StatusOK, as.admission.Evaluate(req))
+		})
+
+		kubeplusAPI.PUT("/scheduler/nodes/:name", func(c *gin.Context) {
+			var node scheduler.Node
+			if err := c.ShouldBindJSON(&node); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			node.Name = c.Param("name")
+			if strings.TrimSpace(node.Name) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "node name is required"})
+				return
+			}
+			as.scheduler.UpsertNode(node)
+			c.JSON(http.StatusOK, gin.H{"message": "node upserted", "node": node.Name})
+		})
+		kubeplusAPI.GET("/scheduler/nodes", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"nodes": as.scheduler.ListNodes()})
+		})
+		kubeplusAPI.POST("/scheduler/score", func(c *gin.Context) {
+			var w scheduler.Workload
+			if err := c.ShouldBindJSON(&w); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"decisions": as.scheduler.Score(w)})
+		})
+		kubeplusAPI.POST("/scheduler/pick", func(c *gin.Context) {
+			var w scheduler.Workload
+			if err := c.ShouldBindJSON(&w); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			best, ok := as.scheduler.PickBest(w)
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "no suitable node found"})
+				return
+			}
+			c.JSON(http.StatusOK, best)
+		})
+
+		kubeplusAPI.POST("/crd/definitions", func(c *gin.Context) {
+			var def crd.Definition
+			if err := c.ShouldBindJSON(&def); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := as.crdRegistry.Register(def); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "definition registered"})
+		})
+		kubeplusAPI.GET("/crd/definitions", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"definitions": as.crdRegistry.List()})
+		})
+		kubeplusAPI.POST("/crd/validate", func(c *gin.Context) {
+			var body struct {
+				Group   string         `json:"group"`
+				Kind    string         `json:"kind"`
+				Version string         `json:"version"`
+				Spec    map[string]any `json:"spec"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			def, ok := as.crdRegistry.Get(body.Group, body.Kind)
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "definition not found"})
+				return
+			}
+			if len(def.Versions) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "definition has no versions"})
+				return
+			}
+			fields := def.Versions[0].Fields
+			if strings.TrimSpace(body.Version) != "" {
+				for _, v := range def.Versions {
+					if v.Version == body.Version {
+						fields = v.Fields
+						break
+					}
+				}
+			}
+			c.JSON(http.StatusOK, crd.ValidateSpec(fields, body.Spec))
+		})
+	}
+
+	netintelAPI := api.Group("/netintel")
+	{
+		netintelAPI.GET("/modes", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"modes": as.modeManager.List()})
+		})
+		netintelAPI.PUT("/modes/:name", func(c *gin.Context) {
+			var cfg modes.ModeConfig
+			if err := c.ShouldBindJSON(&cfg); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			cfg.Name = modes.Mode(strings.ToLower(strings.TrimSpace(c.Param("name"))))
+			if cfg.Name == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "mode name is required"})
+				return
+			}
+			as.modeManager.Upsert(cfg)
+			c.JSON(http.StatusOK, gin.H{"message": "mode upserted", "mode": cfg})
+		})
+		netintelAPI.POST("/modes/events", func(c *gin.Context) {
+			var ev modes.ModeEvent
+			if err := c.ShouldBindJSON(&ev); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if ev.Timestamp.IsZero() {
+				ev.Timestamp = time.Now().UTC()
+			}
+			as.modeManager.Record(ev)
+			c.JSON(http.StatusOK, gin.H{"message": "event recorded"})
+		})
+		netintelAPI.GET("/modes/:name/events", func(c *gin.Context) {
+			name := modes.Mode(strings.ToLower(strings.TrimSpace(c.Param("name"))))
+			c.JSON(http.StatusOK, gin.H{"events": as.modeManager.FindByMode(name)})
+		})
+		netintelAPI.POST("/modes/detect", func(c *gin.Context) {
+			var body struct {
+				Detector int       `json:"detector"`
+				Samples  []float64 `json:"samples"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			var score float64
+			switch body.Detector {
+			case 2:
+				score = modes.Detector002(body.Samples)
+			case 3:
+				score = modes.Detector003(body.Samples)
+			case 4:
+				score = modes.Detector004(body.Samples)
+			case 5:
+				score = modes.Detector005(body.Samples)
+			default:
+				score = modes.Detector001(body.Samples)
+			}
+			c.JSON(http.StatusOK, gin.H{"detector": body.Detector, "score": score})
+		})
+	}
+
+	vectorAPI := api.Group("/vectorplus")
+	{
+		vectorAPI.PUT("/records/:id", func(c *gin.Context) {
+			var body struct {
+				Vec    []float64         `json:"vec"`
+				Labels map[string]string `json:"labels"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			rec := vectorplus.Record{ID: c.Param("id"), Vec: vectorplus.Vector(body.Vec), Labels: body.Labels}
+			if !as.vectorIndex.Upsert(rec) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid vector size or id"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "record upserted", "id": rec.ID})
+		})
+		vectorAPI.DELETE("/records/:id", func(c *gin.Context) {
+			as.vectorIndex.Delete(c.Param("id"))
+			c.JSON(http.StatusOK, gin.H{"message": "record deleted", "id": c.Param("id")})
+		})
+		vectorAPI.POST("/search", func(c *gin.Context) {
+			var body struct {
+				Query []float64 `json:"query"`
+				K     int       `json:"k"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if body.K < 1 {
+				body.K = 5
+			}
+			c.JSON(http.StatusOK, gin.H{"results": as.vectorIndex.Search(vectorplus.Vector(body.Query), body.K)})
+		})
+		vectorAPI.POST("/similarity", func(c *gin.Context) {
+			var body struct {
+				A      []float64 `json:"a"`
+				B      []float64 `json:"b"`
+				Metric int       `json:"metric"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			a := vectorplus.Vector(body.A)
+			b := vectorplus.Vector(body.B)
+			var score float64
+			switch body.Metric {
+			case 2:
+				score = vectorplus.SimilarityMetric002(a, b)
+			case 3:
+				score = vectorplus.SimilarityMetric003(a, b)
+			case 4:
+				score = vectorplus.SimilarityMetric004(a, b)
+			case 5:
+				score = vectorplus.SimilarityMetric005(a, b)
+			default:
+				score = vectorplus.SimilarityMetric001(a, b)
+			}
+			c.JSON(http.StatusOK, gin.H{"metric": body.Metric, "score": score})
+		})
+	}
+
+	reviewAPI := api.Group("/reviewflow")
+	{
+		reviewAPI.PUT("/items/:id", func(c *gin.Context) {
+			var item reviewflow.ReviewItem
+			if err := c.ShouldBindJSON(&item); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			item.ID = c.Param("id")
+			if strings.TrimSpace(item.ID) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "item id is required"})
+				return
+			}
+			if item.Score == 0 {
+				item.Score = reviewflow.ScoreBySignals(item.Title, item.Description, item.Tags)
+			}
+			as.reviewPipeline.Upsert(item)
+			c.JSON(http.StatusOK, gin.H{"message": "item upserted", "id": item.ID})
+		})
+		reviewAPI.GET("/items/:id", func(c *gin.Context) {
+			item, ok := as.reviewPipeline.Get(c.Param("id"))
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
+				return
+			}
+			c.JSON(http.StatusOK, item)
+		})
+		reviewAPI.GET("/items", func(c *gin.Context) {
+			stage := reviewflow.Stage(strings.TrimSpace(c.Query("stage")))
+			c.JSON(http.StatusOK, gin.H{"items": as.reviewPipeline.ListByStage(stage)})
+		})
+		reviewAPI.POST("/items/:id/stage", func(c *gin.Context) {
+			var body struct {
+				Stage reviewflow.Stage `json:"stage"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if !as.reviewPipeline.Advance(c.Param("id"), body.Stage) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "stage updated", "id": c.Param("id"), "stage": body.Stage})
+		})
+		reviewAPI.POST("/score", func(c *gin.Context) {
+			var body struct {
+				Title       string   `json:"title"`
+				Description string   `json:"description"`
+				Tags        []string `json:"tags"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"score": reviewflow.ScoreBySignals(body.Title, body.Description, body.Tags)})
+		})
+		reviewAPI.POST("/quality", func(c *gin.Context) {
+			var body struct {
+				Item  reviewflow.ReviewItem `json:"item"`
+				Check int                   `json:"check"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			var score float64
+			switch body.Check {
+			case 2:
+				score = reviewflow.QualityCheck002(body.Item)
+			case 3:
+				score = reviewflow.QualityCheck003(body.Item)
+			case 4:
+				score = reviewflow.QualityCheck004(body.Item)
+			case 5:
+				score = reviewflow.QualityCheck005(body.Item)
+			default:
+				score = reviewflow.QualityCheck001(body.Item)
+			}
+			c.JSON(http.StatusOK, gin.H{"check": body.Check, "score": score})
+		})
+	}
 }
 
 // CreateResource creates a new resource

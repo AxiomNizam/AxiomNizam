@@ -3,6 +3,7 @@
 /* Tablets (768px and below) */
 @media (max-width: 768px) {
     .nav-container {
+        display: flex;
         flex-wrap: wrap;
         height: auto;
         padding: 10px 15px;
@@ -468,6 +469,7 @@
 /* Landscape Orientation */
 @media (orientation: landscape) and (max-height: 600px) {
     .nav-container {
+        display: flex;
         height: auto;
         padding: 8px 15px;
     }

@@ -72,11 +72,8 @@ func handleApply(opts ApplyOptions) error {
 	}
 
 	// Step 4: Get resource client from config
-	if configManager == nil {
-		configManager = client.NewConfigManager()
-		if err := configManager.Load(); err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
+	if err := ensureConfigManagerLoaded(); err != nil {
+		return err
 	}
 
 	// Initialize API client with current context
