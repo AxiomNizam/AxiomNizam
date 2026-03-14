@@ -736,35 +736,35 @@ func main() {
 	// GIS DASHBOARD ENDPOINTS
 	// ====================================
 	gisHandler := handlers.NewGISHandler()
-	gisAPI := router.Group("/api/v1/gis")
+	gisAPI := router.Group("/api/v1/gis", authMiddleware)
 	{
 		gisAPI.GET("/summary", gisHandler.GetSummary)
 
 		gisAPI.GET("/layers", gisHandler.ListLayers)
-		gisAPI.POST("/layers", gisHandler.CreateLayer)
-		gisAPI.PUT("/layers/:id", gisHandler.UpdateLayer)
-		gisAPI.DELETE("/layers/:id", gisHandler.DeleteLayer)
+		gisAPI.POST("/layers", adminOrSysMiddleware, gisHandler.CreateLayer)
+		gisAPI.PUT("/layers/:id", adminOrSysMiddleware, gisHandler.UpdateLayer)
+		gisAPI.DELETE("/layers/:id", adminOrSysMiddleware, gisHandler.DeleteLayer)
 
 		gisAPI.GET("/regions", gisHandler.ListRegions)
 		gisAPI.GET("/regions/:id", gisHandler.GetRegion)
-		gisAPI.POST("/regions", gisHandler.CreateRegion)
-		gisAPI.PUT("/regions/:id", gisHandler.UpdateRegion)
-		gisAPI.DELETE("/regions/:id", gisHandler.DeleteRegion)
+		gisAPI.POST("/regions", adminOrSysMiddleware, gisHandler.CreateRegion)
+		gisAPI.PUT("/regions/:id", adminOrSysMiddleware, gisHandler.UpdateRegion)
+		gisAPI.DELETE("/regions/:id", adminOrSysMiddleware, gisHandler.DeleteRegion)
 
 		gisAPI.GET("/markers", gisHandler.ListMarkers)
-		gisAPI.POST("/markers", gisHandler.CreateMarker)
-		gisAPI.DELETE("/markers/:id", gisHandler.DeleteMarker)
+		gisAPI.POST("/markers", adminOrSysMiddleware, gisHandler.CreateMarker)
+		gisAPI.DELETE("/markers/:id", adminOrSysMiddleware, gisHandler.DeleteMarker)
 
 		gisAPI.GET("/datasets", gisHandler.ListDatasets)
 		gisAPI.GET("/datasets/:id", gisHandler.GetDataset)
-		gisAPI.POST("/datasets", gisHandler.CreateDataset)
-		gisAPI.PUT("/datasets/:id", gisHandler.UpdateDataset)
-		gisAPI.DELETE("/datasets/:id", gisHandler.DeleteDataset)
+		gisAPI.POST("/datasets", adminOrSysMiddleware, gisHandler.CreateDataset)
+		gisAPI.PUT("/datasets/:id", adminOrSysMiddleware, gisHandler.UpdateDataset)
+		gisAPI.DELETE("/datasets/:id", adminOrSysMiddleware, gisHandler.DeleteDataset)
 	}
 
 	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
 	gisSpecHandler := handlers.NewGISSpecializedHandler()
-	gisSpecAPI := router.Group("/api/v1/gis/dashboards")
+	gisSpecAPI := router.Group("/api/v1/gis/dashboards", authMiddleware)
 	{
 		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)
 		gisSpecAPI.GET("/:type", gisSpecHandler.GetDashboard)
@@ -773,12 +773,12 @@ func main() {
 
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
 	analyticsHandler := handlers.NewAnalyticsHandler()
-	analyticsAPI := router.Group("/api/v1/analytics")
+	analyticsAPI := router.Group("/api/v1/analytics", authMiddleware)
 	{
 		analyticsAPI.GET("/dashboards", analyticsHandler.ListDashboards)
 		analyticsAPI.GET("/dashboards/:id", analyticsHandler.GetDashboard)
-		analyticsAPI.PUT("/dashboards/:id/widgets/:widgetId", analyticsHandler.UpdateWidget)
-		analyticsAPI.PUT("/dashboards/:id/layout", analyticsHandler.ReorderWidgets)
+		analyticsAPI.PUT("/dashboards/:id/widgets/:widgetId", adminOrSysMiddleware, analyticsHandler.UpdateWidget)
+		analyticsAPI.PUT("/dashboards/:id/layout", adminOrSysMiddleware, analyticsHandler.ReorderWidgets)
 		analyticsAPI.GET("/dashboards/:id/widgets/:widgetId/export", analyticsHandler.ExportCSV)
 		analyticsAPI.GET("/widget-types", analyticsHandler.GetWidgetTypes)
 	}
@@ -789,17 +789,17 @@ func main() {
 	cdcEtlHandler := handlers.NewCDCETLHandler()
 
 	// ETL Pipeline Management
-	etlAPI := router.Group("/api/v1/etl")
+	etlAPI := router.Group("/api/v1/etl", authMiddleware)
 	{
 		etlAPI.GET("/pipelines", cdcEtlHandler.ListETLPipelines)
 		etlAPI.GET("/pipelines/:id", cdcEtlHandler.GetETLPipeline)
-		etlAPI.POST("/pipelines", cdcEtlHandler.CreateETLPipeline)
-		etlAPI.PUT("/pipelines/:id", cdcEtlHandler.UpdateETLPipeline)
-		etlAPI.DELETE("/pipelines/:id", cdcEtlHandler.DeleteETLPipeline)
-		etlAPI.POST("/pipelines/:id/run", cdcEtlHandler.RunETLPipeline)
+		etlAPI.POST("/pipelines", adminOrSysMiddleware, cdcEtlHandler.CreateETLPipeline)
+		etlAPI.PUT("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLPipeline)
+		etlAPI.DELETE("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLPipeline)
+		etlAPI.POST("/pipelines/:id/run", adminOrSysMiddleware, cdcEtlHandler.RunETLPipeline)
 		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
 		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
-		etlAPI.POST("/connectors", cdcEtlHandler.CreateETLConnector)
+		etlAPI.POST("/connectors", adminOrSysMiddleware, cdcEtlHandler.CreateETLConnector)
 		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
 		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
 		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)
@@ -808,30 +808,30 @@ func main() {
 	}
 
 	// CDC Pipeline Management
-	cdcAPI := router.Group("/api/v1/cdc")
+	cdcAPI := router.Group("/api/v1/cdc", authMiddleware)
 	{
 		cdcAPI.GET("/pipelines", cdcEtlHandler.ListCDCPipelines)
 		cdcAPI.GET("/pipelines/:id", cdcEtlHandler.GetCDCPipeline)
-		cdcAPI.POST("/pipelines", cdcEtlHandler.CreateCDCPipeline)
-		cdcAPI.PUT("/pipelines/:id", cdcEtlHandler.UpdateCDCPipeline)
-		cdcAPI.DELETE("/pipelines/:id", cdcEtlHandler.DeleteCDCPipeline)
-		cdcAPI.POST("/pipelines/:id/start", cdcEtlHandler.StartCDCPipeline)
-		cdcAPI.POST("/pipelines/:id/pause", cdcEtlHandler.PauseCDCPipeline)
-		cdcAPI.POST("/pipelines/:id/stop", cdcEtlHandler.StopCDCPipeline)
+		cdcAPI.POST("/pipelines", adminOrSysMiddleware, cdcEtlHandler.CreateCDCPipeline)
+		cdcAPI.PUT("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateCDCPipeline)
+		cdcAPI.DELETE("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/start", adminOrSysMiddleware, cdcEtlHandler.StartCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/pause", adminOrSysMiddleware, cdcEtlHandler.PauseCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/stop", adminOrSysMiddleware, cdcEtlHandler.StopCDCPipeline)
 		cdcAPI.GET("/sources", cdcEtlHandler.GetCDCSourceTypes)
 		cdcAPI.GET("/sinks", cdcEtlHandler.GetCDCSinkTypes)
 		cdcAPI.GET("/observability", cdcEtlHandler.GetCDCObservability)
 	}
 
 	// Data Platform Overview
-	router.GET("/api/v1/data-platform/overview", cdcEtlHandler.GetPlatformOverview)
+	router.GET("/api/v1/data-platform/overview", authMiddleware, cdcEtlHandler.GetPlatformOverview)
 
 	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
 	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, conns.Etcd)
 
-	builderAPI := router.Group("/api/v1/builder")
+	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{
 		// Summary
 		builderAPI.GET("/summary", apiBuilderHandler.GetSummary)
@@ -839,32 +839,32 @@ func main() {
 		// Custom API CRUD
 		builderAPI.GET("/apis", apiBuilderHandler.ListAPIs)
 		builderAPI.GET("/apis/:id", apiBuilderHandler.GetAPI)
-		builderAPI.POST("/apis", apiBuilderHandler.CreateAPI)
-		builderAPI.PUT("/apis/:id", apiBuilderHandler.UpdateAPI)
-		builderAPI.DELETE("/apis/:id", apiBuilderHandler.DeleteAPI)
-		builderAPI.POST("/apis/:id/test", apiBuilderHandler.TestAPI)
+		builderAPI.POST("/apis", adminOrSysMiddleware, apiBuilderHandler.CreateAPI)
+		builderAPI.PUT("/apis/:id", adminOrSysMiddleware, apiBuilderHandler.UpdateAPI)
+		builderAPI.DELETE("/apis/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteAPI)
+		builderAPI.POST("/apis/:id/test", adminOrSysMiddleware, apiBuilderHandler.TestAPI)
 
 		// CSV Upload & Dashboard Generation
-		builderAPI.POST("/csv/upload", apiBuilderHandler.UploadCSV)
+		builderAPI.POST("/csv/upload", adminOrSysMiddleware, apiBuilderHandler.UploadCSV)
 		builderAPI.GET("/csv/uploads", apiBuilderHandler.ListCSVUploads)
 		builderAPI.GET("/csv/uploads/:id", apiBuilderHandler.GetCSVUpload)
-		builderAPI.DELETE("/csv/uploads/:id", apiBuilderHandler.DeleteCSVUpload)
-		builderAPI.POST("/csv/uploads/:id/generate-dashboard", apiBuilderHandler.GenerateDashboard)
-		builderAPI.POST("/csv/uploads/:id/generate-gis", apiBuilderHandler.GenerateGISFromCSV)
+		builderAPI.DELETE("/csv/uploads/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteCSVUpload)
+		builderAPI.POST("/csv/uploads/:id/generate-dashboard", adminOrSysMiddleware, apiBuilderHandler.GenerateDashboard)
+		builderAPI.POST("/csv/uploads/:id/generate-gis", adminOrSysMiddleware, apiBuilderHandler.GenerateGISFromCSV)
 
 		// Dashboard <-> GIS Conversion
-		builderAPI.POST("/convert/analyze", apiBuilderHandler.AnalyzeConversion)
-		builderAPI.POST("/convert/dashboard-to-gis", apiBuilderHandler.ConvertDashboardToGIS)
-		builderAPI.POST("/convert/gis-to-dashboard", apiBuilderHandler.ConvertGISToDashboard)
+		builderAPI.POST("/convert/analyze", adminOrSysMiddleware, apiBuilderHandler.AnalyzeConversion)
+		builderAPI.POST("/convert/dashboard-to-gis", adminOrSysMiddleware, apiBuilderHandler.ConvertDashboardToGIS)
+		builderAPI.POST("/convert/gis-to-dashboard", adminOrSysMiddleware, apiBuilderHandler.ConvertGISToDashboard)
 		builderAPI.GET("/conversions", apiBuilderHandler.ListConversions)
 
 		// File Scanner (SafeGate Pipeline)
-		builderAPI.POST("/scanner/scan", apiBuilderHandler.ScanFile)
+		builderAPI.POST("/scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanFile)
 		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
 		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
 
 		// Dashboard Deletion
-		builderAPI.DELETE("/dashboards/:id", apiBuilderHandler.DeleteDashboard)
+		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)
 	}
 
 	// ====================================
@@ -872,7 +872,7 @@ func main() {
 	// ====================================
 	netIntelHandler := handlers.NewNetIntelHandler()
 
-	netintelAPI := router.Group("/api/v1/netintel")
+	netintelAPI := router.Group("/api/v1/netintel", authMiddleware)
 	{
 		// Summary & Observability
 		netintelAPI.GET("/summary", netIntelHandler.GetSummary)
@@ -882,19 +882,19 @@ func main() {
 		// Parser CRUD
 		netintelAPI.GET("/parsers", netIntelHandler.ListParsers)
 		netintelAPI.GET("/parsers/:id", netIntelHandler.GetParser)
-		netintelAPI.POST("/parsers", netIntelHandler.CreateParser)
-		netintelAPI.PUT("/parsers/:id", netIntelHandler.UpdateParser)
-		netintelAPI.DELETE("/parsers/:id", netIntelHandler.DeleteParser)
+		netintelAPI.POST("/parsers", adminOrSysMiddleware, netIntelHandler.CreateParser)
+		netintelAPI.PUT("/parsers/:id", adminOrSysMiddleware, netIntelHandler.UpdateParser)
+		netintelAPI.DELETE("/parsers/:id", adminOrSysMiddleware, netIntelHandler.DeleteParser)
 
 		// Log Entries
 		netintelAPI.GET("/logs", netIntelHandler.ListEntries)
-		netintelAPI.POST("/logs", netIntelHandler.IngestLog)
+		netintelAPI.POST("/logs", adminOrSysMiddleware, netIntelHandler.IngestLog)
 		netintelAPI.GET("/logs/stats", netIntelHandler.GetEntryStats)
 
 		// Topology
 		netintelAPI.GET("/topology", netIntelHandler.GetTopology)
 		netintelAPI.GET("/topology/nodes/:id", netIntelHandler.GetTopologyNode)
-		netintelAPI.PUT("/topology/nodes/:id", netIntelHandler.UpdateTopologyNode)
+		netintelAPI.PUT("/topology/nodes/:id", adminOrSysMiddleware, netIntelHandler.UpdateTopologyNode)
 
 		// Heatmaps & Trends
 		netintelAPI.GET("/heatmap", netIntelHandler.GetHeatmap)
@@ -907,13 +907,13 @@ func main() {
 
 		// Anomalies
 		netintelAPI.GET("/anomalies", netIntelHandler.ListAnomalies)
-		netintelAPI.POST("/anomalies/:id/acknowledge", netIntelHandler.AcknowledgeAnomaly)
-		netintelAPI.POST("/anomalies/:id/resolve", netIntelHandler.ResolveAnomaly)
+		netintelAPI.POST("/anomalies/:id/acknowledge", adminOrSysMiddleware, netIntelHandler.AcknowledgeAnomaly)
+		netintelAPI.POST("/anomalies/:id/resolve", adminOrSysMiddleware, netIntelHandler.ResolveAnomaly)
 
 		// Alerts
 		netintelAPI.GET("/alerts", netIntelHandler.ListAlerts)
-		netintelAPI.POST("/alerts/:id/acknowledge", netIntelHandler.AcknowledgeAlert)
-		netintelAPI.POST("/alerts/:id/resolve", netIntelHandler.ResolveAlert)
+		netintelAPI.POST("/alerts/:id/acknowledge", adminOrSysMiddleware, netIntelHandler.AcknowledgeAlert)
+		netintelAPI.POST("/alerts/:id/resolve", adminOrSysMiddleware, netIntelHandler.ResolveAlert)
 
 		// Forecasts
 		netintelAPI.GET("/forecasts", netIntelHandler.ListForecasts)
