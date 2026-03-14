@@ -1,965 +1,749 @@
 # AxiomNizam
 
-**Cloud-Native Data Platform Engine with Kubernetes-Style Control Plane**
+Comprehensive platform for API control-plane workflows, multi-database REST services, GraphQL, data platform orchestration (ETL/CDC), GIS and analytics dashboards, and NetIntel observability.
 
-| | |
-|---|---|
-| **Version** | 1.0.0 |
-| **Language** | Go 1.25 |
-| **Framework** | Gin HTTP + GORM ORM |
-| **Architecture** | Kubernetes-style declarative control plane |
-| **Go Files** | 323 files · ~82,400 lines of code |
-| **Internal Packages** | 51 packages |
-| **REST Endpoints** | 200+ |
-| **Databases Supported** | 9 (MySQL, MariaDB, PostgreSQL, Percona, Oracle, MongoDB, Redis/Valkey, Elasticsearch, etcd) |
-
----
+This README is intentionally detailed and aligned with the current code in this repository.
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Core Components](#core-components)
-  - [Control Plane](#control-plane)
-  - [API Layer](#api-layer)
-  - [Data Layer](#data-layer)
-  - [Policy and Security](#policy-and-security)
-  - [Data Integration](#data-integration)
-  - [Observability](#observability)
-  - [Distributed Systems](#distributed-systems)
-- [CLI Tool — axiomnizamctl](#cli-tool--axiomnizamctl)
-- [Frontend Dashboards](#frontend-dashboards)
-- [API Reference](#api-reference)
-- [Configuration](#configuration)
-- [Docker Deployment](#docker-deployment)
-- [Examples](#examples)
-- [Dependencies](#dependencies)
-
----
+1. Overview
+2. Architecture and Services
+3. Project Size Snapshot
+4. Quick Start
+5. Authentication, Authorization, and Security
+6. Feature Coverage
+7. REST API Coverage
+8. GraphQL Coverage
+9. Dashboard and UI Coverage
+10. GIS Coverage
+11. Network Intelligence (NetIntel) Coverage
+12. CLI Full Command Reference
+13. Internal Module Coverage
+14. Frontend Template Coverage
+15. Configuration and Environment Variables
+16. Project Structure
+17. Appendix: Feature-to-File Evidence Matrix
+18. Troubleshooting
+19. License
 
 ## Overview
 
-AxiomNizam is an enterprise-grade data platform engine built on Kubernetes-style patterns. It provides:
+AxiomNizam contains:
 
-- **Declarative resource management** — Define desired state via YAML; controllers reconcile to reality
-- **Multi-database operations** — Unified CRUD and dynamic queries across 9 database backends
-- **ETL/CDC pipelines** — Extract-Transform-Load and Change Data Capture orchestration
-- **Policy engine** — RBAC, admission control, data governance, rate limiting, quota enforcement
-- **Event-driven architecture** — Event bus with pub/sub, topics, dead-letter queues
-- **Real-time streaming** — WebSocket-based live data feeds
-- **Field-level encryption** — AES-256-GCM with key rotation and audit trails
-- **Network intelligence** — Anomaly detection, traffic forecasting, topology mapping
-- **GIS capabilities** — Geographic layers, regions, markers, specialized dashboards
-- **kubectl-like CLI** — `axiomnizamctl` with YAML apply, contexts, shell completion
-- **Multi-tenancy** — Tenant isolation, quotas, member management
-- **Full observability** — Distributed tracing, audit logging, compliance reporting, metrics
+- Backend API server in Go (Gin) on port 8000.
+- Frontend dashboard server in Go (Gin + templates) on port 7000.
+- Keycloak-based authentication and token validation.
+- Fine-grained RBAC middleware for auth-only and admin/system-manager routes.
+- Platform services backed by etcd for multi-tenant operations.
+- Query logging, API metrics, and rate limiting.
+- Data tooling: API Builder, CSV upload, dashboard generation, GIS conversion, and file malware scanning.
 
----
+## Architecture and Services
 
-## Architecture
+Active services in docker-compose:
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        AxiomNizam Platform                           │
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  Frontend (port 7000)                                          │  │
-│  │  Dashboards: Main · Admin · GIS · Analytics · CDC/ETL · NetIntel│ │
-│  └────────────────────────┬───────────────────────────────────────┘  │
-│                           │ HTTP                                     │
-│  ┌────────────────────────▼───────────────────────────────────────┐  │
-│  │  API Server (port 8000)         CLI: axiomnizamctl             │  │
-│  │  ┌──────────────────────────────────────────────────────────┐  │  │
-│  │  │  Gin Router · CORS · Rate Limiting · JWT Auth Middleware │  │  │
-│  │  └──────────────────────────────────────────────────────────┘  │  │
-│  │                                                                │  │
-│  │  ┌─────────────┐ ┌──────────────┐ ┌────────────────────────┐  │  │
-│  │  │ 29 Handlers │ │ Resource API │ │ Control Plane          │  │  │
-│  │  │ (CRUD, GIS, │ │ (K8s-style   │ │ Controllers +          │  │  │
-│  │  │  Analytics, │ │  namespaced)  │ │ Reconcilers +          │  │  │
-│  │  │  CDC/ETL,   │ │              │ │ Work Queue +           │  │  │
-│  │  │  NetIntel)  │ │              │ │ Event Bus              │  │  │
-│  │  └──────┬──────┘ └──────┬───────┘ └────────────┬───────────┘  │  │
-│  │         │               │                      │              │  │
-│  │  ┌──────▼───────────────▼──────────────────────▼───────────┐  │  │
-│  │  │  Services · Repositories · In-Memory Managers           │  │  │
-│  │  └──────────────────────┬──────────────────────────────────┘  │  │
-│  └─────────────────────────┼──────────────────────────────────────┘  │
-│                            │                                         │
-│  ┌─────────────────────────▼──────────────────────────────────────┐  │
-│  │  Data Layer                                                    │  │
-│  │  PostgreSQL · MySQL · MariaDB · Percona · Oracle · MongoDB    │  │
-│  │  Valkey/Redis (cache) · Elasticsearch (search) · etcd (state) │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  Auth: Keycloak (port 8080) — OIDC / JWT / RBAC              │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────┘
-```
+- axiomnizam: backend API, http://localhost:8000
+- axiomnizam-frontend: frontend UI, http://localhost:7000
+- keycloak: identity provider, http://localhost:8080
+- postgres: relational storage
+- valkey: cache/state support
+- etcd: distributed state for platform managers
+- clamav: SafeGate scanner
 
----
+Runtime note:
+
+- API server runs on configured API_HOST:API_PORT (default 0.0.0.0:8000).
+- Internal runtime component starts on runtime port 8001 by default.
+
+## Project Size Snapshot
+
+Code inventory snapshot (workspace scan on 2026-03-14):
+
+- Total code files: 374
+- Total code lines: 105408
+- Go files: 338
+- Go lines: 89659
+
+Counting method used:
+
+- Code file extensions included: .go, .js, .ts, .tsx, .jsx, .html, .css, .scss, .sql, .sh, .py, .java, .rs, .c, .cpp, .h, .hpp.
+- Line counts are physical lines across matching files.
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker & Docker Compose
-- Go 1.23+ (for local development)
-- 8 GB RAM minimum
-- Ports available: 7000, 8000, 8080
-
-### Option 1: Docker Compose (recommended)
+### Docker Compose (recommended)
 
 ```bash
-cd AxiomNizam
-docker-compose up -d
+docker compose up -d --build
 ```
 
-This starts: API Server (`:8000`), Frontend (`:7000`), Keycloak (`:8080`), PostgreSQL, MongoDB, Valkey, etcd.
+Endpoints:
 
-### Option 2: Local development
+- Backend: http://localhost:8000
+- Frontend: http://localhost:7000
+- Keycloak: http://localhost:8080
+
+Stop:
 
 ```bash
-# Backend
-go mod download
-go run main.go
+docker compose down
+```
 
-# Frontend (separate terminal)
+### Local Development
+
+Backend:
+
+```bash
+go run main.go
+```
+
+Frontend:
+
+```bash
 cd frontend
-go mod download
 go run main.go
 ```
 
-### Build CLI tool
+## Authentication, Authorization, and Security
 
-```bash
-go build -o axiomnizamctl ./cmd/axiomnizamctl/
+### Auth Endpoints
+
+- POST /auth/login
+- POST /auth/refresh
+- GET /auth/validate
+- GET /auth/token-status
+- GET /auth/admin/tokens-status
+
+### Public Health Endpoints
+
+- GET /health
+- GET /status
+- GET /distributed
+
+### Keycloak-Only Mode
+
+Strict mode flag:
+
+- KEYCLOAK_ONLY_AUTH=true
+
+When enabled:
+
+- Login uses Keycloak only.
+- Local/demo fallback auth path is disabled.
+
+### Roles and RBAC
+
+Core privileged checks:
+
+- admin middleware for strict admin-only routes.
+- adminOrSys middleware for routes allowing admin and system-manager.
+
+Accepted system-manager aliases in checks:
+
+- system-manager
+- sysadmin
+- system_admin
+- system-admin
+
+### Rate Limiting
+
+Token-bound rate limits:
+
+- RATE_LIMIT_MAX_CALLS
+- RATE_LIMIT_VALIDITY_MINUTES
+
+Default in repo:
+
+- 500 calls
+- 10 minutes
+
+### Platform User to Keycloak Sync
+
+Endpoint:
+
+- POST /api/v1/users
+
+When KEYCLOAK_USER_SYNC_ENABLED=true, platform user creation includes:
+
+1. Create user in Keycloak Admin API.
+2. Ensure and assign realm role.
+3. Store local platform user record.
+
+Important sync env vars:
+
+- KEYCLOAK_USER_SYNC_ENABLED
+- KEYCLOAK_HOST
+- KEYCLOAK_PORT
+- KEYCLOAK_ADMIN_REALM
+- KEYCLOAK_ADMIN_CLIENT_ID
+- KEYCLOAK_ADMIN_USERNAME
+- KEYCLOAK_ADMIN_PASSWORD
+
+## Feature Coverage
+
+Primary feature areas:
+
+- REST APIs across SQL and NoSQL integrations.
+- GraphQL API endpoint with schema and playground.
+- Dashboard suite for admin, manager, system-manager, GIS, analytics, CDC/ETL, NetIntel, governance, operations-center, and lineage/version views.
+- GIS entity management and specialized GIS dashboard summaries.
+- ETL and CDC pipeline lifecycle APIs.
+- API Builder and CSV-to-visualization generation.
+- SafeGate file scanner integration backed by ClamAV.
+- NetIntel parsing, topology, anomaly, alerts, forecasts.
+- Control-plane APIs for namespaces, policies, workflows, datasources, jobs.
+- Platform services for bulk, eventbus, exports, webhooks, streaming, tenants, RBAC, versioning, lineage, tracing.
+- Data Mesh domain/product/subscription/lineage capabilities in internal mesh modules and CLI mesh commands.
+- Integration and governance analysis commands for health, alerts, catalog, compliance, quality, and lineage in CLI integration modules.
+
+## REST API Coverage
+
+### Core Auth and Health
+
+- /health
+- /status
+- /distributed
+- /auth/*
+- /auth/token-status
+
+### GraphQL (REST-exposed route handlers)
+
+- POST /api/graphql
+- GET /api/graphql/schema
+- GET /api/graphql/playground
+
+### Multi-Database CRUD
+
+Read and write APIs for:
+
+- /api/mysql/users*
+- /api/mariadb/users*
+- /api/postgres/users*
+- /api/percona/users*
+- /api/mongodb/users*
+- /api/firebase/users*
+- /api/oracle/users*
+
+### Dynamic Query APIs
+
+Supported prefixes:
+
+- /api/mysql/query
+- /api/mariadb/query
+- /api/postgres/query
+- /api/percona/query
+- /api/oracle/query
+
+Also:
+
+- /api/{db}/query/batch
+- /api/{db}/schema
+- /api/{db}/logs
+- /api/{db}/stats
+
+### Transformation APIs
+
+- /api/transform/rules*
+- /api/transform/apply
+- /api/transform/batch
+- /api/transform/preview
+- /api/transform/test/*
+- /api/transform/rules/export
+- /api/transform/rules/import
+
+### Admin and Platform User APIs
+
+- /api/admin/database/*
+- /api/admin/table/*
+- /api/admin/metrics/*
+- /api/v1/users*
+
+### Notification APIs
+
+- /api/notifications/send
+- /api/notifications/health
+- /api/notifications/status
+
+### CLI Auth APIs
+
+- /api/v1/auth/login
+- /api/v1/auth/verify
+- /api/v1/auth/whoami
+
+### Kubernetes-style and Control-plane APIs
+
+- /api/v1/namespaces/:namespace/:kind*
+- /api/v1/apis
+- /api/v1/policies
+- /api/v1/workflows
+- /api/v1/workflows/:name/run
+- /api/v1/datasources*
+- /api/v1/jobs*
+
+### Platform Service APIs
+
+- /api/v1/bulk/operations*
+- /api/v1/eventbus*
+- /api/v1/exports*
+- /api/v1/export-templates*
+- /api/v1/webhooks*
+- /api/v1/streams*
+- /api/v1/streaming/subscriptions*
+- /api/v1/tenants*
+- /api/v1/rbac*
+- /api/v1/versioning*
+- /api/v1/lineage*
+- /api/v1/tracing*
+
+### Data Platform and Specialized APIs
+
+- /api/v1/gis*
+- /api/v1/gis/dashboards*
+- /api/v1/analytics*
+- /api/v1/etl*
+- /api/v1/cdc*
+- /api/v1/data-platform/overview
+- /api/v1/builder*
+- /api/v1/netintel*
+
+API Builder details (implemented routes):
+
+- /api/v1/builder/apis*
+- /api/v1/builder/csv/upload
+- /api/v1/builder/csv/uploads*
+- /api/v1/builder/csv/uploads/:id/generate-dashboard
+- /api/v1/builder/csv/uploads/:id/generate-gis
+- /api/v1/builder/convert/analyze
+- /api/v1/builder/convert/dashboard-to-gis
+- /api/v1/builder/convert/gis-to-dashboard
+- /api/v1/builder/conversions
+- /api/v1/builder/scanner/scan
+- /api/v1/builder/scanner/scans
+- /api/v1/builder/scanner/health
+
+## GraphQL Coverage
+
+Endpoints:
+
+- POST /api/graphql
+- GET /api/graphql/schema
+- GET /api/graphql/playground
+
+Implementation summary:
+
+- GraphQL handler uses SQL backend preference order with PostgreSQL first fallback chain.
+- Access is protected by auth middleware.
+
+## Dashboard and UI Coverage
+
+Frontend routes:
+
+- /
+- /admin
+- /system-manager
+- /manager
+- /gis
+- /analytics
+- /cdc-etl
+- /netintel
+- /governance
+- /operations-center
+- /lineage-version
+
+Frontend role normalization handles aliases such as sysadmin to system-manager.
+
+## GIS Coverage
+
+GIS API groups:
+
+- /api/v1/gis/summary
+- /api/v1/gis/layers*
+- /api/v1/gis/regions*
+- /api/v1/gis/markers*
+- /api/v1/gis/datasets*
+
+Specialized GIS dashboards:
+
+- /api/v1/gis/dashboards
+- /api/v1/gis/dashboards/:type
+- /api/v1/gis/dashboards/:type/summary
+
+## Network Intelligence (NetIntel) Coverage
+
+NetIntel API group:
+
+- /api/v1/netintel/summary
+- /api/v1/netintel/observability
+- /api/v1/netintel/log-types
+- /api/v1/netintel/parsers*
+- /api/v1/netintel/logs*
+- /api/v1/netintel/topology*
+- /api/v1/netintel/heatmap
+- /api/v1/netintel/trends
+- /api/v1/netintel/predictions
+- /api/v1/netintel/tracks*
+- /api/v1/netintel/anomalies*
+- /api/v1/netintel/alerts*
+- /api/v1/netintel/forecasts*
+
+## CLI Full Command Reference
+
+Verified top-level commands:
+
+- alerts
+- api
+- apibank
+- bulk
+- catalog
+- completion
+- compliance
+- config
+- current-user
+- datasource
+- diff
+- events
+- exportx
+- health
+- incidents
+- job
+- lineage
+- lineagex
+- login
+- logout
+- mesh
+- metrics
+- policy
+- quality
+- rbacx
+- status
+- stream
+- tenant
+- trace
+- version
+- versioning
+- webhook
+- workflow
+
+### Complete Command Tree
+
+```text
+axiomnizamctl
+├─ login [server-url]
+├─ logout
+├─ current-user
+├─ api
+│  ├─ create
+│  ├─ list
+│  ├─ get [name]
+│  ├─ update [name]
+│  ├─ delete [name]
+│  ├─ apply -f [file]
+│  ├─ describe [name]
+│  └─ diff -f [file]
+├─ apibank
+│  ├─ create
+│  ├─ list
+│  ├─ get [bank-name]
+│  ├─ add-api [bank-name]
+│  └─ search
+├─ policy
+│  ├─ apply -f [file]
+│  ├─ list
+│  ├─ get [name]
+│  ├─ delete [name]
+│  ├─ describe [name]
+│  └─ diff -f [file]
+├─ workflow
+│  ├─ apply -f [file]
+│  ├─ list
+│  ├─ run [name]
+│  ├─ status [name]
+│  ├─ describe [name]
+│  └─ diff -f [file]
+├─ datasource
+│  ├─ create
+│  ├─ list
+│  ├─ test [name]
+│  ├─ apply -f [file]
+│  ├─ delete [name]
+│  ├─ describe [name]
+│  ├─ diff -f [file]
+│  ├─ get [name]
+│  └─ update [name]
+├─ job
+│  ├─ create
+│  ├─ list
+│  ├─ get [job-id]
+│  ├─ run [name]
+│  ├─ delete [name]
+│  ├─ logs [job-id]
+│  ├─ cancel [job-id]
+│  ├─ describe [job-id]
+│  ├─ diff -f [file]
+│  └─ status [job-id]
+├─ mesh
+│  ├─ list
+│  ├─ status
+│  ├─ domain
+│  │  ├─ create
+│  │  ├─ list
+│  │  └─ get [domain-name]
+│  ├─ product
+│  │  ├─ create
+│  │  ├─ list
+│  │  └─ get
+│  ├─ subscribe
+│  └─ lineage
+├─ tenant
+│  ├─ list
+│  ├─ get [id]
+│  └─ create
+├─ rbacx
+│  ├─ roles
+│  ├─ create-role
+│  └─ check
+├─ webhook
+│  ├─ list
+│  ├─ create
+│  └─ test [id]
+├─ stream
+│  ├─ list
+│  ├─ create
+│  └─ cancel [id]
+├─ exportx
+│  ├─ list
+│  ├─ create
+│  └─ progress [id]
+├─ bulk
+│  ├─ list
+│  ├─ submit
+│  └─ progress [id]
+├─ versioning
+│  ├─ history [resource-type] [resource-id]
+│  ├─ diff [resource-type] [resource-id]
+│  └─ rollback [resource-type] [resource-id]
+├─ trace
+│  ├─ search
+│  └─ get [trace-id]
+├─ lineagex
+│  ├─ graph [resource-type] [resource-id]
+│  └─ impact [resource-type] [resource-id]
+├─ incidents
+│  └─ overview
+├─ health
+│  └─ check
+├─ alerts
+│  ├─ check
+│  └─ list
+├─ metrics
+│  └─ collect
+├─ catalog
+│  ├─ search [query]
+│  └─ list
+├─ compliance
+│  ├─ check
+│  ├─ report
+│  └─ audit
+├─ quality
+│  ├─ analyze
+│  └─ check
+├─ lineage
+│  └─ trace [resource]
+├─ config
+│  ├─ view
+│  ├─ current-context
+│  ├─ use-context [context-name]
+│  ├─ get-clusters
+│  ├─ set-context [context-name] --cluster=[cluster] --user=[user]
+│  ├─ set-cluster [cluster-name] --server=[server-url]
+│  ├─ delete-context [context-name]
+│  └─ rename-context [old-name] [new-name]
+├─ status
+├─ events
+│  ├─ get [resource-kind] [resource-name]
+│  └─ list
+├─ diff
+│  └─ diff -f resource.yaml
+├─ completion [bash|zsh|fish|powershell]
+└─ version
 ```
 
-### Get an auth token
+### Global CLI Flags
 
-```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/realms/axiomnizam/protocol/openid-connect/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=axiomnizam-backend&client_secret=YOUR_SECRET&grant_type=client_credentials" \
-  | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-```
+- --kubeconfig
+- --context
+- --namespace
+- --output
+- --verbose
+- --dry-run
+- --help
+- --version
 
-### Test
+### CLI Execution Modes
 
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/api/postgres/users -H "Authorization: Bearer $TOKEN"
-```
+CLI commands in this repository are a mix of:
 
----
+- API-backed commands: call backend REST endpoints (for example api, policy, workflow, datasource, job, tenant, webhook, stream, exportx, bulk, versioning, trace, lineagex).
+- Local integration commands: run local integration analyzers without requiring backend routes for every operation (for example health, alerts, metrics, catalog, compliance, quality, lineage, and parts of mesh behavior).
+
+This split is intentional in the current codebase.
+
+## Internal Module Coverage
+
+Implemented internal modules include:
+
+- Control-plane and runtime: apiserver, runtime, resources, reconciler, controllers, workflow, workflows, workqueue.
+- Security and auth: auth, rbac, ratelimit, encryption, security, audit.
+- Data and integration: database, repositories, services, mesh, integration, etl, cdc, eventbus, events, export, streaming, webhooks.
+- Platform operations: bulk, tenant, versioning, lineage, tracing, status, distributed, distributedstate.
+- Data quality and performance: quality, metrics, performance, scanner.
+- API/user-facing layers: handlers, graphql, models, output, client.
+
+These module folders are present under internal/ and are part of the implemented platform surface.
+
+## Frontend Template Coverage
+
+Implemented frontend template pages and scripts include:
+
+- Public and auth flows: dashboard, auth.
+- Role views: admin, manager, system-manager.
+- Domain dashboards: gis-dashboard, analytics-dashboard, cdc-etl-dashboard, netintel-dashboard.
+- Governance and operations: governance-dashboard, operations-center, version-lineage-dashboard.
+- Shared layout and styling: layout, responsive, platform-console styles.
+
+Template files are present in frontend/templates and the frontend server routes expose the primary pages at runtime.
+
+## Configuration and Environment Variables
+
+Key vars used by current code paths:
+
+- API_HOST
+- API_PORT
+- KEYCLOAK_HOST
+- KEYCLOAK_PORT
+- KEYCLOAK_REALM
+- KEYCLOAK_CLIENT_ID
+- KEYCLOAK_CLIENT_SECRET
+- KEYCLOAK_ONLY_AUTH
+- KEYCLOAK_USER_SYNC_ENABLED
+- KEYCLOAK_ADMIN_REALM
+- KEYCLOAK_ADMIN_CLIENT_ID
+- KEYCLOAK_ADMIN_USERNAME
+- KEYCLOAK_ADMIN_PASSWORD
+- RATE_LIMIT_MAX_CALLS
+- RATE_LIMIT_VALIDITY_MINUTES
+- ETCD_HOST
+- ETCD_PORT
+- VALKEY_HOST
+- VALKEY_PORT
+- SAFEGATE_CLAMAV_ADDR
+- SAFEGATE_MAX_FILE_SIZE
+
+Security recommendation:
+
+- Rotate default credentials and secrets before production.
+- Avoid committing real webhook URLs and admin credentials.
 
 ## Project Structure
 
-```
-AxiomNizam/
-├── main.go                          # Root API server entry point (Gin router, all routes)
-├── go.mod                           # Go module definition
-├── docker-compose.yml               # Full stack: API + frontend + Keycloak + 5 databases
-├── Dockerfile                       # Multi-stage build for API server + CLI
-├── Dockerfile.axiomnizamctl         # Standalone CLI container
-├── init-postgres.sql                # Keycloak database initialization
-│
-├── cmd/
-│   ├── axiomnizam-server/main.go    # K8s-style server with controllers, informers, event bus
-│   └── axiomnizamctl/               # CLI tool (13+ source files)
-│       ├── main.go                  # Entry point
-│       ├── root.go                  # Root cobra command, global flags
-│       ├── COMMAND_TREE.go          # Full command documentation
-│       ├── commands.go              # Status, health commands
-│       ├── api.go                   # API resource CRUD
-│       ├── apply.go                 # YAML apply engine
-│       ├── auth.go                  # login/logout/current-user
-│       ├── config.go                # kubeconfig-style context management
-│       ├── policy_workflow.go       # Policy & workflow commands
-│       ├── datasource_job.go        # DataSource & job commands
-│       ├── mesh.go                  # Data mesh commands
-│       ├── apibank.go               # API bank commands
-│       ├── diff.go                  # Resource diff engine
-│       ├── events.go                # Event listing
-│       ├── integration.go           # Integration platform commands
-│       ├── cli_manager.go           # Resource manager for CLI
-│       └── completion.go            # Shell auto-completion
-│
-├── frontend/
-│   ├── main.go                      # Gin server on port 7000
-│   └── templates/                   # HTML/JS/CSS dashboards
-│       ├── dashboard.html/js        # Main dashboard
-│       ├── admin-dashboard.html/js  # Admin panel
-│       ├── gis-dashboard.*          # Geographic Information System (Leaflet.js)
-│       ├── analytics-dashboard.*    # Analytics with Chart.js
-│       ├── cdc-etl-dashboard.*      # CDC/ETL pipeline monitor
-│       ├── netintel-dashboard.*     # Network intelligence
-│       ├── system-manager.html/js   # System management
-│       └── auth.js                  # JWT token handling
-│
-├── internal/                        # 51 packages, 300+ Go files
-│   │
-│   │── # ── Control Plane ──
-│   ├── apiserver/                   # Resource store with watchers (K8s kube-apiserver)
-│   ├── resources/                   # CRD-like resource definitions + API versions
-│   ├── controllers/                 # Reconciliation controllers (K8s operators)
-│   ├── reconciler/                  # Core reconciliation engine (observe → diff → act)
-│   ├── workqueue/                   # Rate-limited work queue with priority levels
-│   ├── runtime/                     # Controller manager with leader election
-│   │
-│   │── # ── Security ──
-│   ├── auth/                        # JWT validation, Keycloak OIDC, middleware
-│   ├── rbac/                        # Role-based access control
-│   ├── security/                    # Row-level security (RLS)
-│   ├── encryption/                  # AES-256-GCM field encryption, key rotation
-│   ├── policies/                    # Policy engine (CEL, Rego, DSL), admission, governance
-│   ├── ratelimit/                   # Rate limiting middleware, quota management
-│   │
-│   │── # ── Data ──
-│   ├── database/                    # Multi-database connection manager (9 backends)
-│   ├── models/                      # Domain models (15 model files)
-│   ├── repositories/                # Data access layer (15 repository files)
-│   ├── migrations/                  # GORM auto-migrations with indexes
-│   ├── services/                    # Business logic (auth, user, cached variants)
-│   │
-│   │── # ── API ──
-│   ├── handlers/                    # 29 HTTP handler files
-│   ├── client/                      # API client library for CLI
-│   ├── config/                      # Configuration from environment variables
-│   ├── graphql/                     # Dynamic GraphQL schema from database
-│   ├── docs/                        # OpenAPI spec generator
-│   │
-│   │── # ── Data Integration ──
-│   ├── etl/                         # ETL pipeline engine (10 step types)
-│   ├── cdc/                         # Change data capture with webhook subscriptions
-│   ├── streaming/                   # WebSocket real-time streaming
-│   ├── workflows/                   # Workflow orchestration engine
-│   ├── jobs/                        # Background job queue (18 files)
-│   │
-│   │── # ── Observability ──
-│   ├── events/                      # Domain event system (20+ event types)
-│   ├── eventbus/                    # Pub/sub event broker with topics
-│   ├── cache/                       # Multi-backend cache (Redis + in-memory)
-│   ├── status/                      # Resource status tracking
-│   ├── diff/                        # Change detection engine
-│   ├── audit/                       # Audit logging, compliance reporting
-│   ├── tracing/                     # Distributed tracing (OpenTelemetry-style)
-│   ├── metrics/                     # Prometheus-style metrics
-│   ├── performance/                 # Query performance analyzer
-│   │
-│   │── # ── Distributed ──
-│   ├── distributed/                 # etcd cluster coordination
-│   ├── distributedstate/            # Distributed state (CAS, leases, locks)
-│   ├── tenant/                      # Multi-tenancy (isolation, quotas, tiers)
-│   │
-│   │── # ── Governance ──
-│   ├── lineage/                     # Data lineage tracking, impact analysis
-│   ├── quality/                     # Data quality validation, anomaly detection
-│   ├── mesh/                        # Data mesh (domains, products, SLAs)
-│   ├── apibanks/                    # API collection management
-│   ├── netintel/                    # Network intelligence (predictions, anomalies)
-│   │
-│   │── # ── Utilities ──
-│   ├── export/                      # Data export (CSV, JSON, Parquet, Excel)
-│   ├── bulk/                        # Bulk CRUD operations with progress
-│   ├── versioning/                  # Resource version history, snapshots, rollback
-│   ├── webhooks/                    # Webhook delivery with retry
-│   ├── output/                      # Output formatting (JSON, YAML, table, wide)
-│   ├── integration/                 # Multi-phase integration framework (31 files)
-│   └── utils/                       # 44 utility files (retry, crypto, validation...)
-│
-└── examples/                        # YAML resources + Postman collections
-    ├── api.yaml                     # API resource example
-    ├── policy.yaml                  # RBAC policy example
-    ├── workflow.yaml                # ETL workflow example
-    ├── datasource.yaml              # PostgreSQL datasource example
-    ├── kubeconfig-example.yaml      # CLI configuration
-    └── *.json                       # 10 Postman collections
-```
+Important folders:
 
----
+- cmd/axiomnizamctl: CLI implementation
+- internal/auth: token validation and role checks
+- internal/config: environment loading
+- internal/database: connection initialization
+- internal/handlers: API handlers and feature modules
+- internal/runtime: control-plane runtime
+- internal/* platform modules: bulk, eventbus, export, tenant, rbac, tracing, lineage, versioning, streaming, webhooks
+- frontend/templates: dashboard pages and scripts
+- examples: sample YAML and Postman collections
 
-## Core Components
+## Appendix: Feature-to-File Evidence Matrix
 
-### Control Plane
+This appendix maps implemented features to concrete source evidence (module to route/command/template source path).
 
-The Kubernetes-style control plane implements the **reconciliation pattern**: users declare desired state, controllers continuously drive actual state to match.
+### Backend Feature Evidence
 
-| Component | Package | Purpose |
+| Feature | Route Wiring Evidence | Module/Handler Evidence |
 |---|---|---|
-| API Server | `apiserver/` | In-memory resource store with watchers, namespace support, CRUD |
-| Resources | `resources/` | CRD-like definitions: `WorkloadResource`, `PipelineResource`, `ScheduleResource`, `ExecutionResource` with `ObjectMeta`, `TypeMeta`, `ObjectStatus`, finalizers, labels, annotations |
-| Controllers | `controllers/` | `WorkloadReconciler`, `PipelineReconciler`, `ScheduleReconciler` |
-| Reconciler | `reconciler/` | Generic reconciliation engine with `Observer`, `Differ`, `Actor` interfaces |
-| Work Queue | `workqueue/` | FIFO + priority queue with exponential backoff rate limiting |
-| Runtime | `runtime/` | Controller manager, lifecycle orchestration, leader election |
-| Status | `status/` | Phase tracking: Pending → Validating → Acting → Succeeded/Failed |
-| Diff | `diff/` | Resource diff engine with policy/workflow impact analysis |
-
-**Reconciliation loop:**
-```
-User applies YAML → API Server stores resource → Controller watches for changes
-  → Controller reconciles (desired vs actual) → Updates status conditions
-  → Requeues with backoff if needed
-```
-
-### API Layer
-
-**29 HTTP handlers** registered in the Gin router, organized by domain:
-
-| Handler | Endpoints | Description |
-|---|---|---|
-| Health | `/health`, `/status`, `/distributed` | Liveness, readiness, cluster mode |
-| Auth | `/auth/login`, `/auth/refresh`, `/auth/validate` | JWT token lifecycle |
-| User CRUD | `/api/{db}/users` | Per-database CRUD (7 databases) |
-| Dynamic Query | `/api/{db}/query`, `/api/{db}/schema` | SQL execution, batch, introspection |
-| Resources | `/api/v1/namespaces/{ns}/{kind}/{name}` | K8s-style namespaced resource API |
-| GIS | `/api/v1/gis/*` | Layers, regions, markers, datasets, specialized dashboards |
-| Analytics | `/api/v1/analytics/*` | Dashboards, widgets, CSV export |
-| ETL | `/api/v1/etl/*` | Pipeline CRUD, runs, connectors, observability |
-| CDC | `/api/v1/cdc/*` | Pipeline management, start/pause/stop, sources/sinks |
-| Network Intel | `/api/v1/netintel/*` | Parsers, logs, topology, heatmaps, predictions, anomalies |
-| DataSources | `/api/v1/datasources` | DataSource CRUD + connection testing |
-| Jobs | `/api/v1/jobs` | Job submission, run, cancel, logs |
-| Workflows | `/api/v1/workflows` | Workflow CRUD + run |
-| Policies | `/api/v1/policies` | Policy CRUD |
-| Admin | `/api/admin/*` | Database/table management, API metrics |
-| Notifications | `/api/notifications/*` | Discord webhook notifications |
-| Transform | `/api/transform/*` | Data transformation rules, batch, preview |
-
-Additional **13 enterprise feature services** (71 endpoints):
-
-| Service | Endpoints | Description |
-|---|---|---|
-| Audit | 4 | Immutable audit trail, compliance reports |
-| Tenant | 9 | Multi-tenancy, members, quotas |
-| Jobs (advanced) | 7 | Submit, cancel, retry, progress, logs |
-| Streaming | 6 | WebSocket streams, subscriptions |
-| Bulk | 7 | Batch operations with per-item tracking |
-| Versioning | 6 | Version history, snapshots, diff, rollback |
-| Webhooks | 7 | Webhook CRUD, test, delivery logs |
-| Event Bus | 8 | Publish, topics, subscriptions, DLQ |
-| Tracing | 8 | Traces, spans, service map, metrics |
-| Export | 8 | Export jobs, templates, download URL |
-| Lineage | 9 | Data lineage nodes/edges, impact analysis |
-| Encryption | 9 | Key management, encrypt/decrypt, policies |
-| RBAC | 14 | Roles, bindings, permissions, access requests |
-
-### Data Layer
-
-**Multi-database support** with unified connection management:
-
-| Database | Driver | Use Case |
-|---|---|---|
-| MySQL | GORM | Relational storage |
-| MariaDB | GORM | Relational storage |
-| PostgreSQL | GORM | Primary relational database |
-| Percona | GORM | MySQL-compatible |
-| Oracle | GORM | Enterprise relational |
-| MongoDB | Native driver | Document storage |
-| Valkey/Redis | go-redis | Caching, job queue, query logs |
-| Elasticsearch | elastic-go | Full-text search |
-| etcd | etcd client v3 | Distributed state, leader election |
-
-**ORM models** (15 files in `models/`): User, AuditLog, Tenant, Job, Stream, BulkOperation, ResourceVersion, Webhook, Event/Topic, Trace/Span, ExportJob, LineageNode/Edge, EncryptionKey, Role/Permission.
-
-**Repository pattern** (15 files in `repositories/`): Each domain has a typed repository interface with Create, GetByID, Update, Delete, FindAll + specialized queries.
-
-**Migrations**: Auto-migration with 30+ performance indexes and foreign key relationships.
-
-### Policy and Security
-
-| Component | Package | Description |
-|---|---|---|
-| Auth | `auth/` | JWT validation with Keycloak JWKS, token middleware |
-| RBAC | `rbac/` | Roles (Admin, Manager, User, Guest), hierarchical permissions |
-| Row-Level Security | `security/` | Per-table/per-user policy evaluation with caching |
-| Field Encryption | `encryption/` | AES-256-GCM, key versioning, rotation events |
-| Policy Engine | `policies/` | CEL/Rego/DSL languages, admission control, data governance, quotas |
-| Rate Limiting | `ratelimit/` | Per-token rate limiting, quota management |
-
-**Auth flow:**
-```
-Client → JWT in Authorization header → Keycloak JWKS validation
-  → Claims extraction → RBAC role check → Rate limit check → Handler
-```
-
-**Roles:** Admin (full access) → Manager (no delete/role mgmt) → User (own data) → Guest (read-only)
-
-### Data Integration
-
-| Component | Package | Description |
-|---|---|---|
-| ETL Engine | `etl/` | Pipeline with 10 step types: extract, transform, load, filter, map, aggregate, join, validate, enrich, deduplicate |
-| CDC | `cdc/` | Change event capture (INSERT, UPDATE, DELETE), webhook subscriptions |
-| Streaming | `streaming/` | WebSocket real-time data with buffering, subscriptions |
-| Workflows | `workflows/` | Multi-step workflow engine with triggers (policy, resource, schedule, manual) |
-| Jobs | `jobs/` | Priority queues, dead-letter, cron scheduling, Redis persistence, fairness, observability |
-| GraphQL | `graphql/` | Dynamic schema generation from database tables |
-
-### Observability
-
-| Component | Package | Description |
-|---|---|---|
-| Events | `events/` | 20+ domain event types, pub/sub bus, event history |
-| Event Bus | `eventbus/` | Topic-based broker with correlation IDs, DLQ |
-| Audit | `audit/` | Compliance rules (GDPR, HIPAA, SOC2, PCI-DSS), risk assessment |
-| Tracing | `tracing/` | OpenTelemetry-style traces, spans, service dependency maps |
-| Metrics | `metrics/` | Prometheus counters, gauges, histograms |
-| Performance | `performance/` | Query duration, rows scanned, cache hits, index usage |
-| Lineage | `lineage/` | Data flow graphs, transformation logs, impact analysis |
-| Quality | `quality/` | Data validation rules, baseline anomaly detection |
-
-### Distributed Systems
-
-| Component | Package | Description |
-|---|---|---|
-| Distributed | `distributed/` | etcd cluster health, member listing, leader detection |
-| Distributed State | `distributedstate/` | Compare-and-swap, leases/TTL, watch support, distributed locks |
-| Cache | `cache/` | Redis + in-memory backends, TTL, informer change notifications |
-| Mesh | `mesh/` | Data mesh pattern: domains, data products, SLAs, subscriptions |
-
----
-
-## CLI Tool — axiomnizamctl
-
-A kubectl-inspired CLI for managing the platform. Built with Cobra.
-
-### Installation
-
-```bash
-go build -o axiomnizamctl ./cmd/axiomnizamctl/
-
-# Or as a Docker container:
-docker build -f Dockerfile.axiomnizamctl -t axiomnizamctl .
-```
-
-### Core commands
-
-```bash
-# Authentication
-axiomnizamctl login [server-url]
-axiomnizamctl logout
-axiomnizamctl current-user
-
-# YAML apply (kubectl-style)
-axiomnizamctl api apply -f api.yaml
-axiomnizamctl policy apply -f policy.yaml
-axiomnizamctl workflow apply -f workflow.yaml
-axiomnizamctl datasource apply -f datasource.yaml
-
-# Resource CRUD
-axiomnizamctl api list
-axiomnizamctl api get users-api -o yaml
-axiomnizamctl api describe users-api
-axiomnizamctl api delete users-api
-axiomnizamctl api diff -f api.yaml
-
-# Workflow execution
-axiomnizamctl workflow run daily-etl
-axiomnizamctl workflow status daily-etl
-
-# Jobs
-axiomnizamctl job list
-axiomnizamctl job get <id>
-axiomnizamctl job logs <id>
-
-# Monitoring
-axiomnizamctl health check
-axiomnizamctl status
-axiomnizamctl alerts list
-axiomnizamctl metrics collect
-axiomnizamctl events list
-
-# Data platform
-axiomnizamctl apibank list
-axiomnizamctl mesh list
-axiomnizamctl lineage trace [resource]
-axiomnizamctl quality analyze
-axiomnizamctl compliance check
-
-# Config (kubeconfig-style)
-axiomnizamctl config view
-axiomnizamctl config use-context production
-axiomnizamctl config set-cluster staging --server=https://staging:8000
-```
-
-### Global flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `--namespace` | `default` | Namespace scope |
-| `--output` | `table` | Output format: table, json, yaml, wide |
-| `--kubeconfig` | `~/.axiomnizam/config` | Config file path |
-| `--context` | (current) | Override current context |
-| `--verbose` | false | Enable verbose logging |
-| `--dry-run` | false | Preview without applying |
-
-### Apply workflow
-
-```
-axiomnizamctl api apply -f api.yaml
-  → CLI reads & validates YAML
-  → POST /api/v1/namespaces/{ns}/{kind}s
-  → Server stores resource, assigns generation number
-  → Informer detects change, enqueues work
-  → Controller reconciles desired → actual state
-  → Status updated: phase=Active, conditions=[Ready, Synced]
-  → CLI polls and displays result
-```
-
----
-
-## Frontend Dashboards
-
-The frontend is a Go-based web server (Gin, port 7000) serving HTML/JS/CSS:
-
-| Route | Dashboard | Technology |
-|---|---|---|
-| `/` | Public Dashboard | HTML/JS |
-| `/admin` | Admin Dashboard | HTML/JS |
-| `/system-manager` | System Manager | HTML/JS |
-| `/gis` | GIS Dashboard | Leaflet.js |
-| `/analytics` | Analytics | Chart.js |
-| `/cdc-etl` | CDC/ETL Monitor | HTML/JS |
-| `/netintel` | Network Intelligence | HTML/JS |
-
----
-
-## API Reference
-
-### Health (no auth)
-
-```
-GET  /health       → { "status": "alive" }
-GET  /status       → { version, databases, connections }
-GET  /distributed  → { etcd cluster status }
-```
-
-### Authentication
-
-```
-POST /auth/login              # Get JWT token
-POST /auth/refresh            # Refresh token
-GET  /auth/validate           # Validate token
-GET  /auth/token-status       # Token info (requires auth)
-GET  /auth/admin/tokens-status  # All tokens (admin only)
-```
-
-### Database CRUD
-
-Databases: `mysql`, `mariadb`, `postgres`, `percona`, `oracle`, `mongodb`, `firebase`
-
-```
-GET    /api/{db}/users          # List (authenticated)
-GET    /api/{db}/users/:id      # Get (authenticated)
-POST   /api/{db}/users          # Create (admin)
-PUT    /api/{db}/users/:id      # Update (admin)
-DELETE /api/{db}/users/:id      # Delete (admin)
-```
-
-### Dynamic Queries
-
-Databases: `mysql`, `mariadb`, `postgres`, `percona`, `oracle`
-
-```
-GET  /api/{db}/query           # Execute SELECT
-POST /api/{db}/query           # Execute any SQL
-POST /api/{db}/query/batch     # Batch operations
-GET  /api/{db}/schema          # Table schema
-GET  /api/{db}/logs            # Query logs
-GET  /api/{db}/stats           # Query statistics
-```
-
-### GraphQL (auth required)
-
-```
-POST /api/graphql             # Execute GraphQL query
-GET  /api/graphql/schema      # Schema availability/metadata
-GET  /api/graphql/playground  # GraphQL playground endpoint
-```
-
-### Kubernetes-Style Resources
-
-```
-POST   /api/v1/namespaces/{ns}/{kind}              # Create
-GET    /api/v1/namespaces/{ns}/{kind}               # List
-GET    /api/v1/namespaces/{ns}/{kind}/{name}        # Get
-PUT    /api/v1/namespaces/{ns}/{kind}/{name}        # Update
-DELETE /api/v1/namespaces/{ns}/{kind}/{name}        # Delete
-GET    /api/v1/namespaces/{ns}/{kind}/{name}/status # Get status
-GET    /api/v1/namespaces/{ns}/{kind}/{name}/events # Get events
-```
-
-### Data Platform
-
-```
-# ETL Pipelines
-GET/POST/PUT/DELETE  /api/v1/etl/pipelines[/:id]
-POST                 /api/v1/etl/pipelines/:id/run
-GET                  /api/v1/etl/{runs|connectors|observability}
-
-# CDC Pipelines
-GET/POST/PUT/DELETE  /api/v1/cdc/pipelines[/:id]
-POST                 /api/v1/cdc/pipelines/:id/{start|pause|stop}
-GET                  /api/v1/cdc/{sources|sinks|observability}
-
-# GIS
-CRUD                 /api/v1/gis/{layers|regions|markers|datasets}[/:id]
-GET                  /api/v1/gis/summary
-GET                  /api/v1/gis/dashboards[/:type[/summary]]
-
-# Analytics
-GET                  /api/v1/analytics/dashboards[/:id]
-PUT                  /api/v1/analytics/dashboards/:id/{widgets/:id|layout}
-GET                  /api/v1/analytics/widget-types
-
-# Network Intelligence
-CRUD                 /api/v1/netintel/parsers[/:id]
-GET/POST             /api/v1/netintel/logs
-GET                  /api/v1/netintel/{topology|heatmap|trends|predictions|anomalies|alerts|forecasts}
-
-# Data Transformation
-POST                 /api/transform/{apply|batch|preview}
-CRUD                 /api/transform/rules[/:name]
-GET/POST             /api/transform/rules/{export|import}
-
-# DataSources
-CRUD                 /api/v1/datasources[/:name]
-POST                 /api/v1/datasources/:name/test
-
-# Jobs
-POST   /api/v1/jobs           # Create
-GET    /api/v1/jobs            # List
-GET    /api/v1/jobs/:id        # Get
-POST   /api/v1/jobs/:id/run   # Run
-POST   /api/v1/jobs/:id/cancel  # Cancel
-GET    /api/v1/jobs/:id/logs  # Logs
-DELETE /api/v1/jobs/:id       # Delete
-```
-
-### Admin & System Manager (RBAC)
-
-```
-POST /api/admin/database/create
-GET  /api/admin/database/list
-GET  /api/admin/database/servers
-POST /api/admin/database/connect
-POST /api/admin/table/create
-GET  /api/admin/table/list
-```
-
-### Admin-only Metrics
-
-```
-GET /api/admin/metrics/{all|count|stats}
-```
-
-### Notifications
-
-```
-POST /api/notifications/send     # Send to Discord
-POST /api/notifications/health   # Health notification
-POST /api/notifications/status   # Status notification
-GET  /api/notifications/status   # Service status
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-```env
-# Server
-PORT=8000
-FRONTEND_PORT=7000
-
-# Keycloak (OIDC)
-KEYCLOAK_URL=http://keycloak:8080
-KEYCLOAK_REALM=axiomnizam
-KEYCLOAK_CLIENT_ID=axiomnizam-backend
-KEYCLOAK_CLIENT_SECRET=<secret>
-
-# Databases
-MYSQL_DSN=root:password@tcp(mysql:3306)/axiomnizam
-POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=axiomnizam
-MONGO_URI=mongodb://mongo:27017
-REDIS_ADDR=redis:6379
-
-# Rate Limiting
-MAX_CALLS_PER_TOKEN=100
-TOKEN_VALIDITY_MINUTES=60
-
-# Notifications (optional)
-DISCORD_WEBHOOK_URL=https://discordapp.com/api/webhooks/...
-```
-
-### CLI Config Files
-
-Stored at `~/.axiomnizam/`:
-
-| File | Purpose |
+| Auth login | main.go:274 (/auth/login) | internal/handlers/auth_handler.go |
+| GraphQL | main.go:334 (/api/graphql) | internal/handlers/graphql_handler.go |
+| Health/status/distributed | main.go:266, main.go:267, main.go:268 | internal/handlers/handlers.go |
+| Dynamic SQL query | main.go:409 (/api/mysql/query) | internal/handlers/dynamic_query_handler.go |
+| Transform rules | main.go:469 (/api/transform/rules) | internal/handlers/transformation_handler.go |
+| Platform users | main.go:503 (/api/v1/users) | internal/handlers/user_handler.go |
+| CLI auth APIs | main.go:528 (/api/v1/auth/login) | internal/handlers/cli_auth_handler.go |
+| Kubernetes-style namespaced resources | main.go:538 (group /api/v1/namespaces) | internal/handlers/resource_handler.go |
+| Streaming websocket | main.go:649 (/ws/stream) | internal/streaming/ and internal/handlers/phase3_handlers.go |
+| Tenants | main.go:664 (group /api/v1/tenants) | internal/tenant/ |
+| RBAC service APIs | main.go:678 (group /api/v1/rbac) | internal/rbac/ |
+| Lineage APIs | main.go:709 (group /api/v1/lineage) | internal/lineage/ |
+| Tracing APIs | main.go:723 (group /api/v1/tracing) | internal/tracing/ |
+| GIS APIs | main.go:739 (group /api/v1/gis) | internal/handlers/gis_handler.go |
+| ETL APIs | main.go:792 (group /api/v1/etl) | internal/handlers/cdc_etl_handler.go |
+| CDC APIs | main.go:811 (group /api/v1/cdc) | internal/handlers/cdc_etl_handler.go |
+| Data platform overview | main.go:827 (/api/v1/data-platform/overview) | internal/handlers/cdc_etl_handler.go |
+| API Builder and scanner | main.go:834 (group /api/v1/builder) | internal/handlers/api_builder_handler.go, internal/scanner/ |
+| NetIntel | main.go:875 (group /api/v1/netintel) | internal/handlers/netintel_handler.go, internal/netintel/ |
+| Bulk operations | main.go:599 (group /api/v1/bulk/operations) | internal/bulk/ |
+| Exports | main.go:624 (group /api/v1/exports) | internal/export/ |
+| Webhooks | main.go:637 (group /api/v1/webhooks) | internal/webhooks/ |
+
+### CLI Command Evidence
+
+| CLI Area | Command Source Path |
 |---|---|
-| `config` | Contexts, clusters, users (kubeconfig-style YAML) |
-| `token` | JWT token (file permissions: 0600) |
+| Root command | cmd/axiomnizamctl/root.go:22 |
+| Login/logout/current-user | cmd/axiomnizamctl/auth.go:24 |
+| API commands | cmd/axiomnizamctl/api.go:15 |
+| API bank commands | cmd/axiomnizamctl/apibank.go:13 |
+| Policy/workflow commands | cmd/axiomnizamctl/policy_workflow.go:15 |
+| Datasource/job commands | cmd/axiomnizamctl/datasource_job.go:15 |
+| Mesh commands | cmd/axiomnizamctl/mesh.go:18 |
+| Tenant/RBAC/webhook/stream/export/bulk/versioning/trace/lineagex/incidents | cmd/axiomnizamctl/platform_commands.go:11 |
+| Health/alerts/metrics/catalog/compliance/quality/lineage integration commands | cmd/axiomnizamctl/integration.go:17 |
+| Config commands | cmd/axiomnizamctl/config.go:19 |
+| Status command | cmd/axiomnizamctl/commands.go:9 |
+| Events command | cmd/axiomnizamctl/events.go:10 |
+| Diff command | cmd/axiomnizamctl/diff.go:14 |
+| Completion command | cmd/axiomnizamctl/completion.go:9 |
 
----
+### Frontend Route and Template Evidence
 
-## Docker Deployment
-
-### docker-compose.yml services
-
-| Service | Port | Purpose |
-|---|---|---|
-| **axiomnizam** | 8000 | API server + CLI |
-| **axiomnizam-frontend** | 7000 | Web dashboards |
-| **keycloak** | 8080 | OAuth2/OIDC auth |
-| **postgres** | 5432 | Primary database + Keycloak backend |
-| **mongodb** | 27017 | Document storage |
-| **valkey** | 6379 | Cache + job queue |
-| **etcd** | 2379 | Distributed coordination |
-
-Optional services (commented in compose file): MySQL, MariaDB, Percona, Oracle, Elasticsearch, Firebase Emulator.
-
-### Commands
-
-```bash
-docker-compose up -d                  # Start all
-docker-compose ps                     # Check status
-docker-compose logs -f axiomnizam     # View API logs
-docker-compose exec axiomnizam axiomnizamctl version  # CLI in container
-```
-
-### Dockerfiles
-
-| File | Description |
+| Frontend Route Evidence | Template/Asset Evidence |
 |---|---|
-| `Dockerfile` | Multi-stage build: Go 1.25 builder → Debian slim runtime. Builds both `axiomnizam` server and `axiomnizamctl` CLI. Exposes port 8000. |
-| `Dockerfile.axiomnizamctl` | Standalone CLI container on Alpine. |
-| `Dockerfile.ctl-test` | Test runner container for CLI integration tests. |
+| frontend/main.go:125 (/) | frontend/templates/public-dashboard.html, frontend/templates/dashboard.js |
+| frontend/main.go:126 (/admin) | frontend/templates/admin.html, frontend/templates/admin.js |
+| frontend/main.go:127 (/system-manager) | frontend/templates/system-manager.html, frontend/templates/system-manager.js |
+| frontend/main.go:128 (/manager) | frontend/templates/manager.html, frontend/templates/manager.js |
+| frontend/main.go:129 (/gis) | frontend/templates/gis-dashboard.html, frontend/templates/gis-dashboard.js |
+| frontend/main.go:130 (/analytics) | frontend/templates/analytics-dashboard.html, frontend/templates/analytics-dashboard.js |
+| frontend/main.go:131 (/cdc-etl) | frontend/templates/cdc-etl-dashboard.html, frontend/templates/cdc-etl-dashboard.js |
+| frontend/main.go:132 (/netintel) | frontend/templates/netintel-dashboard.html, frontend/templates/netintel-dashboard.js |
+| frontend/main.go:133 (/governance) | frontend/templates/governance-dashboard.html, frontend/templates/governance-dashboard.js |
+| frontend/main.go:134 (/operations-center) | frontend/templates/operations-center.html, frontend/templates/operations-center.js |
+| frontend/main.go:135 (/lineage-version) | frontend/templates/version-lineage-dashboard.html, frontend/templates/version-lineage-dashboard.js |
 
----
+## Troubleshooting
 
-## Examples
+1. Login succeeds but privileged APIs return forbidden
+- Confirm Keycloak roles exist and are assigned.
+- Ensure token carries role in realm_access or resource_access.
 
-Example YAML resources and Postman collections are in `examples/`:
+2. Platform user created but cannot login
+- Confirm KEYCLOAK_USER_SYNC_ENABLED is true.
+- Validate Keycloak admin sync credentials and realm settings.
 
-| File | Description |
-|---|---|
-| `api.yaml` | API resource (CRUD, rate limit, cache) |
-| `policy.yaml` | RBAC policy (roles, time/IP conditions) |
-| `workflow.yaml` | ETL workflow (cron schedule, 3 steps) |
-| `datasource.yaml` | PostgreSQL connection config |
-| `kubeconfig-example.yaml` | CLI context/cluster configuration |
-| `COMPLETE_API_COLLECTION.json` | Full Postman collection |
-| `POSTMAN_COLLECTION.json` | Core API testing |
-| `CDC_ETL_POSTMAN.json` | CDC/ETL endpoint tests |
-| `DATA_TRANSFORMATION_POSTMAN.json` | Transformation tests |
-| `DYNAMIC_QUERIES_POSTMAN.json` | Dynamic query tests |
-| `NETWORK_INTELLIGENCE_POSTMAN_COLLECTION.json` | NetIntel tests |
-| `API_METRICS_POSTMAN.json` | API metrics tests |
-| `QUERY_LOGGER_POSTMAN_COLLECTION.json` | Query logging tests |
-| `UTILS_POSTMAN_COLLECTION.json` | Utility endpoint tests |
+3. 401 on protected endpoints
+- Check Authorization header format Bearer <token>.
+- Check token status and rate-limit window.
 
----
+4. Strict mode migration issues
+- With KEYCLOAK_ONLY_AUTH=true, legacy demo/local fallback credentials are expected to fail.
 
-## Dependencies
-
-Key Go modules (`go.mod`):
-
-| Module | Version | Purpose |
-|---|---|---|
-| `gin-gonic/gin` | 1.9.1 | HTTP framework |
-| `gorm.io/gorm` | 1.30.0 | ORM for SQL databases |
-| `gorm.io/driver/postgres` | 1.6.0 | PostgreSQL driver |
-| `gorm.io/driver/mysql` | 1.6.0 | MySQL/MariaDB/Percona driver |
-| `go.mongodb.org/mongo-driver` | 1.12.1 | MongoDB native driver |
-| `redis/go-redis/v9` | 9.0.5 | Redis/Valkey client |
-| `elastic/go-elasticsearch/v8` | 8.19.1 | Elasticsearch client |
-| `go.etcd.io/etcd/client/v3` | 3.5.9 | etcd client |
-| `golang-jwt/jwt/v5` | 5.0.0 | JWT tokens |
-| `spf13/cobra` | 1.10.2 | CLI framework |
-| `gorilla/websocket` | 1.5.3 | WebSocket support |
-| `robfig/cron/v3` | 3.0.1 | Cron scheduling |
-| `prometheus/client_golang` | 1.11.1 | Prometheus metrics |
-| `go.opentelemetry.io/otel` | 1.28.0 | OpenTelemetry tracing |
-| `go.uber.org/zap` | 1.17.0 | Structured logging |
-| `golang.org/x/crypto` | 0.31.0 | Cryptographic functions |
-| `google/uuid` | 1.6.0 | UUID generation |
-| `graphql-go/graphql` | 0.8.1 | GraphQL engine |
-
----
+5. NetIntel or dashboard write actions denied
+- Verify caller role is admin or system-manager for write operations.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
-
----
-
-## GUI API Builder, File-to-Dashboard, Dashboard↔GIS Converter & SafeGate File Scanner
-
-### Overview
-
-The Admin Dashboard (`/admin`) provides powerful GUI-based features that let administrators create APIs, ingest data files, convert between dashboard types, and scan files for security threats — all without writing code.
-
-### 1. GUI API Builder (REST + GraphQL, separate builders)
-
-Create, test, and manage custom APIs visually from the admin interface.
-
-- REST API Builder remains dedicated to REST endpoint definitions.
-- GraphQL API Builder is a separate UI section and stores `api_type=graphql` APIs.
-
-**Features:**
-- Create APIs with name, method (GET/POST/PUT/DELETE/PATCH), path, category, and description
-- Select source database and source server for each API definition
-- Set authentication requirements and rate limits per API
-- **Configurable response caching** — enable per-API caching with custom TTL (1–86400 seconds, default 300s)
-- Define mock JSON responses for rapid prototyping
-- Add query parameters with type and required/optional flags
-- Create GraphQL APIs with operation name and GraphQL query body (kept separate from REST builder)
-- Test APIs directly from the GUI with one click — cached responses returned instantly
-- Track hit counts and status (active/draft/archived)
-- Filter APIs by category and status
-
-**Backend Endpoints:**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/builder/summary` | Builder summary (supports `api_type=rest|graphql`) |
-| GET | `/api/v1/builder/apis` | List custom APIs (filter by `api_type`, category, status) |
-| POST | `/api/v1/builder/apis` | Create a custom API (`api_type=rest|graphql`, supports `source_database`, `source_server`, `cache_enabled`, `cache_ttl`) |
-| GET | `/api/v1/builder/apis/:id` | Get API details |
-| PUT | `/api/v1/builder/apis/:id` | Update an API (including cache settings) |
-| DELETE | `/api/v1/builder/apis/:id` | Delete an API |
-| POST | `/api/v1/builder/apis/:id/test` | Test API (returns cached or mock response) |
-
-### 2. File Upload → Auto Analytics Dashboard
-
-Upload CSV, JSON, or Excel (.xlsx) files and automatically generate a full analytics dashboard with appropriate widgets, charts, and tables.
-
-**Features:**
-- Drag-and-drop file upload zone supporting **CSV**, **JSON**, and **Excel (.xlsx/.xls)** formats
-- JSON support: array of objects or object containing a data array
-- Excel support: reads first sheet, header row + data rows
-- Automatic column type detection: string, number, date, geo_lat, geo_lng, geo_name
-- Sample data preview table
-- Auto-generates dashboard with:
-  - KPI widgets (average of numeric columns)
-  - Bar charts (string vs. numeric aggregation)
-  - Doughnut charts (string frequency distribution)
-  - Line charts (date vs. numeric trends)
-  - Full data table widget
-- If geo data (lat/lng) is detected, also generate a GIS map dataset with markers
-- **Dashboard deletion** — delete generated dashboards from the upload history
-- Upload history with file type tracking and status
-
-**Backend Endpoints:**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/builder/csv/upload` | Upload file (CSV, JSON, or Excel — multipart form) |
-| GET | `/api/v1/builder/csv/uploads` | List all file uploads |
-| GET | `/api/v1/builder/csv/uploads/:id` | Get upload details |
-| DELETE | `/api/v1/builder/csv/uploads/:id` | Delete an upload |
-| POST | `/api/v1/builder/csv/uploads/:id/generate-dashboard` | Generate analytics dashboard |
-| POST | `/api/v1/builder/csv/uploads/:id/generate-gis` | Generate GIS dataset (requires geo columns) |
-| DELETE | `/api/v1/builder/dashboards/:id` | Delete a generated dashboard |
-
-### 3. Dashboard ↔ GIS Converter
-
-Convert between analytics dashboards and GIS map views bidirectionally, with automatic field mapping and confidence scoring.
-
-**Dashboard → GIS:**
-- Analyzes dashboard widgets for geographic data (lat, lng, region, city columns)
-- Calculates conversion confidence score (0-100%)
-- Extracts markers from table widget rows
-- Creates a new GIS dataset with markers placed at detected coordinates
-
-**GIS → Dashboard:**
-- Creates analytics widgets from GIS dataset markers
-- Generates KPI cards, marker distribution charts, and data tables
-- Preserves all original marker metadata
-
-**Backend Endpoints:**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/builder/convert/analyze` | Analyze conversion feasibility and confidence |
-| POST | `/api/v1/builder/convert/dashboard-to-gis` | Convert dashboard to GIS dataset |
-| POST | `/api/v1/builder/convert/gis-to-dashboard` | Convert GIS dataset to dashboard |
-| GET | `/api/v1/builder/conversions` | List all conversion history |
-
-### 4. SafeGate File Scanner
-
-Integrated security file scanner with a 6-stage detection pipeline. Scan any uploaded file for malware, macro exploits, XSS payloads, archive bombs, and more.
-
-**Scanner Pipeline (6 stages):**
-
-| Scanner | Detection |
-|---------|-----------|
-| **Metadata Scanner** | File size limits, empty files, null bytes in text files, double-extension spoofing |
-| **MIME Type Scanner** | Magic byte detection, MIME type spoofing (claimed vs detected), executable signatures (PE/ELF/Mach-O) |
-| **SVG XSS Scanner** | Script tags, event handlers, javascript: URIs, data: URIs, foreignObject, external xlink, base64 injection |
-| **Macro Scanner** | PDF JavaScript/auto-actions/launch/embedded/encrypted, Office VBA macros/auto-exec/shell commands |
-| **Archive Bomb Scanner** | Zip bomb detection (>100:1 ratio), nesting depth limits, path traversal, executables inside archives |
-| **ClamAV Antivirus** | TCP INSTREAM protocol to ClamAV daemon for full virus/malware detection |
-
-**Features:**
-- Drag-and-drop scan zone in the admin interface
-- SHA256 file fingerprinting
-- Severity classification: Critical, High, Medium, Low, Info
-- Scan history with results tracking
-- Scanner health monitoring
-
-**Backend Endpoints:**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/builder/scanner/scan` | Scan a file (multipart form upload) |
-| GET | `/api/v1/builder/scanner/scans` | List all scan records |
-| GET | `/api/v1/builder/scanner/health` | Scanner pipeline health status |
-
-**Docker Compose:**
-ClamAV runs as a dedicated container service on port 3310:
-```yaml
-clamav:
-  image: clamav/clamav:latest
-  ports:
-    - "3310:3310"
-```
-
-**Environment Variables:**
-```env
-SAFEGATE_CLAMAV_ADDR=clamav:3310
-SAFEGATE_MAX_FILE_SIZE=104857600
-```
-
-### Admin Interface Tabs
-
-| Tab | Description |
-|-----|-------------|
-| **API Builder** | Summary cards, API list with filters, create/test/delete APIs, cache configuration |
-| **GraphQL API Builder** | Separate GraphQL API creation/testing with operation name, query body, and same policy/cache/rate-limit controls |
-| **File → Dashboard** | Drag-drop upload (CSV/JSON/Excel), column analysis, generate dashboard or GIS, delete dashboards |
-| **Dashboard ↔ GIS** | Select source, analyze confidence, convert with field mapping |
-| **File Scanner** | SafeGate 6-stage security scan, drag-drop scan zone, scan history, scanner health |
-| **API Testing** | Original API testing with method filters |
-| **GraphQL Studio** | Execute GraphQL queries with variables and view JSON responses in-browser |
-| **Control Plane** | kubectl-style resource apply/list/get/status/events + DataSource and Job operations |
-| **Logs** | Real-time activity log viewer |
-| **Settings** | System configuration |
-
-### System Manager Interface Tabs
-
-| Tab | Description |
-|-----|-------------|
-| **Overview** | Live system health and synthetic performance indicators |
-| **Databases** | Server-aware database create/list and DB server connection workflow |
-| **Users** | User CRUD with role assignment |
-| **Monitoring** | Metrics and performance overview |
-| **Operations** | Operational maintenance actions and operation log |
-| **GraphQL Studio** | Execute GraphQL queries as system-manager/admin |
-| **Control Plane** | Resource/DataSource/Job/workflow operational commands with RBAC enforcement |
-
-System-manager (sysadmin) role is allowed to use all admin UI capabilities and admin routes exposed by the dashboard, including both REST and GraphQL API Builder workflows.
+See LICENSE.
