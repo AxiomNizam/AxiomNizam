@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -20,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"example.com/axiomnizam/internal/scanner"
 )
@@ -145,13 +148,20 @@ type APIBuilderHandler struct {
 	scanRecords map[string]*FileScanRecord
 	apiData     map[string][]map[string]interface{} // stores mock data per API
 	csvData     map[string][][]string               // raw CSV data per upload
+	etcd        *clientv3.Client
+	stateKey    string
 	scanOrch    *scanner.Orchestrator
 	// reference to analytics & GIS handlers for conversion
 	analyticsHandler *AnalyticsHandler
 	gisHandler       *GISHandler
 }
 
-func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler) *APIBuilderHandler {
+type apiBuilderState struct {
+	CustomAPIs map[string]*CustomAPI               `json:"custom_apis"`
+	APIData    map[string][]map[string]interface{} `json:"api_data"`
+}
+
+func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, etcd *clientv3.Client) *APIBuilderHandler {
 	// Build scanner pipeline
 	orchestrator := scanner.NewOrchestrator(
 		scanner.NewMetadataScanner(100*1024*1024),
@@ -178,12 +188,75 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler) *APIBuilderHandl
 		scanRecords:      make(map[string]*FileScanRecord),
 		apiData:          make(map[string][]map[string]interface{}),
 		csvData:          make(map[string][][]string),
+		etcd:             etcd,
+		stateKey:         "axiomnizam:builder:custom_apis",
 		scanOrch:         orchestrator,
 		analyticsHandler: ah,
 		gisHandler:       gh,
 	}
-	h.seedData()
+	if !h.loadState() {
+		h.seedData()
+		h.persistStateLocked()
+	}
 	return h
+}
+
+func (h *APIBuilderHandler) loadState() bool {
+	if h.etcd == nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.etcd.Get(ctx, h.stateKey)
+	if err != nil {
+		log.Printf("api-builder: failed to load persisted state from etcd: %v", err)
+		return false
+	}
+	if len(resp.Kvs) == 0 {
+		return false
+	}
+
+	var state apiBuilderState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("api-builder: failed to decode persisted state: %v", err)
+		return false
+	}
+
+	if state.CustomAPIs == nil {
+		state.CustomAPIs = make(map[string]*CustomAPI)
+	}
+	if state.APIData == nil {
+		state.APIData = make(map[string][]map[string]interface{})
+	}
+
+	h.customAPIs = state.CustomAPIs
+	h.apiData = state.APIData
+	return true
+}
+
+func (h *APIBuilderHandler) persistStateLocked() {
+	if h.etcd == nil {
+		return
+	}
+
+	state := apiBuilderState{
+		CustomAPIs: h.customAPIs,
+		APIData:    h.apiData,
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("api-builder: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
+		log.Printf("api-builder: failed to persist state to etcd: %v", err)
+	}
 }
 
 func getClamAVAddr() string {
@@ -340,6 +413,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 	}
 	h.customAPIs[id] = api
 	h.apiData[id] = make([]map[string]interface{}, 0)
+	h.persistStateLocked()
 
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "api": api})
 }
@@ -436,6 +510,7 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 		}
 	}
 	api.UpdatedAt = time.Now()
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "api": api})
 }
@@ -451,6 +526,7 @@ func (h *APIBuilderHandler) DeleteAPI(c *gin.Context) {
 	}
 	delete(h.customAPIs, id)
 	delete(h.apiData, id)
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "api deleted"})
 }

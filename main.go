@@ -743,7 +743,7 @@ func main() {
 	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
-	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler)
+	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, conns.Etcd)
 
 	builderAPI := router.Group("/api/v1/builder")
 	{
@@ -935,9 +935,22 @@ func main() {
 	fmt.Println("  Supported kinds: workloads, pipelines, schedules")
 	fmt.Println()
 
-	// Start runtime in background
+	runtimeHost := strings.TrimSpace(os.Getenv("RUNTIME_HOST"))
+	if runtimeHost == "" {
+		runtimeHost = apiHost
+	}
+	runtimePort := strings.TrimSpace(os.Getenv("RUNTIME_PORT"))
+	if runtimePort == "" {
+		runtimePort = "8001"
+	}
+	if runtimeHost == apiHost && runtimePort == apiPort {
+		runtimePort = "8001"
+	}
+	runtimeAddr := fmt.Sprintf("%s:%s", runtimeHost, runtimePort)
+
+	// Start runtime in background on a dedicated port to avoid router conflicts.
 	go func() {
-		if err := rt.Start(ctx, fmt.Sprintf("%s:%s", apiHost, apiPort)); err != nil {
+		if err := rt.Start(ctx, runtimeAddr); err != nil {
 			log.Printf("Failed to start runtime: %v", err)
 			cancel()
 		}
