@@ -29,7 +29,6 @@ import (
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 )
@@ -165,12 +164,102 @@ func main() {
 	}
 	graphQLHandler := handlers.NewGraphQLHandler(graphQLDB)
 
-	// Apply auth middleware to protected routes
-	var authMiddleware gin.HandlerFunc
-	if tokenValidator != nil {
-		authMiddleware = auth.CombinedAuthMiddleware(tokenValidator, rateLimiter)
-	} else {
-		authMiddleware = func(c *gin.Context) { c.Next() }
+	// Context enrichment helper - populates database name and user info for logging
+	enrichRequestContext := func(c *gin.Context) {
+		// Extract database name from URL path (e.g., /api/mysql/query -> mysql)
+		pathParts := strings.Split(c.Request.URL.Path, "/")
+		if len(pathParts) >= 3 {
+			dbName := pathParts[2]
+			switch dbName {
+			case "mysql", "mariadb", "postgres", "percona", "oracle":
+				c.Set("database", dbName)
+			}
+		}
+
+		// Extract user info from validated claims if available
+		if claims := auth.GetUser(c); claims != nil && claims.Sub != "" {
+			c.Set("user_id", claims.Sub)
+		}
+	}
+
+	// authenticateRequest validates token + rate limits and sets auth context without advancing handlers.
+	authenticateRequest := func(c *gin.Context) bool {
+		if tokenValidator == nil {
+			return true
+		}
+
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
+			c.Abort()
+			return false
+		}
+
+		token, err := auth.ExtractBearerToken(authHeader)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid authorization header: %v", err)})
+			c.Abort()
+			return false
+		}
+
+		allowed, callsRemaining, expiresAt, limitErr := rateLimiter.CheckRateLimit(token)
+		if !allowed {
+			if limitErr != nil && limitErr.Error() == "token expired" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":      "token expired",
+					"message":    "your token is no longer valid. please login again to get a new token",
+					"expired_at": expiresAt.Format("2006-01-02 15:04:05"),
+				})
+			} else if limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or unregistered token"})
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":           "api call limit exceeded",
+					"message":         "you have used all 500 api calls allowed per token",
+					"calls_limit":     500,
+					"expires_at":      expiresAt.Format("2006-01-02 15:04:05"),
+					"action_required": "login again to get a fresh token with new 500 calls",
+					"action_endpoint": "/auth/login",
+				})
+			}
+			c.Abort()
+			return false
+		}
+
+		claims, err := tokenValidator.ValidateToken(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
+			c.Abort()
+			return false
+		}
+
+		if err := rateLimiter.IncrementCallCount(token); err != nil {
+			log.Printf("⚠️  Failed to increment call count: %v", err)
+		}
+
+		c.Set("user", claims)
+		c.Set("username", claims.PreferredUsername)
+		c.Set("email", claims.Email)
+		c.Set("roles", claims.RealmAccess.Roles)
+		c.Set("calls_remaining", callsRemaining)
+		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
+		c.Set("token", token)
+
+		c.Header("X-RateLimit-Limit", "500")
+		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
+		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
+
+		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", claims.PreferredUsername, callsRemaining)
+		return true
+	}
+
+	// Apply auth middleware to protected routes.
+	authMiddleware := func(c *gin.Context) {
+		if !authenticateRequest(c) {
+			return
+		}
+		enrichRequestContext(c)
+		c.Next()
 	}
 
 	// Health check endpoints (no auth required)
@@ -190,54 +279,51 @@ func main() {
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
 	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
 
-	// Context enrichment middleware - populates database name and user info for logging
-	contextEnrichmentMiddleware := func(c *gin.Context) {
-		// Extract database name from URL path (e.g., /api/mysql/query -> mysql)
-		pathParts := strings.Split(c.Request.URL.Path, "/")
-		if len(pathParts) >= 3 {
-			dbName := pathParts[2]
-			switch dbName {
-			case "mysql", "mariadb", "postgres", "percona", "oracle":
-				c.Set("database", dbName)
-			}
-		}
-
-		// Extract user info from token claims if available
-		if claims, exists := c.Get("claims"); exists {
-			if tokenClaims, ok := claims.(jwt.MapClaims); ok {
-				if userID, ok := tokenClaims["sub"]; ok {
-					c.Set("user_id", userID)
-				}
-			}
-		}
-
-		c.Next()
-	}
-
-	// Apply context enrichment to auth middleware
-	originalAuthMiddleware := authMiddleware
-	authMiddleware = func(c *gin.Context) {
-		originalAuthMiddleware(c)
-		if !c.IsAborted() {
-			contextEnrichmentMiddleware(c)
-		}
-	}
-
 	// Get admin middleware (requires admin role)
 	var adminMiddleware gin.HandlerFunc
 	var adminOrSysMiddleware gin.HandlerFunc
 	if tokenValidator != nil {
 		adminMiddleware = func(c *gin.Context) {
-			authMiddleware(c)
-			if !c.IsAborted() {
-				auth.RequireAdmin()(c)
+			if !authenticateRequest(c) {
+				return
 			}
+			enrichRequestContext(c)
+			claims := auth.GetUser(c)
+			if claims == nil || !claims.HasRole("admin") {
+				roles := []string{}
+				if claims != nil {
+					roles = claims.RealmAccess.Roles
+				}
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":      "forbidden: user does not have 'admin' role",
+					"user_roles": roles,
+					"required":   "admin",
+				})
+				c.Abort()
+				return
+			}
+			c.Next()
 		}
 		adminOrSysMiddleware = func(c *gin.Context) {
-			authMiddleware(c)
-			if !c.IsAborted() {
-				auth.RequireAnyRole("admin", "system-manager", "sysadmin", "system_admin", "system-admin")(c)
+			if !authenticateRequest(c) {
+				return
 			}
+			enrichRequestContext(c)
+			claims := auth.GetUser(c)
+			if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
+				roles := []string{}
+				if claims != nil {
+					roles = claims.RealmAccess.Roles
+				}
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",
+					"user_roles": roles,
+					"required":   []string{"admin", "system-manager", "sysadmin", "system_admin", "system-admin"},
+				})
+				c.Abort()
+				return
+			}
+			c.Next()
 		}
 	} else {
 		adminMiddleware = func(c *gin.Context) { c.Next() }

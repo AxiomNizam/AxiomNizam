@@ -287,10 +287,18 @@ function extractUserRole(token) {
 }
 
 function getAuthHeaders() {
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': authToken ? 'Bearer ' + authToken : ''
+    const headers = {
+        'Content-Type': 'application/json'
     };
+
+    // Always resolve the latest token from storage/cookies to avoid stale in-memory state.
+    const latestToken = localStorage.getItem('authToken') || readCookie('authToken') || authToken;
+    if (latestToken) {
+        authToken = latestToken;
+        headers['Authorization'] = 'Bearer ' + latestToken;
+    }
+
+    return headers;
 }
 
 function isAuthenticated() {
