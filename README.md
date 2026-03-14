@@ -59,10 +59,10 @@ Runtime note:
 
 Code inventory snapshot (workspace scan on 2026-03-14):
 
-- Total code files: 374
-- Total code lines: 105408
-- Go files: 338
-- Go lines: 89659
+- Total code files: 390
+- Total code lines: 131758
+- Go files: 354
+- Go lines: 116009
 
 Counting method used:
 
@@ -195,6 +195,10 @@ Primary feature areas:
 - Platform services for bulk, eventbus, exports, webhooks, streaming, tenants, RBAC, versioning, lineage, tracing.
 - Data Mesh domain/product/subscription/lineage capabilities in internal mesh modules and CLI mesh commands.
 - Integration and governance analysis commands for health, alerts, catalog, compliance, quality, and lineage in CLI integration modules.
+- Kubernetes-inspired extension modules for admission decisions, scheduling heuristics, and CRD-style definitions.
+- NetIntel mode manager with detector endpoints for mode configuration, event capture, and scoring.
+- Vector search and similarity services (vectorplus) with index management and query APIs.
+- Review pipeline services (reviewflow) for staged items, transitions, and quality scoring.
 
 ## REST API Coverage
 
@@ -278,6 +282,22 @@ Also:
 - /api/v1/workflows
 - /api/v1/workflows/:name/run
 - /api/v1/datasources*
+
+### Extension APIs (new)
+
+- /api/v1/kubeplus/admission/policies
+- /api/v1/kubeplus/admission/evaluate
+- /api/v1/kubeplus/scheduler/nodes*
+- /api/v1/kubeplus/scheduler/score
+- /api/v1/kubeplus/scheduler/pick
+- /api/v1/kubeplus/crd/definitions*
+- /api/v1/kubeplus/crd/validate
+- /api/v1/vectorplus/records*
+- /api/v1/vectorplus/search
+- /api/v1/vectorplus/similarity
+- /api/v1/reviewflow/items*
+- /api/v1/reviewflow/score
+- /api/v1/reviewflow/quality
 - /api/v1/jobs*
 
 ### Platform Service APIs
@@ -385,6 +405,11 @@ NetIntel API group:
 - /api/v1/netintel/anomalies*
 - /api/v1/netintel/alerts*
 - /api/v1/netintel/forecasts*
+- /api/v1/netintel/modes
+- /api/v1/netintel/modes/:name
+- /api/v1/netintel/modes/events
+- /api/v1/netintel/modes/:name/events
+- /api/v1/netintel/modes/detect
 
 ## CLI Full Command Reference
 
@@ -598,6 +623,8 @@ Implemented internal modules include:
 - Platform operations: bulk, tenant, versioning, lineage, tracing, status, distributed, distributedstate.
 - Data quality and performance: quality, metrics, performance, scanner.
 - API/user-facing layers: handlers, graphql, models, output, client.
+- Extension modules: kubeplus/admission, kubeplus/scheduler, kubeplus/crd, netintel/modes, vectorplus, reviewflow.
+- Tooling support: internal/scripts generator for reproducible feature module regeneration.
 
 These module folders are present under internal/ and are part of the implemented platform surface.
 
@@ -648,13 +675,20 @@ Security recommendation:
 
 Important folders:
 
+- cmd/axiomnizam-server: backend server entrypoint
 - cmd/axiomnizamctl: CLI implementation
 - internal/auth: token validation and role checks
 - internal/config: environment loading
 - internal/database: connection initialization
 - internal/handlers: API handlers and feature modules
+- internal/apiserver: generic resource API server and extension route wiring
 - internal/runtime: control-plane runtime
 - internal/* platform modules: bulk, eventbus, export, tenant, rbac, tracing, lineage, versioning, streaming, webhooks
+- internal/kubeplus: admission, scheduler, and CRD extension modules
+- internal/netintel/modes: mode manager and detectors
+- internal/vectorplus: vector index and similarity metrics
+- internal/reviewflow: staged review pipeline and quality checks
+- internal/scripts: deterministic code generation helpers
 - frontend/templates: dashboard pages and scripts
 - examples: sample YAML and Postman collections
 
