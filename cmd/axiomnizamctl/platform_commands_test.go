@@ -568,3 +568,110 @@ func TestTraceIngestionCLICommands(t *testing.T) {
 		}
 	})
 }
+
+func TestEventBusAckReplayCLICommands(t *testing.T) {
+	var (
+		mu           sync.Mutex
+		lastPath     string
+		lastMethod   string
+		lastBody     map[string]interface{}
+		requestCount int
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		requestCount++
+		lastPath = r.URL.RequestURI()
+		lastMethod = r.Method
+		lastBody = nil
+
+		if r.Body != nil {
+			defer r.Body.Close()
+			var body map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				lastBody = body
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "path": r.URL.RequestURI()})
+	}))
+	defer server.Close()
+
+	setupPlatformCommandTestContext(t, server.URL)
+
+	t.Run("event ack", func(t *testing.T) {
+		eventBusAckCmd.Flags().Set("subscription-id", "sub-1")
+		eventBusAckCmd.Flags().Set("acknowledged-by", "worker-1")
+		eventBusAckCmd.Flags().Set("message", "processed")
+
+		if err := eventBusAckCmd.RunE(eventBusAckCmd, []string{"event-1"}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodPost {
+			t.Fatalf("expected POST, got %s", lastMethod)
+		}
+		if lastPath != "/api/v1/eventbus/events/event-1/ack" {
+			t.Fatalf("expected ack path, got %s", lastPath)
+		}
+		if lastBody == nil {
+			t.Fatal("expected JSON payload")
+		}
+		if got, ok := lastBody["acknowledgedBy"].(string); !ok || got != "worker-1" {
+			t.Fatalf("expected acknowledgedBy=worker-1, got %#v", lastBody["acknowledgedBy"])
+		}
+		if got, ok := lastBody["subscriptionId"].(string); !ok || got != "sub-1" {
+			t.Fatalf("expected subscriptionId=sub-1, got %#v", lastBody["subscriptionId"])
+		}
+	})
+
+	t.Run("event ack requires acknowledged-by", func(t *testing.T) {
+		mu.Lock()
+		before := requestCount
+		mu.Unlock()
+
+		eventBusAckCmd.Flags().Set("acknowledged-by", "")
+		err := eventBusAckCmd.RunE(eventBusAckCmd, []string{"event-2"})
+		if err == nil {
+			t.Fatal("expected validation error when --acknowledged-by is missing")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if requestCount != before {
+			t.Fatalf("expected no HTTP request, got before=%d after=%d", before, requestCount)
+		}
+	})
+
+	t.Run("dlq replay", func(t *testing.T) {
+		eventBusDLQReplayCmd.Flags().Set("replay-to-topic", "orders.replayed")
+		eventBusDLQReplayCmd.Flags().Set("replayed-by", "operator-1")
+
+		if err := eventBusDLQReplayCmd.RunE(eventBusDLQReplayCmd, []string{"dlq-1"}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodPost {
+			t.Fatalf("expected POST, got %s", lastMethod)
+		}
+		if lastPath != "/api/v1/eventbus/dlq/dlq-1/replay" {
+			t.Fatalf("expected replay path, got %s", lastPath)
+		}
+		if lastBody == nil {
+			t.Fatal("expected JSON payload")
+		}
+		if got, ok := lastBody["replayToTopic"].(string); !ok || got != "orders.replayed" {
+			t.Fatalf("expected replayToTopic payload, got %#v", lastBody["replayToTopic"])
+		}
+		if got, ok := lastBody["replayedBy"].(string); !ok || got != "operator-1" {
+			t.Fatalf("expected replayedBy payload, got %#v", lastBody["replayedBy"])
+		}
+	})
+}

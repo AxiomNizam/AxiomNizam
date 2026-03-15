@@ -742,12 +742,14 @@ func main() {
 	{
 		eventBusAPI.POST("/events/publish", adminOrSysMiddleware, eventBusHandler.PublishEvent)
 		eventBusAPI.GET("/events", eventBusHandler.ListEvents)
+		eventBusAPI.POST("/events/:id/ack", adminOrSysMiddleware, eventBusHandler.AckEvent)
 		eventBusAPI.POST("/topics", adminOrSysMiddleware, eventBusHandler.CreateTopic)
 		eventBusAPI.GET("/topics", eventBusHandler.ListTopics)
 		eventBusAPI.POST("/subscriptions", adminOrSysMiddleware, eventBusHandler.CreateSubscription)
 		eventBusAPI.GET("/subscriptions/:id", eventBusHandler.GetSubscription)
 		eventBusAPI.GET("/subscriptions", eventBusHandler.ListSubscriptions)
 		eventBusAPI.GET("/dlq", eventBusHandler.ListDLQ)
+		eventBusAPI.POST("/dlq/:id/replay", adminOrSysMiddleware, eventBusHandler.ReplayDLQEvent)
 	}
 
 	// Exports

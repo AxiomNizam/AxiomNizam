@@ -88,6 +88,45 @@ func (m *InMemoryEventBusManager) ListEvents(tenantID, eventType, processed stri
 	return result, nil
 }
 
+// AckEvent marks an event as processed and optionally updates subscription progress.
+func (m *InMemoryEventBusManager) AckEvent(eventID, subscriptionID, acknowledgedBy, message string) (*EventBusEvent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	event, exists := m.events[eventID]
+	if !exists {
+		return nil, fmt.Errorf("event not found")
+	}
+
+	now := time.Now()
+	event.IsProcessed = true
+	event.ProcessedAt = now
+
+	if event.Metadata == nil {
+		event.Metadata = map[string]string{}
+	}
+	if acknowledgedBy != "" {
+		event.Metadata["acknowledgedBy"] = acknowledgedBy
+	}
+	event.Metadata["acknowledgedAt"] = now.UTC().Format(time.RFC3339)
+	if message != "" {
+		event.Metadata["ackMessage"] = message
+	}
+	if subscriptionID != "" {
+		event.Metadata["subscriptionId"] = subscriptionID
+		if sub, ok := m.subscriptions[subscriptionID]; ok {
+			sub.ProcessedCount++
+			sub.LastProcessed = now
+			sub.UpdatedAt = now
+			if event.EventSequence > sub.Offset {
+				sub.Offset = event.EventSequence
+			}
+		}
+	}
+
+	return event, nil
+}
+
 // CreateTopic creates topic
 func (m *InMemoryEventBusManager) CreateTopic(topic *EventTopic) (*EventTopic, error) {
 	m.mu.Lock()
@@ -178,6 +217,64 @@ func (m *InMemoryEventBusManager) ListDLQEvents(tenantID string) ([]*DLQEvent, e
 		result = append(result, e)
 	}
 	return result, nil
+}
+
+// ReplayDLQEvent replays a dead-lettered event back into the bus.
+func (m *InMemoryEventBusManager) ReplayDLQEvent(dlqID, replayToTopic, replayedBy string) (*EventPublishResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	dlqEvent, exists := m.dlq[dlqID]
+	if !exists {
+		return nil, fmt.Errorf("dlq event not found")
+	}
+
+	topic := replayToTopic
+	if topic == "" {
+		topic = dlqEvent.ReplayToTopic
+	}
+	if topic == "" {
+		topic = dlqEvent.Topic
+	}
+	if topic == "" {
+		topic = dlqEvent.Event.Type
+	}
+	if topic == "" {
+		return nil, fmt.Errorf("replay topic is required")
+	}
+
+	now := time.Now()
+	replayEvent := dlqEvent.Event
+	replayEvent.ID = fmt.Sprintf("event-%d", now.UnixNano())
+	replayEvent.Type = topic
+	replayEvent.Timestamp = now
+	replayEvent.IsProcessed = false
+	replayEvent.ProcessedAt = time.Time{}
+	replayEvent.DeadLettered = false
+	replayEvent.RetryCount = dlqEvent.FailureCount + 1
+	if replayEvent.Metadata == nil {
+		replayEvent.Metadata = map[string]string{}
+	}
+	replayEvent.Metadata["replayedFromDLQ"] = dlqID
+	if replayedBy != "" {
+		replayEvent.Metadata["replayedBy"] = replayedBy
+	}
+
+	m.events[replayEvent.ID] = &replayEvent
+	if topicState := m.topics[topic]; topicState != nil {
+		topicState.MessageCount++
+	}
+
+	dlqEvent.ManuallyResolved = true
+	dlqEvent.ResolutionAction = "retry"
+	dlqEvent.ResolutionTime = now
+	dlqEvent.ReplayToTopic = topic
+
+	return &EventPublishResponse{
+		EventID:   replayEvent.ID,
+		Timestamp: replayEvent.Timestamp,
+		Topic:     replayEvent.Type,
+	}, nil
 }
 
 // PurgeDLQEvent purges DLQ entry

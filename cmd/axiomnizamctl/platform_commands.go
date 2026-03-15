@@ -211,6 +211,59 @@ var rbacAccessRequestRejectCmd = &cobra.Command{
 	},
 }
 
+var EventBusCmd = &cobra.Command{
+	Use:   "eventbus",
+	Short: "Manage event bus operations",
+}
+
+var eventBusAckCmd = &cobra.Command{
+	Use:   "ack [event-id]",
+	Short: "Acknowledge a processed event",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		subscriptionID, _ := cmd.Flags().GetString("subscription-id")
+		acknowledgedBy, _ := cmd.Flags().GetString("acknowledged-by")
+		message, _ := cmd.Flags().GetString("message")
+
+		acknowledgedBy = strings.TrimSpace(acknowledgedBy)
+		if acknowledgedBy == "" {
+			return NewCommandError(ErrInvalidInput, "--acknowledged-by is required")
+		}
+
+		payload := map[string]interface{}{
+			"acknowledgedBy": acknowledgedBy,
+		}
+		if strings.TrimSpace(subscriptionID) != "" {
+			payload["subscriptionId"] = strings.TrimSpace(subscriptionID)
+		}
+		if strings.TrimSpace(message) != "" {
+			payload["message"] = strings.TrimSpace(message)
+		}
+
+		return postAndPrint("/api/v1/eventbus/events/"+args[0]+"/ack", payload)
+	},
+}
+
+var eventBusDLQReplayCmd = &cobra.Command{
+	Use:   "dlq-replay [dlq-id]",
+	Short: "Replay an event from dead-letter queue",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		replayToTopic, _ := cmd.Flags().GetString("replay-to-topic")
+		replayedBy, _ := cmd.Flags().GetString("replayed-by")
+
+		payload := map[string]interface{}{}
+		if strings.TrimSpace(replayToTopic) != "" {
+			payload["replayToTopic"] = strings.TrimSpace(replayToTopic)
+		}
+		if strings.TrimSpace(replayedBy) != "" {
+			payload["replayedBy"] = strings.TrimSpace(replayedBy)
+		}
+
+		return postAndPrint("/api/v1/eventbus/dlq/"+args[0]+"/replay", payload)
+	},
+}
+
 var WebhookCmd = &cobra.Command{
 	Use:   "webhook",
 	Short: "Manage webhooks",
@@ -657,6 +710,13 @@ func init() {
 		rbacAccessRequestApproveCmd,
 		rbacAccessRequestRejectCmd,
 	)
+
+	eventBusAckCmd.Flags().String("subscription-id", "", "Optional subscription ID for ack attribution")
+	eventBusAckCmd.Flags().String("acknowledged-by", "", "Actor acknowledging the event")
+	eventBusAckCmd.Flags().String("message", "", "Optional ack note")
+	eventBusDLQReplayCmd.Flags().String("replay-to-topic", "", "Optional destination topic for replay")
+	eventBusDLQReplayCmd.Flags().String("replayed-by", "", "Optional actor replaying the event")
+	EventBusCmd.AddCommand(eventBusAckCmd, eventBusDLQReplayCmd)
 
 	WebhookCmd.AddCommand(webhookListCmd, webhookCreateCmd, webhookTestCmd)
 

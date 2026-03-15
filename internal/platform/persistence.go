@@ -322,6 +322,45 @@ func (m *persistentEventBusManager) ListEvents(tenantID, eventType, processed st
 	return res, nil
 }
 
+func (m *persistentEventBusManager) AckEvent(eventID, subscriptionID, acknowledgedBy, message string) (*eventbus.EventBusEvent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	event, ok := m.state.Events[eventID]
+	if !ok {
+		return nil, fmt.Errorf("event not found")
+	}
+
+	now := time.Now()
+	event.IsProcessed = true
+	event.ProcessedAt = now
+
+	if event.Metadata == nil {
+		event.Metadata = map[string]string{}
+	}
+	if acknowledgedBy != "" {
+		event.Metadata["acknowledgedBy"] = acknowledgedBy
+	}
+	event.Metadata["acknowledgedAt"] = now.UTC().Format(time.RFC3339)
+	if message != "" {
+		event.Metadata["ackMessage"] = message
+	}
+	if subscriptionID != "" {
+		event.Metadata["subscriptionId"] = subscriptionID
+		if sub, exists := m.state.Subscriptions[subscriptionID]; exists {
+			sub.ProcessedCount++
+			sub.LastProcessed = now
+			sub.UpdatedAt = now
+			if event.EventSequence > sub.Offset {
+				sub.Offset = event.EventSequence
+			}
+		}
+	}
+
+	m.persist()
+	return event, nil
+}
+
 func (m *persistentEventBusManager) CreateTopic(topic *eventbus.EventTopic) (*eventbus.EventTopic, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -395,6 +434,64 @@ func (m *persistentEventBusManager) ListDLQEvents(tenantID string) ([]*eventbus.
 		res = append(res, e)
 	}
 	return res, nil
+}
+
+func (m *persistentEventBusManager) ReplayDLQEvent(dlqID, replayToTopic, replayedBy string) (*eventbus.EventPublishResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	dlqEvent, ok := m.state.DLQ[dlqID]
+	if !ok {
+		return nil, fmt.Errorf("dlq event not found")
+	}
+
+	topic := replayToTopic
+	if topic == "" {
+		topic = dlqEvent.ReplayToTopic
+	}
+	if topic == "" {
+		topic = dlqEvent.Topic
+	}
+	if topic == "" {
+		topic = dlqEvent.Event.Type
+	}
+	if topic == "" {
+		return nil, fmt.Errorf("replay topic is required")
+	}
+
+	now := time.Now()
+	replayEvent := dlqEvent.Event
+	replayEvent.ID = platformID("event")
+	replayEvent.Type = topic
+	replayEvent.Timestamp = now
+	replayEvent.IsProcessed = false
+	replayEvent.ProcessedAt = time.Time{}
+	replayEvent.DeadLettered = false
+	replayEvent.RetryCount = dlqEvent.FailureCount + 1
+	if replayEvent.Metadata == nil {
+		replayEvent.Metadata = map[string]string{}
+	}
+	replayEvent.Metadata["replayedFromDLQ"] = dlqID
+	if replayedBy != "" {
+		replayEvent.Metadata["replayedBy"] = replayedBy
+	}
+
+	m.state.Events[replayEvent.ID] = &replayEvent
+	if topicState := m.state.Topics[topic]; topicState != nil {
+		topicState.MessageCount++
+	}
+
+	dlqEvent.ManuallyResolved = true
+	dlqEvent.ResolutionAction = "retry"
+	dlqEvent.ResolutionTime = now
+	dlqEvent.ReplayToTopic = topic
+
+	m.persist()
+	return &eventbus.EventPublishResponse{
+		EventID:   replayEvent.ID,
+		Timestamp: replayEvent.Timestamp,
+		Topic:     replayEvent.Type,
+	}, nil
 }
 
 // ---------- Streaming ----------
