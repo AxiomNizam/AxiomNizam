@@ -871,7 +871,7 @@ func main() {
 	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
-	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, conns.Etcd)
+	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd)
 
 	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{
@@ -908,6 +908,10 @@ func main() {
 		// Dashboard Deletion
 		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)
 	}
+
+	// Runtime execution routes for REST APIs created via API Builder.
+	router.Any("/api/custom", authMiddleware, apiBuilderHandler.InvokeCustomAPI)
+	router.Any("/api/custom/*path", authMiddleware, apiBuilderHandler.InvokeCustomAPI)
 
 	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS

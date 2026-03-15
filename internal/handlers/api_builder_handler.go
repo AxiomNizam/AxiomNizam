@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"gorm.io/gorm"
 
 	"example.com/axiomnizam/internal/scanner"
 )
@@ -148,6 +149,7 @@ type APIBuilderHandler struct {
 	scanRecords map[string]*FileScanRecord
 	apiData     map[string][]map[string]interface{} // stores mock data per API
 	csvData     map[string][][]string               // raw CSV data per upload
+	db          map[string]*gorm.DB
 	etcd        *clientv3.Client
 	stateKey    string
 	scanOrch    *scanner.Orchestrator
@@ -161,7 +163,7 @@ type apiBuilderState struct {
 	APIData    map[string][]map[string]interface{} `json:"api_data"`
 }
 
-func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, etcd *clientv3.Client) *APIBuilderHandler {
+func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client) *APIBuilderHandler {
 	// Build scanner pipeline
 	orchestrator := scanner.NewOrchestrator(
 		scanner.NewMetadataScanner(100*1024*1024),
@@ -188,6 +190,7 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, etcd *clientv3.C
 		scanRecords:      make(map[string]*FileScanRecord),
 		apiData:          make(map[string][]map[string]interface{}),
 		csvData:          make(map[string][][]string),
+		db:               db,
 		etcd:             etcd,
 		stateKey:         "axiomnizam:builder:custom_apis",
 		scanOrch:         orchestrator,
@@ -593,6 +596,299 @@ func (h *APIBuilderHandler) TestAPI(c *gin.Context) {
 		"cache_ttl": api.CacheTTL,
 		"response":  response,
 	})
+}
+
+// InvokeCustomAPI executes runtime calls for builder-created REST APIs.
+// Routes are mounted under /api/custom/* and resolved against saved API definitions.
+func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
+	method := strings.ToUpper(strings.TrimSpace(c.Request.Method))
+	path := strings.TrimSpace(c.Request.URL.Path)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	pathMatches := make([]*CustomAPI, 0)
+	for _, candidate := range h.customAPIs {
+		if strings.ToLower(strings.TrimSpace(candidate.APIType)) != "rest" {
+			continue
+		}
+		if !matchBuilderPath(candidate.Path, path) {
+			continue
+		}
+		pathMatches = append(pathMatches, candidate)
+	}
+
+	if len(pathMatches) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":            "custom api not found",
+			"requested_path":   path,
+			"requested_method": method,
+		})
+		return
+	}
+
+	var api *CustomAPI
+	allowedMethods := make([]string, 0)
+	for _, candidate := range pathMatches {
+		candidateMethod := strings.ToUpper(strings.TrimSpace(candidate.Method))
+		allowedMethods = append(allowedMethods, candidateMethod)
+		if candidateMethod == method {
+			api = candidate
+			break
+		}
+	}
+
+	if api == nil {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{
+			"error":            "method not allowed for custom api",
+			"requested_path":   path,
+			"requested_method": method,
+			"allowed_methods":  allowedMethods,
+		})
+		return
+	}
+
+	if strings.ToLower(strings.TrimSpace(api.Status)) != "active" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "custom api is not active"})
+		return
+	}
+
+	missingParams := make([]string, 0)
+	for _, p := range api.QueryParams {
+		if !p.Required {
+			continue
+		}
+		if strings.TrimSpace(c.Query(p.Name)) == "" {
+			missingParams = append(missingParams, p.Name)
+		}
+	}
+	if len(missingParams) > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":          "missing required query parameters",
+			"missing_params": missingParams,
+		})
+		return
+	}
+
+	api.HitCount++
+
+	if api.CacheEnabled && api.cachedResult != nil {
+		ttl := time.Duration(api.CacheTTL) * time.Second
+		if ttl <= 0 {
+			ttl = 300 * time.Second
+		}
+		if time.Since(api.cachedAt) < ttl {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "success",
+				"api_id":    api.ID,
+				"api_type":  api.APIType,
+				"method":    api.Method,
+				"path":      api.Path,
+				"cached":    true,
+				"cache_ttl": api.CacheTTL,
+				"params":    c.Request.URL.Query(),
+				"response":  api.cachedResult,
+			})
+			return
+		}
+	}
+
+	requestQuery, requestParams, queryErr := extractRuntimeQueryRequest(c, method)
+	if queryErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": queryErr.Error()})
+		return
+	}
+
+	query := strings.TrimSpace(requestQuery)
+	params := requestParams
+	if query == "" {
+		fallbackQuery, fallbackParams := extractQueryFromMock(api.MockResponse)
+		query = strings.TrimSpace(fallbackQuery)
+		if len(params) == 0 {
+			params = fallbackParams
+		}
+	}
+
+	var response interface{}
+	if query != "" {
+		dbType := strings.ToLower(strings.TrimSpace(api.SourceDatabase))
+		dbConn := h.db[dbType]
+		if dbType == "" || dbConn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":           "source database is not configured for this custom api",
+				"source_database": api.SourceDatabase,
+			})
+			return
+		}
+
+		if isReadOnlyQuery(query) {
+			rows, err := dbConn.Raw(query, params...).Rows()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":  "query execution failed",
+					"detail": err.Error(),
+				})
+				return
+			}
+			defer rows.Close()
+
+			columns, err := rows.Columns()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":  "failed to get result columns",
+					"detail": err.Error(),
+				})
+				return
+			}
+
+			result := make([]map[string]interface{}, 0)
+			for rows.Next() {
+				values := make([]interface{}, len(columns))
+				valuePtrs := make([]interface{}, len(columns))
+				for i := range columns {
+					valuePtrs[i] = &values[i]
+				}
+
+				if err := rows.Scan(valuePtrs...); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error":  "failed to scan result row",
+						"detail": err.Error(),
+					})
+					return
+				}
+
+				entry := make(map[string]interface{})
+				for i, col := range columns {
+					val := values[i]
+					if b, ok := val.([]byte); ok {
+						entry[col] = string(b)
+					} else {
+						entry[col] = val
+					}
+				}
+				result = append(result, entry)
+			}
+
+			response = gin.H{
+				"source_database": dbType,
+				"query":           query,
+				"params":          params,
+				"count":           len(result),
+				"data":            result,
+			}
+		} else {
+			execResult := dbConn.Exec(query, params...)
+			if execResult.Error != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":  "query execution failed",
+					"detail": execResult.Error.Error(),
+				})
+				return
+			}
+
+			response = gin.H{
+				"source_database": dbType,
+				"query":           query,
+				"params":          params,
+				"rows_affected":   execResult.RowsAffected,
+			}
+		}
+	} else if api.MockResponse != nil {
+		response = api.MockResponse
+	} else {
+		response = gin.H{
+			"message": "API endpoint active, no mock response configured",
+			"data":    h.apiData[api.ID],
+		}
+	}
+
+	if api.CacheEnabled {
+		api.cachedResult = response
+		api.cachedAt = time.Now()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "success",
+		"api_id":    api.ID,
+		"api_type":  api.APIType,
+		"method":    api.Method,
+		"path":      api.Path,
+		"cached":    false,
+		"cache_ttl": api.CacheTTL,
+		"params":    c.Request.URL.Query(),
+		"response":  response,
+	})
+}
+
+func matchBuilderPath(pattern, actual string) bool {
+	pattern = "/" + strings.Trim(strings.TrimSpace(pattern), "/")
+	actual = "/" + strings.Trim(strings.TrimSpace(actual), "/")
+
+	if pattern == actual {
+		return true
+	}
+
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	actualParts := strings.Split(strings.Trim(actual, "/"), "/")
+
+	if len(patternParts) != len(actualParts) {
+		return false
+	}
+
+	for i := 0; i < len(patternParts); i++ {
+		segment := strings.TrimSpace(patternParts[i])
+		if strings.HasPrefix(segment, ":") {
+			continue
+		}
+		if segment != strings.TrimSpace(actualParts[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func extractRuntimeQueryRequest(c *gin.Context, method string) (string, []interface{}, error) {
+	if method == "GET" || c.Request.ContentLength == 0 {
+		return "", nil, nil
+	}
+
+	var body struct {
+		Query  string        `json:"query"`
+		Params []interface{} `json:"params"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		return "", nil, fmt.Errorf("invalid request body: expected {\"query\":\"...\",\"params\":[]}")
+	}
+	return strings.TrimSpace(body.Query), body.Params, nil
+}
+
+func extractQueryFromMock(mock interface{}) (string, []interface{}) {
+	m, ok := mock.(map[string]interface{})
+	if !ok {
+		return "", nil
+	}
+
+	query, _ := m["query"].(string)
+	paramsRaw, _ := m["params"].([]interface{})
+	if paramsRaw == nil {
+		return query, nil
+	}
+
+	params := make([]interface{}, 0, len(paramsRaw))
+	for _, p := range paramsRaw {
+		params = append(params, p)
+	}
+	return query, params
+}
+
+func isReadOnlyQuery(query string) bool {
+	q := strings.ToUpper(strings.TrimSpace(query))
+	return strings.HasPrefix(q, "SELECT") ||
+		strings.HasPrefix(q, "WITH") ||
+		strings.HasPrefix(q, "SHOW") ||
+		strings.HasPrefix(q, "DESCRIBE") ||
+		strings.HasPrefix(q, "EXPLAIN")
 }
 
 func (h *APIBuilderHandler) GetSummary(c *gin.Context) {
