@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -74,10 +75,37 @@ func main() {
 		Realm:     cfg.Keycloak.Realm,
 		ClientID:  cfg.Keycloak.ClientID,
 	}
+	var tokenValidatorMu sync.RWMutex
 	tokenValidator, err := auth.NewTokenValidator(keycloakConfig)
 	if err != nil {
-		log.Printf("⚠️  Keycloak initialization failed: %v (running without auth)", err)
+		log.Printf("⚠️  Keycloak initialization failed at startup: %v", err)
+		log.Printf("⚠️  Auth-protected APIs will return 503 until Keycloak becomes reachable")
 		tokenValidator = nil
+	}
+
+	getOrInitTokenValidator := func() *auth.TokenValidator {
+		tokenValidatorMu.RLock()
+		tv := tokenValidator
+		tokenValidatorMu.RUnlock()
+		if tv != nil {
+			return tv
+		}
+
+		tokenValidatorMu.Lock()
+		defer tokenValidatorMu.Unlock()
+		if tokenValidator != nil {
+			return tokenValidator
+		}
+
+		initializedValidator, initErr := auth.NewTokenValidator(keycloakConfig)
+		if initErr != nil {
+			log.Printf("⚠️  Keycloak still unavailable: %v", initErr)
+			return nil
+		}
+
+		tokenValidator = initializedValidator
+		log.Printf("✅ Keycloak token validator initialized after startup")
+		return tokenValidator
 	}
 
 	// Initialize all connections
@@ -197,7 +225,8 @@ func main() {
 
 	// authenticateRequest validates token + rate limits and sets auth context without advancing handlers.
 	authenticateRequest := func(c *gin.Context) bool {
-		if tokenValidator == nil {
+		activeTokenValidator := getOrInitTokenValidator()
+		if activeTokenValidator == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "authentication unavailable",
 				"message": "token validation is not available because keycloak initialization failed",
@@ -244,7 +273,7 @@ func main() {
 			return false
 		}
 
-		claims, err := tokenValidator.ValidateToken(token)
+		claims, err := activeTokenValidator.ValidateToken(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
 			c.Abort()
@@ -300,64 +329,47 @@ func main() {
 	// Get admin middleware (requires admin role)
 	var adminMiddleware gin.HandlerFunc
 	var adminOrSysMiddleware gin.HandlerFunc
-	if tokenValidator != nil {
-		adminMiddleware = func(c *gin.Context) {
-			if !authenticateRequest(c) {
-				return
-			}
-			enrichRequestContext(c)
-			claims := auth.GetUser(c)
-			if claims == nil || !claims.HasRole("admin") {
-				roles := []string{}
-				if claims != nil {
-					roles = claims.RealmAccess.Roles
-				}
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":      "forbidden: user does not have 'admin' role",
-					"user_roles": roles,
-					"required":   "admin",
-				})
-				c.Abort()
-				return
-			}
-			c.Next()
+	adminMiddleware = func(c *gin.Context) {
+		if !authenticateRequest(c) {
+			return
 		}
-		adminOrSysMiddleware = func(c *gin.Context) {
-			if !authenticateRequest(c) {
-				return
+		enrichRequestContext(c)
+		claims := auth.GetUser(c)
+		if claims == nil || !claims.HasRole("admin") {
+			roles := []string{}
+			if claims != nil {
+				roles = claims.RealmAccess.Roles
 			}
-			enrichRequestContext(c)
-			claims := auth.GetUser(c)
-			if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
-				roles := []string{}
-				if claims != nil {
-					roles = claims.RealmAccess.Roles
-				}
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",
-					"user_roles": roles,
-					"required":   []string{"admin", "system-manager", "sysadmin", "system_admin", "system-admin"},
-				})
-				c.Abort()
-				return
-			}
-			c.Next()
-		}
-	} else {
-		adminMiddleware = func(c *gin.Context) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":   "authentication unavailable",
-				"message": "admin routes are disabled because keycloak initialization failed",
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":      "forbidden: user does not have 'admin' role",
+				"user_roles": roles,
+				"required":   "admin",
 			})
 			c.Abort()
+			return
 		}
-		adminOrSysMiddleware = func(c *gin.Context) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":   "authentication unavailable",
-				"message": "admin routes are disabled because keycloak initialization failed",
+		c.Next()
+	}
+	adminOrSysMiddleware = func(c *gin.Context) {
+		if !authenticateRequest(c) {
+			return
+		}
+		enrichRequestContext(c)
+		claims := auth.GetUser(c)
+		if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
+			roles := []string{}
+			if claims != nil {
+				roles = claims.RealmAccess.Roles
+			}
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",
+				"user_roles": roles,
+				"required":   []string{"admin", "system-manager", "sysadmin", "system_admin", "system-admin"},
 			})
 			c.Abort()
+			return
 		}
+		c.Next()
 	}
 
 	// GraphQL endpoints (auth required)
