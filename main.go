@@ -818,7 +818,9 @@ func main() {
 		rbacAPI.POST("/permissions/check", rbacHandler.CheckPermission)
 
 		rbacAPI.POST("/access-requests", rbacHandler.CreateAccessRequest)
+		rbacAPI.GET("/access-requests", rbacHandler.ListAccessRequests)
 		rbacAPI.POST("/access-requests/:id/approve", adminOrSysMiddleware, rbacHandler.ApproveAccessRequest)
+		rbacAPI.POST("/access-requests/:id/reject", adminOrSysMiddleware, rbacHandler.RejectAccessRequest)
 	}
 
 	// Versioning

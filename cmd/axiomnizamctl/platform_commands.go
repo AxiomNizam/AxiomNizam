@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -100,6 +101,113 @@ var rbacCheckCmd = &cobra.Command{
 			"action":      action,
 		}
 		return postAndPrint("/api/v1/rbac/permissions/check", payload)
+	},
+}
+
+var rbacAccessRequestListCmd = &cobra.Command{
+	Use:   "access-request-list",
+	Short: "List RBAC access requests",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		principalID, _ := cmd.Flags().GetString("principal-id")
+		status, _ := cmd.Flags().GetString("status")
+
+		query := url.Values{}
+		if tenantID != "" {
+			query.Set("tenantId", tenantID)
+		}
+		if principalID != "" {
+			query.Set("principalId", principalID)
+		}
+		if status != "" {
+			query.Set("status", status)
+		}
+
+		path := "/api/v1/rbac/access-requests"
+		if encoded := query.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+
+		return getAndPrint(path)
+	},
+}
+
+var rbacAccessRequestCreateCmd = &cobra.Command{
+	Use:   "access-request-create",
+	Short: "Create an RBAC access request",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		principalID, _ := cmd.Flags().GetString("principal-id")
+		resourceType, _ := cmd.Flags().GetString("resource-type")
+		resourceID, _ := cmd.Flags().GetString("resource-id")
+		action, _ := cmd.Flags().GetString("action")
+		duration, _ := cmd.Flags().GetInt("duration")
+		justification, _ := cmd.Flags().GetString("justification")
+
+		tenantID = strings.TrimSpace(tenantID)
+		principalID = strings.TrimSpace(principalID)
+		resourceType = strings.TrimSpace(resourceType)
+		action = strings.TrimSpace(action)
+
+		if tenantID == "" || principalID == "" || resourceType == "" || action == "" {
+			return NewCommandError(ErrInvalidInput, "--tenant-id, --principal-id, --resource-type, and --action are required")
+		}
+
+		payload := map[string]interface{}{
+			"tenantId":     tenantID,
+			"principalId":  principalID,
+			"resourceType": resourceType,
+			"action":       action,
+		}
+		if strings.TrimSpace(resourceID) != "" {
+			payload["resourceId"] = strings.TrimSpace(resourceID)
+		}
+		if duration > 0 {
+			payload["duration"] = duration
+		}
+		if strings.TrimSpace(justification) != "" {
+			payload["justification"] = strings.TrimSpace(justification)
+		}
+
+		return postAndPrint("/api/v1/rbac/access-requests", payload)
+	},
+}
+
+var rbacAccessRequestApproveCmd = &cobra.Command{
+	Use:   "access-request-approve [request-id]",
+	Short: "Approve an RBAC access request",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		approvedBy, _ := cmd.Flags().GetString("approved-by")
+		approvedBy = strings.TrimSpace(approvedBy)
+		if approvedBy == "" {
+			return NewCommandError(ErrInvalidInput, "--approved-by is required")
+		}
+
+		payload := map[string]interface{}{"approvedBy": approvedBy}
+		return postAndPrint("/api/v1/rbac/access-requests/"+args[0]+"/approve", payload)
+	},
+}
+
+var rbacAccessRequestRejectCmd = &cobra.Command{
+	Use:   "access-request-reject [request-id]",
+	Short: "Reject an RBAC access request",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		rejectedBy, _ := cmd.Flags().GetString("rejected-by")
+		reason, _ := cmd.Flags().GetString("reason")
+
+		rejectedBy = strings.TrimSpace(rejectedBy)
+		if rejectedBy == "" {
+			return NewCommandError(ErrInvalidInput, "--rejected-by is required")
+		}
+
+		payload := map[string]interface{}{"rejectedBy": rejectedBy}
+		if strings.TrimSpace(reason) != "" {
+			payload["reason"] = reason
+		}
+
+		return postAndPrint("/api/v1/rbac/access-requests/"+args[0]+"/reject", payload)
 	},
 }
 
@@ -452,7 +560,29 @@ func printPrettyJSON(data interface{}) error {
 func init() {
 	TenantCmd.AddCommand(tenantListCmd, tenantGetCmd, tenantCreateCmd)
 
-	RBACCmd.AddCommand(rbacRoleListCmd, rbacRoleCreateCmd, rbacCheckCmd)
+	rbacAccessRequestListCmd.Flags().String("tenant-id", "", "Filter by tenant ID")
+	rbacAccessRequestListCmd.Flags().String("principal-id", "", "Filter by principal ID")
+	rbacAccessRequestListCmd.Flags().String("status", "", "Filter by status (PENDING|APPROVED|REJECTED|EXPIRED|CANCELLED)")
+	rbacAccessRequestCreateCmd.Flags().String("tenant-id", "", "Tenant ID")
+	rbacAccessRequestCreateCmd.Flags().String("principal-id", "", "Principal ID")
+	rbacAccessRequestCreateCmd.Flags().String("resource-type", "", "Resource type")
+	rbacAccessRequestCreateCmd.Flags().String("resource-id", "", "Resource identifier")
+	rbacAccessRequestCreateCmd.Flags().String("action", "", "Requested action")
+	rbacAccessRequestCreateCmd.Flags().Int("duration", 0, "Duration in seconds (0 means no expiry)")
+	rbacAccessRequestCreateCmd.Flags().String("justification", "", "Optional business justification")
+	rbacAccessRequestApproveCmd.Flags().String("approved-by", "", "Actor approving the access request")
+	rbacAccessRequestRejectCmd.Flags().String("rejected-by", "", "Actor rejecting the access request")
+	rbacAccessRequestRejectCmd.Flags().String("reason", "", "Optional rejection reason")
+
+	RBACCmd.AddCommand(
+		rbacRoleListCmd,
+		rbacRoleCreateCmd,
+		rbacCheckCmd,
+		rbacAccessRequestListCmd,
+		rbacAccessRequestCreateCmd,
+		rbacAccessRequestApproveCmd,
+		rbacAccessRequestRejectCmd,
+	)
 
 	WebhookCmd.AddCommand(webhookListCmd, webhookCreateCmd, webhookTestCmd)
 

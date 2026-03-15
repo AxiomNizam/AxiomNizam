@@ -77,7 +77,9 @@ type rbacManagerAdapter struct {
 		CheckPermission(subjectID, resource, action string) (bool, error)
 		ListPermissions(roleID string) ([]*rbac.Permission, error)
 		CreateAccessRequest(request *rbac.AccessRequest) (*rbac.AccessRequest, error)
+		ListAccessRequests(tenantID, principalID, status string) ([]*rbac.AccessRequest, error)
 		ApproveAccessRequest(requestID, approverID string) error
+		RejectAccessRequest(requestID, approverID, reason string) error
 		GetAccessRequest(id string) (*rbac.AccessRequest, error)
 	}
 }
@@ -168,8 +170,19 @@ func (a *rbacManagerAdapter) CreateAccessRequest(req *rbac.AccessRequest) (*rbac
 	return a.base.CreateAccessRequest(req)
 }
 
+func (a *rbacManagerAdapter) ListAccessRequests(tenantID, principalID, status string) ([]*rbac.AccessRequest, error) {
+	return a.base.ListAccessRequests(tenantID, principalID, status)
+}
+
 func (a *rbacManagerAdapter) ApproveAccessRequest(id, approvedBy string) (*rbac.AccessRequest, error) {
 	if err := a.base.ApproveAccessRequest(id, approvedBy); err != nil {
+		return nil, err
+	}
+	return a.base.GetAccessRequest(id)
+}
+
+func (a *rbacManagerAdapter) RejectAccessRequest(id, rejectedBy, reason string) (*rbac.AccessRequest, error) {
+	if err := a.base.RejectAccessRequest(id, rejectedBy, reason); err != nil {
 		return nil, err
 	}
 	return a.base.GetAccessRequest(id)

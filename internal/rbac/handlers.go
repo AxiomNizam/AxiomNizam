@@ -207,6 +207,7 @@ func (h *RBACHandler) CreateAccessRequest(c *gin.Context) {
 		TenantID      string `json:"tenantId" binding:"required"`
 		PrincipalID   string `json:"principalId" binding:"required"`
 		ResourceType  string `json:"resourceType" binding:"required"`
+		ResourceID    string `json:"resourceId"`
 		Action        string `json:"action" binding:"required"`
 		Duration      int    `json:"duration"`
 		Justification string `json:"justification"`
@@ -217,16 +218,24 @@ func (h *RBACHandler) CreateAccessRequest(c *gin.Context) {
 		return
 	}
 
+	requestedAt := time.Now()
+	var expiresAt time.Time
+	if req.Duration > 0 {
+		expiresAt = requestedAt.Add(time.Duration(req.Duration) * time.Second)
+	}
+
 	accessReq := &AccessRequest{
 		TenantID:      req.TenantID,
-		PrincipalType: "USER",
+		PrincipalType: PrincipalTypeUser,
 		PrincipalID:   req.PrincipalID,
 		ResourceType:  req.ResourceType,
+		ResourceID:    req.ResourceID,
 		Action:        req.Action,
 		Duration:      req.Duration,
 		Justification: req.Justification,
-		Status:        "Pending",
-		RequestedAt:   time.Now(),
+		Status:        RequestStatusPending,
+		RequestedAt:   requestedAt,
+		ExpiresAt:     expiresAt,
 	}
 
 	created, err := h.manager.CreateAccessRequest(accessReq)
@@ -236,6 +245,21 @@ func (h *RBACHandler) CreateAccessRequest(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, created)
+}
+
+// ListAccessRequests handles GET /api/v1/access-requests
+func (h *RBACHandler) ListAccessRequests(c *gin.Context) {
+	tenantID := c.Query("tenantId")
+	principalID := c.Query("principalId")
+	status := c.Query("status")
+
+	requests, err := h.manager.ListAccessRequests(tenantID, principalID, status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"accessRequests": requests, "count": len(requests)})
 }
 
 // ApproveAccessRequest handles POST /api/v1/access-requests/:id/approve
@@ -259,10 +283,32 @@ func (h *RBACHandler) ApproveAccessRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, approved)
 }
 
+// RejectAccessRequest handles POST /api/v1/access-requests/:id/reject
+func (h *RBACHandler) RejectAccessRequest(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		RejectedBy string `json:"rejectedBy" binding:"required"`
+		Reason     string `json:"reason"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	rejected, err := h.manager.RejectAccessRequest(id, req.RejectedBy, req.Reason)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, rejected)
+}
+
 // RegisterRBACRoutes registers all RBAC routes
 func RegisterRBACRoutes(router *gin.Engine, manager RBACManager) {
 	handler := NewRBACHandler(manager)
-	
+
 	group := router.Group("/api/v1")
 	{
 		// Roles
@@ -271,19 +317,21 @@ func RegisterRBACRoutes(router *gin.Engine, manager RBACManager) {
 		group.GET("/roles/:id", handler.GetRole)
 		group.PATCH("/roles/:id", handler.UpdateRole)
 		group.DELETE("/roles/:id", handler.DeleteRole)
-		
+
 		// Role Bindings
 		group.POST("/role-bindings", handler.BindRole)
 		group.GET("/role-bindings", handler.ListBindings)
 		group.DELETE("/role-bindings/:id", handler.DeleteBinding)
-		
+
 		// Permissions
 		group.GET("/permissions", handler.ListPermissions)
 		group.POST("/permissions/check", handler.CheckPermission)
-		
+
 		// Access Requests
 		group.POST("/access-requests", handler.CreateAccessRequest)
+		group.GET("/access-requests", handler.ListAccessRequests)
 		group.POST("/access-requests/:id/approve", handler.ApproveAccessRequest)
+		group.POST("/access-requests/:id/reject", handler.RejectAccessRequest)
 	}
 }
 
@@ -300,5 +348,7 @@ type RBACManager interface {
 	CheckPermission(req *PermissionCheck) (*PermissionCheckResult, error)
 	ListPermissions(tenantID, resource string) ([]*Permission, error)
 	CreateAccessRequest(req *AccessRequest) (*AccessRequest, error)
+	ListAccessRequests(tenantID, principalID, status string) ([]*AccessRequest, error)
 	ApproveAccessRequest(id, approvedBy string) (*AccessRequest, error)
+	RejectAccessRequest(id, rejectedBy, reason string) (*AccessRequest, error)
 }

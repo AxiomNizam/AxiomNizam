@@ -1835,10 +1835,45 @@ func (m *persistentRBACCoreManager) CreateAccessRequest(req *rbac.AccessRequest)
 	if req.RequestedAt.IsZero() {
 		req.RequestedAt = time.Now()
 	}
+	if req.Duration > 0 && req.ExpiresAt.IsZero() {
+		req.ExpiresAt = req.RequestedAt.Add(time.Duration(req.Duration) * time.Second)
+	}
 	req.Status = rbac.RequestStatusPending
 	m.state.AccessRequests[req.ID] = req
 	m.persist()
 	return req, nil
+}
+
+func (m *persistentRBACCoreManager) ListAccessRequests(tenantID, principalID, status string) ([]*rbac.AccessRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	statusFilter, hasStatusFilter := normalizeAccessRequestStatus(status)
+	result := make([]*rbac.AccessRequest, 0, len(m.state.AccessRequests))
+	changed := false
+
+	for _, req := range m.state.AccessRequests {
+		if maybeExpireAccessRequest(req, now) {
+			changed = true
+		}
+		if tenantID != "" && req.TenantID != tenantID {
+			continue
+		}
+		if principalID != "" && req.PrincipalID != principalID {
+			continue
+		}
+		if hasStatusFilter && req.Status != statusFilter {
+			continue
+		}
+		result = append(result, req)
+	}
+
+	if changed {
+		m.persist()
+	}
+
+	return result, nil
 }
 
 func (m *persistentRBACCoreManager) ApproveAccessRequest(requestID, approverID string) error {
@@ -1847,6 +1882,13 @@ func (m *persistentRBACCoreManager) ApproveAccessRequest(requestID, approverID s
 	req, ok := m.state.AccessRequests[requestID]
 	if !ok {
 		return fmt.Errorf("request not found")
+	}
+	if maybeExpireAccessRequest(req, time.Now()) {
+		m.persist()
+		return fmt.Errorf("request expired")
+	}
+	if req.Status != rbac.RequestStatusPending {
+		return fmt.Errorf("request is not pending")
 	}
 	req.Status = rbac.RequestStatusApproved
 	req.ApprovedAt = time.Now()
@@ -1863,12 +1905,76 @@ func (m *persistentRBACCoreManager) ApproveAccessRequest(requestID, approverID s
 	return nil
 }
 
+func (m *persistentRBACCoreManager) RejectAccessRequest(requestID, approverID, reason string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	req, ok := m.state.AccessRequests[requestID]
+	if !ok {
+		return fmt.Errorf("request not found")
+	}
+	if maybeExpireAccessRequest(req, time.Now()) {
+		m.persist()
+		return fmt.Errorf("request expired")
+	}
+	if req.Status != rbac.RequestStatusPending {
+		return fmt.Errorf("request is not pending")
+	}
+	req.Status = rbac.RequestStatusRejected
+	req.RejectedAt = time.Now()
+	req.RejectionReason = reason
+	if req.Metadata == nil {
+		req.Metadata = map[string]interface{}{}
+	}
+	req.Metadata["rejectedBy"] = approverID
+	m.persist()
+	return nil
+}
+
 func (m *persistentRBACCoreManager) GetAccessRequest(id string) (*rbac.AccessRequest, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	req, ok := m.state.AccessRequests[id]
 	if !ok {
 		return nil, fmt.Errorf("request not found")
 	}
+	if maybeExpireAccessRequest(req, time.Now()) {
+		m.persist()
+	}
 	return req, nil
+}
+
+func normalizeAccessRequestStatus(status string) (rbac.RequestStatus, bool) {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "":
+		return "", false
+	case string(rbac.RequestStatusPending):
+		return rbac.RequestStatusPending, true
+	case string(rbac.RequestStatusApproved):
+		return rbac.RequestStatusApproved, true
+	case string(rbac.RequestStatusRejected):
+		return rbac.RequestStatusRejected, true
+	case string(rbac.RequestStatusExpired):
+		return rbac.RequestStatusExpired, true
+	case string(rbac.RequestStatusCancelled):
+		return rbac.RequestStatusCancelled, true
+	default:
+		return "", false
+	}
+}
+
+func maybeExpireAccessRequest(req *rbac.AccessRequest, now time.Time) bool {
+	if req == nil {
+		return false
+	}
+	if req.Status != rbac.RequestStatusPending {
+		return false
+	}
+	if req.ExpiresAt.IsZero() {
+		return false
+	}
+	if req.ExpiresAt.After(now) {
+		return false
+	}
+	req.Status = rbac.RequestStatusExpired
+	return true
 }

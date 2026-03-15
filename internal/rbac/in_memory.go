@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -215,6 +216,9 @@ func (m *InMemoryRBACManager) CreateAccessRequest(request *AccessRequest) (*Acce
 	if request.RequestedAt.IsZero() {
 		request.RequestedAt = time.Now()
 	}
+	if request.Duration > 0 && request.ExpiresAt.IsZero() {
+		request.ExpiresAt = request.RequestedAt.Add(time.Duration(request.Duration) * time.Second)
+	}
 
 	request.Status = RequestStatusPending
 	m.accessRequests[request.ID] = request
@@ -223,27 +227,35 @@ func (m *InMemoryRBACManager) CreateAccessRequest(request *AccessRequest) (*Acce
 
 // GetAccessRequest retrieves access request
 func (m *InMemoryRBACManager) GetAccessRequest(id string) (*AccessRequest, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	request, exists := m.accessRequests[id]
 	if !exists {
 		return nil, fmt.Errorf(errRequestNotFound)
 	}
+	maybeExpireAccessRequestInMemory(request, time.Now())
 	return request, nil
 }
 
 // ListAccessRequests lists access requests
-func (m *InMemoryRBACManager) ListAccessRequests(subjectID, status string) ([]*AccessRequest, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (m *InMemoryRBACManager) ListAccessRequests(tenantID, principalID, status string) ([]*AccessRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	statusFilter, hasStatusFilter := normalizeRequestStatus(status)
+	now := time.Now()
 
 	var result []*AccessRequest
 	for _, r := range m.accessRequests {
-		if subjectID != "" && r.PrincipalID != subjectID {
+		maybeExpireAccessRequestInMemory(r, now)
+		if tenantID != "" && r.TenantID != tenantID {
 			continue
 		}
-		if status != "" && string(r.Status) != status {
+		if principalID != "" && r.PrincipalID != principalID {
+			continue
+		}
+		if hasStatusFilter && r.Status != statusFilter {
 			continue
 		}
 		result = append(result, r)
@@ -252,13 +264,19 @@ func (m *InMemoryRBACManager) ListAccessRequests(subjectID, status string) ([]*A
 }
 
 // ApproveAccessRequest approves access request
-func (m *InMemoryRBACManager) ApproveAccessRequest(requestID, approverID string) error {
+func (m *InMemoryRBACManager) ApproveAccessRequest(requestID, approverID string) (*AccessRequest, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	request, exists := m.accessRequests[requestID]
 	if !exists {
-		return fmt.Errorf(errRequestNotFound)
+		return nil, fmt.Errorf(errRequestNotFound)
+	}
+	if maybeExpireAccessRequestInMemory(request, time.Now()) {
+		return nil, fmt.Errorf("request expired")
+	}
+	if request.Status != RequestStatusPending {
+		return nil, fmt.Errorf("request is not pending")
 	}
 
 	request.Status = RequestStatusApproved
@@ -274,22 +292,65 @@ func (m *InMemoryRBACManager) ApproveAccessRequest(requestID, approverID string)
 	}
 	m.bindings[binding.ID] = binding
 
-	return nil
+	return request, nil
 }
 
 // RejectAccessRequest rejects access request
-func (m *InMemoryRBACManager) RejectAccessRequest(requestID, approverID, reason string) error {
+func (m *InMemoryRBACManager) RejectAccessRequest(requestID, approverID, reason string) (*AccessRequest, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	request, exists := m.accessRequests[requestID]
 	if !exists {
-		return fmt.Errorf(errRequestNotFound)
+		return nil, fmt.Errorf(errRequestNotFound)
+	}
+	if maybeExpireAccessRequestInMemory(request, time.Now()) {
+		return nil, fmt.Errorf("request expired")
+	}
+	if request.Status != RequestStatusPending {
+		return nil, fmt.Errorf("request is not pending")
 	}
 
 	request.Status = RequestStatusRejected
 	request.RejectionReason = reason
 	request.RejectedAt = time.Now()
+	if request.Metadata == nil {
+		request.Metadata = map[string]interface{}{}
+	}
+	request.Metadata["rejectedBy"] = approverID
 
-	return nil
+	return request, nil
+}
+
+func normalizeRequestStatus(status string) (RequestStatus, bool) {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "":
+		return "", false
+	case string(RequestStatusPending):
+		return RequestStatusPending, true
+	case string(RequestStatusApproved):
+		return RequestStatusApproved, true
+	case string(RequestStatusRejected):
+		return RequestStatusRejected, true
+	case string(RequestStatusExpired):
+		return RequestStatusExpired, true
+	case string(RequestStatusCancelled):
+		return RequestStatusCancelled, true
+	default:
+		return "", false
+	}
+}
+
+func maybeExpireAccessRequestInMemory(request *AccessRequest, now time.Time) bool {
+	if request == nil {
+		return false
+	}
+	if request.Status != RequestStatusPending {
+		return false
+	}
+	if request.ExpiresAt.IsZero() || request.ExpiresAt.After(now) {
+		return false
+	}
+	request.Status = RequestStatusExpired
+	return true
 }
