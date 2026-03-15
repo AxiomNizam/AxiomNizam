@@ -6,6 +6,38 @@
 
 const GIS_API = (window.BACKEND_URL || 'http://localhost:8000') + '/api/v1/gis';
 
+function readAuthCookie(name) {
+    const prefix = name + '=';
+    const parts = document.cookie.split(';');
+    for (let i = 0; i < parts.length; i++) {
+        const item = parts[i].trim();
+        if (item.startsWith(prefix)) {
+            return decodeURIComponent(item.substring(prefix.length));
+        }
+    }
+    return '';
+}
+
+function buildAuthHeaders(includeJSONContentType) {
+    if (typeof getAuthHeaders === 'function') {
+        const headers = getAuthHeaders();
+        if (!includeJSONContentType) {
+            delete headers['Content-Type'];
+        }
+        return headers;
+    }
+
+    const headers = {};
+    const token = localStorage.getItem('authToken') || readAuthCookie('authToken');
+    if (token) {
+        headers.Authorization = token.startsWith('Bearer ') ? token : 'Bearer ' + token;
+    }
+    if (includeJSONContentType) {
+        headers['Content-Type'] = 'application/json';
+    }
+    return headers;
+}
+
 // Current dashboard type
 let currentDashType = 'general';
 
@@ -199,11 +231,11 @@ async function loadGISData() {
         if (currentDashType === 'general') {
             // Use original GIS endpoints
             const [summaryRes, layersRes, regionsRes, markersRes, datasetsRes] = await Promise.all([
-                fetch(GIS_API + '/summary'),
-                fetch(GIS_API + '/layers'),
-                fetch(GIS_API + '/regions'),
-                fetch(GIS_API + '/markers'),
-                fetch(GIS_API + '/datasets'),
+                fetch(GIS_API + '/summary', { headers: buildAuthHeaders(false) }),
+                fetch(GIS_API + '/layers', { headers: buildAuthHeaders(false) }),
+                fetch(GIS_API + '/regions', { headers: buildAuthHeaders(false) }),
+                fetch(GIS_API + '/markers', { headers: buildAuthHeaders(false) }),
+                fetch(GIS_API + '/datasets', { headers: buildAuthHeaders(false) }),
             ]);
             if (!summaryRes.ok || !layersRes.ok || !regionsRes.ok || !markersRes.ok || !datasetsRes.ok) {
                 throw new Error('One or more API calls failed');
@@ -218,7 +250,9 @@ async function loadGISData() {
             renderDashDescription('Population, divisions, districts and points of interest across Bangladesh');
         } else {
             // Use specialized dashboard endpoint
-            const res = await fetch(GIS_API + '/dashboards/' + encodeURIComponent(currentDashType));
+            const res = await fetch(GIS_API + '/dashboards/' + encodeURIComponent(currentDashType), {
+                headers: buildAuthHeaders(false)
+            });
             if (!res.ok) throw new Error('Dashboard API failed: ' + res.status);
             const data = await res.json();
 
@@ -545,7 +579,9 @@ function flyToRegion(region) {
 async function loadDistrictsForDivision(divisionId) {
     if (currentDashType !== 'general') return;
     try {
-        const res = await fetch(GIS_API + '/regions?type=district&parent=' + encodeURIComponent(divisionId));
+        const res = await fetch(GIS_API + '/regions?type=district&parent=' + encodeURIComponent(divisionId), {
+            headers: buildAuthHeaders(false)
+        });
         if (!res.ok) return;
         const districts = await res.json();
         if (districts.length > 0) {
@@ -878,7 +914,9 @@ async function loadDataset(id) {
     try {
         let ds;
         if (currentDashType === 'general') {
-            const res = await fetch(GIS_API + '/datasets/' + encodeURIComponent(id));
+            const res = await fetch(GIS_API + '/datasets/' + encodeURIComponent(id), {
+                headers: buildAuthHeaders(false)
+            });
             if (!res.ok) return;
             ds = await res.json();
         } else {

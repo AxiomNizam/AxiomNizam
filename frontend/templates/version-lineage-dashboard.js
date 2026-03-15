@@ -1,3 +1,11 @@
+const VERSION_LINEAGE_API_BASE = window.BACKEND_URL || 'http://localhost:8000';
+
+function versionLineageURL(path) {
+    if (!path) return VERSION_LINEAGE_API_BASE;
+    if (/^https?:\/\//i.test(path)) return path;
+    return VERSION_LINEAGE_API_BASE + path;
+}
+
 function versionLineageHeaders() {
     return (typeof getAuthHeaders === 'function') ? getAuthHeaders() : { 'Content-Type': 'application/json' };
 }
@@ -10,7 +18,7 @@ function renderVersionLineage(data) {
 }
 
 async function vlFetch(path) {
-    const response = await fetch(path, { headers: versionLineageHeaders() });
+    const response = await fetch(versionLineageURL(path), { headers: versionLineageHeaders() });
     const data = await response.json().catch(function() { return { error: 'Invalid JSON' }; });
     if (!response.ok) {
         throw new Error(data.error || data.message || response.statusText);

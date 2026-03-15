@@ -6,6 +6,38 @@
     const API = window.BACKEND_URL || 'http://localhost:8000';
     const BASE = API + '/api/v1/netintel';
 
+    function readAuthCookie(name) {
+        const prefix = name + '=';
+        const parts = document.cookie.split(';');
+        for (let i = 0; i < parts.length; i++) {
+            const item = parts[i].trim();
+            if (item.startsWith(prefix)) {
+                return decodeURIComponent(item.substring(prefix.length));
+            }
+        }
+        return '';
+    }
+
+    function buildAuthHeaders(includeJSONContentType) {
+        if (typeof getAuthHeaders === 'function') {
+            const headers = getAuthHeaders();
+            if (!includeJSONContentType) {
+                delete headers['Content-Type'];
+            }
+            return headers;
+        }
+
+        const headers = {};
+        const token = localStorage.getItem('authToken') || readAuthCookie('authToken');
+        if (token) {
+            headers.Authorization = token.startsWith('Bearer ') ? token : 'Bearer ' + token;
+        }
+        if (includeJSONContentType) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return headers;
+    }
+
     // State
     let charts = {};
     let heatmapInstance = null;
@@ -14,7 +46,9 @@
 
     async function fetchJSON(url) {
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, {
+                headers: buildAuthHeaders(false)
+            });
             if (!res.ok) throw new Error(res.statusText);
             return await res.json();
         } catch (e) {
@@ -27,7 +61,7 @@
         try {
             const res = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: buildAuthHeaders(true),
                 body: JSON.stringify(body)
             });
             return await res.json();
@@ -600,7 +634,7 @@
     async function updateParser(id, status) {
         await fetch(`${BASE}/parsers/${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: buildAuthHeaders(true),
             body: JSON.stringify({ status })
         });
         loadParsers();
@@ -608,7 +642,10 @@
 
     async function deleteParser(id) {
         if (!confirm('Delete this parser?')) return;
-        await fetch(`${BASE}/parsers/${id}`, { method: 'DELETE' });
+        await fetch(`${BASE}/parsers/${id}`, {
+            method: 'DELETE',
+            headers: buildAuthHeaders(false)
+        });
         loadParsers();
     }
 

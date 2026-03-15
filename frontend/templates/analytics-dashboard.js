@@ -11,6 +11,38 @@ let widgetTypes = [];
 let editingWidgetId = null;
 let chartInstances = {};
 
+function readAuthCookie(name) {
+    const prefix = name + '=';
+    const parts = document.cookie.split(';');
+    for (let i = 0; i < parts.length; i++) {
+        const item = parts[i].trim();
+        if (item.startsWith(prefix)) {
+            return decodeURIComponent(item.substring(prefix.length));
+        }
+    }
+    return '';
+}
+
+function buildAuthHeaders(includeJSONContentType) {
+    if (typeof getAuthHeaders === 'function') {
+        const headers = getAuthHeaders();
+        if (!includeJSONContentType) {
+            delete headers['Content-Type'];
+        }
+        return headers;
+    }
+
+    const headers = {};
+    const token = localStorage.getItem('authToken') || readAuthCookie('authToken');
+    if (token) {
+        headers.Authorization = token.startsWith('Bearer ') ? token : 'Bearer ' + token;
+    }
+    if (includeJSONContentType) {
+        headers['Content-Type'] = 'application/json';
+    }
+    return headers;
+}
+
 // =====================================================
 // Initialization
 // =====================================================
@@ -21,7 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadDashboardList() {
     try {
-        const res = await fetch(`${BACKEND}/api/v1/analytics/dashboards`);
+        const res = await fetch(`${BACKEND}/api/v1/analytics/dashboards`, {
+            headers: buildAuthHeaders(false)
+        });
         const data = await res.json();
         const sel = document.getElementById('dashboardSelector');
         sel.innerHTML = '<option value="">Select Dashboard...</option>';
@@ -38,7 +72,9 @@ async function loadDashboardList() {
 
 async function loadWidgetTypes() {
     try {
-        const res = await fetch(`${BACKEND}/api/v1/analytics/widget-types`);
+        const res = await fetch(`${BACKEND}/api/v1/analytics/widget-types`, {
+            headers: buildAuthHeaders(false)
+        });
         widgetTypes = await res.json();
     } catch (e) {
         console.error('Failed to load widget types:', e);
@@ -63,7 +99,9 @@ async function loadDashboard(id) {
         return;
     }
     try {
-        const res = await fetch(`${BACKEND}/api/v1/analytics/dashboards/${encodeURIComponent(id)}`);
+        const res = await fetch(`${BACKEND}/api/v1/analytics/dashboards/${encodeURIComponent(id)}`, {
+            headers: buildAuthHeaders(false)
+        });
         if (!res.ok) throw new Error('Dashboard not found');
         currentDashboard = await res.json();
         currentDashboardId = id;
@@ -510,7 +548,7 @@ async function saveWidgetEdits() {
     try {
         const res = await fetch(`${BACKEND}/api/v1/analytics/dashboards/${encodeURIComponent(currentDashboardId)}/widgets/${encodeURIComponent(editingWidgetId)}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: buildAuthHeaders(true),
             body: JSON.stringify(body)
         });
         if (!res.ok) throw new Error('Save failed');
