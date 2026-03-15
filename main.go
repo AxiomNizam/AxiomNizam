@@ -198,7 +198,12 @@ func main() {
 	// authenticateRequest validates token + rate limits and sets auth context without advancing handlers.
 	authenticateRequest := func(c *gin.Context) bool {
 		if tokenValidator == nil {
-			return true
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":   "authentication unavailable",
+				"message": "token validation is not available because keycloak initialization failed",
+			})
+			c.Abort()
+			return false
 		}
 
 		authHeader := c.GetHeader("Authorization")
@@ -339,8 +344,20 @@ func main() {
 			c.Next()
 		}
 	} else {
-		adminMiddleware = func(c *gin.Context) { c.Next() }
-		adminOrSysMiddleware = func(c *gin.Context) { c.Next() }
+		adminMiddleware = func(c *gin.Context) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":   "authentication unavailable",
+				"message": "admin routes are disabled because keycloak initialization failed",
+			})
+			c.Abort()
+		}
+		adminOrSysMiddleware = func(c *gin.Context) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":   "authentication unavailable",
+				"message": "admin routes are disabled because keycloak initialization failed",
+			})
+			c.Abort()
+		}
 	}
 
 	// GraphQL endpoints (auth required)
