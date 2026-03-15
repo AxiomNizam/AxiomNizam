@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -596,7 +597,91 @@ func main() {
 	router.POST("/api/v1/workflows", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
 	router.GET("/api/v1/workflows", authMiddleware, resourceHandler.ListAll)
 	router.POST("/api/v1/workflows/:name/run", adminOrSysMiddleware, func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": fmt.Sprintf("Workflow '%s' started", c.Param("name")), "status": "Running"})
+		workflowName := strings.TrimSpace(c.Param("name"))
+		if workflowName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "workflow name is required"})
+			return
+		}
+
+		var req struct {
+			TriggerContext map[string]interface{} `json:"triggerContext"`
+		}
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
+		if err := ensureWorkflowRegistered(c.Request.Context(), resourceHandler, workflowName); err != nil {
+			if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) == nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			log.Printf("⚠️  workflow run using previously-registered definition for %s: %v", workflowName, err)
+		}
+
+		triggerContext := req.TriggerContext
+		if triggerContext == nil {
+			triggerContext = make(map[string]interface{})
+		}
+		if username := strings.TrimSpace(auth.GetUsername(c)); username != "" {
+			if _, exists := triggerContext["requestedBy"]; !exists {
+				triggerContext["requestedBy"] = username
+			}
+		}
+		if _, exists := triggerContext["triggeredAt"]; !exists {
+			triggerContext["triggeredAt"] = time.Now().UTC().Format(time.RFC3339)
+		}
+
+		execution, err := workflows.Execute(c.Request.Context(), workflowName, triggerContext)
+		if err != nil {
+			errMsg := strings.ToLower(err.Error())
+			switch {
+			case strings.Contains(errMsg, "not found"):
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			case strings.Contains(errMsg, "disabled"):
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":   fmt.Sprintf("Workflow '%s' executed", workflowName),
+			"execution": execution,
+			"status":    execution.Status,
+		})
+	})
+	router.GET("/api/v1/workflows/:name/executions", authMiddleware, func(c *gin.Context) {
+		workflowName := strings.TrimSpace(c.Param("name"))
+		if workflowName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "workflow name is required"})
+			return
+		}
+
+		executions := workflows.GlobalWorkflowEngine.ListExecutions(workflowName)
+		c.JSON(http.StatusOK, gin.H{
+			"workflow":   workflowName,
+			"executions": executions,
+			"count":      len(executions),
+		})
+	})
+	router.GET("/api/v1/workflows/executions/:id", authMiddleware, func(c *gin.Context) {
+		executionID := strings.TrimSpace(c.Param("id"))
+		if executionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "execution id is required"})
+			return
+		}
+
+		execution := workflows.GlobalWorkflowEngine.GetExecution(executionID)
+		if execution == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "execution not found"})
+			return
+		}
+
+		c.JSON(http.StatusOK, execution)
 	})
 
 	// DataSource endpoints
@@ -1468,4 +1553,276 @@ func createTables(conns *database.Connections) {
 		conns.Oracle.AutoMigrate(&models.User{})
 		log.Println("✅ Oracle table created/migrated")
 	}
+}
+
+func ensureWorkflowRegistered(ctx context.Context, resourceHandler *handlers.ResourceHandler, workflowName string) error {
+	if resourceHandler == nil {
+		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
+			return nil
+		}
+		return fmt.Errorf("workflow %q not found", workflowName)
+	}
+
+	resource, found := resourceHandler.FindResourceByKindAndName("workflow", workflowName)
+	if !found {
+		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
+			return nil
+		}
+		return fmt.Errorf("workflow %q not found", workflowName)
+	}
+
+	workflowDef, err := workflowFromResource(resource)
+	if err != nil {
+		return err
+	}
+
+	return workflows.AddWorkflow(ctx, workflowDef)
+}
+
+func workflowFromResource(resource *handlers.GenericResource) (*workflows.Workflow, error) {
+	if resource == nil {
+		return nil, fmt.Errorf("workflow definition is nil")
+	}
+
+	name := strings.TrimSpace(resource.Metadata.Name)
+	if name == "" {
+		return nil, fmt.Errorf("workflow metadata.name is required")
+	}
+
+	steps, err := workflowStepsFromSpec(name, resource.Spec)
+	if err != nil {
+		return nil, err
+	}
+
+	enabled := true
+	if v, ok := boolFromAny(resource.Spec["enabled"]); ok {
+		enabled = v
+	}
+	if schedule, ok := resource.Spec["schedule"].(map[string]interface{}); ok {
+		if v, ok := boolFromAny(schedule["enabled"]); ok {
+			enabled = v
+		}
+	}
+
+	version := strings.TrimSpace(stringFromAny(resource.Spec["version"]))
+	if version == "" {
+		version = "v1"
+	}
+
+	namespace := strings.TrimSpace(resource.Metadata.Namespace)
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	return &workflows.Workflow{
+		Name:        name,
+		Namespace:   namespace,
+		Version:     version,
+		Description: stringFromAny(resource.Spec["description"]),
+		Triggers:    workflowTriggersFromSpec(resource.Spec),
+		Steps:       steps,
+		Enabled:     enabled,
+		Labels:      resource.Metadata.Labels,
+		Annotations: resource.Metadata.Annotations,
+	}, nil
+}
+
+func workflowTriggersFromSpec(spec map[string]interface{}) []workflows.WorkflowTrigger {
+	triggers := make([]workflows.WorkflowTrigger, 0)
+
+	if raw, ok := spec["triggers"].([]interface{}); ok {
+		for _, item := range raw {
+			triggerMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			triggerType := strings.TrimSpace(stringFromAny(triggerMap["type"]))
+			if triggerType == "" {
+				continue
+			}
+
+			condition := make(map[string]interface{})
+			if condMap, ok := triggerMap["condition"].(map[string]interface{}); ok {
+				for k, v := range condMap {
+					condition[k] = v
+				}
+			}
+
+			triggers = append(triggers, workflows.WorkflowTrigger{
+				Type:      triggerType,
+				Condition: condition,
+			})
+		}
+	}
+
+	if schedule, ok := spec["schedule"].(map[string]interface{}); ok {
+		condition := make(map[string]interface{}, len(schedule))
+		for k, v := range schedule {
+			condition[k] = v
+		}
+		triggers = append(triggers, workflows.WorkflowTrigger{Type: "schedule", Condition: condition})
+	}
+
+	if len(triggers) == 0 {
+		triggers = append(triggers, workflows.WorkflowTrigger{Type: "manual", Condition: map[string]interface{}{"source": "api"}})
+	}
+
+	return triggers
+}
+
+func workflowStepsFromSpec(workflowName string, spec map[string]interface{}) ([]workflows.WorkflowStep, error) {
+	rawSteps, ok := spec["steps"].([]interface{})
+	if !ok || len(rawSteps) == 0 {
+		return nil, fmt.Errorf("workflow %q must define at least one step", workflowName)
+	}
+
+	steps := make([]workflows.WorkflowStep, 0, len(rawSteps))
+	for i, rawStep := range rawSteps {
+		stepMap, ok := rawStep.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		stepID := strings.TrimSpace(stringFromAny(stepMap["id"]))
+		if stepID == "" {
+			stepID = fmt.Sprintf("%s-step-%d", workflowName, i+1)
+		}
+
+		stepName := strings.TrimSpace(stringFromAny(stepMap["name"]))
+		if stepName == "" {
+			stepName = stepID
+		}
+
+		stepType := strings.TrimSpace(stringFromAny(stepMap["type"]))
+		if stepType == "" {
+			stepType = "http"
+		}
+
+		action := strings.TrimSpace(stringFromAny(stepMap["action"]))
+		if action == "" {
+			action = stepType
+		}
+
+		config := make(map[string]interface{})
+		if rawConfig, ok := stepMap["config"].(map[string]interface{}); ok {
+			for k, v := range rawConfig {
+				config[k] = v
+			}
+		}
+
+		for k, v := range stepMap {
+			switch k {
+			case "id", "name", "type", "action", "retry", "timeout", "config":
+				continue
+			default:
+				config[k] = v
+			}
+		}
+
+		if _, exists := config["action"]; !exists && action != "" {
+			config["action"] = action
+		}
+		if stepType == "http" {
+			if _, exists := config["method"]; !exists {
+				method := strings.ToUpper(strings.TrimSpace(stringFromAny(stepMap["method"])))
+				if method == "" {
+					method = "GET"
+				}
+				config["method"] = method
+			}
+		}
+
+		steps = append(steps, workflows.WorkflowStep{
+			ID:      stepID,
+			Name:    stepName,
+			Type:    stepType,
+			Action:  action,
+			Config:  config,
+			Timeout: durationFromAny(stepMap["timeout"]),
+			Retry:   intFromAny(stepMap["retry"]),
+		})
+	}
+
+	if len(steps) == 0 {
+		return nil, fmt.Errorf("workflow %q has invalid steps", workflowName)
+	}
+
+	return steps, nil
+}
+
+func stringFromAny(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	case int:
+		return strconv.Itoa(v)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
+func boolFromAny(value interface{}) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err == nil {
+			return parsed, true
+		}
+	}
+	return false, false
+}
+
+func intFromAny(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func durationFromAny(value interface{}) time.Duration {
+	switch v := value.(type) {
+	case time.Duration:
+		return v
+	case string:
+		parsed, err := time.ParseDuration(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	case int:
+		if v > 0 {
+			return time.Duration(v) * time.Second
+		}
+	case int64:
+		if v > 0 {
+			return time.Duration(v) * time.Second
+		}
+	case float64:
+		if v > 0 {
+			return time.Duration(v * float64(time.Second))
+		}
+	}
+	return 0
 }

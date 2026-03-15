@@ -383,6 +383,81 @@ func (h *ResourceHandler) Events(c *gin.Context) {
 	c.JSON(http.StatusOK, events)
 }
 
+// FindResourceByKindAndName finds the first matching resource across namespaces.
+// It returns a defensive copy to avoid callers mutating internal handler state.
+func (h *ResourceHandler) FindResourceByKindAndName(kind, name string) (*GenericResource, bool) {
+	normalizedKind := normalizeKind(kind)
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for storedKind, byNamespace := range h.resources {
+		for _, byName := range byNamespace {
+			for _, res := range byName {
+				if !strings.EqualFold(res.Metadata.Name, name) {
+					continue
+				}
+
+				if normalizedKind != "" {
+					if !(strings.EqualFold(storedKind, normalizedKind) ||
+						strings.EqualFold(res.Kind, normalizedKind) ||
+						strings.EqualFold(res.Kind, kind)) {
+						continue
+					}
+				}
+
+				return cloneGenericResource(res), true
+			}
+		}
+	}
+
+	return nil, false
+}
+
+func cloneGenericResource(in *GenericResource) *GenericResource {
+	if in == nil {
+		return nil
+	}
+
+	out := *in
+	out.Metadata.Labels = cloneStringMap(in.Metadata.Labels)
+	out.Metadata.Annotations = cloneStringMap(in.Metadata.Annotations)
+	out.Spec = cloneAnyMap(in.Spec)
+
+	if len(in.Status.Conditions) > 0 {
+		out.Status.Conditions = make([]map[string]interface{}, len(in.Status.Conditions))
+		for i := range in.Status.Conditions {
+			out.Status.Conditions[i] = cloneAnyMap(in.Status.Conditions[i])
+		}
+	}
+
+	return &out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneAnyMap(in map[string]interface{}) map[string]interface{} {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
 // normalizeKind normalizes resource kind names for consistent storage
 func normalizeKind(kind string) string {
 	kind = strings.ToLower(kind)
