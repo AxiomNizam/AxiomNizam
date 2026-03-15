@@ -3,6 +3,61 @@
 
 const BACKEND_URL = window.BACKEND_URL || 'http://localhost:8000';
 
+function mgrBuildEmbedURL(path) {
+    const sep = path.indexOf('?') >= 0 ? '&' : '?';
+    return path + sep + 'embed=1&from=manager&v=3';
+}
+
+function mgrNormalizeEmbeddedFrame(frame) {
+    if (!frame) return;
+    try {
+        const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+        if (!doc) return;
+
+        const nav = doc.querySelector('.navbar');
+        if (nav) nav.style.display = 'none';
+
+        const footer = doc.querySelector('.footer');
+        if (footer) footer.style.display = 'none';
+
+        const main = doc.querySelector('.main-content');
+        if (main) {
+            main.style.maxWidth = '100%';
+            main.style.margin = '0';
+            main.style.padding = '0';
+        }
+    } catch (err) {
+        console.warn('Unable to normalize embedded frame:', err);
+    }
+}
+
+function mgrInitEmbeddedFrames() {
+    const frames = [
+        { id: 'mgrGisFrame', path: '/gis' },
+        { id: 'mgrAnalyticsFrame', path: '/analytics' },
+        { id: 'mgrNetintelFrame', path: '/netintel' }
+    ];
+
+    frames.forEach(function(item) {
+        const frame = document.getElementById(item.id);
+        if (!frame) return;
+
+        if (!frame.dataset.embedLoadHooked) {
+            frame.addEventListener('load', function() {
+                mgrNormalizeEmbeddedFrame(frame);
+            });
+            frame.dataset.embedLoadHooked = '1';
+        }
+
+        const target = mgrBuildEmbedURL(item.path);
+        if (frame.getAttribute('src') !== target) {
+            frame.setAttribute('src', target);
+        } else {
+            mgrNormalizeEmbeddedFrame(frame);
+        }
+    });
+}
+
 // ===================== TAB SWITCHING =====================
 function mgr_switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -21,6 +76,9 @@ function mgr_switchTab(tabId) {
     // Lazy-load content when tab becomes visible
     if (tabId === 'mgr-apis') mgrLoadAPIs();
     if (tabId === 'mgr-dashboards') mgrLoadDashboards();
+    if (tabId === 'mgr-gis' || tabId === 'mgr-analytics' || tabId === 'mgr-netintel') {
+        mgrInitEmbeddedFrames();
+    }
 }
 
 // ===================== INIT =====================
@@ -29,6 +87,7 @@ window.addEventListener('DOMContentLoaded', function () {
     if (userNameEl) {
         userNameEl.textContent = localStorage.getItem('userName') || 'Manager';
     }
+    mgrInitEmbeddedFrames();
     mgrLoadAPIs();
 });
 

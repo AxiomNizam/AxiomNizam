@@ -17,10 +17,18 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <!-- Chart.js for Analytics dashboard -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    {{ if .embedded }}
+    <style>
+        .navbar, .footer { display: none !important; }
+        .main-content { max-width: 100%; margin: 0; padding: 0; }
+        .app-container { min-height: auto; }
+    </style>
+    {{ end }}
 </head>
 <body>
     <div class="app-container">
         <!-- Navigation Bar -->
+        {{ if not .embedded }}
         <nav class="navbar">
             <div class="nav-container">
                 <div class="nav-logo">
@@ -93,6 +101,7 @@
                 </div>
             </div>
         </nav>
+        {{ end }}
 
         <!-- Main Content -->
         <main class="main-content">
@@ -122,6 +131,7 @@
         </main>
 
         <!-- Footer -->
+        {{ if not .embedded }}
         <footer class="footer">
             <div class="footer-content">
                 <p>&copy; 2026 AxiomNizam - All Rights Reserved</p>
@@ -132,6 +142,7 @@
                 </div>
             </div>
         </footer>
+        {{ end }}
     </div>
 
     <!-- Login Modal -->

@@ -59,6 +59,12 @@ func defaultPathForRole(role string) string {
 	}
 }
 
+func setNoCacheHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+}
+
 func requireFrontendRoles(allowed ...string) gin.HandlerFunc {
 	allowedSet := make(map[string]bool, len(allowed))
 	for _, role := range allowed {
@@ -201,6 +207,8 @@ func adminHandler(c *gin.Context) {
 
 // managerHandler serves the manager portal
 func managerHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
 	authToken := c.GetHeader("Authorization")
 	if authToken == "" {
 		authToken, _ = c.Cookie("authToken")
@@ -248,6 +256,10 @@ func analyticsHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
+	embedded := c.Query("embed") == "1" || strings.EqualFold(c.Query("embed"), "true")
+	if embedded {
+		setNoCacheHeaders(c)
+	}
 	userName := "User"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
@@ -255,6 +267,7 @@ func analyticsHandler(c *gin.Context) {
 		"pageName":   "analytics-dashboard",
 		"page":       "analytics-dashboard",
 		"isAuth":     isAuth,
+		"embedded":   embedded,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})
@@ -288,6 +301,10 @@ func netintelHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
+	embedded := c.Query("embed") == "1" || strings.EqualFold(c.Query("embed"), "true")
+	if embedded {
+		setNoCacheHeaders(c)
+	}
 	userName := "User"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
@@ -295,6 +312,7 @@ func netintelHandler(c *gin.Context) {
 		"pageName":   "netintel-dashboard",
 		"page":       "netintel-dashboard",
 		"isAuth":     isAuth,
+		"embedded":   embedded,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})
@@ -368,6 +386,10 @@ func gisHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
+	embedded := c.Query("embed") == "1" || strings.EqualFold(c.Query("embed"), "true")
+	if embedded {
+		setNoCacheHeaders(c)
+	}
 	userName := "User"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
@@ -375,6 +397,7 @@ func gisHandler(c *gin.Context) {
 		"pageName":   "gis-dashboard",
 		"page":       "gis-dashboard",
 		"isAuth":     isAuth,
+		"embedded":   embedded,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})
