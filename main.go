@@ -141,7 +141,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(dbConnections)
 
 	// User management handler
-	platformUserHandler := handlers.NewPlatformUserHandler()
+	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)
 
 	// Dynamic Query handlers for each database
 	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL, queryLogger)
@@ -538,7 +538,7 @@ func main() {
 	// ====================================
 	// KUBERNETES-STYLE RESOURCE ENDPOINTS
 	// ====================================
-	resourceHandler := handlers.NewResourceHandler()
+	resourceHandler := handlers.NewResourceHandler(conns.Etcd)
 
 	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
 	nsAPI := router.Group("/api/v1/namespaces")

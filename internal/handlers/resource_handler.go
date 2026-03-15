@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // GenericResource represents a Kubernetes-style resource stored in the API server
@@ -42,12 +46,65 @@ type ResourceStatus struct {
 type ResourceHandler struct {
 	mu        sync.RWMutex
 	resources map[string]map[string]map[string]*GenericResource // kind -> namespace -> name -> resource
+	etcd      *clientv3.Client
+	stateKey  string
 }
 
 // NewResourceHandler creates a new resource handler
-func NewResourceHandler() *ResourceHandler {
-	return &ResourceHandler{
+func NewResourceHandler(etcd *clientv3.Client) *ResourceHandler {
+	h := &ResourceHandler{
 		resources: make(map[string]map[string]map[string]*GenericResource),
+		etcd:      etcd,
+		stateKey:  "axiomnizam:resources:state",
+	}
+	h.loadState()
+	return h
+}
+
+func (h *ResourceHandler) loadState() {
+	if h.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.etcd.Get(ctx, h.stateKey)
+	if err != nil {
+		log.Printf("resources: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var resourcesState map[string]map[string]map[string]*GenericResource
+	if err := json.Unmarshal(resp.Kvs[0].Value, &resourcesState); err != nil {
+		log.Printf("resources: failed to decode persisted state: %v", err)
+		return
+	}
+	if resourcesState == nil {
+		resourcesState = make(map[string]map[string]map[string]*GenericResource)
+	}
+	h.resources = resourcesState
+}
+
+func (h *ResourceHandler) persistStateLocked() {
+	if h.etcd == nil {
+		return
+	}
+
+	payload, err := json.Marshal(h.resources)
+	if err != nil {
+		log.Printf("resources: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
+		log.Printf("resources: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -101,6 +158,7 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		resource.Metadata.Namespace = ns
 		resource.Status.Phase = "Reconciling"
 		h.resources[kind][ns][name] = &resource
+		h.persistStateLocked()
 		c.JSON(http.StatusOK, &resource)
 	} else {
 		// Create
@@ -110,6 +168,7 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		resource.Metadata.Namespace = ns
 		resource.Status.Phase = "Pending"
 		h.resources[kind][ns][name] = &resource
+		h.persistStateLocked()
 		c.JSON(http.StatusCreated, &resource)
 	}
 
@@ -121,6 +180,7 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		if r, ok := h.resources[kind][ns][name]; ok {
 			r.Status.Phase = "Ready"
 			r.Status.Message = "Resource reconciled successfully"
+			h.persistStateLocked()
 		}
 	}()
 }
@@ -206,6 +266,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 	}
 	existing.Metadata.Generation++
 	existing.Status.Phase = "Reconciling"
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, existing)
 
@@ -216,6 +277,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 		defer h.mu.Unlock()
 		if r, ok := h.resources[kind][ns][name]; ok {
 			r.Status.Phase = "Ready"
+			h.persistStateLocked()
 		}
 	}()
 }
@@ -239,6 +301,7 @@ func (h *ResourceHandler) Delete(c *gin.Context) {
 	}
 
 	delete(h.resources[kind][ns], name)
+	h.persistStateLocked()
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s '%s' deleted", kind, name)})
 }
 

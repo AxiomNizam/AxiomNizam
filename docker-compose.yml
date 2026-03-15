@@ -8,7 +8,7 @@ services:
     env_file:
       - .env
     depends_on:
-      - valkey
+      # - valkey
       - keycloak
       - etcd
       # - mysql
@@ -40,16 +40,16 @@ services:
       - app-network
 
   # Valkey (Redis alternative)
-  valkey:
-    image: valkey/valkey:latest
-    container_name: valkey
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-    volumes:
-      - valkey-data:/data
-    command: valkey-server --appendonly yes --dir /data
+  # valkey:
+  #   image: valkey/valkey:latest
+  #   container_name: valkey
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - valkey-data:/data
+  #   command: valkey-server --appendonly yes --dir /data
 
   # Keycloak with PostgreSQL backend
   keycloak:

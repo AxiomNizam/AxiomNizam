@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -51,13 +53,66 @@ type PlatformUserHandler struct {
 	mu           sync.RWMutex
 	users        map[string]*PlatformUser
 	keycloakSync *keycloakUserSync
+	etcd         *clientv3.Client
+	stateKey     string
 }
 
 // NewPlatformUserHandler creates a new platform user handler
-func NewPlatformUserHandler() *PlatformUserHandler {
-	return &PlatformUserHandler{
+func NewPlatformUserHandler(etcd *clientv3.Client) *PlatformUserHandler {
+	h := &PlatformUserHandler{
 		users:        make(map[string]*PlatformUser),
 		keycloakSync: newKeycloakUserSync(),
+		etcd:         etcd,
+		stateKey:     "axiomnizam:platform:users",
+	}
+	h.loadState()
+	return h
+}
+
+func (h *PlatformUserHandler) loadState() {
+	if h.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.etcd.Get(ctx, h.stateKey)
+	if err != nil {
+		log.Printf("platform-users: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var users map[string]*PlatformUser
+	if err := json.Unmarshal(resp.Kvs[0].Value, &users); err != nil {
+		log.Printf("platform-users: failed to decode persisted state: %v", err)
+		return
+	}
+	if users == nil {
+		users = make(map[string]*PlatformUser)
+	}
+	h.users = users
+}
+
+func (h *PlatformUserHandler) persistStateLocked() {
+	if h.etcd == nil {
+		return
+	}
+
+	payload, err := json.Marshal(h.users)
+	if err != nil {
+		log.Printf("platform-users: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
+		log.Printf("platform-users: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -468,6 +523,7 @@ func (h *PlatformUserHandler) CreatePlatformUser(c *gin.Context) {
 
 	h.mu.Lock()
 	h.users[user.ID] = user
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -516,6 +572,7 @@ func (h *PlatformUserHandler) UpdatePlatformUser(c *gin.Context) {
 		user.Status = status
 	}
 	user.UpdatedAt = time.Now()
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -539,6 +596,7 @@ func (h *PlatformUserHandler) DeletePlatformUser(c *gin.Context) {
 
 	username := user.Username
 	delete(h.users, id)
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
