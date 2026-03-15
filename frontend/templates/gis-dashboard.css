@@ -2,6 +2,13 @@
    AxiomNizam GIS Dashboard Styles
    ============================================= */
 
+:root {
+    --gis-primary-rgb: var(--primary-rgb, 59, 130, 246);
+    --gis-overlay-soft: rgba(var(--gis-primary-rgb), 0.08);
+    --gis-overlay-subtle: rgba(var(--gis-primary-rgb), 0.05);
+    --gis-row-alt: color-mix(in srgb, var(--light-bg) 55%, var(--card-bg));
+}
+
 /* ----- Layout ----- */
 .gis-container {
     display: flex;
@@ -307,7 +314,7 @@
 .gis-map {
     width: 100%;
     height: 100%;
-    background: #e8e8e8;
+    background: color-mix(in srgb, var(--light-bg) 70%, var(--darker-bg));
     z-index: 1;
 }
 
@@ -445,7 +452,7 @@
     font-size: 12px !important;
     font-weight: 700 !important;
     color: var(--text-primary) !important;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 /* Custom Marker */
@@ -462,7 +469,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-sm);
 }
 
 .gis-marker-icon span {
@@ -536,7 +543,7 @@
 
 .gis-data-tab:hover {
     color: var(--text-primary);
-    background: rgba(59, 130, 246, 0.05);
+    background: var(--gis-overlay-subtle);
 }
 
 .gis-data-tab.active {
@@ -597,11 +604,11 @@
 }
 
 .gis-prop-row:nth-child(odd) {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--gis-row-alt);
 }
 
 .gis-prop-row:hover {
-    background: rgba(59, 130, 246, 0.08);
+    background: var(--gis-overlay-soft);
 }
 
 .prop-label {
@@ -697,11 +704,11 @@
 }
 
 .gis-table tbody tr:hover {
-    background: rgba(59, 130, 246, 0.08);
+    background: var(--gis-overlay-soft);
 }
 
 .gis-table tbody tr:nth-child(even) {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--gis-row-alt);
 }
 
 /* Table Footer & Pagination */
@@ -896,8 +903,8 @@
     align-items: center;
     gap: 16px;
     padding: 8px 16px;
-    background: var(--bg-secondary, #1a1d23);
-    border-bottom: 1px solid var(--border-color, #2d3748);
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
     overflow-x: auto;
 }
@@ -912,7 +919,7 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    color: var(--text-muted, #718096);
+    color: var(--text-muted);
     letter-spacing: 0.05em;
     white-space: nowrap;
     margin-right: 4px;
@@ -923,10 +930,10 @@
     align-items: center;
     gap: 4px;
     padding: 5px 10px;
-    border: 1px solid var(--border-color, #2d3748);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
-    background: var(--bg-primary, #0d1117);
-    color: var(--text-secondary, #a0aec0);
+    background: var(--darker-bg);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
@@ -935,16 +942,16 @@
 }
 
 .gis-type-btn:hover {
-    background: var(--bg-tertiary, #2d3748);
-    color: var(--text-primary, #e2e8f0);
-    border-color: var(--gis-accent, #3b82f6);
+    background: var(--light-bg);
+    color: var(--text-primary);
+    border-color: var(--gis-accent, var(--primary-color));
 }
 
 .gis-type-btn.active {
-    background: var(--gis-accent, #3b82f6);
+    background: var(--gis-accent, var(--primary-color));
     color: #fff;
-    border-color: var(--gis-accent, #3b82f6);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+    border-color: var(--gis-accent, var(--primary-color));
+    box-shadow: 0 0 8px rgba(var(--gis-primary-rgb), 0.3);
 }
 
 .gis-type-btn .type-icon {
@@ -957,7 +964,7 @@
 
 /* Dashboard Info Panel */
 .gis-dashboard-info {
-    border-bottom: 2px solid var(--gis-accent, #3b82f6);
+    border-bottom: 2px solid var(--gis-accent, var(--primary-color));
 }
 
 .gis-dashboard-info .gis-panel-header {
@@ -970,7 +977,7 @@
 
 .gis-dash-desc {
     font-size: 11px;
-    color: var(--text-muted, #718096);
+    color: var(--text-muted);
     line-height: 1.4;
     margin: 0;
 }

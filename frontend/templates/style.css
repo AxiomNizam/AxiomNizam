@@ -6,19 +6,21 @@
 
 /* Default Dark Theme */
 :root, [data-theme="dark"] {
-    --primary-color: #3b82f6;
-    --primary-dark: #1e40af;
-    --primary-light: #60a5fa;
-    --secondary-color: #8b5cf6;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
-    --dark-bg: #0f172a;
-    --darker-bg: #020617;
-    --light-bg: #f8fafc;
-    --card-bg: #1e293b;
-    --border-color: #334155;
-    --text-primary: #f1f5f9;
+    --primary-color: #3b6ea5;
+    --primary-dark: #274c77;
+    --primary-light: #7fb3e6;
+    --secondary-color: #2a9d8f;
+    --primary-rgb: 59, 110, 165;
+    --secondary-rgb: 42, 157, 143;
+    --success-color: #2f855a;
+    --warning-color: #b7791f;
+    --danger-color: #c53030;
+    --dark-bg: #111827;
+    --darker-bg: #0b1220;
+    --light-bg: #1f2937;
+    --card-bg: #162235;
+    --border-color: #2f3f56;
+    --text-primary: #e5e7eb;
     --text-secondary: #cbd5e1;
     --text-muted: #94a3b8;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -29,21 +31,23 @@
 
 /* Light Theme */
 [data-theme="light"] {
-    --primary-color: #2563eb;
-    --primary-dark: #1d4ed8;
-    --primary-light: #3b82f6;
-    --secondary-color: #7c3aed;
-    --success-color: #059669;
-    --warning-color: #d97706;
-    --danger-color: #dc2626;
-    --dark-bg: #f3f4f6;
+    --primary-color: #1d4e89;
+    --primary-dark: #163e6f;
+    --primary-light: #2563eb;
+    --secondary-color: #0f766e;
+    --primary-rgb: 29, 78, 137;
+    --secondary-rgb: 15, 118, 110;
+    --success-color: #15803d;
+    --warning-color: #b45309;
+    --danger-color: #b91c1c;
+    --dark-bg: #edf2f7;
     --darker-bg: #ffffff;
-    --light-bg: #e5e7eb;
+    --light-bg: #e2e8f0;
     --card-bg: #ffffff;
-    --border-color: #d1d5db;
-    --text-primary: #1f2937;
-    --text-secondary: #374151;
-    --text-muted: #6b7280;
+    --border-color: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -52,21 +56,23 @@
 
 /* Default System Theme */
 [data-theme="default"] {
-    --primary-color: #06b6d4;
-    --primary-dark: #0891b2;
-    --primary-light: #22d3ee;
-    --secondary-color: #6366f1;
-    --success-color: #14b8a6;
-    --warning-color: #eab308;
-    --danger-color: #f43f5e;
-    --dark-bg: #1a1a2e;
-    --darker-bg: #16213e;
-    --light-bg: #f0f9ff;
-    --card-bg: #0f3460;
-    --border-color: #533483;
-    --text-primary: #ecf0f1;
-    --text-secondary: #bdc3c7;
-    --text-muted: #95a5a6;
+    --primary-color: #0f4c81;
+    --primary-dark: #0b365c;
+    --primary-light: #3f83c6;
+    --secondary-color: #0f766e;
+    --primary-rgb: 15, 76, 129;
+    --secondary-rgb: 15, 118, 110;
+    --success-color: #0f9d58;
+    --warning-color: #ca8a04;
+    --danger-color: #d14343;
+    --dark-bg: #122033;
+    --darker-bg: #0b1726;
+    --light-bg: #dbeafe;
+    --card-bg: #15263b;
+    --border-color: #29405c;
+    --text-primary: #e6edf3;
+    --text-secondary: #c7d2e0;
+    --text-muted: #9aa9bc;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.6);
@@ -159,12 +165,12 @@ body {
 
 .nav-link:hover {
     color: var(--primary-light);
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(var(--primary-rgb), 0.12);
 }
 
 .nav-link.active {
     color: var(--primary-light);
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(var(--primary-rgb), 0.18);
 }
 
 .nav-icon {
@@ -184,7 +190,7 @@ body {
 }
 
 .theme-btn {
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(var(--primary-rgb), 0.12);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 8px 12px;
@@ -200,7 +206,7 @@ body {
 }
 
 .theme-btn:hover {
-    background: rgba(59, 130, 246, 0.2);
+    background: rgba(var(--primary-rgb), 0.2);
     transform: scale(1.05);
 }
 
@@ -209,7 +215,7 @@ body {
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(var(--primary-rgb), 0.12);
     border-radius: 6px;
     font-size: 14px;
 }
@@ -239,7 +245,7 @@ body {
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 5px 15px rgba(var(--primary-rgb), 0.35);
 }
 
 .btn-secondary {
@@ -320,7 +326,7 @@ body {
 .admin-header,
 .manager-header {
     margin-bottom: 40px;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.12), rgba(var(--secondary-rgb), 0.1));
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 30px;
@@ -406,7 +412,7 @@ body {
 .stat-card:hover {
     transform: translateY(-5px);
     border-color: var(--primary-color);
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.25);
 }
 
 .stat-icon {
@@ -2321,11 +2327,6 @@ code {
    Standard Role UI Polish (Admin/Manager/System Manager/User)
    =================================================================== */
 
-:root,
-[data-theme="dark"] {
-    --secondary-color: #0ea5e9;
-}
-
 body {
     font-family: "Aptos", "Segoe UI", Tahoma, sans-serif;
     background:
@@ -2362,8 +2363,8 @@ body {
 
 .tab-btn.active {
     color: var(--text-primary);
-    background: rgba(14, 165, 233, 0.18);
-    border: 1px solid rgba(14, 165, 233, 0.35);
+    background: rgba(var(--primary-rgb), 0.16);
+    border: 1px solid rgba(var(--primary-rgb), 0.35);
 }
 
 .api-testing-section,
@@ -2402,7 +2403,7 @@ body {
 .form-control:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.18);
 }
 
 .api-card {
@@ -2415,7 +2416,7 @@ body {
 }
 
 .api-card:hover {
-    border-color: rgba(14, 165, 233, 0.45);
+    border-color: rgba(var(--primary-rgb), 0.45);
     box-shadow: 0 10px 22px rgba(2, 6, 23, 0.2);
     transform: translateY(-1px);
 }
