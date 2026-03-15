@@ -238,6 +238,35 @@ type TraceSearchResult struct {
 	Status     string    `json:"status"`
 }
 
+// TraceIngestionAuditLog captures auditable tracing ingestion events.
+type TraceIngestionAuditLog struct {
+	ID           string    `json:"id"`
+	Timestamp    time.Time `json:"timestamp"`
+	TenantID     string    `json:"tenantId,omitempty"`
+	UserID       string    `json:"userId,omitempty"`
+	Username     string    `json:"username,omitempty"`
+	SourceIP     string    `json:"sourceIp,omitempty"`
+	UserAgent    string    `json:"userAgent,omitempty"`
+	RequestID    string    `json:"requestId,omitempty"`
+	Method       string    `json:"method,omitempty"`
+	Path         string    `json:"path,omitempty"`
+	ResourceType string    `json:"resourceType"` // trace, span
+	ResourceID   string    `json:"resourceId,omitempty"`
+	Result       string    `json:"result"` // SUCCESS, FAILURE
+	StatusCode   int       `json:"statusCode"`
+	Message      string    `json:"message,omitempty"`
+	DurationMs   int64     `json:"durationMs"`
+}
+
+// TraceIngestionAuditFilter filters ingestion audit logs.
+type TraceIngestionAuditFilter struct {
+	TenantID     string `json:"tenantId,omitempty"`
+	Username     string `json:"username,omitempty"`
+	ResourceType string `json:"resourceType,omitempty"`
+	Result       string `json:"result,omitempty"`
+	Limit        int    `json:"limit,omitempty"`
+}
+
 // DependencyMetrics for service dependencies
 type DependencyMetrics struct {
 	Source         string    `json:"source"`

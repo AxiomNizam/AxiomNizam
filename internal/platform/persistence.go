@@ -1344,9 +1344,10 @@ func (m *persistentLineageCoreManager) GetLineageStatistics() (*lineage.LineageS
 // ---------- Tracing Core (used by adapter) ----------
 
 type persistentTracingState struct {
-	Traces   map[string]*tracing.Trace        `json:"traces"`
-	Spans    map[string]*tracing.Span         `json:"spans"`
-	Services map[string]*tracing.TraceMetrics `json:"services"`
+	Traces   map[string]*tracing.Trace         `json:"traces"`
+	Spans    map[string]*tracing.Span          `json:"spans"`
+	Services map[string]*tracing.TraceMetrics  `json:"services"`
+	Audits   []*tracing.TraceIngestionAuditLog `json:"audits"`
 }
 
 type persistentTracingCoreManager struct {
@@ -1362,6 +1363,7 @@ func newPersistentTracingCoreManager(store *platformStateStore) *persistentTraci
 			Traces:   make(map[string]*tracing.Trace),
 			Spans:    make(map[string]*tracing.Span),
 			Services: make(map[string]*tracing.TraceMetrics),
+			Audits:   make([]*tracing.TraceIngestionAuditLog, 0, 256),
 		},
 	}
 	if err := store.loadJSON(platformStateKeyTracing, &m.state); err != nil {
@@ -1376,7 +1378,297 @@ func newPersistentTracingCoreManager(store *platformStateStore) *persistentTraci
 	if m.state.Services == nil {
 		m.state.Services = make(map[string]*tracing.TraceMetrics)
 	}
+	if m.state.Audits == nil {
+		m.state.Audits = make([]*tracing.TraceIngestionAuditLog, 0, 256)
+	}
 	return m
+}
+
+func (m *persistentTracingCoreManager) persist() {
+	if err := m.store.saveJSON(platformStateKeyTracing, &m.state); err != nil {
+		log.Printf("tracing state persist failed: %v", err)
+	}
+}
+
+func normalizeTraceForPersistence(trace *tracing.Trace) {
+	if trace == nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	if trace.ID == "" {
+		trace.ID = platformID("trace")
+	}
+	if trace.StartTime.IsZero() {
+		trace.StartTime = now
+	}
+	if trace.EndTime.IsZero() {
+		trace.EndTime = trace.StartTime
+	}
+	if trace.Duration <= 0 {
+		trace.Duration = trace.EndTime.Sub(trace.StartTime).Milliseconds()
+	}
+
+	if trace.TotalSpans == 0 {
+		trace.TotalSpans = len(trace.Spans)
+	}
+
+	serviceSet := make(map[string]bool)
+	errorSpans := 0
+	for i := range trace.Spans {
+		span := &trace.Spans[i]
+		if span.ID == "" {
+			span.ID = platformID("span")
+		}
+		if span.TraceID == "" {
+			span.TraceID = trace.ID
+		}
+		if span.TenantID == "" {
+			span.TenantID = trace.TenantID
+		}
+		if span.Service != "" {
+			serviceSet[span.Service] = true
+		}
+		if span.Error || span.Status == tracing.SpanStatusError {
+			errorSpans++
+		}
+	}
+
+	if len(trace.Services) == 0 && len(serviceSet) > 0 {
+		trace.Services = make([]string, 0, len(serviceSet))
+		for svc := range serviceSet {
+			trace.Services = append(trace.Services, svc)
+		}
+	}
+
+	trace.ErrorSpans = errorSpans
+	if trace.Status == "" {
+		if errorSpans > 0 {
+			trace.Status = "error"
+		} else {
+			trace.Status = "success"
+		}
+	}
+}
+
+func recalculateTraceForPersistence(trace *tracing.Trace) {
+	if trace == nil {
+		return
+	}
+
+	serviceSet := make(map[string]bool)
+	errorSpans := 0
+	for _, span := range trace.Spans {
+		if span.Service != "" {
+			serviceSet[span.Service] = true
+		}
+		if span.Error || span.Status == tracing.SpanStatusError {
+			errorSpans++
+		}
+	}
+
+	trace.TotalSpans = len(trace.Spans)
+	trace.ErrorSpans = errorSpans
+	if errorSpans > 0 {
+		trace.Status = "error"
+	} else if trace.Status == "" || strings.EqualFold(trace.Status, "error") {
+		trace.Status = "success"
+	}
+
+	trace.Services = trace.Services[:0]
+	for svc := range serviceSet {
+		trace.Services = append(trace.Services, svc)
+	}
+
+	if len(trace.Spans) > 0 {
+		start := trace.Spans[0].StartTime
+		end := trace.Spans[0].EndTime
+		for _, span := range trace.Spans[1:] {
+			if !span.StartTime.IsZero() && (start.IsZero() || span.StartTime.Before(start)) {
+				start = span.StartTime
+			}
+			if span.EndTime.After(end) {
+				end = span.EndTime
+			}
+		}
+		if !start.IsZero() {
+			trace.StartTime = start
+		}
+		if !end.IsZero() {
+			trace.EndTime = end
+		}
+		if !trace.EndTime.IsZero() && !trace.StartTime.IsZero() {
+			trace.Duration = trace.EndTime.Sub(trace.StartTime).Milliseconds()
+		}
+	}
+}
+
+func (m *persistentTracingCoreManager) IngestTrace(trace *tracing.Trace) (*tracing.Trace, error) {
+	if trace == nil {
+		return nil, fmt.Errorf("trace payload is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	normalizeTraceForPersistence(trace)
+	m.state.Traces[trace.ID] = trace
+
+	for i := range trace.Spans {
+		span := trace.Spans[i]
+		if span.ID == "" {
+			span.ID = platformID("span")
+		}
+		if span.TraceID == "" {
+			span.TraceID = trace.ID
+		}
+		if span.TenantID == "" {
+			span.TenantID = trace.TenantID
+		}
+		trace.Spans[i] = span
+		spanCopy := span
+		m.state.Spans[span.ID] = &spanCopy
+	}
+
+	svc := traceServiceName(trace)
+	if svc != "" {
+		if m.state.Services[svc] == nil {
+			m.state.Services[svc] = &tracing.TraceMetrics{Service: svc}
+		}
+		m.state.Services[svc].TraceCount++
+		if trace.ErrorSpans > 0 || strings.EqualFold(trace.Status, "error") {
+			m.state.Services[svc].ErrorTraceCount++
+		}
+	}
+
+	m.persist()
+	return trace, nil
+}
+
+func (m *persistentTracingCoreManager) IngestSpan(span *tracing.Span) (*tracing.Span, error) {
+	if span == nil {
+		return nil, fmt.Errorf("span payload is required")
+	}
+	if strings.TrimSpace(span.TraceID) == "" {
+		return nil, fmt.Errorf("traceId is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	trace, exists := m.state.Traces[span.TraceID]
+	if !exists {
+		return nil, fmt.Errorf("trace not found")
+	}
+
+	now := time.Now().UTC()
+	if span.ID == "" {
+		span.ID = platformID("span")
+	}
+	if span.TenantID == "" {
+		span.TenantID = trace.TenantID
+	}
+	if span.StartTime.IsZero() {
+		span.StartTime = now
+	}
+	if span.EndTime.IsZero() {
+		span.EndTime = span.StartTime
+	}
+	if span.Duration <= 0 {
+		span.Duration = span.EndTime.Sub(span.StartTime).Microseconds()
+	}
+
+	spanCopy := *span
+	m.state.Spans[spanCopy.ID] = &spanCopy
+
+	updated := false
+	for i := range trace.Spans {
+		if trace.Spans[i].ID == spanCopy.ID {
+			trace.Spans[i] = spanCopy
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		trace.Spans = append(trace.Spans, spanCopy)
+	}
+
+	recalculateTraceForPersistence(trace)
+
+	svc := traceServiceName(trace)
+	if svc != "" {
+		if m.state.Services[svc] == nil {
+			m.state.Services[svc] = &tracing.TraceMetrics{Service: svc}
+		}
+		if spanCopy.Error || spanCopy.Status == tracing.SpanStatusError {
+			m.state.Services[svc].ErrorTraceCount++
+		}
+	}
+
+	m.persist()
+	return &spanCopy, nil
+}
+
+func (m *persistentTracingCoreManager) RecordIngestionAudit(entry *tracing.TraceIngestionAuditLog) error {
+	if entry == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if entry.ID == "" {
+		entry.ID = platformID("trace-audit")
+	}
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now().UTC()
+	}
+
+	m.state.Audits = append(m.state.Audits, entry)
+	if len(m.state.Audits) > 10000 {
+		m.state.Audits = append([]*tracing.TraceIngestionAuditLog(nil), m.state.Audits[len(m.state.Audits)-10000:]...)
+	}
+
+	m.persist()
+	return nil
+}
+
+func (m *persistentTracingCoreManager) ListIngestionAudits(filter *tracing.TraceIngestionAuditFilter) ([]*tracing.TraceIngestionAuditLog, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if filter == nil {
+		filter = &tracing.TraceIngestionAuditFilter{}
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	results := make([]*tracing.TraceIngestionAuditLog, 0, limit)
+	for i := len(m.state.Audits) - 1; i >= 0; i-- {
+		entry := m.state.Audits[i]
+		if filter.TenantID != "" && !strings.EqualFold(strings.TrimSpace(entry.TenantID), strings.TrimSpace(filter.TenantID)) {
+			continue
+		}
+		if filter.Username != "" && !strings.EqualFold(strings.TrimSpace(entry.Username), strings.TrimSpace(filter.Username)) {
+			continue
+		}
+		if filter.ResourceType != "" && !strings.EqualFold(strings.TrimSpace(entry.ResourceType), strings.TrimSpace(filter.ResourceType)) {
+			continue
+		}
+		if filter.Result != "" && !strings.EqualFold(strings.TrimSpace(entry.Result), strings.TrimSpace(filter.Result)) {
+			continue
+		}
+
+		results = append(results, entry)
+		if len(results) >= limit {
+			break
+		}
+	}
+
+	return results, nil
 }
 
 func (m *persistentTracingCoreManager) GetTrace(id string) (*tracing.Trace, error) {

@@ -349,6 +349,11 @@ func (a *lineageManagerAdapter) GetStatistics(tenantID string) (*lineage.Lineage
 // tracingManagerAdapter bridges handler interface to in-memory tracing manager.
 type tracingManagerAdapter struct {
 	base interface {
+		IngestTrace(trace *tracing.Trace) (*tracing.Trace, error)
+		IngestSpan(span *tracing.Span) (*tracing.Span, error)
+		RecordIngestionAudit(entry *tracing.TraceIngestionAuditLog) error
+		ListIngestionAudits(filter *tracing.TraceIngestionAuditFilter) ([]*tracing.TraceIngestionAuditLog, error)
+
 		GetTrace(id string) (*tracing.Trace, error)
 		SearchTraces(req *tracing.TraceSearchRequest) ([]*tracing.Trace, error)
 		GetSpan(id string) (*tracing.Span, error)
@@ -357,6 +362,22 @@ type tracingManagerAdapter struct {
 		GetOperationMetrics(service, operation string) (*tracing.SpanMetrics, error)
 		AnalyzeErrors(service string) ([]*tracing.ErrorAnalysis, error)
 	}
+}
+
+func (a *tracingManagerAdapter) IngestTrace(trace *tracing.Trace) (*tracing.Trace, error) {
+	return a.base.IngestTrace(trace)
+}
+
+func (a *tracingManagerAdapter) IngestSpan(span *tracing.Span) (*tracing.Span, error) {
+	return a.base.IngestSpan(span)
+}
+
+func (a *tracingManagerAdapter) RecordIngestionAudit(entry *tracing.TraceIngestionAuditLog) error {
+	return a.base.RecordIngestionAudit(entry)
+}
+
+func (a *tracingManagerAdapter) ListIngestionAudits(filter *tracing.TraceIngestionAuditFilter) ([]*tracing.TraceIngestionAuditLog, error) {
+	return a.base.ListIngestionAudits(filter)
 }
 
 func (a *tracingManagerAdapter) GetTrace(traceID string) (*tracing.Trace, error) {

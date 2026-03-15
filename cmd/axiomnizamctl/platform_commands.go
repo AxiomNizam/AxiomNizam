@@ -448,6 +448,80 @@ var traceGetCmd = &cobra.Command{
 	},
 }
 
+var traceIngestCmd = &cobra.Command{
+	Use:   "ingest",
+	Short: "Ingest a trace",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		service, _ := cmd.Flags().GetString("service")
+		operation, _ := cmd.Flags().GetString("operation")
+		traceID, _ := cmd.Flags().GetString("trace-id")
+
+		tenantID = strings.TrimSpace(tenantID)
+		service = strings.TrimSpace(service)
+		operation = strings.TrimSpace(operation)
+		traceID = strings.TrimSpace(traceID)
+
+		if tenantID == "" || service == "" || operation == "" {
+			return NewCommandError(ErrInvalidInput, "--tenant-id, --service, and --operation are required")
+		}
+
+		payload := map[string]interface{}{
+			"tenantId": tenantID,
+			"services": []string{service},
+			"spans": []map[string]interface{}{
+				{
+					"service":       service,
+					"operationName": operation,
+					"kind":          "SERVER",
+					"status":        "OK",
+				},
+			},
+		}
+		if traceID != "" {
+			payload["id"] = traceID
+		}
+
+		return postAndPrint("/api/v1/tracing/traces", payload)
+	},
+}
+
+var traceIngestionAuditListCmd = &cobra.Command{
+	Use:   "ingestion-audit-list",
+	Short: "List tracing ingestion audit logs",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		username, _ := cmd.Flags().GetString("username")
+		resourceType, _ := cmd.Flags().GetString("resource-type")
+		result, _ := cmd.Flags().GetString("result")
+		limit, _ := cmd.Flags().GetInt("limit")
+
+		query := url.Values{}
+		if strings.TrimSpace(tenantID) != "" {
+			query.Set("tenantId", strings.TrimSpace(tenantID))
+		}
+		if strings.TrimSpace(username) != "" {
+			query.Set("username", strings.TrimSpace(username))
+		}
+		if strings.TrimSpace(resourceType) != "" {
+			query.Set("resourceType", strings.TrimSpace(resourceType))
+		}
+		if strings.TrimSpace(result) != "" {
+			query.Set("result", strings.TrimSpace(result))
+		}
+		if limit > 0 {
+			query.Set("limit", fmt.Sprintf("%d", limit))
+		}
+
+		path := "/api/v1/tracing/ingestion/audit"
+		if encoded := query.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+
+		return getAndPrint(path)
+	},
+}
+
 var LineageAPICmd = &cobra.Command{
 	Use:   "lineagex",
 	Short: "Explore lineage graph APIs",
@@ -599,7 +673,16 @@ func init() {
 
 	traceSearchCmd.Flags().String("service", "", "Service name")
 	traceSearchCmd.Flags().Int("limit", 20, "Maximum results")
-	TraceCmd.AddCommand(traceSearchCmd, traceGetCmd)
+	traceIngestCmd.Flags().String("tenant-id", "", "Tenant ID")
+	traceIngestCmd.Flags().String("service", "", "Service name")
+	traceIngestCmd.Flags().String("operation", "", "Operation name")
+	traceIngestCmd.Flags().String("trace-id", "", "Optional explicit trace ID")
+	traceIngestionAuditListCmd.Flags().String("tenant-id", "", "Filter by tenant ID")
+	traceIngestionAuditListCmd.Flags().String("username", "", "Filter by username")
+	traceIngestionAuditListCmd.Flags().String("resource-type", "", "Filter by resource type (trace|span)")
+	traceIngestionAuditListCmd.Flags().String("result", "", "Filter by result (SUCCESS|FAILURE)")
+	traceIngestionAuditListCmd.Flags().Int("limit", 100, "Maximum audit records")
+	TraceCmd.AddCommand(traceSearchCmd, traceGetCmd, traceIngestCmd, traceIngestionAuditListCmd)
 
 	LineageAPICmd.AddCommand(lineageGraphCmd, lineageImpactCmd)
 

@@ -854,14 +854,17 @@ func main() {
 	// Tracing
 	tracingAPI := router.Group("/api/v1/tracing", authMiddleware)
 	{
+		tracingAPI.POST("/traces", adminOrSysMiddleware, tracingHandler.IngestTrace)
 		tracingAPI.GET("/traces/:traceId", tracingHandler.GetTrace)
 		tracingAPI.GET("/traces/search", tracingHandler.SearchTraces)
+		tracingAPI.POST("/spans", adminOrSysMiddleware, tracingHandler.IngestSpan)
 		tracingAPI.GET("/spans/:spanId", tracingHandler.GetSpan)
 		tracingAPI.GET("/service-map", tracingHandler.GetServiceMap)
 		tracingAPI.GET("/services", tracingHandler.ListServices)
 		tracingAPI.GET("/services/:service/metrics", tracingHandler.GetServiceMetrics)
 		tracingAPI.GET("/services/:service/operations/:operation/metrics", tracingHandler.GetOperationMetrics)
 		tracingAPI.GET("/errors/analysis", tracingHandler.GetErrorAnalysis)
+		tracingAPI.GET("/ingestion/audit", adminOrSysMiddleware, tracingHandler.ListIngestionAudits)
 	}
 
 	// ====================================

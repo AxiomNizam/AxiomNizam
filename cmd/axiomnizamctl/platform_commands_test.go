@@ -460,3 +460,111 @@ func TestJobScheduleCLICommands(t *testing.T) {
 		}
 	})
 }
+
+func TestTraceIngestionCLICommands(t *testing.T) {
+	var (
+		mu           sync.Mutex
+		lastPath     string
+		lastMethod   string
+		lastBody     map[string]interface{}
+		requestCount int
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		requestCount++
+		lastPath = r.URL.RequestURI()
+		lastMethod = r.Method
+		lastBody = nil
+
+		if r.Body != nil {
+			defer r.Body.Close()
+			var body map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				lastBody = body
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "path": r.URL.RequestURI()})
+	}))
+	defer server.Close()
+
+	setupPlatformCommandTestContext(t, server.URL)
+
+	t.Run("trace ingest", func(t *testing.T) {
+		traceIngestCmd.Flags().Set("tenant-id", "tenant-1")
+		traceIngestCmd.Flags().Set("service", "api-gateway")
+		traceIngestCmd.Flags().Set("operation", "GET /orders")
+		traceIngestCmd.Flags().Set("trace-id", "trace-explicit-1")
+
+		if err := traceIngestCmd.RunE(traceIngestCmd, []string{}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodPost {
+			t.Fatalf("expected POST, got %s", lastMethod)
+		}
+		if lastPath != "/api/v1/tracing/traces" {
+			t.Fatalf("expected trace ingest path, got %s", lastPath)
+		}
+		if lastBody == nil {
+			t.Fatal("expected JSON payload")
+		}
+		if got, ok := lastBody["tenantId"].(string); !ok || got != "tenant-1" {
+			t.Fatalf("expected tenantId=tenant-1, got %#v", lastBody["tenantId"])
+		}
+		if got, ok := lastBody["id"].(string); !ok || got != "trace-explicit-1" {
+			t.Fatalf("expected id=trace-explicit-1, got %#v", lastBody["id"])
+		}
+		if spans, ok := lastBody["spans"].([]interface{}); !ok || len(spans) == 0 {
+			t.Fatalf("expected non-empty spans payload, got %#v", lastBody["spans"])
+		}
+	})
+
+	t.Run("trace ingest requires mandatory flags", func(t *testing.T) {
+		mu.Lock()
+		before := requestCount
+		mu.Unlock()
+
+		traceIngestCmd.Flags().Set("tenant-id", "")
+		traceIngestCmd.Flags().Set("service", "")
+		traceIngestCmd.Flags().Set("operation", "")
+		err := traceIngestCmd.RunE(traceIngestCmd, []string{})
+		if err == nil {
+			t.Fatal("expected validation error when required trace ingest flags are missing")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if requestCount != before {
+			t.Fatalf("expected no HTTP request, got before=%d after=%d", before, requestCount)
+		}
+	})
+
+	t.Run("trace ingestion audit list with filters", func(t *testing.T) {
+		traceIngestionAuditListCmd.Flags().Set("tenant-id", "tenant-1")
+		traceIngestionAuditListCmd.Flags().Set("username", "alice")
+		traceIngestionAuditListCmd.Flags().Set("resource-type", "trace")
+		traceIngestionAuditListCmd.Flags().Set("result", "SUCCESS")
+		traceIngestionAuditListCmd.Flags().Set("limit", "25")
+
+		if err := traceIngestionAuditListCmd.RunE(traceIngestionAuditListCmd, []string{}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodGet {
+			t.Fatalf("expected GET, got %s", lastMethod)
+		}
+		expectedPath := "/api/v1/tracing/ingestion/audit?limit=25&resourceType=trace&result=SUCCESS&tenantId=tenant-1&username=alice"
+		if lastPath != expectedPath {
+			t.Fatalf("expected path %s, got %s", expectedPath, lastPath)
+		}
+	})
+}
