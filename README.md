@@ -57,16 +57,17 @@ Runtime note:
 
 ## Project Size Snapshot
 
-Code inventory snapshot (workspace scan on 2026-03-14):
+Code inventory snapshot (workspace scan on 2026-03-16):
 
 - Total code files: 390
 - Total code lines: 131758
-- Go files: 354
-- Go lines: 116009
+- Go files: 360
+- Go lines: 121209
 
 Counting method used:
 
-- Code file extensions included: .go, .js, .ts, .tsx, .jsx, .html, .css, .scss, .sql, .sh, .py, .java, .rs, .c, .cpp, .h, .hpp.
+- Code file extensions included: .go, .js, .ts, .jsx, .tsx, .py, .java, .rb, .php, .cs, .cpp, .c, .h, .hpp.
+- Excluded: .git and vendor directories.
 - Line counts are physical lines across matching files.
 
 ## Quick Start
@@ -200,6 +201,61 @@ Primary feature areas:
 - Vector search and similarity services (vectorplus) with index management and query APIs.
 - Review pipeline services (reviewflow) for staged items, transitions, and quality scoring.
 
+## Roadmap 1-5 Feature and Command References
+
+### No. 1 Workflow execution lifecycle
+
+- Backend APIs:
+	- POST /api/v1/workflows/:name/run
+	- GET /api/v1/workflows/:name/executions
+	- GET /api/v1/workflows/executions/:id
+- CLI commands:
+	- workflow run [name]
+	- workflow status [name|execution-id]
+
+### No. 2 RBAC access request lifecycle
+
+- Backend APIs:
+	- POST /api/v1/rbac/access-requests
+	- GET /api/v1/rbac/access-requests
+	- POST /api/v1/rbac/access-requests/:id/approve
+	- POST /api/v1/rbac/access-requests/:id/reject
+- CLI commands:
+	- rbacx access-request-list
+	- rbacx access-request-create
+	- rbacx access-request-approve [request-id]
+	- rbacx access-request-reject [request-id]
+
+### No. 3 Job scheduling APIs
+
+- Backend APIs:
+	- GET /api/v1/jobs/schedules
+	- POST /api/v1/jobs/:id/schedule
+	- DELETE /api/v1/jobs/:id/schedule
+- CLI commands:
+	- job schedule-list
+	- job schedule-set [job-id]
+	- job schedule-remove [job-id]
+
+### No. 4 Tracing ingestion and ingestion-audit logging
+
+- Backend APIs:
+	- POST /api/v1/tracing/traces
+	- POST /api/v1/tracing/spans
+	- GET /api/v1/tracing/ingestion/audit
+- CLI commands:
+	- trace ingest
+	- trace ingestion-audit-list
+
+### No. 5 Event bus ack and DLQ replay
+
+- Backend APIs:
+	- POST /api/v1/eventbus/events/:id/ack
+	- POST /api/v1/eventbus/dlq/:id/replay
+- CLI commands:
+	- eventbus ack [event-id]
+	- eventbus dlq-replay [dlq-id]
+
 ## REST API Coverage
 
 ### Core Auth and Health
@@ -281,6 +337,8 @@ Also:
 - /api/v1/policies
 - /api/v1/workflows
 - /api/v1/workflows/:name/run
+- /api/v1/workflows/:name/executions
+- /api/v1/workflows/executions/:id
 - /api/v1/datasources*
 
 ### Extension APIs (new)
@@ -299,11 +357,15 @@ Also:
 - /api/v1/reviewflow/score
 - /api/v1/reviewflow/quality
 - /api/v1/jobs*
+- /api/v1/jobs/schedules
+- /api/v1/jobs/:id/schedule
 
 ### Platform Service APIs
 
 - /api/v1/bulk/operations*
 - /api/v1/eventbus*
+- /api/v1/eventbus/events/:id/ack
+- /api/v1/eventbus/dlq/:id/replay
 - /api/v1/exports*
 - /api/v1/export-templates*
 - /api/v1/webhooks*
@@ -311,9 +373,15 @@ Also:
 - /api/v1/streaming/subscriptions*
 - /api/v1/tenants*
 - /api/v1/rbac*
+- /api/v1/rbac/access-requests*
+- /api/v1/rbac/access-requests/:id/approve
+- /api/v1/rbac/access-requests/:id/reject
 - /api/v1/versioning*
 - /api/v1/lineage*
 - /api/v1/tracing*
+- /api/v1/tracing/traces
+- /api/v1/tracing/spans
+- /api/v1/tracing/ingestion/audit
 
 ### Data Platform and Specialized APIs
 
@@ -426,6 +494,7 @@ Verified top-level commands:
 - current-user
 - datasource
 - diff
+- eventbus
 - events
 - exportx
 - health
@@ -482,7 +551,7 @@ axiomnizamctl
 │  ├─ apply -f [file]
 │  ├─ list
 │  ├─ run [name]
-│  ├─ status [name]
+│  ├─ status [name|execution-id]
 │  ├─ describe [name]
 │  └─ diff -f [file]
 ├─ datasource
@@ -505,7 +574,10 @@ axiomnizamctl
 │  ├─ cancel [job-id]
 │  ├─ describe [job-id]
 │  ├─ diff -f [file]
-│  └─ status [job-id]
+│  ├─ status [job-id]
+│  ├─ schedule-list
+│  ├─ schedule-set [job-id]
+│  └─ schedule-remove [job-id]
 ├─ mesh
 │  ├─ list
 │  ├─ status
@@ -526,7 +598,14 @@ axiomnizamctl
 ├─ rbacx
 │  ├─ roles
 │  ├─ create-role
-│  └─ check
+│  ├─ check
+│  ├─ access-request-list
+│  ├─ access-request-create
+│  ├─ access-request-approve [request-id]
+│  └─ access-request-reject [request-id]
+├─ eventbus
+│  ├─ ack [event-id]
+│  └─ dlq-replay [dlq-id]
 ├─ webhook
 │  ├─ list
 │  ├─ create
@@ -549,7 +628,9 @@ axiomnizamctl
 │  └─ rollback [resource-type] [resource-id]
 ├─ trace
 │  ├─ search
-│  └─ get [trace-id]
+│  ├─ get [trace-id]
+│  ├─ ingest
+│  └─ ingestion-audit-list
 ├─ lineagex
 │  ├─ graph [resource-type] [resource-id]
 │  └─ impact [resource-type] [resource-id]
@@ -608,7 +689,7 @@ axiomnizamctl
 
 CLI commands in this repository are a mix of:
 
-- API-backed commands: call backend REST endpoints (for example api, policy, workflow, datasource, job, tenant, webhook, stream, exportx, bulk, versioning, trace, lineagex).
+- API-backed commands: call backend REST endpoints (for example api, policy, workflow, datasource, job, tenant, rbacx, eventbus, webhook, stream, exportx, bulk, versioning, trace, lineagex).
 - Local integration commands: run local integration analyzers without requiring backend routes for every operation (for example health, alerts, metrics, catalog, compliance, quality, lineage, and parts of mesh behavior).
 
 This split is intentional in the current codebase.
