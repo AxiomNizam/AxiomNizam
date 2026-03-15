@@ -1,10 +1,15 @@
 package reviewflow
 
 import (
+	"context"
+	"encoding/json"
+	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Stage string
@@ -30,12 +35,103 @@ type ReviewItem struct {
 }
 
 type Pipeline struct {
-	mu    sync.RWMutex
-	items map[string]ReviewItem
+	mu       sync.RWMutex
+	items    map[string]ReviewItem
+	etcd     *clientv3.Client
+	stateKey string
 }
 
-func NewPipeline() *Pipeline {
-	return &Pipeline{items: make(map[string]ReviewItem)}
+type pipelineState struct {
+	Items map[string]ReviewItem `json:"items"`
+}
+
+var (
+	globalEtcdMu     sync.RWMutex
+	globalEtcdClient *clientv3.Client
+	defaultStateKey  = "axiomnizam:reviewflow:pipeline:state"
+)
+
+func NewPipeline(etcd ...*clientv3.Client) *Pipeline {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	} else {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+
+	p := &Pipeline{items: make(map[string]ReviewItem), etcd: etcdClient, stateKey: defaultStateKey}
+	p.loadState()
+	return p
+}
+
+func ConfigureGlobalPersistence(etcd *clientv3.Client) {
+	globalEtcdMu.Lock()
+	globalEtcdClient = etcd
+	globalEtcdMu.Unlock()
+}
+
+func (p *Pipeline) loadState() {
+	etcdClient := p.etcd
+	if etcdClient == nil {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+	if etcdClient == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := etcdClient.Get(ctx, p.stateKey)
+	if err != nil {
+		log.Printf("reviewflow: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var state pipelineState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("reviewflow: failed to decode persisted state: %v", err)
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if state.Items != nil {
+		p.items = state.Items
+	}
+}
+
+func (p *Pipeline) persistStateLocked() {
+	etcdClient := p.etcd
+	if etcdClient == nil {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+	if etcdClient == nil {
+		return
+	}
+
+	state := pipelineState{Items: p.items}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("reviewflow: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := etcdClient.Put(ctx, p.stateKey, string(payload)); err != nil {
+		log.Printf("reviewflow: failed to persist state to etcd: %v", err)
+	}
 }
 
 func (p *Pipeline) Upsert(item ReviewItem) {
@@ -50,6 +146,7 @@ func (p *Pipeline) Upsert(item ReviewItem) {
 		item.Stage = StageDraft
 	}
 	p.items[item.ID] = item
+	p.persistStateLocked()
 }
 
 func (p *Pipeline) Get(id string) (ReviewItem, bool) {
@@ -87,6 +184,7 @@ func (p *Pipeline) Advance(id string, target Stage) bool {
 	item.Stage = target
 	item.UpdatedAt = time.Now().UTC()
 	p.items[id] = item
+	p.persistStateLocked()
 	return true
 }
 

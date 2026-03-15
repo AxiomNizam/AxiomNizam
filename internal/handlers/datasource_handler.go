@@ -1,13 +1,17 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // DataSourceResource represents a datasource on the server
@@ -38,12 +42,70 @@ type DataSourceStatus struct {
 type DataSourceHandler struct {
 	mu          sync.RWMutex
 	datasources map[string]*DataSourceResource // name -> datasource
+	etcd        *clientv3.Client
+	stateKey    string
 }
 
 // NewDataSourceHandler creates a new datasource handler
-func NewDataSourceHandler() *DataSourceHandler {
-	return &DataSourceHandler{
+func NewDataSourceHandler(etcd ...*clientv3.Client) *DataSourceHandler {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	}
+
+	h := &DataSourceHandler{
 		datasources: make(map[string]*DataSourceResource),
+		etcd:        etcdClient,
+		stateKey:    "axiomnizam:datasources:state",
+	}
+	h.loadState()
+	return h
+}
+
+func (h *DataSourceHandler) loadState() {
+	if h.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.etcd.Get(ctx, h.stateKey)
+	if err != nil {
+		log.Printf("datasources: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var datasources map[string]*DataSourceResource
+	if err := json.Unmarshal(resp.Kvs[0].Value, &datasources); err != nil {
+		log.Printf("datasources: failed to decode persisted state: %v", err)
+		return
+	}
+	if datasources == nil {
+		datasources = make(map[string]*DataSourceResource)
+	}
+	h.datasources = datasources
+}
+
+func (h *DataSourceHandler) persistStateLocked() {
+	if h.etcd == nil {
+		return
+	}
+
+	payload, err := json.Marshal(h.datasources)
+	if err != nil {
+		log.Printf("datasources: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
+		log.Printf("datasources: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -75,6 +137,7 @@ func (h *DataSourceHandler) Create(c *gin.Context) {
 	}
 
 	h.datasources[name] = &ds
+	h.persistStateLocked()
 	c.JSON(http.StatusCreated, &ds)
 }
 
@@ -132,6 +195,7 @@ func (h *DataSourceHandler) Update(c *gin.Context) {
 	for k, v := range updates {
 		ds.Spec[k] = v
 	}
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, ds)
 }
@@ -149,6 +213,7 @@ func (h *DataSourceHandler) Delete(c *gin.Context) {
 	}
 
 	delete(h.datasources, name)
+	h.persistStateLocked()
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("datasource '%s' deleted", name)})
 }
 
@@ -169,6 +234,7 @@ func (h *DataSourceHandler) Test(c *gin.Context) {
 	ds.Status.Connected = true
 	ds.Status.LastCheck = time.Now().UTC().Format(time.RFC3339)
 	ds.Status.Message = "Connection test successful"
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "connected",

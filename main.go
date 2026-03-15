@@ -18,6 +18,7 @@ import (
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
+	"example.com/axiomnizam/internal/integration"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
 	"example.com/axiomnizam/internal/kubeplus/scheduler"
@@ -34,6 +35,7 @@ import (
 	"example.com/axiomnizam/internal/vectorplus"
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
+	"example.com/axiomnizam/internal/workflows"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
@@ -80,6 +82,11 @@ func main() {
 
 	// Initialize all connections
 	conns := database.InitConnections(cfg)
+	workflows.ConfigureGlobalPersistence(conns.Etcd)
+	modes.ConfigureGlobalPersistence(conns.Etcd)
+	vectorplus.ConfigureGlobalPersistence(conns.Etcd)
+	reviewflow.ConfigureGlobalPersistence(conns.Etcd)
+	integration.ConfigureGlobalPersistence(conns.Etcd)
 
 	// Create tables
 	createTables(conns)
@@ -564,7 +571,7 @@ func main() {
 	})
 
 	// DataSource endpoints
-	dsHandler := handlers.NewDataSourceHandler()
+	dsHandler := handlers.NewDataSourceHandler(conns.Etcd)
 	router.POST("/api/v1/datasources", adminOrSysMiddleware, dsHandler.Create)
 	router.GET("/api/v1/datasources", authMiddleware, dsHandler.List)
 	router.GET("/api/v1/datasources/:name", authMiddleware, dsHandler.Get)
@@ -573,7 +580,7 @@ func main() {
 	router.POST("/api/v1/datasources/:name/test", adminOrSysMiddleware, dsHandler.Test)
 
 	// Job endpoints
-	jobHandler := handlers.NewJobHandler()
+	jobHandler := handlers.NewJobHandler(conns.Etcd)
 	router.POST("/api/v1/jobs", adminOrSysMiddleware, jobHandler.Create)
 	router.GET("/api/v1/jobs", authMiddleware, jobHandler.List)
 	router.GET("/api/v1/jobs/:id", authMiddleware, jobHandler.Get)
@@ -792,7 +799,7 @@ func main() {
 	// ====================================
 	// CDC & ETL DATA PLATFORM ENDPOINTS
 	// ====================================
-	cdcEtlHandler := handlers.NewCDCETLHandler()
+	cdcEtlHandler := handlers.NewCDCETLHandler(conns.Etcd)
 
 	// ETL Pipeline Management
 	etlAPI := router.Group("/api/v1/etl", authMiddleware)

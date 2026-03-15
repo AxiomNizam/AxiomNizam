@@ -10,6 +10,7 @@ import (
 	"example.com/axiomnizam/internal/events"
 	"example.com/axiomnizam/internal/mesh"
 	"example.com/axiomnizam/internal/policies"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // ComplianceAuditor tracks compliance for data operations
@@ -19,6 +20,13 @@ type ComplianceAuditor struct {
 	maxRecords    int
 	policyManager *policies.PolicyManager
 	eventRecorder events.EventRecorder
+	etcd          *clientv3.Client
+	stateKey      string
+}
+
+type complianceAuditorState struct {
+	AuditLog   []AuditRecord `json:"auditLog"`
+	MaxRecords int           `json:"maxRecords"`
 }
 
 // AuditRecord represents a compliance audit record
@@ -36,12 +44,57 @@ type AuditRecord struct {
 
 // NewComplianceAuditor creates a new compliance auditor
 func NewComplianceAuditor(maxRecords int) *ComplianceAuditor {
-	return &ComplianceAuditor{
+	ca := &ComplianceAuditor{
 		auditLog:      make([]AuditRecord, 0, maxRecords),
 		maxRecords:    maxRecords,
 		policyManager: policies.GlobalPolicyManager,
 		eventRecorder: events.GlobalEventRecorder,
+		etcd:          integrationEtcdClient(),
+		stateKey:      "axiomnizam:integration:compliance:state",
 	}
+	ca.loadState()
+	return ca
+}
+
+func (ca *ComplianceAuditor) ConfigurePersistence(etcd *clientv3.Client) {
+	ca.mu.Lock()
+	ca.etcd = etcd
+	if ca.stateKey == "" {
+		ca.stateKey = "axiomnizam:integration:compliance:state"
+	}
+	ca.mu.Unlock()
+	ca.loadState()
+}
+
+func (ca *ComplianceAuditor) loadState() {
+	if ca.etcd == nil {
+		return
+	}
+
+	var state complianceAuditorState
+	if !loadStateFromEtcd(ca.etcd, ca.stateKey, &state) {
+		return
+	}
+
+	ca.mu.Lock()
+	defer ca.mu.Unlock()
+	if state.AuditLog != nil {
+		ca.auditLog = state.AuditLog
+	}
+	if state.MaxRecords > 0 {
+		ca.maxRecords = state.MaxRecords
+	}
+}
+
+func (ca *ComplianceAuditor) persistStateLocked() {
+	if ca.etcd == nil {
+		return
+	}
+
+	saveStateToEtcd(ca.etcd, ca.stateKey, complianceAuditorState{
+		AuditLog:   ca.auditLog,
+		MaxRecords: ca.maxRecords,
+	})
 }
 
 // RecordOperation records an operation in the audit log
@@ -87,6 +140,7 @@ func (ca *ComplianceAuditor) RecordOperation(ctx context.Context, op Operation) 
 	if len(ca.auditLog) > ca.maxRecords {
 		ca.auditLog = ca.auditLog[len(ca.auditLog)-ca.maxRecords:]
 	}
+	ca.persistStateLocked()
 
 	// Record event - skip for now due to interface complexity
 	// if ca.eventRecorder != nil {

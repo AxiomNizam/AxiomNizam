@@ -1,9 +1,14 @@
 package cdc
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // =====================================================
@@ -119,9 +124,22 @@ type PipelineEngine struct {
 	observability *CDCObservability
 	cdc           *ChangeDataCapture // reference to core CDC
 	sequence      int64
+	etcd          *clientv3.Client
+	stateKey      string
 }
 
-func NewPipelineEngine(cdc *ChangeDataCapture) *PipelineEngine {
+type pipelineEngineState struct {
+	Pipelines     map[string]*CDCPipeline `json:"pipelines"`
+	Observability *CDCObservability       `json:"observability"`
+	Sequence      int64                   `json:"sequence"`
+}
+
+func NewPipelineEngine(cdc *ChangeDataCapture, etcd ...*clientv3.Client) *PipelineEngine {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	}
+
 	pe := &PipelineEngine{
 		pipelines: make(map[string]*CDCPipeline),
 		cdc:       cdc,
@@ -132,10 +150,72 @@ func NewPipelineEngine(cdc *ChangeDataCapture) *PipelineEngine {
 			ThroughputLog: make([]CDCThroughputPoint, 0),
 			LastUpdated:   time.Now(),
 		},
+		etcd:     etcdClient,
+		stateKey: "axiomnizam:cdc:pipelines:state",
 	}
 	pe.registerTypes()
-	pe.seedPipelines()
+	if !pe.loadState() {
+		pe.seedPipelines()
+		pe.persistStateLocked()
+	}
 	return pe
+}
+
+func (pe *PipelineEngine) loadState() bool {
+	if pe.etcd == nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := pe.etcd.Get(ctx, pe.stateKey)
+	if err != nil {
+		log.Printf("cdc-pipeline: failed to load persisted state from etcd: %v", err)
+		return false
+	}
+	if len(resp.Kvs) == 0 {
+		return false
+	}
+
+	var state pipelineEngineState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("cdc-pipeline: failed to decode persisted state: %v", err)
+		return false
+	}
+
+	if state.Pipelines != nil {
+		pe.pipelines = state.Pipelines
+	}
+	if state.Observability != nil {
+		pe.observability = state.Observability
+	}
+	pe.sequence = state.Sequence
+	return true
+}
+
+func (pe *PipelineEngine) persistStateLocked() {
+	if pe.etcd == nil {
+		return
+	}
+
+	state := pipelineEngineState{
+		Pipelines:     pe.pipelines,
+		Observability: pe.observability,
+		Sequence:      pe.sequence,
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("cdc-pipeline: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := pe.etcd.Put(ctx, pe.stateKey, string(payload)); err != nil {
+		log.Printf("cdc-pipeline: failed to persist state to etcd: %v", err)
+	}
 }
 
 func (pe *PipelineEngine) registerTypes() {
@@ -182,6 +262,7 @@ func (pe *PipelineEngine) CreatePipeline(p *CDCPipeline) error {
 	pe.observability.mu.Lock()
 	pe.observability.PipelinesTotal++
 	pe.observability.mu.Unlock()
+	pe.persistStateLocked()
 	return nil
 }
 
@@ -216,6 +297,7 @@ func (pe *PipelineEngine) UpdatePipeline(id string, updates map[string]interface
 		p.Description = desc
 	}
 	p.UpdatedAt = time.Now()
+	pe.persistStateLocked()
 	return nil
 }
 
@@ -235,6 +317,7 @@ func (pe *PipelineEngine) DeletePipeline(id string) error {
 	pe.observability.mu.Unlock()
 
 	delete(pe.pipelines, id)
+	pe.persistStateLocked()
 	return nil
 }
 
@@ -253,6 +336,7 @@ func (pe *PipelineEngine) StartPipeline(id string) error {
 	pe.observability.mu.Lock()
 	pe.observability.PipelinesActive++
 	pe.observability.mu.Unlock()
+	pe.persistStateLocked()
 	return nil
 }
 
@@ -271,6 +355,7 @@ func (pe *PipelineEngine) PausePipeline(id string) error {
 	}
 	p.Status = CDCPaused
 	p.UpdatedAt = time.Now()
+	pe.persistStateLocked()
 	return nil
 }
 
@@ -292,6 +377,7 @@ func (pe *PipelineEngine) StopPipeline(id string) error {
 	}
 	p.Status = CDCStopped
 	p.UpdatedAt = time.Now()
+	pe.persistStateLocked()
 	return nil
 }
 

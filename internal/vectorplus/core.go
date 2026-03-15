@@ -1,9 +1,15 @@
 package vectorplus
 
 import (
+	"context"
+	"encoding/json"
+	"log"
 	"math"
 	"sort"
 	"sync"
+	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Vector []float64
@@ -21,16 +27,117 @@ type SearchResult struct {
 }
 
 type Index struct {
-	mu      sync.RWMutex
-	dim     int
-	records map[string]Record
+	mu       sync.RWMutex
+	dim      int
+	records  map[string]Record
+	etcd     *clientv3.Client
+	stateKey string
 }
 
-func NewIndex(dim int) *Index {
+type indexState struct {
+	Dim     int               `json:"dim"`
+	Records map[string]Record `json:"records"`
+}
+
+var (
+	globalEtcdMu     sync.RWMutex
+	globalEtcdClient *clientv3.Client
+	defaultStateKey  = "axiomnizam:vectorplus:index:state"
+)
+
+func NewIndex(dim int, etcd ...*clientv3.Client) *Index {
 	if dim < 1 {
 		dim = 1
 	}
-	return &Index{dim: dim, records: make(map[string]Record)}
+
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	} else {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+
+	idx := &Index{
+		dim:      dim,
+		records:  make(map[string]Record),
+		etcd:     etcdClient,
+		stateKey: defaultStateKey,
+	}
+	idx.loadState()
+	return idx
+}
+
+func ConfigureGlobalPersistence(etcd *clientv3.Client) {
+	globalEtcdMu.Lock()
+	globalEtcdClient = etcd
+	globalEtcdMu.Unlock()
+}
+
+func (idx *Index) loadState() {
+	etcdClient := idx.etcd
+	if etcdClient == nil {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+	if etcdClient == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := etcdClient.Get(ctx, idx.stateKey)
+	if err != nil {
+		log.Printf("vectorplus: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var state indexState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("vectorplus: failed to decode persisted state: %v", err)
+		return
+	}
+
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if state.Dim > 0 {
+		idx.dim = state.Dim
+	}
+	if state.Records != nil {
+		idx.records = state.Records
+	}
+}
+
+func (idx *Index) persistStateLocked() {
+	etcdClient := idx.etcd
+	if etcdClient == nil {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+	if etcdClient == nil {
+		return
+	}
+
+	state := indexState{Dim: idx.dim, Records: idx.records}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("vectorplus: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := etcdClient.Put(ctx, idx.stateKey, string(payload)); err != nil {
+		log.Printf("vectorplus: failed to persist state to etcd: %v", err)
+	}
 }
 
 func (idx *Index) Upsert(r Record) bool {
@@ -43,6 +150,7 @@ func (idx *Index) Upsert(r Record) bool {
 		r.Labels = map[string]string{}
 	}
 	idx.records[r.ID] = r
+	idx.persistStateLocked()
 	return true
 }
 
@@ -50,6 +158,7 @@ func (idx *Index) Delete(id string) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	delete(idx.records, id)
+	idx.persistStateLocked()
 }
 
 func dot(a, b Vector) float64 {

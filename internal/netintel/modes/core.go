@@ -1,10 +1,15 @@
 package modes
 
 import (
+	"context"
+	"encoding/json"
+	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Mode string
@@ -35,15 +40,115 @@ type ModeEvent struct {
 }
 
 type Manager struct {
-	mu      sync.RWMutex
-	configs map[Mode]ModeConfig
-	events  []ModeEvent
+	mu       sync.RWMutex
+	configs  map[Mode]ModeConfig
+	events   []ModeEvent
+	etcd     *clientv3.Client
+	stateKey string
 }
 
-func NewManager() *Manager {
-	return &Manager{
-		configs: map[Mode]ModeConfig{},
-		events:  make([]ModeEvent, 0, 1024),
+type managerState struct {
+	Configs map[Mode]ModeConfig `json:"configs"`
+	Events  []ModeEvent         `json:"events"`
+}
+
+var (
+	globalEtcdMu     sync.RWMutex
+	globalEtcdClient *clientv3.Client
+	defaultStateKey  = "axiomnizam:netintel:modes:state"
+)
+
+func NewManager(etcd ...*clientv3.Client) *Manager {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	} else {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+
+	mgr := &Manager{
+		configs:  map[Mode]ModeConfig{},
+		events:   make([]ModeEvent, 0, 1024),
+		etcd:     etcdClient,
+		stateKey: defaultStateKey,
+	}
+	mgr.loadState()
+	return mgr
+}
+
+func ConfigureGlobalPersistence(etcd *clientv3.Client) {
+	globalEtcdMu.Lock()
+	globalEtcdClient = etcd
+	globalEtcdMu.Unlock()
+}
+
+func (m *Manager) loadState() {
+	etcdClient := m.etcd
+	if etcdClient == nil {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+	if etcdClient == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := etcdClient.Get(ctx, m.stateKey)
+	if err != nil {
+		log.Printf("netintel-modes: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var state managerState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("netintel-modes: failed to decode persisted state: %v", err)
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if state.Configs != nil {
+		m.configs = state.Configs
+	}
+	if state.Events != nil {
+		m.events = state.Events
+	}
+}
+
+func (m *Manager) persistStateLocked() {
+	etcdClient := m.etcd
+	if etcdClient == nil {
+		globalEtcdMu.RLock()
+		etcdClient = globalEtcdClient
+		globalEtcdMu.RUnlock()
+	}
+	if etcdClient == nil {
+		return
+	}
+
+	state := managerState{
+		Configs: m.configs,
+		Events:  m.events,
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("netintel-modes: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := etcdClient.Put(ctx, m.stateKey, string(payload)); err != nil {
+		log.Printf("netintel-modes: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -54,6 +159,7 @@ func (m *Manager) Upsert(cfg ModeConfig) {
 		cfg.Labels = map[string]string{}
 	}
 	m.configs[cfg.Name] = cfg
+	m.persistStateLocked()
 }
 
 func (m *Manager) Get(name Mode) (ModeConfig, bool) {
@@ -81,6 +187,7 @@ func (m *Manager) Record(ev ModeEvent) {
 	if len(m.events) > 50000 {
 		m.events = m.events[len(m.events)-50000:]
 	}
+	m.persistStateLocked()
 }
 
 func (m *Manager) FindByMode(mode Mode) []ModeEvent {

@@ -2,11 +2,15 @@ package etl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"sync"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // =====================================================
@@ -198,9 +202,24 @@ type Engine struct {
 	connectors    []ConnectorType
 	observability *ETLObservability
 	sequence      int64
+	etcd          *clientv3.Client
+	stateKey      string
 }
 
-func NewEngine() *Engine {
+type engineState struct {
+	Pipelines     map[string]*Pipeline    `json:"pipelines"`
+	Runs          map[string]*PipelineRun `json:"runs"`
+	Connectors    []ConnectorType         `json:"connectors"`
+	Observability *ETLObservability       `json:"observability"`
+	Sequence      int64                   `json:"sequence"`
+}
+
+func NewEngine(etcd ...*clientv3.Client) *Engine {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	}
+
 	e := &Engine{
 		pipelines: make(map[string]*Pipeline),
 		runs:      make(map[string]*PipelineRun),
@@ -210,10 +229,80 @@ func NewEngine() *Engine {
 			ThroughputLog: make([]ThroughputPoint, 0),
 			LastUpdated:   time.Now(),
 		},
+		etcd:     etcdClient,
+		stateKey: "axiomnizam:etl:state",
 	}
 	e.registerConnectors()
-	e.seedPipelines()
+	if !e.loadState() {
+		e.seedPipelines()
+		e.persistStateLocked()
+	}
 	return e
+}
+
+func (e *Engine) loadState() bool {
+	if e.etcd == nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := e.etcd.Get(ctx, e.stateKey)
+	if err != nil {
+		log.Printf("etl: failed to load persisted state from etcd: %v", err)
+		return false
+	}
+	if len(resp.Kvs) == 0 {
+		return false
+	}
+
+	var state engineState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("etl: failed to decode persisted state: %v", err)
+		return false
+	}
+
+	if state.Pipelines != nil {
+		e.pipelines = state.Pipelines
+	}
+	if state.Runs != nil {
+		e.runs = state.Runs
+	}
+	if state.Connectors != nil {
+		e.connectors = state.Connectors
+	}
+	if state.Observability != nil {
+		e.observability = state.Observability
+	}
+	e.sequence = state.Sequence
+	return true
+}
+
+func (e *Engine) persistStateLocked() {
+	if e.etcd == nil {
+		return
+	}
+
+	state := engineState{
+		Pipelines:     e.pipelines,
+		Runs:          e.runs,
+		Connectors:    e.connectors,
+		Observability: e.observability,
+		Sequence:      e.sequence,
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("etl: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := e.etcd.Put(ctx, e.stateKey, string(payload)); err != nil {
+		log.Printf("etl: failed to persist state to etcd: %v", err)
+	}
 }
 
 // --- Connector Registry ---
@@ -267,6 +356,7 @@ func (e *Engine) AddConnector(connector ConnectorType) error {
 	}
 
 	e.connectors = append(e.connectors, connector)
+	e.persistStateLocked()
 	return nil
 }
 
@@ -359,6 +449,7 @@ func (e *Engine) CreatePipeline(p *Pipeline) error {
 	e.observability.mu.Lock()
 	e.observability.PipelinesTotal++
 	e.observability.mu.Unlock()
+	e.persistStateLocked()
 	return nil
 }
 
@@ -454,6 +545,7 @@ func (e *Engine) UpdatePipeline(id string, updates map[string]interface{}) error
 		p.Orchestration = normalizeOrchestration(orch)
 	}
 	p.UpdatedAt = time.Now()
+	e.persistStateLocked()
 	return nil
 }
 
@@ -498,6 +590,7 @@ func (e *Engine) DeletePipeline(id string) error {
 	e.observability.mu.Lock()
 	e.observability.PipelinesTotal--
 	e.observability.mu.Unlock()
+	e.persistStateLocked()
 	return nil
 }
 
@@ -526,6 +619,7 @@ func (e *Engine) RunPipeline(ctx context.Context, pipelineID string, trigger str
 	p.Status = PipelineRunning
 	p.LastRunAt = &now
 	p.RunCount++
+	e.persistStateLocked()
 	e.mu.Unlock()
 
 	// Update observability
@@ -553,6 +647,7 @@ func (e *Engine) executeSteps(ctx context.Context, p *Pipeline, run *PipelineRun
 			finTime := time.Now()
 			run.FinishedAt = &finTime
 			p.Status = PipelineStopped
+			e.persistStateLocked()
 			e.mu.Unlock()
 			return
 		default:
@@ -600,6 +695,7 @@ func (e *Engine) executeSteps(ctx context.Context, p *Pipeline, run *PipelineRun
 
 		e.mu.Lock()
 		run.StepResults = append(run.StepResults, result)
+		e.persistStateLocked()
 		e.mu.Unlock()
 
 		totalRead += rowsIn
@@ -650,6 +746,7 @@ func (e *Engine) executeSteps(ctx context.Context, p *Pipeline, run *PipelineRun
 		run.Status = PipelineFailed
 		p.Status = PipelineFailed
 	}
+	e.persistStateLocked()
 	e.mu.Unlock()
 
 	e.observability.mu.Lock()
@@ -667,6 +764,10 @@ func (e *Engine) executeSteps(ctx context.Context, p *Pipeline, run *PipelineRun
 	}
 	e.observability.LastUpdated = time.Now()
 	e.observability.mu.Unlock()
+
+	e.mu.Lock()
+	e.persistStateLocked()
+	e.mu.Unlock()
 }
 
 func (e *Engine) simulateStep(step Step) (rowsIn, rowsOut, rowsErr int64, err error) {
