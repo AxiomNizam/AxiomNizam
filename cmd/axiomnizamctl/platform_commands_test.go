@@ -355,3 +355,108 @@ func TestRBACAccessRequestCLICommands(t *testing.T) {
 		}
 	})
 }
+
+func TestJobScheduleCLICommands(t *testing.T) {
+	var (
+		mu           sync.Mutex
+		lastPath     string
+		lastMethod   string
+		lastBody     map[string]interface{}
+		requestCount int
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		requestCount++
+		lastPath = r.URL.RequestURI()
+		lastMethod = r.Method
+		lastBody = nil
+
+		if r.Body != nil {
+			defer r.Body.Close()
+			var body map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				lastBody = body
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "path": r.URL.RequestURI()})
+	}))
+	defer server.Close()
+
+	setupPlatformCommandTestContext(t, server.URL)
+
+	t.Run("list schedules", func(t *testing.T) {
+		if err := JobScheduleListCmd.RunE(JobScheduleListCmd, []string{}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodGet {
+			t.Fatalf("expected GET, got %s", lastMethod)
+		}
+		if lastPath != "/api/v1/jobs/schedules" {
+			t.Fatalf("expected list schedules path, got %s", lastPath)
+		}
+	})
+
+	t.Run("set schedule", func(t *testing.T) {
+		JobScheduleSetCmd.Flags().Set("schedule", "30m")
+
+		if err := JobScheduleSetCmd.RunE(JobScheduleSetCmd, []string{"job-123"}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodPost {
+			t.Fatalf("expected POST, got %s", lastMethod)
+		}
+		if lastPath != "/api/v1/jobs/job-123/schedule" {
+			t.Fatalf("expected set schedule path, got %s", lastPath)
+		}
+		if lastBody == nil {
+			t.Fatal("expected JSON payload")
+		}
+		if got, ok := lastBody["schedule"].(string); !ok || got != "30m" {
+			t.Fatalf("expected schedule=30m, got %#v", lastBody["schedule"])
+		}
+	})
+
+	t.Run("set schedule requires schedule flag", func(t *testing.T) {
+		mu.Lock()
+		before := requestCount
+		mu.Unlock()
+
+		JobScheduleSetCmd.Flags().Set("schedule", "")
+		err := JobScheduleSetCmd.RunE(JobScheduleSetCmd, []string{"job-456"})
+		if err == nil {
+			t.Fatal("expected validation error when --schedule is missing")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if requestCount != before {
+			t.Fatalf("expected no HTTP request, got before=%d after=%d", before, requestCount)
+		}
+	})
+
+	t.Run("remove schedule", func(t *testing.T) {
+		if err := JobScheduleRemoveCmd.RunE(JobScheduleRemoveCmd, []string{"job-789"}); err != nil {
+			t.Fatalf("command failed: %v", err)
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if lastMethod != http.MethodDelete {
+			t.Fatalf("expected DELETE, got %s", lastMethod)
+		}
+		if lastPath != "/api/v1/jobs/job-789/schedule" {
+			t.Fatalf("expected remove schedule path, got %s", lastPath)
+		}
+	})
+}

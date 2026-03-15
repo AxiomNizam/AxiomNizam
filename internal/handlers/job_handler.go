@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/robfig/cron/v3"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -21,7 +23,16 @@ type JobResource struct {
 	Metadata   JobMetadata            `json:"metadata"`
 	Spec       map[string]interface{} `json:"spec,omitempty"`
 	Status     JobStatus              `json:"status,omitempty"`
+	Schedule   *JobSchedule           `json:"schedule,omitempty"`
 	Logs       []string               `json:"logs,omitempty"`
+}
+
+// JobSchedule holds scheduling metadata for recurring jobs.
+type JobSchedule struct {
+	Expression string `json:"expression"`
+	Enabled    bool   `json:"enabled"`
+	LastRun    string `json:"lastRun,omitempty"`
+	NextRun    string `json:"nextRun,omitempty"`
 }
 
 // JobMetadata holds job metadata
@@ -43,10 +54,13 @@ type JobStatus struct {
 
 // JobHandler manages job resources
 type JobHandler struct {
-	mu       sync.RWMutex
-	jobs     map[string]*JobResource // job ID -> job
-	etcd     *clientv3.Client
-	stateKey string
+	mu              sync.RWMutex
+	jobs            map[string]*JobResource // job ID -> job
+	etcd            *clientv3.Client
+	stateKey        string
+	schedulerCtx    context.Context
+	schedulerCancel context.CancelFunc
+	schedulerWG     sync.WaitGroup
 }
 
 // NewJobHandler creates a new job handler
@@ -62,7 +76,216 @@ func NewJobHandler(etcd ...*clientv3.Client) *JobHandler {
 		stateKey: "axiomnizam:jobs:state",
 	}
 	h.loadState()
+	h.startScheduler()
 	return h
+}
+
+// Close stops the background scheduler loop.
+func (h *JobHandler) Close() {
+	h.mu.Lock()
+	cancel := h.schedulerCancel
+	h.schedulerCancel = nil
+	h.schedulerCtx = nil
+	h.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	h.schedulerWG.Wait()
+}
+
+func (h *JobHandler) startScheduler() {
+	h.mu.Lock()
+	if h.schedulerCancel != nil {
+		h.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	h.schedulerCtx = ctx
+	h.schedulerCancel = cancel
+	h.mu.Unlock()
+
+	h.schedulerWG.Add(1)
+	go func() {
+		defer h.schedulerWG.Done()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.processScheduledJobs()
+			}
+		}
+	}()
+}
+
+func getScheduleExpression(spec map[string]interface{}) (string, bool) {
+	if spec == nil {
+		return "", false
+	}
+	for _, key := range []string{"schedule", "interval"} {
+		if raw, ok := spec[key]; ok {
+			expr := strings.TrimSpace(fmt.Sprintf("%v", raw))
+			if expr != "" {
+				return expr, true
+			}
+		}
+	}
+	return "", false
+}
+
+func calculateNextRun(expression string, from time.Time) (time.Time, error) {
+	expression = strings.TrimSpace(expression)
+	if expression == "" {
+		return time.Time{}, fmt.Errorf("schedule expression is required")
+	}
+
+	if duration, err := time.ParseDuration(expression); err == nil {
+		if duration <= 0 {
+			return time.Time{}, fmt.Errorf("duration must be positive")
+		}
+		return from.Add(duration), nil
+	}
+
+	schedule, err := cron.ParseStandard(expression)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid schedule expression: %w", err)
+	}
+
+	nextRun := schedule.Next(from)
+	if nextRun.IsZero() {
+		return time.Time{}, fmt.Errorf("could not determine next run for expression")
+	}
+
+	return nextRun, nil
+}
+
+func normalizeScheduleFromSpec(job *JobResource, now time.Time) error {
+	if job == nil {
+		return nil
+	}
+	if job.Schedule != nil {
+		return nil
+	}
+
+	expression, ok := getScheduleExpression(job.Spec)
+	if !ok {
+		return nil
+	}
+
+	nextRun, err := calculateNextRun(expression, now)
+	if err != nil {
+		return err
+	}
+
+	job.Schedule = &JobSchedule{
+		Expression: expression,
+		Enabled:    true,
+		NextRun:    nextRun.UTC().Format(time.RFC3339),
+	}
+	job.Status.NextRun = job.Schedule.NextRun
+	return nil
+}
+
+func (h *JobHandler) processScheduledJobs() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	now := time.Now().UTC()
+	for _, job := range h.jobs {
+		if job.Schedule == nil || !job.Schedule.Enabled {
+			continue
+		}
+
+		nextRun, err := time.Parse(time.RFC3339, strings.TrimSpace(job.Schedule.NextRun))
+		if err != nil {
+			nextRun, err = calculateNextRun(job.Schedule.Expression, now)
+			if err != nil {
+				job.Logs = append(job.Logs, fmt.Sprintf("[%s] Invalid schedule '%s': %v", now.Format(time.RFC3339), job.Schedule.Expression, err))
+				continue
+			}
+			job.Schedule.NextRun = nextRun.UTC().Format(time.RFC3339)
+			job.Status.NextRun = job.Schedule.NextRun
+		}
+
+		if now.Before(nextRun) {
+			continue
+		}
+
+		if strings.EqualFold(job.Status.Phase, "Running") {
+			continue
+		}
+
+		h.startJobExecutionLocked(job, "scheduled")
+	}
+}
+
+func (h *JobHandler) startJobExecutionLocked(job *JobResource, trigger string) {
+	now := time.Now().UTC()
+	job.Status.Phase = "Running"
+	job.Status.Progress = 0
+	job.Status.LastRun = now.Format(time.RFC3339)
+	if job.Schedule != nil {
+		job.Schedule.LastRun = job.Status.LastRun
+	}
+	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Job started (%s)", now.Format(time.RFC3339), trigger))
+	h.persistStateLocked()
+
+	jobID := job.Metadata.ID
+	go h.executeJob(jobID)
+}
+
+func (h *JobHandler) executeJob(jobID string) {
+	for i := 1; i <= 10; i++ {
+		time.Sleep(200 * time.Millisecond)
+		h.mu.Lock()
+		job := h.findJob(jobID)
+		if job == nil {
+			h.mu.Unlock()
+			return
+		}
+		if strings.EqualFold(job.Status.Phase, "Cancelled") {
+			h.persistStateLocked()
+			h.mu.Unlock()
+			return
+		}
+		job.Status.Progress = i * 10
+		job.Logs = append(job.Logs, fmt.Sprintf("[%s] Progress: %d%%", time.Now().UTC().Format(time.RFC3339), i*10))
+		h.persistStateLocked()
+		h.mu.Unlock()
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	job := h.findJob(jobID)
+	if job == nil {
+		return
+	}
+
+	job.Status.Phase = "Succeeded"
+	job.Status.Progress = 100
+	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Job completed successfully", time.Now().UTC().Format(time.RFC3339)))
+
+	if job.Schedule != nil && job.Schedule.Enabled {
+		nextRun, err := calculateNextRun(job.Schedule.Expression, time.Now().UTC())
+		if err != nil {
+			job.Status.LastError = err.Error()
+			job.Logs = append(job.Logs, fmt.Sprintf("[%s] Failed to compute next run: %v", time.Now().UTC().Format(time.RFC3339), err))
+			job.Status.NextRun = ""
+			job.Schedule.NextRun = ""
+		} else {
+			job.Schedule.NextRun = nextRun.UTC().Format(time.RFC3339)
+			job.Status.NextRun = job.Schedule.NextRun
+		}
+	} else {
+		job.Status.NextRun = ""
+	}
+
+	h.persistStateLocked()
 }
 
 func (h *JobHandler) loadState() {
@@ -137,6 +360,11 @@ func (h *JobHandler) Create(c *gin.Context) {
 		job.Metadata.Name = fmt.Sprintf("job-%s", id)
 	}
 
+	if err := normalizeScheduleFromSpec(&job, time.Now().UTC()); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	h.jobs[id] = &job
 	h.persistStateLocked()
 
@@ -154,6 +382,30 @@ func (h *JobHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, items)
+}
+
+// ListSchedules lists all job schedules.
+func (h *JobHandler) ListSchedules(c *gin.Context) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	items := make([]gin.H, 0)
+	for _, job := range h.jobs {
+		if job.Schedule == nil {
+			continue
+		}
+		items = append(items, gin.H{
+			"id":         job.Metadata.ID,
+			"name":       job.Metadata.Name,
+			"expression": job.Schedule.Expression,
+			"enabled":    job.Schedule.Enabled,
+			"lastRun":    job.Schedule.LastRun,
+			"nextRun":    job.Schedule.NextRun,
+			"phase":      job.Status.Phase,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"schedules": items, "count": len(items)})
 }
 
 // Get returns a job by ID
@@ -185,38 +437,103 @@ func (h *JobHandler) Run(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
+	if strings.EqualFold(job.Status.Phase, "Running") {
+		h.mu.Unlock()
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("job '%s' is already running", id)})
+		return
+	}
 
-	job.Status.Phase = "Running"
-	job.Status.Progress = 0
-	job.Status.LastRun = time.Now().UTC().Format(time.RFC3339)
-	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Job started", time.Now().UTC().Format(time.RFC3339)))
-	h.persistStateLocked()
+	h.startJobExecutionLocked(job, "manual")
 	h.mu.Unlock()
 
-	// Simulate job execution
-	go func() {
-		for i := 1; i <= 10; i++ {
-			time.Sleep(200 * time.Millisecond)
-			h.mu.Lock()
-			if j := h.findJob(id); j != nil {
-				j.Status.Progress = i * 10
-				j.Logs = append(j.Logs, fmt.Sprintf("[%s] Progress: %d%%", time.Now().UTC().Format(time.RFC3339), i*10))
-				h.persistStateLocked()
-			}
-			h.mu.Unlock()
-		}
-		h.mu.Lock()
-		if j := h.findJob(id); j != nil {
-			j.Status.Phase = "Succeeded"
-			j.Status.Progress = 100
-			j.Status.NextRun = time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339)
-			j.Logs = append(j.Logs, fmt.Sprintf("[%s] Job completed successfully", time.Now().UTC().Format(time.RFC3339)))
-			h.persistStateLocked()
-		}
-		h.mu.Unlock()
-	}()
-
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("job '%s' started", id), "status": "Running"})
+}
+
+// SetSchedule creates or updates a job schedule.
+func (h *JobHandler) SetSchedule(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Schedule   string `json:"schedule"`
+		Expression string `json:"expression"`
+		Interval   string `json:"interval"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	expression := strings.TrimSpace(req.Expression)
+	if expression == "" {
+		expression = strings.TrimSpace(req.Schedule)
+	}
+	if expression == "" {
+		expression = strings.TrimSpace(req.Interval)
+	}
+	if expression == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "schedule expression is required"})
+		return
+	}
+
+	nextRun, err := calculateNextRun(expression, time.Now().UTC())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	job := h.findJob(id)
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		return
+	}
+
+	if job.Spec == nil {
+		job.Spec = map[string]interface{}{}
+	}
+	job.Spec["schedule"] = expression
+
+	if job.Schedule == nil {
+		job.Schedule = &JobSchedule{}
+	}
+	job.Schedule.Expression = expression
+	job.Schedule.Enabled = true
+	job.Schedule.NextRun = nextRun.UTC().Format(time.RFC3339)
+	job.Status.NextRun = job.Schedule.NextRun
+	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Schedule set to '%s'", time.Now().UTC().Format(time.RFC3339), expression))
+	h.persistStateLocked()
+
+	c.JSON(http.StatusOK, gin.H{"message": "schedule updated", "job": job})
+}
+
+// RemoveSchedule removes a job schedule.
+func (h *JobHandler) RemoveSchedule(c *gin.Context) {
+	id := c.Param("id")
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	job := h.findJob(id)
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		return
+	}
+	if job.Schedule == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' has no schedule", id)})
+		return
+	}
+
+	job.Schedule = nil
+	job.Status.NextRun = ""
+	if job.Spec != nil {
+		delete(job.Spec, "schedule")
+	}
+	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Schedule removed", time.Now().UTC().Format(time.RFC3339)))
+	h.persistStateLocked()
+
+	c.JSON(http.StatusOK, gin.H{"message": "schedule removed", "job": job})
 }
 
 // GetLogs returns logs for a job
