@@ -1956,7 +1956,7 @@ code {
     background: rgba(245, 158, 11, 0.15);
     color: #f59e0b;
 }
-.status-archived, .status-failed {
+.status-archived, .status-failed, .status-inactive {
     background: rgba(239, 68, 68, 0.15);
     color: #ef4444;
 }
@@ -1981,6 +1981,18 @@ code {
 }
 .btn-sm.btn-test {
     color: var(--primary-light);
+}
+.btn-sm.btn-edit {
+    color: #f59e0b;
+}
+.btn-sm.btn-edit:hover {
+    background: rgba(245, 158, 11, 0.1);
+}
+.btn-sm.btn-toggle {
+    color: #10b981;
+}
+.btn-sm.btn-toggle:hover {
+    background: rgba(16, 185, 129, 0.1);
 }
 .btn-sm.btn-del {
     color: var(--danger-color);

@@ -15,6 +15,7 @@ let filteredMethod = 'ALL';
 let currentCSVUploadId = null;
 let currentDashMappings = [];
 let builderDataServers = [];
+let customAPIById = {};
 
 const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
@@ -108,6 +109,7 @@ function loadCustomAPIs() {
 
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
+        customAPIById = {};
         var el = document.getElementById('apiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -118,9 +120,13 @@ function loadCustomAPIs() {
             '<th>Method</th><th>Name</th><th>Path</th><th>Category</th><th>Source DB</th><th>Source Server</th><th>Status</th><th>Hits</th><th>Actions</th>' +
             '</tr></thead><tbody>';
         list.forEach(function(api) {
+            customAPIById[api.id] = api;
             var safeId = api.id.replace(/'/g, "\\'");
             var actionsHtml = '<button class="btn-sm btn-test" onclick="testCustomAPI(\'' + safeId + '\')">Test</button> ';
             if (canModify()) {
+                var isActive = (api.status || '').toLowerCase() === 'active';
+                actionsHtml += '<button class="btn-sm btn-edit" onclick="openEditCustomAPI(\'' + safeId + '\')">Edit</button> ';
+                actionsHtml += '<button class="btn-sm btn-toggle" onclick="toggleCustomAPIStatus(\'' + safeId + '\')">' + (isActive ? 'Deactivate' : 'Activate') + '</button> ';
                 actionsHtml += '<button class="btn-sm btn-del" onclick="deleteCustomAPI(\'' + safeId + '\')">Del</button>';
             }
             html += '<tr>' +
@@ -209,13 +215,17 @@ function submitCreateAPI(e) {
     });
 }
 
-function loadBuilderDataSources() {
+function loadBuilderDataSources(onDone) {
     fetchJSON('/api/admin/database/servers').then(function(d) {
         builderDataServers = d.servers || [];
 
         var dbSelect = document.getElementById('apiSourceDatabaseInput');
         var gqlDbSelect = document.getElementById('gqlSourceDatabaseInput');
-        if (!dbSelect && !gqlDbSelect) return;
+        var editDbSelect = document.getElementById('editApiSourceDatabaseInput');
+        if (!dbSelect && !gqlDbSelect && !editDbSelect) {
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
 
         var existing = {};
         DEFAULT_BUILDER_DATABASES.forEach(function(db) { existing[db] = true; });
@@ -237,13 +247,20 @@ function loadBuilderDataSources() {
 
         populateDatabaseSelect(dbSelect);
         populateDatabaseSelect(gqlDbSelect);
+        populateDatabaseSelect(editDbSelect);
 
         updateBuilderSourceServers();
         updateGraphQLBuilderSourceServers();
+        updateEditBuilderSourceServers();
+        if (typeof onDone === 'function') onDone();
     }).catch(function() {
         var dbSelect = document.getElementById('apiSourceDatabaseInput');
         var gqlDbSelect = document.getElementById('gqlSourceDatabaseInput');
-        if (!dbSelect && !gqlDbSelect) return;
+        var editDbSelect = document.getElementById('editApiSourceDatabaseInput');
+        if (!dbSelect && !gqlDbSelect && !editDbSelect) {
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
 
         function populateDefault(selectEl) {
             if (!selectEl) return;
@@ -259,15 +276,40 @@ function loadBuilderDataSources() {
 
         populateDefault(dbSelect);
         populateDefault(gqlDbSelect);
+        populateDefault(editDbSelect);
 
         updateBuilderSourceServers();
         updateGraphQLBuilderSourceServers();
+        updateEditBuilderSourceServers();
+        if (typeof onDone === 'function') onDone();
     });
 }
 
 function updateBuilderSourceServers() {
     var dbTypeEl = document.getElementById('apiSourceDatabaseInput');
     var serverEl = document.getElementById('apiSourceServerInput');
+    if (!dbTypeEl || !serverEl) return;
+
+    var selectedDB = (dbTypeEl.value || '').trim();
+    var previouslySelected = serverEl.value;
+    var filtered = (builderDataServers || []).filter(function(s) {
+        return !selectedDB || s.db_type === selectedDB;
+    });
+
+    serverEl.innerHTML = '<option value="">Default server for selected database</option>';
+    filtered.forEach(function(s) {
+        var name = (s.name || s.key || 'server') + (s.connected ? '' : ' (disconnected)');
+        serverEl.innerHTML += '<option value="' + escapeHtml(s.key || '') + '">' + escapeHtml(name) + '</option>';
+    });
+
+    if (previouslySelected && filtered.some(function(s) { return s.key === previouslySelected; })) {
+        serverEl.value = previouslySelected;
+    }
+}
+
+function updateEditBuilderSourceServers() {
+    var dbTypeEl = document.getElementById('editApiSourceDatabaseInput');
+    var serverEl = document.getElementById('editApiSourceServerInput');
     if (!dbTypeEl || !serverEl) return;
 
     var selectedDB = (dbTypeEl.value || '').trim();
@@ -471,6 +513,92 @@ function testCustomAPI(id) {
     postJSON('/api/v1/builder/apis/' + id + '/test', {}).then(function(d) {
         showResponse('API Test Result', 200, d, (d.method || 'GET') + ' ' + (d.path || ''));
         addLog('Tested API: ' + id, 'info');
+    });
+}
+
+function openEditCustomAPI(id) {
+    if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+    var api = customAPIById[id];
+    if (!api) { alert('API details not found. Please refresh and try again.'); return; }
+
+    loadBuilderDataSources(function() {
+        document.getElementById('editApiIdInput').value = api.id || '';
+        document.getElementById('editApiNameInput').value = api.name || '';
+        document.getElementById('editApiMethodInput').value = api.method || 'GET';
+        document.getElementById('editApiPathInput').value = api.path || '';
+        document.getElementById('editApiCategoryInput').value = api.category || 'custom';
+        document.getElementById('editApiSourceDatabaseInput').value = api.source_database || '';
+        updateEditBuilderSourceServers();
+        document.getElementById('editApiSourceServerInput').value = api.source_server || '';
+        document.getElementById('editApiDescInput').value = api.description || '';
+        document.getElementById('editApiAuthInput').checked = !!api.auth_required;
+        document.getElementById('editApiRateLimitInput').value = api.rate_limit || 0;
+        document.getElementById('editApiStatusInput').value = api.status || 'active';
+        document.getElementById('editAPIModal').style.display = 'flex';
+    });
+}
+
+function closeEditAPIModal() {
+    document.getElementById('editAPIModal').style.display = 'none';
+    document.getElementById('editAPIForm').reset();
+}
+
+function submitEditAPI(e) {
+    e.preventDefault();
+    if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+
+    var id = document.getElementById('editApiIdInput').value;
+    if (!id) {
+        alert('Invalid API ID');
+        return;
+    }
+
+    var body = {
+        name: document.getElementById('editApiNameInput').value,
+        method: document.getElementById('editApiMethodInput').value,
+        path: document.getElementById('editApiPathInput').value,
+        description: document.getElementById('editApiDescInput').value,
+        category: document.getElementById('editApiCategoryInput').value,
+        source_database: (document.getElementById('editApiSourceDatabaseInput').value || '').trim(),
+        source_server: (document.getElementById('editApiSourceServerInput').value || '').trim(),
+        auth_required: document.getElementById('editApiAuthInput').checked,
+        rate_limit: parseInt(document.getElementById('editApiRateLimitInput').value, 10) || 0,
+        status: document.getElementById('editApiStatusInput').value
+    };
+
+    putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), body).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') {
+            closeEditAPIModal();
+            loadBuilderSummary();
+            loadCustomAPIs();
+            addLog('Updated API: ' + id, 'info');
+        } else {
+            alert(d.error || 'Failed to update API');
+        }
+    }).catch(function() {
+        alert('Failed to update API');
+    });
+}
+
+function toggleCustomAPIStatus(id) {
+    if (!canModify()) { alert('You do not have permission to update API status. Contact an admin, manager, or system-manager.'); return; }
+
+    var api = customAPIById[id];
+    if (!api) { alert('API details not found. Please refresh and try again.'); return; }
+
+    var currentStatus = String(api.status || '').toLowerCase();
+    var nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
+
+    putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), { status: nextStatus }).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') {
+            addLog('Updated API status: ' + id + ' -> ' + nextStatus, 'info');
+            loadBuilderSummary();
+            loadCustomAPIs();
+        } else {
+            alert(d.error || 'Failed to update API status');
+        }
+    }).catch(function() {
+        alert('Failed to update API status');
     });
 }
 
@@ -1329,6 +1457,8 @@ window.onclick = function(event) {
     if (event.target === responseModal) responseModal.style.display = 'none';
     var createModal = document.getElementById('createAPIModal');
     if (event.target === createModal) createModal.style.display = 'none';
+    var editModal = document.getElementById('editAPIModal');
+    if (event.target === editModal) editModal.style.display = 'none';
     var createGraphQLModal = document.getElementById('createGraphQLAPIModal');
     if (event.target === createGraphQLModal) createGraphQLModal.style.display = 'none';
 };
