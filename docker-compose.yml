@@ -32,8 +32,12 @@ services:
     ports:
       - "7000:7000"
     environment:
-      BACKEND_URL: http://axiomnizam:8000
-      FRONTEND_PORT: 7000
+      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-http://localhost:8000}
+      FRONTEND_PORT: ${FRONTEND_PORT:-7000}
+      KEYCLOAK_URL: ${PUBLIC_IDP_URL:-http://localhost:8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-axiomnizam}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-axiomnizam-frontend}
+      KEYCLOAK_REDIRECT_URI: ${KEYCLOAK_FRONTEND_REDIRECT_URI:-http://localhost:7000/callback}
     depends_on:
       - axiomnizam
     networks:
@@ -64,6 +68,13 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: postgres
+      KC_HTTP_ENABLED: ${KC_HTTP_ENABLED:-true}
+      KC_HTTP_RELATIVE_PATH: ${KC_HTTP_RELATIVE_PATH:-/}
+      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN:-http://localhost:8080}
+      KC_HOSTNAME: ${KC_HOSTNAME:-http://localhost:8080}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,7 +84,7 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 15s
       timeout: 5s
       retries: 5

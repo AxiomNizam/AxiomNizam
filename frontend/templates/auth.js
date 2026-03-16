@@ -1,10 +1,12 @@
 // Authentication Module
 const AUTH_CONFIG = (() => {
-    // Determine backend API URL based on current location
-    let apiURL = 'http://localhost:8000';
-    if (window.location.hostname && window.location.hostname !== 'localhost') {
-        // For non-localhost environments, construct the URL
+    // Prefer server-injected backend URL from env.
+    let apiURL = window.BACKEND_URL || 'http://localhost:8000';
+    if (!window.BACKEND_URL && window.location.hostname && window.location.hostname !== 'localhost') {
         apiURL = window.location.protocol + '//' + window.location.hostname + ':8000';
+    }
+    if (apiURL.length > 1 && apiURL.endsWith('/')) {
+        apiURL = apiURL.slice(0, -1);
     }
     return {
         apiURL: apiURL,
