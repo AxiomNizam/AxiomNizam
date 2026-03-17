@@ -2519,41 +2519,43 @@ body {
     background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.08), rgba(var(--secondary-rgb), 0.06));
     border: 1px solid var(--border-color);
     border-radius: 14px;
-    padding: 10px 12px 12px;
+    padding: 12px;
     gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
-    scroll-behavior: smooth;
-    scroll-snap-type: x proximity;
     overscroll-behavior-x: contain;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    scrollbar-width: thin;
-    scrollbar-color: rgba(var(--primary-rgb), 0.5) rgba(var(--primary-rgb), 0.08);
+    scrollbar-width: auto;
+    scrollbar-color: var(--primary-color) rgba(0, 0, 0, 0.1);
 }
 
 .tab-navigation::-webkit-scrollbar {
-    height: 10px;
+    height: 12px; /* Thicker scrollbar to grab */
+    border-radius: 10px;
 }
 
 .tab-navigation::-webkit-scrollbar-track {
-    background: rgba(var(--primary-rgb), 0.08);
-    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    margin: 0 4px; /* Space from edges */
 }
 
 .tab-navigation::-webkit-scrollbar-thumb {
-    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.55), rgba(var(--secondary-rgb), 0.55));
-    border: 2px solid transparent;
+    background: var(--primary-color);
+    border-radius: 10px;
+    border: 3px solid transparent; /* Padding box creates a nested pill look */
     background-clip: padding-box;
-    border-radius: 999px;
+    cursor: pointer;
 }
 
 .tab-navigation::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.8), rgba(var(--secondary-rgb), 0.8));
+    background: var(--primary-light);
+    border: 2px solid transparent;
+    background-clip: padding-box;
 }
 
 .tab-btn {
     flex: 0 0 auto;
-    scroll-snap-align: start;
     white-space: nowrap;
     border-bottom: none;
     border-radius: 8px;
