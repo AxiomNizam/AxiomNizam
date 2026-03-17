@@ -166,26 +166,6 @@ function loadAPIs() {
             { method: 'GET', path: '/api/admin/table/list', url: 'http://localhost:8000/api/admin/table/list?db_type=mysql', description: 'List tables', auth: true },
             { method: 'POST', path: '/api/admin/table/create', url: 'http://localhost:8000/api/admin/table/create', description: 'Create table', auth: true, body: {table_name: 'test_table', db_type: 'mysql', columns: [{name: 'id', type: 'INT', nullable: false, primary: true}]} },
         ],
-        'MySQL': [
-            { method: 'GET', path: '/api/mysql/users', url: 'http://localhost:8000/api/mysql/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/mysql/users', url: 'http://localhost:8000/api/mysql/users', description: 'Create user', auth: true, body: {name: 'John Doe', email: 'john@example.com', age: 30} },
-        ],
-        'PostgreSQL': [
-            { method: 'GET', path: '/api/postgres/users', url: 'http://localhost:8000/api/postgres/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/postgres/users', url: 'http://localhost:8000/api/postgres/users', description: 'Create user', auth: true, body: {name: 'Jane Doe', email: 'jane@example.com', age: 28} },
-        ],
-        'MariaDB': [
-            { method: 'GET', path: '/api/mariadb/users', url: 'http://localhost:8000/api/mariadb/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/mariadb/users', url: 'http://localhost:8000/api/mariadb/users', description: 'Create user', auth: true, body: {name: 'Bob Smith', email: 'bob@example.com', age: 35} },
-        ],
-        'MongoDB': [
-            { method: 'GET', path: '/api/mongodb/users', url: 'http://localhost:8000/api/mongodb/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/mongodb/users', url: 'http://localhost:8000/api/mongodb/users', description: 'Create user', auth: true, body: {name: 'Alice Brown', email: 'alice@example.com', age: 32} },
-        ],
-        'Firebase': [
-            { method: 'GET', path: '/api/firebase/users', url: 'http://localhost:8000/api/firebase/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/firebase/users', url: 'http://localhost:8000/api/firebase/users', description: 'Create user', auth: true, body: {name: 'Charlie Davis', email: 'charlie@example.com', age: 40} },
-        ],
     };
 
     let html = '';
