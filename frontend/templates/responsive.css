@@ -14,6 +14,8 @@
         width: 100%;
         gap: 15px;
         order: 3;
+        overflow-x: auto;
+        flex-wrap: nowrap;
     }
 
     .nav-link {
@@ -21,6 +23,23 @@
         justify-content: center;
         padding: 10px 8px;
         font-size: 12px;
+    }
+
+    .nav-dropdown {
+        flex: 1;
+    }
+
+    .nav-more-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 8px;
+        font-size: 12px;
+    }
+
+    .nav-dropdown-menu {
+        right: auto;
+        left: 0;
+        min-width: 100%;
     }
 
     .nav-right {
@@ -145,6 +164,14 @@
 
     .nav-center {
         gap: 10px;
+    }
+
+    .nav-more-label {
+        display: none;
+    }
+
+    .nav-more-btn {
+        padding: 10px;
     }
 
     .main-content {

@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }}</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260317-6">
-    <link rel="stylesheet" href="/static/responsive.css?v=20260317-6">
+    <link rel="stylesheet" href="/static/style.css?v=20260318-8">
+    <link rel="stylesheet" href="/static/responsive.css?v=20260318-8">
     <link rel="stylesheet" href="/static/gis-dashboard.css">
     <link rel="stylesheet" href="/static/analytics-dashboard.css">
     <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
@@ -57,32 +57,46 @@
                         <span class="nav-icon">📡</span>
                         <span>NetIntel</span>
                     </a>
-                    <a href="/governance" class="nav-link {{ if eq .page "governance-dashboard" }}active{{ end }}" id="nav-governance" style="display:none">
-                        <span class="nav-icon">🏛️</span>
-                        <span>Governance</span>
-                    </a>
-                    <a href="/operations-center" class="nav-link {{ if eq .page "operations-center" }}active{{ end }}" id="nav-ops" style="display:none">
-                        <span class="nav-icon">🛠️</span>
-                        <span>Operations</span>
-                    </a>
-                    <a href="/lineage-version" class="nav-link {{ if eq .page "version-lineage-dashboard" }}active{{ end }}" id="nav-lineage" style="display:none">
-                        <span class="nav-icon">🧭</span>
-                        <span>Lineage</span>
-                    </a>
-                    {{ if .isAuth }}
-                    <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
-                        <span class="nav-icon">🔧</span>
-                        <span>Admin</span>
-                    </a>
-                    <a href="/system-manager" class="nav-link {{ if eq .page "system-manager" }}active{{ end }}" id="nav-sysmanager" style="display:none">
-                        <span class="nav-icon">🖥️</span>
-                        <span>System Manager</span>
-                    </a>
-                    <a href="/manager" class="nav-link {{ if eq .page "manager" }}active{{ end }}" id="nav-manager" style="display:none">
-                        <span class="nav-icon">📋</span>
-                        <span>Manager</span>
-                    </a>
-                    {{ end }}
+
+                    <div class="nav-dropdown" id="nav-more-wrap">
+                        <button
+                            class="nav-more-btn {{ if or (eq .page "governance-dashboard") (eq .page "operations-center") (eq .page "version-lineage-dashboard") (eq .page "admin") (eq .page "system-manager") (eq .page "manager") }}active{{ end }}"
+                            id="navMoreBtn"
+                            onclick="toggleNavMoreMenu(event)">
+                            <span class="nav-icon">☰</span>
+                            <span class="nav-more-label">More</span>
+                            <span class="nav-more-caret">▾</span>
+                        </button>
+
+                        <div class="nav-dropdown-menu" id="navMoreMenu">
+                            <a href="/governance" class="nav-dropdown-link {{ if eq .page "governance-dashboard" }}active{{ end }}" id="nav-governance" style="display:none">
+                                <span class="nav-icon">🏛️</span>
+                                <span>Governance</span>
+                            </a>
+                            <a href="/operations-center" class="nav-dropdown-link {{ if eq .page "operations-center" }}active{{ end }}" id="nav-ops" style="display:none">
+                                <span class="nav-icon">🛠️</span>
+                                <span>Operations</span>
+                            </a>
+                            <a href="/lineage-version" class="nav-dropdown-link {{ if eq .page "version-lineage-dashboard" }}active{{ end }}" id="nav-lineage" style="display:none">
+                                <span class="nav-icon">🧭</span>
+                                <span>Lineage</span>
+                            </a>
+                            {{ if .isAuth }}
+                            <a href="/admin" class="nav-dropdown-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
+                                <span class="nav-icon">🔧</span>
+                                <span>Admin</span>
+                            </a>
+                            <a href="/system-manager" class="nav-dropdown-link {{ if eq .page "system-manager" }}active{{ end }}" id="nav-sysmanager" style="display:none">
+                                <span class="nav-icon">🖥️</span>
+                                <span>System Manager</span>
+                            </a>
+                            <a href="/manager" class="nav-dropdown-link {{ if eq .page "manager" }}active{{ end }}" id="nav-manager" style="display:none">
+                                <span class="nav-icon">📋</span>
+                                <span>Manager</span>
+                            </a>
+                            {{ end }}
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="nav-right">
@@ -164,7 +178,7 @@
                     </div>
                     <button type="submit" class="btn-primary btn-large">Login with Keycloak</button>
                 </form>
-                <p class="login-hint">Demo accounts: admin/admin | sysadmin/sysadmin | manager/manager | user/user</p>
+                <p class="login-hint">AxiomNixam Auth(Role): admin | sysadmin | manager | user</p>
             </div>
         </div>
     </div>
@@ -216,6 +230,93 @@
             }
         }
 
+        function toggleNavMoreMenu(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            const wrap = document.getElementById('nav-more-wrap');
+            if (!wrap) return;
+            wrap.classList.toggle('open');
+        }
+
+        function closeNavMoreMenu() {
+            const wrap = document.getElementById('nav-more-wrap');
+            if (wrap) {
+                wrap.classList.remove('open');
+            }
+        }
+
+        function normalizeUserRole(rawRole) {
+            const role = String(rawRole || '').toLowerCase().trim();
+            if (!role) return 'user';
+            if (role === 'administrator' || role === 'superadmin' || role === 'super-admin') return 'admin';
+            if (role === 'system_manager' || role === 'system manager' || role === 'sysadmin' || role === 'sys-admin') return 'system-manager';
+            if (role === 'mgr') return 'manager';
+            return role;
+        }
+
+        function readCookieValue(name) {
+            const cookieName = name + '=';
+            const chunks = document.cookie.split(';');
+            for (let i = 0; i < chunks.length; i++) {
+                const item = chunks[i].trim();
+                if (item.indexOf(cookieName) === 0) {
+                    return decodeURIComponent(item.substring(cookieName.length));
+                }
+            }
+            return '';
+        }
+
+        function applyRoleNavVisibility() {
+            const storedRole = localStorage.getItem('userRole') || localStorage.getItem('role') || readCookieValue('userRole') || '';
+            const storedName = (localStorage.getItem('userName') || readCookieValue('userName') || '').toLowerCase().trim();
+            const hasAuthToken = !!(localStorage.getItem('authToken') || readCookieValue('authToken'));
+
+            let role = normalizeUserRole(storedRole || 'user');
+            if (role === 'user' && storedName) {
+                if (storedName === 'sysadmin') role = 'system-manager';
+                if (storedName === 'admin') role = 'admin';
+                if (storedName === 'manager') role = 'manager';
+            }
+
+            const navAdmin = document.getElementById('nav-admin');
+            const navSysManager = document.getElementById('nav-sysmanager');
+            const navManager = document.getElementById('nav-manager');
+            const navGovernance = document.getElementById('nav-governance');
+            const navOps = document.getElementById('nav-ops');
+            const navLineage = document.getElementById('nav-lineage');
+
+            const isAdmin = role === 'admin';
+            const isSystemManager = role === 'system-manager';
+            const isManager = role === 'manager';
+
+            if (navAdmin) navAdmin.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+            if (navSysManager) navSysManager.style.display = isSystemManager ? '' : 'none';
+            if (navManager) navManager.style.display = isManager ? '' : 'none';
+            if (navGovernance) navGovernance.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+            if (navOps) navOps.style.display = (isAdmin || isSystemManager || isManager) ? '' : 'none';
+            if (navLineage) navLineage.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+
+            const navMoreWrap = document.getElementById('nav-more-wrap');
+            const navMoreMenu = document.getElementById('navMoreMenu');
+            if (navMoreWrap && navMoreMenu) {
+                let hasVisibleMoreItems = Array.from(navMoreMenu.querySelectorAll('.nav-dropdown-link'))
+                    .some((link) => link.style.display !== 'none');
+
+                // Keep More menu useful if auth is present but role propagation is delayed.
+                if (!hasVisibleMoreItems && hasAuthToken && navOps) {
+                    navOps.style.display = '';
+                    hasVisibleMoreItems = true;
+                }
+
+                navMoreWrap.style.display = hasVisibleMoreItems ? '' : 'none';
+                if (!hasVisibleMoreItems) {
+                    navMoreWrap.classList.remove('open');
+                }
+            }
+        }
+
         // Check authentication on page load
         window.addEventListener('DOMContentLoaded', function() {
             initTheme();
@@ -224,24 +325,25 @@
                 window.location.href = '/login';
             }
 
-            // Show only role-appropriate nav links
-            const role = localStorage.getItem('userRole') || 'user';
-            const navAdmin = document.getElementById('nav-admin');
-            const navSysManager = document.getElementById('nav-sysmanager');
-            const navManager = document.getElementById('nav-manager');
-            const navGovernance = document.getElementById('nav-governance');
-            const navOps = document.getElementById('nav-ops');
-            const navLineage = document.getElementById('nav-lineage');
-            if (navAdmin) navAdmin.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
-            if (navSysManager) navSysManager.style.display = (role === 'system-manager') ? '' : 'none';
-            if (navManager) navManager.style.display = (role === 'manager') ? '' : 'none';
-            if (navGovernance) navGovernance.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
-            if (navOps) navOps.style.display = (role === 'admin' || role === 'system-manager' || role === 'manager') ? '' : 'none';
-            if (navLineage) navLineage.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
+            // Role can be populated asynchronously after auth bootstrap.
+            applyRoleNavVisibility();
+            setTimeout(applyRoleNavVisibility, 350);
+            setTimeout(applyRoleNavVisibility, 1200);
+            window.addEventListener('focus', applyRoleNavVisibility);
 
             {{ if .forceLogin }}
             openLoginModal();
             {{ end }}
+        });
+
+        window.addEventListener('storage', function(event) {
+            if (!event || !event.key) {
+                applyRoleNavVisibility();
+                return;
+            }
+            if (event.key === 'userRole' || event.key === 'role' || event.key === 'authToken' || event.key === 'userName') {
+                applyRoleNavVisibility();
+            }
         });
 
         function openLoginModal() {
@@ -257,11 +359,21 @@
         }
 
         window.onclick = function(event) {
+            if (!event.target.closest('#nav-more-wrap')) {
+                closeNavMoreMenu();
+            }
+
             const modal = document.getElementById('loginModal');
             if (event.target === modal) {
                 modal.style.display = 'none';
             }
         };
+
+        window.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeNavMoreMenu();
+            }
+        });
     </script>
 </body>
 </html>
