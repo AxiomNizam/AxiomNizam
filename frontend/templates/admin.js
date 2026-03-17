@@ -1033,6 +1033,40 @@ function loadAPIs() {
                 { method: 'GET', path: '/health', url: BACKEND_URL + '/health', description: 'Health check', body: null },
                 { method: 'GET', path: '/status', url: BACKEND_URL + '/status', description: 'Platform status', body: null }
             ],
+            'Notifications': [
+                {
+                    method: 'POST',
+                    path: '/api/v1/notifications/send',
+                    url: BACKEND_URL + '/api/v1/notifications/send',
+                    description: 'Send custom notification to Discord',
+                    body: {
+                        title: 'AxiomNizam Notification',
+                        message: 'Notification API restored and working.',
+                        type: 'info'
+                    }
+                },
+                {
+                    method: 'POST',
+                    path: '/api/v1/notifications/health',
+                    url: BACKEND_URL + '/api/v1/notifications/health',
+                    description: 'Send health check notification',
+                    body: null
+                },
+                {
+                    method: 'POST',
+                    path: '/api/v1/notifications/status',
+                    url: BACKEND_URL + '/api/v1/notifications/status',
+                    description: 'Send platform status notification',
+                    body: null
+                },
+                {
+                    method: 'GET',
+                    path: '/api/v1/notifications/status',
+                    url: BACKEND_URL + '/api/v1/notifications/status',
+                    description: 'Get notification service status',
+                    body: null
+                }
+            ],
             'Custom REST Runtime (API Builder)': restAPIs.map(function(api) {
                 var method = String(api.method || 'GET').toUpperCase();
                 var runtimePath = normalizeRuntimePath(api.path || '/');

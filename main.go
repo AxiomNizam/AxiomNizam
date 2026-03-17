@@ -157,7 +157,7 @@ func main() {
 		c.Writer.Header().Set("Vary", "Origin")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-API-KEY")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-			c.Writer.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-Token-Expires-At")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-Token-Expires-At")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		if origin != "" && isAllowedOrigin(origin) {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
@@ -529,6 +529,12 @@ func main() {
 	router.POST("/api/notifications/health", authMiddleware, notificationHandler.SendHealthNotification)
 	router.POST("/api/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
 	router.GET("/api/notifications/status", notificationHandler.GetNotificationStatus)
+
+	// Backward-compatible notification aliases restored under /api/v1.
+	router.POST("/api/v1/notifications/send", authMiddleware, notificationHandler.SendNotification)
+	router.POST("/api/v1/notifications/health", authMiddleware, notificationHandler.SendHealthNotification)
+	router.POST("/api/v1/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
+	router.GET("/api/v1/notifications/status", notificationHandler.GetNotificationStatus)
 
 	// ====================================
 	// CLI AUTHENTICATION ENDPOINTS
