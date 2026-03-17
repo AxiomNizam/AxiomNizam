@@ -561,6 +561,9 @@ function openEditCustomAPI(id) {
         document.getElementById('editApiDescInput').value = api.description || '';
         document.getElementById('editApiSQLTemplateInput').value = getSQLTemplateFromAPI(api);
         document.getElementById('editApiAuthInput').checked = !!api.auth_required;
+        document.getElementById('editApiCacheInput').checked = !!api.cache_enabled;
+        document.getElementById('editApiCacheTTLInput').value = api.cache_ttl || 300;
+        toggleEditCacheTTL();
         document.getElementById('editApiRateLimitInput').value = api.rate_limit || 0;
         document.getElementById('editApiStatusInput').value = api.status || 'active';
         document.getElementById('editAPIModal').style.display = 'flex';
@@ -570,6 +573,14 @@ function openEditCustomAPI(id) {
 function closeEditAPIModal() {
     document.getElementById('editAPIModal').style.display = 'none';
     document.getElementById('editAPIForm').reset();
+    var ttlGroup = document.getElementById('editCacheTTLGroup');
+    if (ttlGroup) ttlGroup.style.display = 'none';
+}
+
+function toggleEditCacheTTL() {
+    var checked = document.getElementById('editApiCacheInput').checked;
+    var group = document.getElementById('editCacheTTLGroup');
+    if (group) group.style.display = checked ? 'block' : 'none';
 }
 
 function submitEditAPI(e) {
@@ -592,6 +603,8 @@ function submitEditAPI(e) {
         source_database: (document.getElementById('editApiSourceDatabaseInput').value || '').trim(),
         source_server: (document.getElementById('editApiSourceServerInput').value || '').trim(),
         auth_required: document.getElementById('editApiAuthInput').checked,
+        cache_enabled: document.getElementById('editApiCacheInput').checked,
+        cache_ttl: parseInt(document.getElementById('editApiCacheTTLInput').value, 10) || 300,
         rate_limit: parseInt(document.getElementById('editApiRateLimitInput').value, 10) || 0,
         status: document.getElementById('editApiStatusInput').value
     };

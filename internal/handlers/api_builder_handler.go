@@ -65,6 +65,12 @@ type CustomAPI struct {
 	HitCount       int64             `json:"hit_count"`
 	cachedResult   interface{}       // in-memory cache of last test result
 	cachedAt       time.Time         // when the cache was last set
+	rateBuckets    map[string]*apiRuntimeRateBucket
+}
+
+type apiRuntimeRateBucket struct {
+	WindowStart time.Time
+	Count       int
 }
 
 type SchemaDefinition struct {
@@ -694,6 +700,16 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 		return
 	}
 
+	if allowed, retryAfter := enforceCustomAPIRateLimit(c, api); !allowed {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error":               "custom api rate limit exceeded",
+			"api_id":              api.ID,
+			"rate_limit_per_min":  api.RateLimit,
+			"retry_after_seconds": retryAfter,
+		})
+		return
+	}
+
 	api.HitCount++
 
 	if api.CacheEnabled && api.cachedResult != nil {
@@ -1092,6 +1108,62 @@ func parseParamValue(paramType string, raw interface{}) (interface{}, error) {
 
 func countSQLPlaceholders(query string) int {
 	return strings.Count(query, "?")
+}
+
+func enforceCustomAPIRateLimit(c *gin.Context, api *CustomAPI) (bool, int) {
+	limit := api.RateLimit
+	if limit <= 0 {
+		return true, 0
+	}
+
+	if api.rateBuckets == nil {
+		api.rateBuckets = make(map[string]*apiRuntimeRateBucket)
+	}
+
+	callerKey := strings.TrimSpace(c.GetString("token"))
+	if callerKey == "" {
+		callerKey = "ip:" + strings.TrimSpace(c.ClientIP())
+	}
+
+	now := time.Now().UTC()
+	for key, bucket := range api.rateBuckets {
+		if bucket == nil || now.Sub(bucket.WindowStart) > 5*time.Minute {
+			delete(api.rateBuckets, key)
+		}
+	}
+
+	bucket, exists := api.rateBuckets[callerKey]
+	if !exists || bucket == nil || now.Sub(bucket.WindowStart) >= time.Minute {
+		bucket = &apiRuntimeRateBucket{WindowStart: now, Count: 1}
+		api.rateBuckets[callerKey] = bucket
+		remaining := limit - 1
+		if remaining < 0 {
+			remaining = 0
+		}
+		c.Header("X-API-RateLimit-Limit", strconv.Itoa(limit))
+		c.Header("X-API-RateLimit-Remaining", strconv.Itoa(remaining))
+		return true, 0
+	}
+
+	if bucket.Count >= limit {
+		retryAfter := int((time.Minute - now.Sub(bucket.WindowStart)).Seconds())
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+		c.Header("X-API-RateLimit-Limit", strconv.Itoa(limit))
+		c.Header("X-API-RateLimit-Remaining", "0")
+		c.Header("Retry-After", strconv.Itoa(retryAfter))
+		return false, retryAfter
+	}
+
+	bucket.Count++
+	remaining := limit - bucket.Count
+	if remaining < 0 {
+		remaining = 0
+	}
+	c.Header("X-API-RateLimit-Limit", strconv.Itoa(limit))
+	c.Header("X-API-RateLimit-Remaining", strconv.Itoa(remaining))
+	return true, 0
 }
 
 func isStrictReadOnlyQuery(query string) bool {

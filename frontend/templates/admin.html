@@ -722,6 +722,15 @@ search:string:false"></textarea>
                         <label><input type="checkbox" id="editApiAuthInput"> Requires Authentication</label>
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="editApiCacheInput" onchange="toggleEditCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="editCacheTTLGroup" style="display:none">
+                        <label for="editApiCacheTTLInput">Cache TTL (seconds)</label>
+                        <input type="number" id="editApiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
                 <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Save Changes</button>
             </form>
         </div>
@@ -729,5 +738,5 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260316-1"></script>
+<script src="/static/admin.js?v=20260317-2"></script>
 {{ end }}
