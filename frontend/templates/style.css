@@ -79,6 +79,12 @@
     --transition: all 0.3s ease;
 }
 
+html,
+body {
+    width: 100%;
+    overflow-x: hidden;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
@@ -478,10 +484,15 @@ body {
     gap: 10px;
     margin-bottom: 30px;
     border-bottom: 1px solid var(--border-color);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 .tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
     padding: 12px 24px;
     border: none;
     background: transparent;
@@ -1083,6 +1094,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
     margin-bottom: 20px;
 }
 
@@ -1166,6 +1179,7 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 20px;
+    overflow-x: auto;
 }
 
 .metrics-table h4 {
@@ -2498,4 +2512,68 @@ body {
     color: var(--text-secondary);
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.main-content,
+.admin-container,
+.system-manager-container,
+.tab-content,
+.section,
+.api-testing-section,
+.logs-section,
+.settings-section,
+.cp-card,
+.builder-toolbar,
+.api-card,
+.api-card-header,
+.api-card-actions,
+.live-status,
+.status-indicator,
+.database-controls,
+.section-header {
+    min-width: 0;
+}
+
+.api-builder-list,
+.csv-history,
+.analysis-sample,
+.metrics-table,
+.operation-log,
+.api-categories,
+#csvUploadHistory,
+#conversionHistoryList,
+#scanHistory,
+#scanFindings,
+#csvSampleTable,
+#apiCategories {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+@media (max-width: 1200px) {
+    .main-content {
+        padding: 24px 14px;
+    }
+
+    .tab-navigation {
+        padding: 6px;
+    }
+
+    .live-status {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .builder-toolbar {
+        align-items: stretch;
+    }
+
+    .builder-toolbar select,
+    .builder-toolbar button {
+        width: 100%;
+    }
 }
