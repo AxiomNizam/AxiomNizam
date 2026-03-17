@@ -560,7 +560,9 @@ function testGraphQLCustomAPI(id) {
 
 function deleteGraphQLCustomAPI(id) {
     if (!canModify()) { alert('You do not have permission to delete APIs. Contact an admin, manager, or system-manager.'); return; }
-    if (!confirm('Delete this GraphQL API?')) return;
+    var api = graphQLAPIById[id] || {};
+    var apiName = api.name || id;
+    if (!confirmDeleteAPI('GraphQL API', apiName)) return;
     deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
         if (d.status === 'success' || d.status === 'ok') {
             addLog('Deleted GraphQL API: ' + id, 'warn');
@@ -1786,10 +1788,30 @@ function applyRoleRestrictions() {
     }
 }
 
+function confirmDeleteAPI(kindLabel, apiName) {
+    var label = kindLabel || 'API';
+    var name = String(apiName || '').trim() || 'unnamed-api';
+    if (!confirm('Delete ' + label + ' "' + name + '"? This action cannot be undone.')) {
+        return false;
+    }
+
+    var ack = prompt('Type DELETE to confirm deleting "' + name + '"');
+    if (ack === null) {
+        return false;
+    }
+    if (String(ack).trim().toUpperCase() !== 'DELETE') {
+        alert('Delete cancelled: confirmation text did not match DELETE.');
+        return false;
+    }
+    return true;
+}
+
 // Override delete/create functions for role checks
 function deleteCustomAPI(id) {
     if (!canModify()) { alert('You do not have permission to delete APIs. Contact an admin or manager.'); return; }
-    if (!confirm('Delete this API?')) return;
+    var api = customAPIById[id] || {};
+    var apiName = api.name || id;
+    if (!confirmDeleteAPI('REST API', apiName)) return;
     deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
         if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); }
         else { alert(d.error || 'Failed to delete API'); }
