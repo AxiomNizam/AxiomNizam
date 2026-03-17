@@ -61,6 +61,7 @@ window.addEventListener('DOMContentLoaded', function() {
     setupScanDropZone();
     loadScannerHealth();
     applyRoleRestrictions();
+    initAdminCertificateActions();
 });
 
 function switchTab(tabName) {
@@ -79,6 +80,7 @@ function switchTab(tabName) {
     if (tabName === 'file-scanner') { loadScanHistory(); loadScannerHealth(); }
     if (tabName === 'graphql-studio') { loadAdminGraphQLSchemaInfo(); }
     if (tabName === 'control-plane') { refreshAdminControlPlaneData(); }
+    if (tabName === 'settings') { loadAdminCertificatePanel(); }
 }
 
 // ===================================================================
@@ -1324,6 +1326,79 @@ function refreshAdminControlPlaneData() {
         setAdminControlPlaneOutput('Refresh failed', { error: err.message, details: err.response || {} });
     });
 }
+
+function getAdminCertName() {
+    var el = document.getElementById('adminCertName');
+    if (!el) return '';
+    return (el.value || '').trim();
+}
+
+function setAdminCertificateOutput(title, payload) {
+    var el = document.getElementById('adminCertificateOutput');
+    if (!el) return;
+    el.textContent = title + '\n\n' + JSON.stringify(payload, null, 2);
+}
+
+function loadAdminCertificatePanel() {
+    var el = document.getElementById('adminCertificateOutput');
+    if (el && !el.textContent.trim()) {
+        el.textContent = 'Kubernetes certificate status will appear here.';
+    }
+}
+
+function initAdminCertificateActions() {
+    var checkBtn = document.getElementById('adminCertCheckBtn');
+    var dryRunBtn = document.getElementById('adminCertDryRunBtn');
+    var renewBtn = document.getElementById('adminCertRenewBtn');
+
+    if (checkBtn && !checkBtn.dataset.bound) {
+        checkBtn.addEventListener('click', function() { adminCheckCertificateExpiry(); });
+        checkBtn.dataset.bound = '1';
+    }
+    if (dryRunBtn && !dryRunBtn.dataset.bound) {
+        dryRunBtn.addEventListener('click', function() { adminRenewCertificate(true); });
+        dryRunBtn.dataset.bound = '1';
+    }
+    if (renewBtn && !renewBtn.dataset.bound) {
+        renewBtn.addEventListener('click', function() { adminRenewCertificate(false); });
+        renewBtn.dataset.bound = '1';
+    }
+}
+
+function adminCheckCertificateExpiry() {
+    if (!ensureControlPlaneWrite('view certificate status')) return;
+
+    var cert = getAdminCertName();
+    var path = '/api/admin/certificates/status';
+    if (cert) {
+        path += '?cert=' + encodeURIComponent(cert);
+    }
+
+    adminApiCall('GET', path).then(function(result) {
+        setAdminCertificateOutput('Certificate status', result.data);
+        addLog('Checked certificate expiry' + (cert ? ' for ' + cert : ''), 'info');
+    }).catch(function(err) {
+        setAdminCertificateOutput('Certificate status failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function adminRenewCertificate(dryRun) {
+    if (!ensureControlPlaneWrite('renew certificates')) return;
+
+    var cert = getAdminCertName();
+    var body = { dry_run: !!dryRun };
+    if (cert) body.cert = cert;
+
+    adminApiCall('POST', '/api/admin/certificates/renew', body).then(function(result) {
+        setAdminCertificateOutput(dryRun ? 'Certificate renew dry run' : 'Certificate renew result', result.data);
+        addLog((dryRun ? 'Prepared' : 'Triggered') + ' certificate renewal' + (cert ? ' for ' + cert : ''), dryRun ? 'info' : 'warn');
+    }).catch(function(err) {
+        setAdminCertificateOutput('Certificate renew failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+window.adminCheckCertificateExpiry = adminCheckCertificateExpiry;
+window.adminRenewCertificate = adminRenewCertificate;
 
 // ===================================================================
 // File Scanner (SafeGate Pipeline)

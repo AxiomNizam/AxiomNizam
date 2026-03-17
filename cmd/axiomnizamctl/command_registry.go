@@ -49,7 +49,7 @@ func integrationCommands() []*cobra.Command {
 }
 
 func adminCommands() []*cobra.Command {
-	return []*cobra.Command{ConfigCmd, StatusCmd, EventsCmd, DiffCmd}
+	return []*cobra.Command{ConfigCmd, StatusCmd, EventsCmd, DiffCmd, CertCmd}
 }
 
 func utilityCommands() []*cobra.Command {

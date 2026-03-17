@@ -100,6 +100,23 @@ func TestPlatformCLICommandsHitExpectedEndpoints(t *testing.T) {
 			run:      func() error { return lineageGraphCmd.RunE(lineageGraphCmd, []string{"apis", "orders"}) },
 			expected: "/api/v1/lineage/apis/orders",
 		},
+		{
+			name: "certificate status",
+			run: func() error {
+				_ = certStatusCmd.Flags().Set("cert", "apiserver")
+				return certStatusCmd.RunE(certStatusCmd, []string{})
+			},
+			expected: "/api/admin/certificates/status?cert=apiserver",
+		},
+		{
+			name: "certificate renew dry run",
+			run: func() error {
+				_ = certRenewCmd.Flags().Set("cert", "all")
+				_ = certRenewCmd.Flags().Set("dry-run", "true")
+				return certRenewCmd.RunE(certRenewCmd, []string{})
+			},
+			expected: "/api/admin/certificates/renew",
+		},
 	}
 
 	for _, tc := range tests {

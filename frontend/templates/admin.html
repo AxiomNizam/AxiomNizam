@@ -421,6 +421,22 @@
                 </div>
             </div>
         </div>
+
+        <div class="settings-section" style="margin-top:16px;">
+            <h3>Kubernetes Certificate Management</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label for="adminCertName">Certificate Name (optional)</label>
+                    <input type="text" id="adminCertName" placeholder="all or apiserver" value="all">
+                </div>
+            </div>
+            <div class="cp-actions">
+                <button id="adminCertCheckBtn" class="btn-secondary">Check Expiry</button>
+                <button id="adminCertDryRunBtn" class="btn-warning">Renew (Dry Run)</button>
+                <button id="adminCertRenewBtn" class="btn-danger">Renew Now</button>
+            </div>
+            <pre id="adminCertificateOutput" class="cp-output">Certificate lifecycle status will appear here.</pre>
+        </div>
     </div>
 </div>
 
@@ -705,5 +721,5 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js"></script>
+<script src="/static/admin.js?v=20260316-1"></script>
 {{ end }}

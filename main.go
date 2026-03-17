@@ -49,7 +49,8 @@ func main() {
 	if err != nil {
 		log.Println("⚠️  No .env file found, using system environment variables")
 	}
-	fmt.Println("🚀 Starting AxiomNizam with Kubernetes-style Runtime...\n")
+	fmt.Println("🚀 Starting AxiomNizam with Kubernetes-style Runtime...")
+	fmt.Println()
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -531,12 +532,15 @@ func main() {
 	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
+	certificateHandler := handlers.NewCertificateHandler()
 
 	// Database management endpoints (admin only)
 	router.POST("/api/admin/database/create", adminOrSysMiddleware, adminHandler.CreateDatabase)
 	router.GET("/api/admin/database/list", adminOrSysMiddleware, adminHandler.ListDatabases)
 	router.GET("/api/admin/database/servers", adminOrSysMiddleware, adminHandler.ListDatabaseServers)
 	router.POST("/api/admin/database/connect", adminOrSysMiddleware, adminHandler.ConnectDatabaseServer)
+	router.GET("/api/admin/certificates/status", adminOrSysMiddleware, certificateHandler.GetCertificateStatus)
+	router.POST("/api/admin/certificates/renew", adminOrSysMiddleware, certificateHandler.RenewCertificate)
 
 	// Table management endpoints (admin only)
 	router.POST("/api/admin/table/create", adminOrSysMiddleware, adminHandler.CreateTable)
@@ -1392,7 +1396,8 @@ func main() {
 	fmt.Printf("📡 API Server running on http://%s:%s\n", apiHost, apiPort)
 	fmt.Println("\n🔐 RBAC Security Model:")
 	fmt.Println("  ✅ READ  operations (GET)     - Allowed for all authenticated users")
-	fmt.Println("  ❌ WRITE operations (POST/PUT/DELETE) - Allowed ONLY for users with 'admin' role\n")
+	fmt.Println("  ❌ WRITE operations (POST/PUT/DELETE) - Allowed ONLY for users with 'admin' role")
+	fmt.Println()
 	fmt.Println("Available endpoints:")
 	fmt.Println("  GET  /health                  - Health check (no auth)")
 	fmt.Println("  GET  /status                  - Check all connections (no auth)")
