@@ -20,13 +20,13 @@
     <line x1="40" y1="15" x2="40" y2="40" stroke="#F42A41" stroke-width="2.4" stroke-linecap="round"/>
 
     <!-- Arabic ayat text fitted inside the Quran pages -->
-    <text x="37" y="16.4" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="2.25" fill="#0A8A66">الَّذِي عَلَّمَ بِالْقَلَمِ</text>
-    <text x="37" y="20.0" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="2.25" fill="#F42A41">عَلَّمَ الْإِنسَانَ مَا لَمْ يَعْلَمْ</text>
+    <text x="20" y="16.4" text-anchor="middle" textLength="28" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="2.25" fill="#0A8A66">الَّذِي عَلَّمَ بِالْقَلَمِ</text>
+    <text x="20" y="20.0" text-anchor="middle" textLength="28" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="2.25" fill="#F42A41">عَلَّمَ الْإِنسَانَ مَا لَمْ يَعْلَمْ</text>
 
-    <text x="77" y="15.8" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#0A8A66">إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ</text>
-    <text x="77" y="18.9" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#F42A41">وَنَكْتُبُ مَا قَدَّمُوا</text>
-    <text x="77" y="22.0" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#0A8A66">وَآثَارَهُمْ ۚ وَكُلَّ شَيْءٍ</text>
-    <text x="77" y="25.1" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#F42A41">أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ</text>
+    <text x="60" y="15.8" text-anchor="middle" textLength="28" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#0A8A66">إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ</text>
+    <text x="60" y="18.9" text-anchor="middle" textLength="28" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#F42A41">وَنَكْتُبُ مَا قَدَّمُوا</text>
+    <text x="60" y="22.0" text-anchor="middle" textLength="28" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#0A8A66">وَآثَارَهُمْ ۚ وَكُلَّ شَيْءٍ</text>
+    <text x="60" y="25.1" text-anchor="middle" textLength="28" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#F42A41">أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ</text>
   </g>
 
   <rect x="24" y="110" width="80" height="4" rx="2" fill="#239F40"/>
