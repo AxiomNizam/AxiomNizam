@@ -409,6 +409,37 @@ func (k *keycloakUserSync) UpdateUserRole(username, role string) error {
 	return nil
 }
 
+func (k *keycloakUserSync) UpdateUserEnabled(username string, enabled bool) error {
+	if k == nil {
+		return nil
+	}
+
+	token, err := k.getAdminAccessToken()
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to authenticate with keycloak admin API"}
+	}
+
+	userID, err := k.findUserID(token, username)
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to locate keycloak user for status update"}
+	}
+
+	endpoint := fmt.Sprintf("%s/admin/realms/%s/users/%s", k.baseURL, url.PathEscape(k.targetRealm), url.PathEscape(userID))
+	status, body, _, err := k.doJSON(http.MethodPut, endpoint, token, map[string]interface{}{"enabled": enabled})
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to connect to keycloak admin API"}
+	}
+	if status != http.StatusNoContent {
+		message := strings.TrimSpace(string(body))
+		if message == "" {
+			message = "failed to update keycloak user status"
+		}
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: message}
+	}
+
+	return nil
+}
+
 func (k *keycloakUserSync) CreateUser(username, email, password, role string) error {
 	if k == nil {
 		return nil
@@ -646,11 +677,15 @@ func (h *PlatformUserHandler) UpdatePlatformUser(c *gin.Context) {
 	normalizedStatus := ""
 	if req.Status != "" {
 		status := strings.ToLower(strings.TrimSpace(req.Status))
-		if status != "active" && status != "disabled" {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid status. Must be active or disabled"})
+		switch status {
+		case "active", "enabled":
+			normalizedStatus = "active"
+		case "disabled", "inactive", "deactive", "deactivated":
+			normalizedStatus = "disabled"
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid status. Must be active/disabled (inactive/deactive also accepted)"})
 			return
 		}
-		normalizedStatus = status
 	}
 
 	h.mu.RLock()
@@ -669,6 +704,19 @@ func (h *PlatformUserHandler) UpdatePlatformUser(c *gin.Context) {
 				return
 			}
 			c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": "failed to sync updated role to keycloak: " + err.Error()})
+			return
+		}
+	}
+
+	if normalizedStatus != "" && h.keycloakSync != nil {
+		enabled := normalizedStatus == "active"
+		if err := h.keycloakSync.UpdateUserEnabled(user.Username, enabled); err != nil {
+			var syncErr *keycloakSyncError
+			if errors.As(err, &syncErr) {
+				c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": syncErr.Message})
+				return
+			}
+			c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": "failed to sync updated status to keycloak: " + err.Error()})
 			return
 		}
 	}
@@ -699,6 +747,8 @@ func (h *PlatformUserHandler) UpdatePlatformUser(c *gin.Context) {
 		"message": fmt.Sprintf("User '%s' updated successfully", user.Username),
 		"user":    user,
 	})
+
+	return
 }
 
 // DeletePlatformUser deletes a platform user
