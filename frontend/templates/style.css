@@ -2492,22 +2492,73 @@ body {
 }
 
 .tab-navigation {
-    background: var(--card-bg);
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.08), rgba(var(--secondary-rgb), 0.06));
     border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 8px;
+    border-radius: 14px;
+    padding: 10px 12px 12px;
     gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--primary-rgb), 0.5) rgba(var(--primary-rgb), 0.08);
+}
+
+.tab-navigation::-webkit-scrollbar {
+    height: 10px;
+}
+
+.tab-navigation::-webkit-scrollbar-track {
+    background: rgba(var(--primary-rgb), 0.08);
+    border-radius: 999px;
+}
+
+.tab-navigation::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.55), rgba(var(--secondary-rgb), 0.55));
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+}
+
+.tab-navigation::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.8), rgba(var(--secondary-rgb), 0.8));
 }
 
 .tab-btn {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    white-space: nowrap;
     border-bottom: none;
     border-radius: 8px;
+    border: 1px solid transparent;
+    background: rgba(var(--primary-rgb), 0.04);
+    font-weight: 600;
+    transition: all 0.22s ease;
+}
+
+.tab-btn:hover {
+    background: rgba(var(--primary-rgb), 0.14);
+    border-color: rgba(var(--primary-rgb), 0.28);
+    transform: translateY(-1px);
 }
 
 .tab-btn.active {
     color: var(--text-primary);
-    background: rgba(var(--primary-rgb), 0.16);
-    border: 1px solid rgba(var(--primary-rgb), 0.35);
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.24), rgba(var(--secondary-rgb), 0.14));
+    border: 1px solid rgba(var(--primary-rgb), 0.45);
+    box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.2);
+}
+
+.tab-navigation.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.tab-navigation.is-dragging .tab-btn {
+    pointer-events: none;
 }
 
 .api-testing-section,

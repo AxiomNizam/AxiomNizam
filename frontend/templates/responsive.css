@@ -99,6 +99,12 @@
     .tab-navigation {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x mandatory;
+        padding-bottom: 8px;
+    }
+
+    .tab-navigation::-webkit-scrollbar {
+        height: 7px;
     }
 
     .tab-btn {
