@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -124,20 +125,50 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
+	allowedOriginSet := make(map[string]struct{})
+	addAllowedOrigin := func(raw string) {
+		candidate := strings.TrimSpace(raw)
+		if candidate == "" {
+			return
+		}
+		if parsed, err := url.Parse(candidate); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			candidate = parsed.Scheme + "://" + parsed.Host
+		}
+		allowedOriginSet[candidate] = struct{}{}
+	}
+
+	for _, candidate := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		addAllowedOrigin(candidate)
+	}
+	if len(allowedOriginSet) == 0 {
+		addAllowedOrigin(os.Getenv("PUBLIC_FRONTEND_URL"))
+		addAllowedOrigin("http://localhost:7000")
+		addAllowedOrigin("http://127.0.0.1:7000")
+	}
+
+	isAllowedOrigin := func(origin string) bool {
+		_, ok := allowedOriginSet[origin]
+		return ok
+	}
+
 	// Add CORS middleware
 	router.Use(func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		if origin == "" {
-			origin = "*"
-		}
-		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		c.Writer.Header().Set("Vary", "Origin")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-API-KEY")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		if origin != "" && isAllowedOrigin(origin) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
 		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
+			if origin != "" && !isAllowedOrigin(origin) {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
 			c.AbortWithStatus(204)
 			return
 		}
@@ -447,36 +478,36 @@ func main() {
 	// ====================================
 	// These endpoints allow dynamic SQL queries via Postman or any HTTP client
 	// GET requests only support SELECT queries
-	// POST requests support all query types (SELECT, INSERT, UPDATE, DELETE, CREATE, etc.)
+	// POST requests are restricted to admin/system-manager roles.
 
 	// MySQL Dynamic Queries
 	router.GET("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQuery)
-	router.POST("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/mysql/query/batch", authMiddleware, mysqlDynamicHandler.BatchQueries)
+	router.POST("/api/mysql/query", adminOrSysMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mysql/query/batch", adminOrSysMiddleware, mysqlDynamicHandler.BatchQueries)
 	router.GET("/api/mysql/schema", authMiddleware, mysqlDynamicHandler.TableSchema)
 
 	// MariaDB Dynamic Queries
 	router.GET("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQuery)
-	router.POST("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/mariadb/query/batch", authMiddleware, mariadbDynamicHandler.BatchQueries)
+	router.POST("/api/mariadb/query", adminOrSysMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mariadb/query/batch", adminOrSysMiddleware, mariadbDynamicHandler.BatchQueries)
 	router.GET("/api/mariadb/schema", authMiddleware, mariadbDynamicHandler.TableSchema)
 
 	// PostgreSQL Dynamic Queries
 	router.GET("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQuery)
-	router.POST("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/postgres/query/batch", authMiddleware, postgresDynamicHandler.BatchQueries)
+	router.POST("/api/postgres/query", adminOrSysMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/postgres/query/batch", adminOrSysMiddleware, postgresDynamicHandler.BatchQueries)
 	router.GET("/api/postgres/schema", authMiddleware, postgresDynamicHandler.TableSchema)
 
 	// Percona Dynamic Queries
 	router.GET("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQuery)
-	router.POST("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/percona/query/batch", authMiddleware, perconaDynamicHandler.BatchQueries)
+	router.POST("/api/percona/query", adminOrSysMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/percona/query/batch", adminOrSysMiddleware, perconaDynamicHandler.BatchQueries)
 	router.GET("/api/percona/schema", authMiddleware, perconaDynamicHandler.TableSchema)
 
 	// Oracle Dynamic Queries
 	router.GET("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQuery)
-	router.POST("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/oracle/query/batch", authMiddleware, oracleDynamicHandler.BatchQueries)
+	router.POST("/api/oracle/query", adminOrSysMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/oracle/query/batch", adminOrSysMiddleware, oracleDynamicHandler.BatchQueries)
 	router.GET("/api/oracle/schema", authMiddleware, oracleDynamicHandler.TableSchema)
 
 	// ====================================

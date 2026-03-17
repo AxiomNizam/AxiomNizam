@@ -170,6 +170,19 @@ function toggleCacheTTL() {
     if (group) group.style.display = checked ? 'block' : 'none';
 }
 
+function countSQLPlaceholders(query) {
+    var m = String(query || '').match(/\?/g);
+    return m ? m.length : 0;
+}
+
+function getSQLTemplateFromAPI(api) {
+    if (api && api.sql_template) return String(api.sql_template).trim();
+    if (api && api.mock_response && typeof api.mock_response === 'object' && api.mock_response.query) {
+        return String(api.mock_response.query).trim();
+    }
+    return '';
+}
+
 function submitCreateAPI(e) {
     e.preventDefault();
     var mockRaw = document.getElementById('apiMockResponseInput').value.trim();
@@ -188,6 +201,9 @@ function submitCreateAPI(e) {
         });
     }
 
+    var sqlTemplate = (document.getElementById('apiSQLTemplateInput').value || '').trim();
+    var sqlPlaceholderCount = countSQLPlaceholders(sqlTemplate);
+
     var body = {
         api_type: 'rest',
         name: document.getElementById('apiNameInput').value,
@@ -201,9 +217,19 @@ function submitCreateAPI(e) {
         rate_limit: parseInt(document.getElementById('apiRateLimitInput').value) || 0,
         cache_enabled: document.getElementById('apiCacheInput').checked,
         cache_ttl: parseInt(document.getElementById('apiCacheTTLInput').value) || 300,
+        sql_template: sqlTemplate,
         mock_response: mockResp,
         query_params: queryParams
     };
+
+    if (body.source_database && !body.sql_template) {
+        alert('SQL Template is required when Source Database is selected.');
+        return;
+    }
+    if (sqlPlaceholderCount > 0 && queryParams.length === 0) {
+        alert('Define Query Parameters for each SQL placeholder (?); one parameter per placeholder in order.');
+        return;
+    }
 
     postJSON('/api/v1/builder/apis', body).then(function(d) {
         if (d.status === 'success') {
@@ -533,6 +559,7 @@ function openEditCustomAPI(id) {
         updateEditBuilderSourceServers();
         document.getElementById('editApiSourceServerInput').value = api.source_server || '';
         document.getElementById('editApiDescInput').value = api.description || '';
+        document.getElementById('editApiSQLTemplateInput').value = getSQLTemplateFromAPI(api);
         document.getElementById('editApiAuthInput').checked = !!api.auth_required;
         document.getElementById('editApiRateLimitInput').value = api.rate_limit || 0;
         document.getElementById('editApiStatusInput').value = api.status || 'active';
@@ -560,6 +587,7 @@ function submitEditAPI(e) {
         method: document.getElementById('editApiMethodInput').value,
         path: document.getElementById('editApiPathInput').value,
         description: document.getElementById('editApiDescInput').value,
+        sql_template: (document.getElementById('editApiSQLTemplateInput').value || '').trim(),
         category: document.getElementById('editApiCategoryInput').value,
         source_database: (document.getElementById('editApiSourceDatabaseInput').value || '').trim(),
         source_server: (document.getElementById('editApiSourceServerInput').value || '').trim(),
@@ -567,6 +595,11 @@ function submitEditAPI(e) {
         rate_limit: parseInt(document.getElementById('editApiRateLimitInput').value, 10) || 0,
         status: document.getElementById('editApiStatusInput').value
     };
+
+    if (body.source_database && !body.sql_template) {
+        alert('SQL Template is required when Source Database is selected.');
+        return;
+    }
 
     putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), body).then(function(d) {
         if (d.status === 'success' || d.status === 'ok') {

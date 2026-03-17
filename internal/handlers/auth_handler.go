@@ -39,7 +39,7 @@ func NewAuthHandler() *AuthHandler {
 		keycloakURL:    keycloakURL,
 		keycloakRealm:  getEnv("KEYCLOAK_REALM", "axiomnizam"),
 		keycloakClient: getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam-backend"),
-		clientSecret:   getEnv("KEYCLOAK_CLIENT_SECRET", "6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72"),
+		clientSecret:   getEnv("KEYCLOAK_CLIENT_SECRET", ""),
 		rateLimiter:    nil, // Will be set via SetRateLimiter
 	}
 }
@@ -98,7 +98,7 @@ func generateDemoToken(username, role string) (string, error) {
 		"exp":  now.Add(8 * time.Hour).Unix(),
 	}
 	token := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(auth.DemoJWTSecret))
+	return token.SignedString([]byte(auth.DemoJWTSecret()))
 }
 
 // extractRoleFromToken decodes the JWT payload and determines the user role
@@ -184,7 +184,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// Check demo accounts FIRST — always takes priority over Keycloak for known demo credentials.
 		// This ensures local dev accounts always work regardless of Keycloak state.
 		// Set ENABLE_DEMO_ACCOUNTS=false to disable (e.g. in production when you want to remove these accounts).
-		demoEnabled := getEnv("ENABLE_DEMO_ACCOUNTS", "true") == "true"
+		demoEnabled := getEnv("ENABLE_DEMO_ACCOUNTS", "false") == "true"
 		if demo, ok := demoAccounts[req.Username]; ok && demo.password == req.Password {
 			if !demoEnabled {
 				log.Printf("⚠️  Demo account '%s' matched but ENABLE_DEMO_ACCOUNTS=false — falling through to Keycloak\n", req.Username)

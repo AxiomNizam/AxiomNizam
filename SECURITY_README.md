@@ -218,10 +218,24 @@ Mitigation:
 
 ## Phase 0 (Immediate: 24-48 hours)
 
-1. Lock write/DDL query endpoints behind adminOrSys.
-2. Disable arbitrary SQL execution in runtime custom API path.
-3. Rotate all exposed credentials and webhook/token secrets.
-4. Replace permissive CORS reflection with fixed allowlist.
+1. [x] Lock write/DDL query endpoints behind adminOrSys.
+2. [x] Disable arbitrary SQL execution in runtime custom API path.
+3. [~] Rotate exposed credentials and webhook/token secrets.
+4. [x] Replace permissive CORS reflection with fixed allowlist.
+
+### Phase 0 Implementation Notes
+
+- Dynamic SQL write/batch endpoints now require `admin` or `system-manager` roles.
+- API Builder runtime no longer accepts request-provided SQL text; it executes only stored `sql_template` values.
+- Runtime SQL templates are restricted to read-only statements and must use parameter placeholders (`?`).
+- Runtime calls now accept parameter values only (query/body params), with type validation from API Builder `query_params`.
+- CORS now uses a fixed allowlist from `CORS_ALLOWED_ORIGINS` (no dynamic reflection).
+- Hardcoded auth secret fallback was removed; demo JWT secret is now env-based or ephemeral.
+- Public Discord webhook token was removed from `.env`.
+
+### Remaining Operator Action
+
+- Rotate and synchronize `KEYCLOAK_CLIENT_SECRET` in both Keycloak client settings and runtime environment.
 
 ## Phase 1 (Short-term: 1-2 weeks)
 

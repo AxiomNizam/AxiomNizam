@@ -524,6 +524,10 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label for="apiSQLTemplateInput">SQL Template (read-only, use ? placeholders)</label>
+                    <textarea id="apiSQLTemplateInput" rows="4" placeholder="SELECT id, name FROM users LIMIT ? OFFSET ?"></textarea>
+                </div>
+                <div class="form-group">
                     <label for="apiMockResponseInput">Mock Response (JSON)</label>
                     <textarea id="apiMockResponseInput" rows="4" placeholder='{"data": [], "total": 0}'></textarea>
                 </div>
@@ -708,6 +712,10 @@ search:string:false"></textarea>
                 <div class="form-group">
                     <label for="editApiDescInput">Description</label>
                     <textarea id="editApiDescInput" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editApiSQLTemplateInput">SQL Template (read-only, use ? placeholders)</label>
+                    <textarea id="editApiSQLTemplateInput" rows="4" placeholder="SELECT id, name FROM users LIMIT ? OFFSET ?"></textarea>
                 </div>
                 <div class="form-row">
                     <div class="form-group">

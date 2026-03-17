@@ -42,6 +42,7 @@ type CustomAPI struct {
 	Name           string            `json:"name"`
 	Method         string            `json:"method"` // GET, POST, PUT, DELETE
 	Path           string            `json:"path"`
+	SQLTemplate    string            `json:"sql_template,omitempty"`
 	GraphQLQuery   string            `json:"graphql_query,omitempty"`
 	GraphQLOpName  string            `json:"graphql_operation_name,omitempty"`
 	Description    string            `json:"description"`
@@ -325,6 +326,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Name           string            `json:"name" binding:"required"`
 		Method         string            `json:"method"`
 		Path           string            `json:"path"`
+		SQLTemplate    string            `json:"sql_template"`
 		GraphQLQuery   string            `json:"graphql_query"`
 		GraphQLOpName  string            `json:"graphql_operation_name"`
 		Description    string            `json:"description"`
@@ -367,6 +369,21 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET, POST, PUT, DELETE, or PATCH"})
 			return
 		}
+
+		sqlTemplate := strings.TrimSpace(req.SQLTemplate)
+		if sqlTemplate == "" && strings.TrimSpace(req.SourceDatabase) != "" {
+			legacyTemplate, _ := extractQueryFromMock(req.MockResponse)
+			sqlTemplate = strings.TrimSpace(legacyTemplate)
+		}
+		if strings.TrimSpace(req.SourceDatabase) != "" && sqlTemplate == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template is required when source_database is set"})
+			return
+		}
+		if sqlTemplate != "" && !isStrictReadOnlyQuery(sqlTemplate) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
+			return
+		}
+		req.SQLTemplate = sqlTemplate
 	} else {
 		if method == "" {
 			method = "POST"
@@ -394,6 +411,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Name:           req.Name,
 		Method:         method,
 		Path:           path,
+		SQLTemplate:    strings.TrimSpace(req.SQLTemplate),
 		GraphQLQuery:   strings.TrimSpace(req.GraphQLQuery),
 		GraphQLOpName:  strings.TrimSpace(req.GraphQLOpName),
 		Description:    req.Description,
@@ -489,6 +507,14 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["graphql_operation_name"].(string); ok {
 		api.GraphQLOpName = strings.TrimSpace(v)
 	}
+	if v, ok := req["sql_template"].(string); ok {
+		template := strings.TrimSpace(v)
+		if template != "" && !isStrictReadOnlyQuery(template) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
+			return
+		}
+		api.SQLTemplate = template
+	}
 	if v, ok := req["auth_required"].(bool); ok {
 		api.AuthRequired = v
 	}
@@ -511,6 +537,21 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 		if strings.TrimSpace(api.Method) == "" {
 			api.Method = "POST"
 		}
+	} else if strings.TrimSpace(api.SourceDatabase) != "" {
+		template := strings.TrimSpace(api.SQLTemplate)
+		if template == "" {
+			legacyTemplate, _ := extractQueryFromMock(api.MockResponse)
+			template = strings.TrimSpace(legacyTemplate)
+		}
+		if template == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template is required when source_database is set"})
+			return
+		}
+		if !isStrictReadOnlyQuery(template) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
+			return
+		}
+		api.SQLTemplate = template
 	}
 	api.UpdatedAt = time.Now()
 	h.persistStateLocked()
@@ -653,23 +694,6 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 		return
 	}
 
-	missingParams := make([]string, 0)
-	for _, p := range api.QueryParams {
-		if !p.Required {
-			continue
-		}
-		if strings.TrimSpace(c.Query(p.Name)) == "" {
-			missingParams = append(missingParams, p.Name)
-		}
-	}
-	if len(missingParams) > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":          "missing required query parameters",
-			"missing_params": missingParams,
-		})
-		return
-	}
-
 	api.HitCount++
 
 	if api.CacheEnabled && api.cachedResult != nil {
@@ -693,19 +717,43 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 		}
 	}
 
-	requestQuery, requestParams, queryErr := extractRuntimeQueryRequest(c, method)
-	if queryErr != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": queryErr.Error()})
-		return
-	}
+	query := resolveStoredSQLTemplate(api)
+	params := make([]interface{}, 0)
+	if query != "" {
+		if !isStrictReadOnlyQuery(query) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "custom api sql_template must be read-only"})
+			return
+		}
 
-	query := strings.TrimSpace(requestQuery)
-	params := requestParams
-	if query == "" {
-		fallbackQuery, fallbackParams := extractQueryFromMock(api.MockResponse)
-		query = strings.TrimSpace(fallbackQuery)
-		if len(params) == 0 {
-			params = fallbackParams
+		placeholderCount := countSQLPlaceholders(query)
+		if placeholderCount > 0 {
+			paramDefs := api.QueryParams
+			if len(paramDefs) > placeholderCount {
+				paramDefs = paramDefs[:placeholderCount]
+			}
+			if len(paramDefs) > 0 && len(paramDefs) < placeholderCount {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":                    "insufficient query_params definitions for sql_template placeholders",
+					"required_placeholders":    placeholderCount,
+					"defined_query_parameters": len(paramDefs),
+				})
+				return
+			}
+
+			extractedParams, paramErr := extractRuntimeParamsFromRequest(c, method, paramDefs)
+			if paramErr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": paramErr.Error()})
+				return
+			}
+			params = extractedParams
+			if len(params) != placeholderCount {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":               "parameter count does not match sql_template placeholders",
+					"expected_parameters": placeholderCount,
+					"received_parameters": len(params),
+				})
+				return
+			}
 		}
 	}
 
@@ -721,77 +769,59 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 			return
 		}
 
-		if isReadOnlyQuery(query) {
-			rows, err := dbConn.Raw(query, params...).Rows()
-			if err != nil {
+		rows, err := dbConn.Raw(query, params...).Rows()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":  "query execution failed",
+				"detail": err.Error(),
+			})
+			return
+		}
+		defer rows.Close()
+
+		columns, err := rows.Columns()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":  "failed to get result columns",
+				"detail": err.Error(),
+			})
+			return
+		}
+
+		result := make([]map[string]interface{}, 0)
+		for rows.Next() {
+			values := make([]interface{}, len(columns))
+			valuePtrs := make([]interface{}, len(columns))
+			for i := range columns {
+				valuePtrs[i] = &values[i]
+			}
+
+			if err := rows.Scan(valuePtrs...); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":  "query execution failed",
+					"error":  "failed to scan result row",
 					"detail": err.Error(),
 				})
 				return
 			}
-			defer rows.Close()
 
-			columns, err := rows.Columns()
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":  "failed to get result columns",
-					"detail": err.Error(),
-				})
-				return
-			}
-
-			result := make([]map[string]interface{}, 0)
-			for rows.Next() {
-				values := make([]interface{}, len(columns))
-				valuePtrs := make([]interface{}, len(columns))
-				for i := range columns {
-					valuePtrs[i] = &values[i]
+			entry := make(map[string]interface{})
+			for i, col := range columns {
+				val := values[i]
+				if b, ok := val.([]byte); ok {
+					entry[col] = string(b)
+				} else {
+					entry[col] = val
 				}
-
-				if err := rows.Scan(valuePtrs...); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"error":  "failed to scan result row",
-						"detail": err.Error(),
-					})
-					return
-				}
-
-				entry := make(map[string]interface{})
-				for i, col := range columns {
-					val := values[i]
-					if b, ok := val.([]byte); ok {
-						entry[col] = string(b)
-					} else {
-						entry[col] = val
-					}
-				}
-				result = append(result, entry)
 			}
+			result = append(result, entry)
+		}
 
-			response = gin.H{
-				"source_database": dbType,
-				"query":           query,
-				"params":          params,
-				"count":           len(result),
-				"data":            result,
-			}
-		} else {
-			execResult := dbConn.Exec(query, params...)
-			if execResult.Error != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":  "query execution failed",
-					"detail": execResult.Error.Error(),
-				})
-				return
-			}
-
-			response = gin.H{
-				"source_database": dbType,
-				"query":           query,
-				"params":          params,
-				"rows_affected":   execResult.RowsAffected,
-			}
+		response = gin.H{
+			"source_database": dbType,
+			"query":           query,
+			"params":          params,
+			"count":           len(result),
+			"data":            result,
 		}
 	} else if api.MockResponse != nil {
 		response = api.MockResponse
@@ -821,8 +851,8 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 }
 
 func matchBuilderPath(pattern, actual string) bool {
-	pattern = "/" + strings.Trim(strings.TrimSpace(pattern), "/")
-	actual = "/" + strings.Trim(strings.TrimSpace(actual), "/")
+	pattern = normalizeBuilderRuntimePath(pattern)
+	actual = normalizeBuilderRuntimePath(actual)
 
 	if pattern == actual {
 		return true
@@ -848,19 +878,19 @@ func matchBuilderPath(pattern, actual string) bool {
 	return true
 }
 
-func extractRuntimeQueryRequest(c *gin.Context, method string) (string, []interface{}, error) {
-	if method == "GET" || c.Request.ContentLength == 0 {
-		return "", nil, nil
+func normalizeBuilderRuntimePath(path string) string {
+	normalized := "/" + strings.Trim(strings.TrimSpace(path), "/")
+	if normalized == "/api/custom" {
+		return "/"
 	}
-
-	var body struct {
-		Query  string        `json:"query"`
-		Params []interface{} `json:"params"`
+	if strings.HasPrefix(normalized, "/api/custom/") {
+		trimmed := strings.TrimPrefix(normalized, "/api/custom")
+		if trimmed == "" {
+			return "/"
+		}
+		return "/" + strings.Trim(strings.TrimSpace(trimmed), "/")
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		return "", nil, fmt.Errorf("invalid request body: expected {\"query\":\"...\",\"params\":[]}")
-	}
-	return strings.TrimSpace(body.Query), body.Params, nil
+	return normalized
 }
 
 func extractQueryFromMock(mock interface{}) (string, []interface{}) {
@@ -882,13 +912,215 @@ func extractQueryFromMock(mock interface{}) (string, []interface{}) {
 	return query, params
 }
 
-func isReadOnlyQuery(query string) bool {
-	q := strings.ToUpper(strings.TrimSpace(query))
-	return strings.HasPrefix(q, "SELECT") ||
-		strings.HasPrefix(q, "WITH") ||
-		strings.HasPrefix(q, "SHOW") ||
-		strings.HasPrefix(q, "DESCRIBE") ||
-		strings.HasPrefix(q, "EXPLAIN")
+func resolveStoredSQLTemplate(api *CustomAPI) string {
+	if api == nil {
+		return ""
+	}
+	template := strings.TrimSpace(api.SQLTemplate)
+	if template != "" {
+		return template
+	}
+	legacyTemplate, _ := extractQueryFromMock(api.MockResponse)
+	return strings.TrimSpace(legacyTemplate)
+}
+
+func extractRuntimeParamsFromRequest(c *gin.Context, method string, defs []ParamDef) ([]interface{}, error) {
+	bodyParamsByName, bodyParamsList, err := extractRuntimeBodyParams(c, method)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(defs) == 0 {
+		if len(bodyParamsList) > 0 {
+			return bodyParamsList, nil
+		}
+		return make([]interface{}, 0), nil
+	}
+
+	params := make([]interface{}, 0, len(defs))
+	missing := make([]string, 0)
+
+	for _, def := range defs {
+		name := strings.TrimSpace(def.Name)
+		if name == "" {
+			continue
+		}
+
+		rawFromQuery := strings.TrimSpace(c.Query(name))
+		if rawFromQuery != "" {
+			parsed, parseErr := parseParamValue(def.Type, rawFromQuery)
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid value for query parameter %q: %v", name, parseErr)
+			}
+			params = append(params, parsed)
+			continue
+		}
+
+		if bodyParamsByName != nil {
+			if raw, ok := bodyParamsByName[name]; ok {
+				parsed, parseErr := parseParamValue(def.Type, raw)
+				if parseErr != nil {
+					return nil, fmt.Errorf("invalid value for parameter %q: %v", name, parseErr)
+				}
+				params = append(params, parsed)
+				continue
+			}
+		}
+
+		if strings.TrimSpace(def.Default) != "" {
+			parsed, parseErr := parseParamValue(def.Type, def.Default)
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid default value for parameter %q: %v", name, parseErr)
+			}
+			params = append(params, parsed)
+			continue
+		}
+
+		if def.Required {
+			missing = append(missing, name)
+			continue
+		}
+
+		params = append(params, nil)
+	}
+
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("missing required query parameters: %s", strings.Join(missing, ", "))
+	}
+
+	return params, nil
+}
+
+func extractRuntimeBodyParams(c *gin.Context, method string) (map[string]interface{}, []interface{}, error) {
+	if method == "GET" || c.Request.ContentLength == 0 {
+		return nil, nil, nil
+	}
+
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		return nil, nil, fmt.Errorf("invalid request body: expected JSON parameter object")
+	}
+
+	if rawParams, ok := body["params"]; ok {
+		switch typed := rawParams.(type) {
+		case map[string]interface{}:
+			return typed, nil, nil
+		case []interface{}:
+			return nil, typed, nil
+		default:
+			return nil, nil, fmt.Errorf("invalid params field: expected object or array")
+		}
+	}
+
+	return body, nil, nil
+}
+
+func parseParamValue(paramType string, raw interface{}) (interface{}, error) {
+	t := strings.ToLower(strings.TrimSpace(paramType))
+	if t == "" || t == "string" {
+		return fmt.Sprintf("%v", raw), nil
+	}
+
+	switch t {
+	case "int", "integer":
+		switch v := raw.(type) {
+		case float64:
+			return int64(v), nil
+		case int:
+			return int64(v), nil
+		case int32:
+			return int64(v), nil
+		case int64:
+			return v, nil
+		case string:
+			parsed, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return parsed, nil
+		default:
+			parsed, err := strconv.ParseInt(strings.TrimSpace(fmt.Sprintf("%v", raw)), 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return parsed, nil
+		}
+	case "number", "float", "decimal":
+		switch v := raw.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		case int32:
+			return float64(v), nil
+		case int64:
+			return float64(v), nil
+		case string:
+			parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			if err != nil {
+				return nil, err
+			}
+			return parsed, nil
+		default:
+			parsed, err := strconv.ParseFloat(strings.TrimSpace(fmt.Sprintf("%v", raw)), 64)
+			if err != nil {
+				return nil, err
+			}
+			return parsed, nil
+		}
+	case "bool", "boolean":
+		switch v := raw.(type) {
+		case bool:
+			return v, nil
+		case string:
+			parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+			if err != nil {
+				return nil, err
+			}
+			return parsed, nil
+		default:
+			parsed, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprintf("%v", raw)))
+			if err != nil {
+				return nil, err
+			}
+			return parsed, nil
+		}
+	default:
+		return raw, nil
+	}
+}
+
+func countSQLPlaceholders(query string) int {
+	return strings.Count(query, "?")
+}
+
+func isStrictReadOnlyQuery(query string) bool {
+	normalized := strings.ToUpper(strings.Join(strings.Fields(strings.TrimSpace(query)), " "))
+	if normalized == "" {
+		return false
+	}
+
+	if !(strings.HasPrefix(normalized, "SELECT") ||
+		strings.HasPrefix(normalized, "WITH") ||
+		strings.HasPrefix(normalized, "SHOW") ||
+		strings.HasPrefix(normalized, "DESCRIBE") ||
+		strings.HasPrefix(normalized, "EXPLAIN")) {
+		return false
+	}
+
+	blockedKeywords := []string{
+		" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
+		" CREATE ", " REPLACE ", " MERGE ", " GRANT ", " REVOKE ", " CALL ",
+		" EXEC ", " EXECUTE ",
+	}
+	padded := " " + normalized + " "
+	for _, blocked := range blockedKeywords {
+		if strings.Contains(padded, blocked) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (h *APIBuilderHandler) GetSummary(c *gin.Context) {
