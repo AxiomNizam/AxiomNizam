@@ -1,3 +1,11 @@
+const OPERATIONS_API_BASE = window.BACKEND_URL || 'http://localhost:8000';
+
+function operationsURL(path) {
+    if (!path) return OPERATIONS_API_BASE;
+    if (/^https?:\/\//i.test(path)) return path;
+    return OPERATIONS_API_BASE + path;
+}
+
 function operationsHeaders() {
     return (typeof getAuthHeaders === 'function') ? getAuthHeaders() : { 'Content-Type': 'application/json' };
 }
@@ -16,7 +24,7 @@ function toArray(payload, key) {
 }
 
 async function opsFetch(path, method, body) {
-    const response = await fetch(path, {
+    const response = await fetch(operationsURL(path), {
         method: method || 'GET',
         headers: operationsHeaders(),
         body: body ? JSON.stringify(body) : undefined

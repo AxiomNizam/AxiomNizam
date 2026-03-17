@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +21,7 @@ import (
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
+	"example.com/axiomnizam/internal/integration"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
 	"example.com/axiomnizam/internal/kubeplus/scheduler"
@@ -34,6 +38,7 @@ import (
 	"example.com/axiomnizam/internal/vectorplus"
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
+	"example.com/axiomnizam/internal/workflows"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
@@ -45,7 +50,8 @@ func main() {
 	if err != nil {
 		log.Println("⚠️  No .env file found, using system environment variables")
 	}
-	fmt.Println("🚀 Starting AxiomNizam with Kubernetes-style Runtime...\n")
+	fmt.Println("🚀 Starting AxiomNizam with Kubernetes-style Runtime...")
+	fmt.Println()
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -72,14 +78,46 @@ func main() {
 		Realm:     cfg.Keycloak.Realm,
 		ClientID:  cfg.Keycloak.ClientID,
 	}
+	var tokenValidatorMu sync.RWMutex
 	tokenValidator, err := auth.NewTokenValidator(keycloakConfig)
 	if err != nil {
-		log.Printf("⚠️  Keycloak initialization failed: %v (running without auth)", err)
+		log.Printf("⚠️  Keycloak initialization failed at startup: %v", err)
+		log.Printf("⚠️  Auth-protected APIs will return 503 until Keycloak becomes reachable")
 		tokenValidator = nil
+	}
+
+	getOrInitTokenValidator := func() *auth.TokenValidator {
+		tokenValidatorMu.RLock()
+		tv := tokenValidator
+		tokenValidatorMu.RUnlock()
+		if tv != nil {
+			return tv
+		}
+
+		tokenValidatorMu.Lock()
+		defer tokenValidatorMu.Unlock()
+		if tokenValidator != nil {
+			return tokenValidator
+		}
+
+		initializedValidator, initErr := auth.NewTokenValidator(keycloakConfig)
+		if initErr != nil {
+			log.Printf("⚠️  Keycloak still unavailable: %v", initErr)
+			return nil
+		}
+
+		tokenValidator = initializedValidator
+		log.Printf("✅ Keycloak token validator initialized after startup")
+		return tokenValidator
 	}
 
 	// Initialize all connections
 	conns := database.InitConnections(cfg)
+	workflows.ConfigureGlobalPersistence(conns.Etcd)
+	modes.ConfigureGlobalPersistence(conns.Etcd)
+	vectorplus.ConfigureGlobalPersistence(conns.Etcd)
+	reviewflow.ConfigureGlobalPersistence(conns.Etcd)
+	integration.ConfigureGlobalPersistence(conns.Etcd)
 
 	// Create tables
 	createTables(conns)
@@ -87,20 +125,51 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
+	allowedOriginSet := make(map[string]struct{})
+	addAllowedOrigin := func(raw string) {
+		candidate := strings.TrimSpace(raw)
+		if candidate == "" {
+			return
+		}
+		if parsed, err := url.Parse(candidate); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			candidate = parsed.Scheme + "://" + parsed.Host
+		}
+		allowedOriginSet[candidate] = struct{}{}
+	}
+
+	for _, candidate := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		addAllowedOrigin(candidate)
+	}
+	if len(allowedOriginSet) == 0 {
+		addAllowedOrigin(os.Getenv("PUBLIC_FRONTEND_URL"))
+		addAllowedOrigin("http://localhost:7000")
+		addAllowedOrigin("http://127.0.0.1:7000")
+	}
+
+	isAllowedOrigin := func(origin string) bool {
+		_, ok := allowedOriginSet[origin]
+		return ok
+	}
+
 	// Add CORS middleware
 	router.Use(func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		if origin == "" {
-			origin = "*"
-		}
-		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		c.Writer.Header().Set("Vary", "Origin")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-API-KEY")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-Token-Expires-At")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		if origin != "" && isAllowedOrigin(origin) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
 		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
+			if origin != "" && !isAllowedOrigin(origin) {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
 			c.AbortWithStatus(204)
 			return
 		}
@@ -121,13 +190,6 @@ func main() {
 
 	// Initialize all handlers
 	healthHandler := handlers.NewHealthHandler(conns)
-	userHandler := handlers.NewUserHandler(conns.MySQL)
-	mariadbHandler := handlers.NewUserHandler(conns.MariaDB)
-	postgresHandler := handlers.NewUserHandler(conns.PostgreSQL)
-	perconaHandler := handlers.NewUserHandler(conns.Percona)
-	mongoHandler := handlers.NewMongoDBHandler(conns.MongoDB)
-	firebaseHandler := handlers.NewFirebaseHandler("http://firebase:9000")
-	oracleHandler := handlers.NewOracleHandler(conns.Oracle)
 
 	// Admin handler for database and table creation
 	// Only include SQL databases (MongoDB and Firebase don't support SQL DDL operations)
@@ -141,7 +203,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(dbConnections)
 
 	// User management handler
-	platformUserHandler := handlers.NewPlatformUserHandler()
+	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)
 
 	// Dynamic Query handlers for each database
 	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL, queryLogger)
@@ -190,8 +252,14 @@ func main() {
 
 	// authenticateRequest validates token + rate limits and sets auth context without advancing handlers.
 	authenticateRequest := func(c *gin.Context) bool {
-		if tokenValidator == nil {
-			return true
+		activeTokenValidator := getOrInitTokenValidator()
+		if activeTokenValidator == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":   "authentication unavailable",
+				"message": "token validation is not available because keycloak initialization failed",
+			})
+			c.Abort()
+			return false
 		}
 
 		authHeader := c.GetHeader("Authorization")
@@ -232,7 +300,7 @@ func main() {
 			return false
 		}
 
-		claims, err := tokenValidator.ValidateToken(token)
+		claims, err := activeTokenValidator.ValidateToken(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
 			c.Abort()
@@ -288,52 +356,47 @@ func main() {
 	// Get admin middleware (requires admin role)
 	var adminMiddleware gin.HandlerFunc
 	var adminOrSysMiddleware gin.HandlerFunc
-	if tokenValidator != nil {
-		adminMiddleware = func(c *gin.Context) {
-			if !authenticateRequest(c) {
-				return
-			}
-			enrichRequestContext(c)
-			claims := auth.GetUser(c)
-			if claims == nil || !claims.HasRole("admin") {
-				roles := []string{}
-				if claims != nil {
-					roles = claims.RealmAccess.Roles
-				}
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":      "forbidden: user does not have 'admin' role",
-					"user_roles": roles,
-					"required":   "admin",
-				})
-				c.Abort()
-				return
-			}
-			c.Next()
+	adminMiddleware = func(c *gin.Context) {
+		if !authenticateRequest(c) {
+			return
 		}
-		adminOrSysMiddleware = func(c *gin.Context) {
-			if !authenticateRequest(c) {
-				return
+		enrichRequestContext(c)
+		claims := auth.GetUser(c)
+		if claims == nil || !claims.HasRole("admin") {
+			roles := []string{}
+			if claims != nil {
+				roles = claims.RealmAccess.Roles
 			}
-			enrichRequestContext(c)
-			claims := auth.GetUser(c)
-			if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
-				roles := []string{}
-				if claims != nil {
-					roles = claims.RealmAccess.Roles
-				}
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",
-					"user_roles": roles,
-					"required":   []string{"admin", "system-manager", "sysadmin", "system_admin", "system-admin"},
-				})
-				c.Abort()
-				return
-			}
-			c.Next()
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":      "forbidden: user does not have 'admin' role",
+				"user_roles": roles,
+				"required":   "admin",
+			})
+			c.Abort()
+			return
 		}
-	} else {
-		adminMiddleware = func(c *gin.Context) { c.Next() }
-		adminOrSysMiddleware = func(c *gin.Context) { c.Next() }
+		c.Next()
+	}
+	adminOrSysMiddleware = func(c *gin.Context) {
+		if !authenticateRequest(c) {
+			return
+		}
+		enrichRequestContext(c)
+		claims := auth.GetUser(c)
+		if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
+			roles := []string{}
+			if claims != nil {
+				roles = claims.RealmAccess.Roles
+			}
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",
+				"user_roles": roles,
+				"required":   []string{"admin", "system-manager", "sysadmin", "system_admin", "system-admin"},
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 
 	// GraphQL endpoints (auth required)
@@ -341,104 +404,41 @@ func main() {
 	router.GET("/api/graphql/schema", authMiddleware, graphQLHandler.GetSchema)
 	router.GET("/api/graphql/playground", authMiddleware, graphQLHandler.Playground)
 
-	// CRUD routes for MySQL
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/mysql/users", authMiddleware, userHandler.GetAllUsers)
-	router.GET("/api/mysql/users/:id", authMiddleware, userHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/mysql/users", adminMiddleware, userHandler.CreateUser)
-	router.PUT("/api/mysql/users/:id", adminMiddleware, userHandler.UpdateUser)
-	router.DELETE("/api/mysql/users/:id", adminMiddleware, userHandler.DeleteUser)
-
-	// CRUD routes for MariaDB
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/mariadb/users", authMiddleware, mariadbHandler.GetAllUsers)
-	router.GET("/api/mariadb/users/:id", authMiddleware, mariadbHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/mariadb/users", adminMiddleware, mariadbHandler.CreateUser)
-	router.PUT("/api/mariadb/users/:id", adminMiddleware, mariadbHandler.UpdateUser)
-	router.DELETE("/api/mariadb/users/:id", adminMiddleware, mariadbHandler.DeleteUser)
-
-	// CRUD routes for PostgreSQL
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/postgres/users", authMiddleware, postgresHandler.GetAllUsers)
-	router.GET("/api/postgres/users/:id", authMiddleware, postgresHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/postgres/users", adminMiddleware, postgresHandler.CreateUser)
-	router.PUT("/api/postgres/users/:id", adminMiddleware, postgresHandler.UpdateUser)
-	router.DELETE("/api/postgres/users/:id", adminMiddleware, postgresHandler.DeleteUser)
-
-	// CRUD routes for Percona
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/percona/users", authMiddleware, perconaHandler.GetAllUsers)
-	router.GET("/api/percona/users/:id", authMiddleware, perconaHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/percona/users", adminMiddleware, perconaHandler.CreateUser)
-	router.PUT("/api/percona/users/:id", adminMiddleware, perconaHandler.UpdateUser)
-	router.DELETE("/api/percona/users/:id", adminMiddleware, perconaHandler.DeleteUser)
-
-	// CRUD routes for MongoDB
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/mongodb/users", authMiddleware, mongoHandler.GetAllUsers)
-	router.GET("/api/mongodb/users/:id", authMiddleware, mongoHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/mongodb/users", adminMiddleware, mongoHandler.CreateUser)
-	router.PUT("/api/mongodb/users/:id", adminMiddleware, mongoHandler.UpdateUser)
-	router.DELETE("/api/mongodb/users/:id", adminMiddleware, mongoHandler.DeleteUser)
-
-	// CRUD routes for Firebase
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/firebase/users", authMiddleware, firebaseHandler.GetAllUsers)
-	router.GET("/api/firebase/users/:id", authMiddleware, firebaseHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/firebase/users", adminMiddleware, firebaseHandler.CreateUser)
-	router.PUT("/api/firebase/users/:id", adminMiddleware, firebaseHandler.UpdateUser)
-	router.DELETE("/api/firebase/users/:id", adminMiddleware, firebaseHandler.DeleteUser)
-
-	// CRUD routes for Oracle
-	// Read operations (allowed for all authenticated users)
-	router.GET("/api/oracle/users", authMiddleware, oracleHandler.GetAllUsers)
-	router.GET("/api/oracle/users/:id", authMiddleware, oracleHandler.GetUserByID)
-	// Write operations (allowed only for admin users)
-	router.POST("/api/oracle/users", adminMiddleware, oracleHandler.CreateUser)
-	router.PUT("/api/oracle/users/:id", adminMiddleware, oracleHandler.UpdateUser)
-	router.DELETE("/api/oracle/users/:id", adminMiddleware, oracleHandler.DeleteUser)
-
 	// ====================================
 	// DYNAMIC QUERY ENDPOINTS (Auth Required)
 	// ====================================
 	// These endpoints allow dynamic SQL queries via Postman or any HTTP client
 	// GET requests only support SELECT queries
-	// POST requests support all query types (SELECT, INSERT, UPDATE, DELETE, CREATE, etc.)
+	// POST requests are restricted to admin/system-manager roles.
 
 	// MySQL Dynamic Queries
 	router.GET("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQuery)
-	router.POST("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/mysql/query/batch", authMiddleware, mysqlDynamicHandler.BatchQueries)
+	router.POST("/api/mysql/query", adminOrSysMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mysql/query/batch", adminOrSysMiddleware, mysqlDynamicHandler.BatchQueries)
 	router.GET("/api/mysql/schema", authMiddleware, mysqlDynamicHandler.TableSchema)
 
 	// MariaDB Dynamic Queries
 	router.GET("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQuery)
-	router.POST("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/mariadb/query/batch", authMiddleware, mariadbDynamicHandler.BatchQueries)
+	router.POST("/api/mariadb/query", adminOrSysMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mariadb/query/batch", adminOrSysMiddleware, mariadbDynamicHandler.BatchQueries)
 	router.GET("/api/mariadb/schema", authMiddleware, mariadbDynamicHandler.TableSchema)
 
 	// PostgreSQL Dynamic Queries
 	router.GET("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQuery)
-	router.POST("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/postgres/query/batch", authMiddleware, postgresDynamicHandler.BatchQueries)
+	router.POST("/api/postgres/query", adminOrSysMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/postgres/query/batch", adminOrSysMiddleware, postgresDynamicHandler.BatchQueries)
 	router.GET("/api/postgres/schema", authMiddleware, postgresDynamicHandler.TableSchema)
 
 	// Percona Dynamic Queries
 	router.GET("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQuery)
-	router.POST("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/percona/query/batch", authMiddleware, perconaDynamicHandler.BatchQueries)
+	router.POST("/api/percona/query", adminOrSysMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/percona/query/batch", adminOrSysMiddleware, perconaDynamicHandler.BatchQueries)
 	router.GET("/api/percona/schema", authMiddleware, perconaDynamicHandler.TableSchema)
 
 	// Oracle Dynamic Queries
 	router.GET("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQuery)
-	router.POST("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/oracle/query/batch", authMiddleware, oracleDynamicHandler.BatchQueries)
+	router.POST("/api/oracle/query", adminOrSysMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/oracle/query/batch", adminOrSysMiddleware, oracleDynamicHandler.BatchQueries)
 	router.GET("/api/oracle/schema", authMiddleware, oracleDynamicHandler.TableSchema)
 
 	// ====================================
@@ -494,12 +494,15 @@ func main() {
 	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
+	certificateHandler := handlers.NewCertificateHandler()
 
 	// Database management endpoints (admin only)
 	router.POST("/api/admin/database/create", adminOrSysMiddleware, adminHandler.CreateDatabase)
 	router.GET("/api/admin/database/list", adminOrSysMiddleware, adminHandler.ListDatabases)
 	router.GET("/api/admin/database/servers", adminOrSysMiddleware, adminHandler.ListDatabaseServers)
 	router.POST("/api/admin/database/connect", adminOrSysMiddleware, adminHandler.ConnectDatabaseServer)
+	router.GET("/api/admin/certificates/status", adminOrSysMiddleware, certificateHandler.GetCertificateStatus)
+	router.POST("/api/admin/certificates/renew", adminOrSysMiddleware, certificateHandler.RenewCertificate)
 
 	// Table management endpoints (admin only)
 	router.POST("/api/admin/table/create", adminOrSysMiddleware, adminHandler.CreateTable)
@@ -527,6 +530,12 @@ func main() {
 	router.POST("/api/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
 	router.GET("/api/notifications/status", notificationHandler.GetNotificationStatus)
 
+	// Backward-compatible notification aliases restored under /api/v1.
+	router.POST("/api/v1/notifications/send", authMiddleware, notificationHandler.SendNotification)
+	router.POST("/api/v1/notifications/health", authMiddleware, notificationHandler.SendHealthNotification)
+	router.POST("/api/v1/notifications/status", authMiddleware, notificationHandler.SendStatusNotification)
+	router.GET("/api/v1/notifications/status", notificationHandler.GetNotificationStatus)
+
 	// ====================================
 	// CLI AUTHENTICATION ENDPOINTS
 	// ====================================
@@ -538,7 +547,7 @@ func main() {
 	// ====================================
 	// KUBERNETES-STYLE RESOURCE ENDPOINTS
 	// ====================================
-	resourceHandler := handlers.NewResourceHandler()
+	resourceHandler := handlers.NewResourceHandler(conns.Etcd)
 
 	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
 	nsAPI := router.Group("/api/v1/namespaces")
@@ -560,11 +569,95 @@ func main() {
 	router.POST("/api/v1/workflows", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
 	router.GET("/api/v1/workflows", authMiddleware, resourceHandler.ListAll)
 	router.POST("/api/v1/workflows/:name/run", adminOrSysMiddleware, func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": fmt.Sprintf("Workflow '%s' started", c.Param("name")), "status": "Running"})
+		workflowName := strings.TrimSpace(c.Param("name"))
+		if workflowName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "workflow name is required"})
+			return
+		}
+
+		var req struct {
+			TriggerContext map[string]interface{} `json:"triggerContext"`
+		}
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
+		if err := ensureWorkflowRegistered(c.Request.Context(), resourceHandler, workflowName); err != nil {
+			if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) == nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			log.Printf("⚠️  workflow run using previously-registered definition for %s: %v", workflowName, err)
+		}
+
+		triggerContext := req.TriggerContext
+		if triggerContext == nil {
+			triggerContext = make(map[string]interface{})
+		}
+		if username := strings.TrimSpace(auth.GetUsername(c)); username != "" {
+			if _, exists := triggerContext["requestedBy"]; !exists {
+				triggerContext["requestedBy"] = username
+			}
+		}
+		if _, exists := triggerContext["triggeredAt"]; !exists {
+			triggerContext["triggeredAt"] = time.Now().UTC().Format(time.RFC3339)
+		}
+
+		execution, err := workflows.Execute(c.Request.Context(), workflowName, triggerContext)
+		if err != nil {
+			errMsg := strings.ToLower(err.Error())
+			switch {
+			case strings.Contains(errMsg, "not found"):
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			case strings.Contains(errMsg, "disabled"):
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":   fmt.Sprintf("Workflow '%s' executed", workflowName),
+			"execution": execution,
+			"status":    execution.Status,
+		})
+	})
+	router.GET("/api/v1/workflows/:name/executions", authMiddleware, func(c *gin.Context) {
+		workflowName := strings.TrimSpace(c.Param("name"))
+		if workflowName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "workflow name is required"})
+			return
+		}
+
+		executions := workflows.GlobalWorkflowEngine.ListExecutions(workflowName)
+		c.JSON(http.StatusOK, gin.H{
+			"workflow":   workflowName,
+			"executions": executions,
+			"count":      len(executions),
+		})
+	})
+	router.GET("/api/v1/workflows/executions/:id", authMiddleware, func(c *gin.Context) {
+		executionID := strings.TrimSpace(c.Param("id"))
+		if executionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "execution id is required"})
+			return
+		}
+
+		execution := workflows.GlobalWorkflowEngine.GetExecution(executionID)
+		if execution == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "execution not found"})
+			return
+		}
+
+		c.JSON(http.StatusOK, execution)
 	})
 
 	// DataSource endpoints
-	dsHandler := handlers.NewDataSourceHandler()
+	dsHandler := handlers.NewDataSourceHandler(conns.Etcd)
 	router.POST("/api/v1/datasources", adminOrSysMiddleware, dsHandler.Create)
 	router.GET("/api/v1/datasources", authMiddleware, dsHandler.List)
 	router.GET("/api/v1/datasources/:name", authMiddleware, dsHandler.Get)
@@ -573,10 +666,13 @@ func main() {
 	router.POST("/api/v1/datasources/:name/test", adminOrSysMiddleware, dsHandler.Test)
 
 	// Job endpoints
-	jobHandler := handlers.NewJobHandler()
+	jobHandler := handlers.NewJobHandler(conns.Etcd)
 	router.POST("/api/v1/jobs", adminOrSysMiddleware, jobHandler.Create)
 	router.GET("/api/v1/jobs", authMiddleware, jobHandler.List)
+	router.GET("/api/v1/jobs/schedules", authMiddleware, jobHandler.ListSchedules)
 	router.GET("/api/v1/jobs/:id", authMiddleware, jobHandler.Get)
+	router.POST("/api/v1/jobs/:id/schedule", adminOrSysMiddleware, jobHandler.SetSchedule)
+	router.DELETE("/api/v1/jobs/:id/schedule", adminOrSysMiddleware, jobHandler.RemoveSchedule)
 	router.POST("/api/v1/jobs/:id/run", adminOrSysMiddleware, jobHandler.Run)
 	router.GET("/api/v1/jobs/:id/logs", authMiddleware, jobHandler.GetLogs)
 	router.POST("/api/v1/jobs/:id/cancel", adminOrSysMiddleware, jobHandler.Cancel)
@@ -618,12 +714,14 @@ func main() {
 	{
 		eventBusAPI.POST("/events/publish", adminOrSysMiddleware, eventBusHandler.PublishEvent)
 		eventBusAPI.GET("/events", eventBusHandler.ListEvents)
+		eventBusAPI.POST("/events/:id/ack", adminOrSysMiddleware, eventBusHandler.AckEvent)
 		eventBusAPI.POST("/topics", adminOrSysMiddleware, eventBusHandler.CreateTopic)
 		eventBusAPI.GET("/topics", eventBusHandler.ListTopics)
 		eventBusAPI.POST("/subscriptions", adminOrSysMiddleware, eventBusHandler.CreateSubscription)
 		eventBusAPI.GET("/subscriptions/:id", eventBusHandler.GetSubscription)
 		eventBusAPI.GET("/subscriptions", eventBusHandler.ListSubscriptions)
 		eventBusAPI.GET("/dlq", eventBusHandler.ListDLQ)
+		eventBusAPI.POST("/dlq/:id/replay", adminOrSysMiddleware, eventBusHandler.ReplayDLQEvent)
 	}
 
 	// Exports
@@ -697,7 +795,9 @@ func main() {
 		rbacAPI.POST("/permissions/check", rbacHandler.CheckPermission)
 
 		rbacAPI.POST("/access-requests", rbacHandler.CreateAccessRequest)
+		rbacAPI.GET("/access-requests", rbacHandler.ListAccessRequests)
 		rbacAPI.POST("/access-requests/:id/approve", adminOrSysMiddleware, rbacHandler.ApproveAccessRequest)
+		rbacAPI.POST("/access-requests/:id/reject", adminOrSysMiddleware, rbacHandler.RejectAccessRequest)
 	}
 
 	// Versioning
@@ -728,14 +828,17 @@ func main() {
 	// Tracing
 	tracingAPI := router.Group("/api/v1/tracing", authMiddleware)
 	{
+		tracingAPI.POST("/traces", adminOrSysMiddleware, tracingHandler.IngestTrace)
 		tracingAPI.GET("/traces/:traceId", tracingHandler.GetTrace)
 		tracingAPI.GET("/traces/search", tracingHandler.SearchTraces)
+		tracingAPI.POST("/spans", adminOrSysMiddleware, tracingHandler.IngestSpan)
 		tracingAPI.GET("/spans/:spanId", tracingHandler.GetSpan)
 		tracingAPI.GET("/service-map", tracingHandler.GetServiceMap)
 		tracingAPI.GET("/services", tracingHandler.ListServices)
 		tracingAPI.GET("/services/:service/metrics", tracingHandler.GetServiceMetrics)
 		tracingAPI.GET("/services/:service/operations/:operation/metrics", tracingHandler.GetOperationMetrics)
 		tracingAPI.GET("/errors/analysis", tracingHandler.GetErrorAnalysis)
+		tracingAPI.GET("/ingestion/audit", adminOrSysMiddleware, tracingHandler.ListIngestionAudits)
 	}
 
 	// ====================================
@@ -792,7 +895,7 @@ func main() {
 	// ====================================
 	// CDC & ETL DATA PLATFORM ENDPOINTS
 	// ====================================
-	cdcEtlHandler := handlers.NewCDCETLHandler()
+	cdcEtlHandler := handlers.NewCDCETLHandler(conns.Etcd)
 
 	// ETL Pipeline Management
 	etlAPI := router.Group("/api/v1/etl", authMiddleware)
@@ -835,7 +938,7 @@ func main() {
 	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
-	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, conns.Etcd)
+	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd)
 
 	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{
@@ -872,6 +975,10 @@ func main() {
 		// Dashboard Deletion
 		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)
 	}
+
+	// Runtime execution routes for REST APIs created via API Builder.
+	router.Any("/api/custom", authMiddleware, apiBuilderHandler.InvokeCustomAPI)
+	router.Any("/api/custom/*path", authMiddleware, apiBuilderHandler.InvokeCustomAPI)
 
 	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS
@@ -1257,59 +1364,12 @@ func main() {
 	fmt.Printf("📡 API Server running on http://%s:%s\n", apiHost, apiPort)
 	fmt.Println("\n🔐 RBAC Security Model:")
 	fmt.Println("  ✅ READ  operations (GET)     - Allowed for all authenticated users")
-	fmt.Println("  ❌ WRITE operations (POST/PUT/DELETE) - Allowed ONLY for users with 'admin' role\n")
+	fmt.Println("  ❌ WRITE operations (POST/PUT/DELETE) - Allowed ONLY for users with 'admin' role")
+	fmt.Println()
 	fmt.Println("Available endpoints:")
 	fmt.Println("  GET  /health                  - Health check (no auth)")
 	fmt.Println("  GET  /status                  - Check all connections (no auth)")
-	fmt.Println()
-	fmt.Println("MySQL endpoints:")
-	fmt.Println("  GET  /api/mysql/users         - List users (authenticated users)")
-	fmt.Println("  GET  /api/mysql/users/:id     - Get user (authenticated users)")
-	fmt.Println("  POST /api/mysql/users         - Create user (admin only)")
-	fmt.Println("  PUT  /api/mysql/users/:id     - Update user (admin only)")
-	fmt.Println("  DELETE /api/mysql/users/:id   - Delete user (admin only)")
-	fmt.Println()
-	fmt.Println("MariaDB endpoints:")
-	fmt.Println("  GET  /api/mariadb/users       - List users (authenticated users)")
-	fmt.Println("  GET  /api/mariadb/users/:id   - Get user (authenticated users)")
-	fmt.Println("  POST /api/mariadb/users       - Create user (admin only)")
-	fmt.Println("  PUT  /api/mariadb/users/:id   - Update user (admin only)")
-	fmt.Println("  DELETE /api/mariadb/users/:id - Delete user (admin only)")
-	fmt.Println()
-	fmt.Println("PostgreSQL endpoints:")
-	fmt.Println("  GET  /api/postgres/users      - List users (authenticated users)")
-	fmt.Println("  GET  /api/postgres/users/:id  - Get user (authenticated users)")
-	fmt.Println("  POST /api/postgres/users      - Create user (admin only)")
-	fmt.Println("  PUT  /api/postgres/users/:id  - Update user (admin only)")
-	fmt.Println("  DELETE /api/postgres/users/:id - Delete user (admin only)")
-	fmt.Println()
-	fmt.Println("Percona endpoints:")
-	fmt.Println("  GET  /api/percona/users       - List users (authenticated users)")
-	fmt.Println("  GET  /api/percona/users/:id   - Get user (authenticated users)")
-	fmt.Println("  POST /api/percona/users       - Create user (admin only)")
-	fmt.Println("  PUT  /api/percona/users/:id   - Update user (admin only)")
-	fmt.Println("  DELETE /api/percona/users/:id - Delete user (admin only)")
-	fmt.Println()
-	fmt.Println("MongoDB endpoints:")
-	fmt.Println("  GET  /api/mongodb/users       - List users (authenticated users)")
-	fmt.Println("  GET  /api/mongodb/users/:id   - Get user (authenticated users)")
-	fmt.Println("  POST /api/mongodb/users       - Create user (admin only)")
-	fmt.Println("  PUT  /api/mongodb/users/:id   - Update user (admin only)")
-	fmt.Println("  DELETE /api/mongodb/users/:id - Delete user (admin only)")
-	fmt.Println()
-	fmt.Println("Firebase endpoints:")
-	fmt.Println("  GET  /api/firebase/users      - List users (authenticated users)")
-	fmt.Println("  GET  /api/firebase/users/:id  - Get user (authenticated users)")
-	fmt.Println("  POST /api/firebase/users      - Create user (admin only)")
-	fmt.Println("  PUT  /api/firebase/users/:id  - Update user (admin only)")
-	fmt.Println("  DELETE /api/firebase/users/:id - Delete user (admin only)")
-	fmt.Println()
-	fmt.Println("Oracle endpoints:")
-	fmt.Println("  GET  /api/oracle/users        - List users (authenticated users)")
-	fmt.Println("  GET  /api/oracle/users/:id    - Get user (authenticated users)")
-	fmt.Println("  POST /api/oracle/users        - Create user (admin only)")
-	fmt.Println("  PUT  /api/oracle/users/:id    - Update user (admin only)")
-	fmt.Println("  DELETE /api/oracle/users/:id  - Delete user (admin only)")
+	fmt.Println("  ANY  /api/custom/*path        - Execute API Builder runtime APIs")
 	fmt.Println()
 	fmt.Println("Admin endpoints (admin role required):")
 	fmt.Println("  POST /api/admin/database/create  - Create a new database")
@@ -1326,12 +1386,12 @@ func main() {
 	fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
 	fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
 	fmt.Println()
-	fmt.Println("Dynamic Query endpoints (authenticated users):")
+	fmt.Println("Dynamic Query endpoints:")
 	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")
 	fmt.Println("       Example: /api/mysql/query?q=SELECT * FROM users&params=1")
-	fmt.Println("  POST /api/{db}/query            - Execute any query (SELECT/INSERT/UPDATE/DELETE/CREATE)")
+	fmt.Println("  POST /api/{db}/query            - Execute query body (admin/system-manager only)")
 	fmt.Println("       Body: {\"query\": \"SQL_QUERY\", \"params\": [\"value1\", \"value2\"]}")
-	fmt.Println("  POST /api/{db}/query/batch      - Execute multiple queries at once")
+	fmt.Println("  POST /api/{db}/query/batch      - Execute multiple queries at once (admin/system-manager only)")
 	fmt.Println("       Body: [{\"query\": \"SQL_QUERY\", \"params\": []}]")
 	fmt.Println("  GET  /api/{db}/schema           - Get table schema")
 	fmt.Println("       Example: /api/mysql/schema?table=users")
@@ -1428,4 +1488,276 @@ func createTables(conns *database.Connections) {
 		conns.Oracle.AutoMigrate(&models.User{})
 		log.Println("✅ Oracle table created/migrated")
 	}
+}
+
+func ensureWorkflowRegistered(ctx context.Context, resourceHandler *handlers.ResourceHandler, workflowName string) error {
+	if resourceHandler == nil {
+		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
+			return nil
+		}
+		return fmt.Errorf("workflow %q not found", workflowName)
+	}
+
+	resource, found := resourceHandler.FindResourceByKindAndName("workflow", workflowName)
+	if !found {
+		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
+			return nil
+		}
+		return fmt.Errorf("workflow %q not found", workflowName)
+	}
+
+	workflowDef, err := workflowFromResource(resource)
+	if err != nil {
+		return err
+	}
+
+	return workflows.AddWorkflow(ctx, workflowDef)
+}
+
+func workflowFromResource(resource *handlers.GenericResource) (*workflows.Workflow, error) {
+	if resource == nil {
+		return nil, fmt.Errorf("workflow definition is nil")
+	}
+
+	name := strings.TrimSpace(resource.Metadata.Name)
+	if name == "" {
+		return nil, fmt.Errorf("workflow metadata.name is required")
+	}
+
+	steps, err := workflowStepsFromSpec(name, resource.Spec)
+	if err != nil {
+		return nil, err
+	}
+
+	enabled := true
+	if v, ok := boolFromAny(resource.Spec["enabled"]); ok {
+		enabled = v
+	}
+	if schedule, ok := resource.Spec["schedule"].(map[string]interface{}); ok {
+		if v, ok := boolFromAny(schedule["enabled"]); ok {
+			enabled = v
+		}
+	}
+
+	version := strings.TrimSpace(stringFromAny(resource.Spec["version"]))
+	if version == "" {
+		version = "v1"
+	}
+
+	namespace := strings.TrimSpace(resource.Metadata.Namespace)
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	return &workflows.Workflow{
+		Name:        name,
+		Namespace:   namespace,
+		Version:     version,
+		Description: stringFromAny(resource.Spec["description"]),
+		Triggers:    workflowTriggersFromSpec(resource.Spec),
+		Steps:       steps,
+		Enabled:     enabled,
+		Labels:      resource.Metadata.Labels,
+		Annotations: resource.Metadata.Annotations,
+	}, nil
+}
+
+func workflowTriggersFromSpec(spec map[string]interface{}) []workflows.WorkflowTrigger {
+	triggers := make([]workflows.WorkflowTrigger, 0)
+
+	if raw, ok := spec["triggers"].([]interface{}); ok {
+		for _, item := range raw {
+			triggerMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			triggerType := strings.TrimSpace(stringFromAny(triggerMap["type"]))
+			if triggerType == "" {
+				continue
+			}
+
+			condition := make(map[string]interface{})
+			if condMap, ok := triggerMap["condition"].(map[string]interface{}); ok {
+				for k, v := range condMap {
+					condition[k] = v
+				}
+			}
+
+			triggers = append(triggers, workflows.WorkflowTrigger{
+				Type:      triggerType,
+				Condition: condition,
+			})
+		}
+	}
+
+	if schedule, ok := spec["schedule"].(map[string]interface{}); ok {
+		condition := make(map[string]interface{}, len(schedule))
+		for k, v := range schedule {
+			condition[k] = v
+		}
+		triggers = append(triggers, workflows.WorkflowTrigger{Type: "schedule", Condition: condition})
+	}
+
+	if len(triggers) == 0 {
+		triggers = append(triggers, workflows.WorkflowTrigger{Type: "manual", Condition: map[string]interface{}{"source": "api"}})
+	}
+
+	return triggers
+}
+
+func workflowStepsFromSpec(workflowName string, spec map[string]interface{}) ([]workflows.WorkflowStep, error) {
+	rawSteps, ok := spec["steps"].([]interface{})
+	if !ok || len(rawSteps) == 0 {
+		return nil, fmt.Errorf("workflow %q must define at least one step", workflowName)
+	}
+
+	steps := make([]workflows.WorkflowStep, 0, len(rawSteps))
+	for i, rawStep := range rawSteps {
+		stepMap, ok := rawStep.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		stepID := strings.TrimSpace(stringFromAny(stepMap["id"]))
+		if stepID == "" {
+			stepID = fmt.Sprintf("%s-step-%d", workflowName, i+1)
+		}
+
+		stepName := strings.TrimSpace(stringFromAny(stepMap["name"]))
+		if stepName == "" {
+			stepName = stepID
+		}
+
+		stepType := strings.TrimSpace(stringFromAny(stepMap["type"]))
+		if stepType == "" {
+			stepType = "http"
+		}
+
+		action := strings.TrimSpace(stringFromAny(stepMap["action"]))
+		if action == "" {
+			action = stepType
+		}
+
+		config := make(map[string]interface{})
+		if rawConfig, ok := stepMap["config"].(map[string]interface{}); ok {
+			for k, v := range rawConfig {
+				config[k] = v
+			}
+		}
+
+		for k, v := range stepMap {
+			switch k {
+			case "id", "name", "type", "action", "retry", "timeout", "config":
+				continue
+			default:
+				config[k] = v
+			}
+		}
+
+		if _, exists := config["action"]; !exists && action != "" {
+			config["action"] = action
+		}
+		if stepType == "http" {
+			if _, exists := config["method"]; !exists {
+				method := strings.ToUpper(strings.TrimSpace(stringFromAny(stepMap["method"])))
+				if method == "" {
+					method = "GET"
+				}
+				config["method"] = method
+			}
+		}
+
+		steps = append(steps, workflows.WorkflowStep{
+			ID:      stepID,
+			Name:    stepName,
+			Type:    stepType,
+			Action:  action,
+			Config:  config,
+			Timeout: durationFromAny(stepMap["timeout"]),
+			Retry:   intFromAny(stepMap["retry"]),
+		})
+	}
+
+	if len(steps) == 0 {
+		return nil, fmt.Errorf("workflow %q has invalid steps", workflowName)
+	}
+
+	return steps, nil
+}
+
+func stringFromAny(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	case int:
+		return strconv.Itoa(v)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
+func boolFromAny(value interface{}) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err == nil {
+			return parsed, true
+		}
+	}
+	return false, false
+}
+
+func intFromAny(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func durationFromAny(value interface{}) time.Duration {
+	switch v := value.(type) {
+	case time.Duration:
+		return v
+	case string:
+		parsed, err := time.ParseDuration(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	case int:
+		if v > 0 {
+			return time.Duration(v) * time.Second
+		}
+	case int64:
+		if v > 0 {
+			return time.Duration(v) * time.Second
+		}
+	case float64:
+		if v > 0 {
+			return time.Duration(v * float64(time.Second))
+		}
+	}
+	return 0
 }

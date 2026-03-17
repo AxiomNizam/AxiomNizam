@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // GenericResource represents a Kubernetes-style resource stored in the API server
@@ -42,12 +46,65 @@ type ResourceStatus struct {
 type ResourceHandler struct {
 	mu        sync.RWMutex
 	resources map[string]map[string]map[string]*GenericResource // kind -> namespace -> name -> resource
+	etcd      *clientv3.Client
+	stateKey  string
 }
 
 // NewResourceHandler creates a new resource handler
-func NewResourceHandler() *ResourceHandler {
-	return &ResourceHandler{
+func NewResourceHandler(etcd *clientv3.Client) *ResourceHandler {
+	h := &ResourceHandler{
 		resources: make(map[string]map[string]map[string]*GenericResource),
+		etcd:      etcd,
+		stateKey:  "axiomnizam:resources:state",
+	}
+	h.loadState()
+	return h
+}
+
+func (h *ResourceHandler) loadState() {
+	if h.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.etcd.Get(ctx, h.stateKey)
+	if err != nil {
+		log.Printf("resources: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var resourcesState map[string]map[string]map[string]*GenericResource
+	if err := json.Unmarshal(resp.Kvs[0].Value, &resourcesState); err != nil {
+		log.Printf("resources: failed to decode persisted state: %v", err)
+		return
+	}
+	if resourcesState == nil {
+		resourcesState = make(map[string]map[string]map[string]*GenericResource)
+	}
+	h.resources = resourcesState
+}
+
+func (h *ResourceHandler) persistStateLocked() {
+	if h.etcd == nil {
+		return
+	}
+
+	payload, err := json.Marshal(h.resources)
+	if err != nil {
+		log.Printf("resources: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
+		log.Printf("resources: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -101,6 +158,7 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		resource.Metadata.Namespace = ns
 		resource.Status.Phase = "Reconciling"
 		h.resources[kind][ns][name] = &resource
+		h.persistStateLocked()
 		c.JSON(http.StatusOK, &resource)
 	} else {
 		// Create
@@ -110,6 +168,7 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		resource.Metadata.Namespace = ns
 		resource.Status.Phase = "Pending"
 		h.resources[kind][ns][name] = &resource
+		h.persistStateLocked()
 		c.JSON(http.StatusCreated, &resource)
 	}
 
@@ -121,6 +180,7 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		if r, ok := h.resources[kind][ns][name]; ok {
 			r.Status.Phase = "Ready"
 			r.Status.Message = "Resource reconciled successfully"
+			h.persistStateLocked()
 		}
 	}()
 }
@@ -206,6 +266,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 	}
 	existing.Metadata.Generation++
 	existing.Status.Phase = "Reconciling"
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, existing)
 
@@ -216,6 +277,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 		defer h.mu.Unlock()
 		if r, ok := h.resources[kind][ns][name]; ok {
 			r.Status.Phase = "Ready"
+			h.persistStateLocked()
 		}
 	}()
 }
@@ -239,6 +301,7 @@ func (h *ResourceHandler) Delete(c *gin.Context) {
 	}
 
 	delete(h.resources[kind][ns], name)
+	h.persistStateLocked()
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s '%s' deleted", kind, name)})
 }
 
@@ -318,6 +381,81 @@ func (h *ResourceHandler) Events(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, events)
+}
+
+// FindResourceByKindAndName finds the first matching resource across namespaces.
+// It returns a defensive copy to avoid callers mutating internal handler state.
+func (h *ResourceHandler) FindResourceByKindAndName(kind, name string) (*GenericResource, bool) {
+	normalizedKind := normalizeKind(kind)
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for storedKind, byNamespace := range h.resources {
+		for _, byName := range byNamespace {
+			for _, res := range byName {
+				if !strings.EqualFold(res.Metadata.Name, name) {
+					continue
+				}
+
+				if normalizedKind != "" {
+					if !(strings.EqualFold(storedKind, normalizedKind) ||
+						strings.EqualFold(res.Kind, normalizedKind) ||
+						strings.EqualFold(res.Kind, kind)) {
+						continue
+					}
+				}
+
+				return cloneGenericResource(res), true
+			}
+		}
+	}
+
+	return nil, false
+}
+
+func cloneGenericResource(in *GenericResource) *GenericResource {
+	if in == nil {
+		return nil
+	}
+
+	out := *in
+	out.Metadata.Labels = cloneStringMap(in.Metadata.Labels)
+	out.Metadata.Annotations = cloneStringMap(in.Metadata.Annotations)
+	out.Spec = cloneAnyMap(in.Spec)
+
+	if len(in.Status.Conditions) > 0 {
+		out.Status.Conditions = make([]map[string]interface{}, len(in.Status.Conditions))
+		for i := range in.Status.Conditions {
+			out.Status.Conditions[i] = cloneAnyMap(in.Status.Conditions[i])
+		}
+	}
+
+	return &out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneAnyMap(in map[string]interface{}) map[string]interface{} {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 // normalizeKind normalizes resource kind names for consistent storage

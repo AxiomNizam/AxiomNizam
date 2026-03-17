@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -170,6 +171,73 @@ func (h *EventBusHandler) ListDLQ(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
 }
 
+// AckEvent handles POST /api/v1/events/:id/ack
+func (h *EventBusHandler) AckEvent(c *gin.Context) {
+	eventID := strings.TrimSpace(c.Param("id"))
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "event id is required"})
+		return
+	}
+
+	var req struct {
+		SubscriptionID string `json:"subscriptionId"`
+		AcknowledgedBy string `json:"acknowledgedBy"`
+		Message        string `json:"message"`
+	}
+
+	if c.Request != nil && c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	event, err := h.manager.AckEvent(eventID, strings.TrimSpace(req.SubscriptionID), strings.TrimSpace(req.AcknowledgedBy), strings.TrimSpace(req.Message))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "event acknowledged", "event": event})
+}
+
+// ReplayDLQEvent handles POST /api/v1/dlq/:id/replay
+func (h *EventBusHandler) ReplayDLQEvent(c *gin.Context) {
+	dlqID := strings.TrimSpace(c.Param("id"))
+	if dlqID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dlq id is required"})
+		return
+	}
+
+	var req struct {
+		ReplayToTopic string `json:"replayToTopic"`
+		ReplayedBy    string `json:"replayedBy"`
+	}
+
+	if c.Request != nil && c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	resp, err := h.manager.ReplayDLQEvent(dlqID, strings.TrimSpace(req.ReplayToTopic), strings.TrimSpace(req.ReplayedBy))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "dlq event replayed", "replay": resp})
+}
+
 // RegisterEventBusRoutes registers all event bus routes
 func RegisterEventBusRoutes(router *gin.Engine, manager EventBusManager) {
 	handler := NewEventBusHandler(manager)
@@ -178,12 +246,14 @@ func RegisterEventBusRoutes(router *gin.Engine, manager EventBusManager) {
 	{
 		group.POST("/events/publish", handler.PublishEvent)
 		group.GET("/events", handler.ListEvents)
+		group.POST("/events/:id/ack", handler.AckEvent)
 		group.POST("/topics", handler.CreateTopic)
 		group.GET("/topics", handler.ListTopics)
 		group.POST("/subscriptions", handler.CreateSubscription)
 		group.GET("/subscriptions/:id", handler.GetSubscription)
 		group.GET("/subscriptions", handler.ListSubscriptions)
 		group.GET("/dlq", handler.ListDLQ)
+		group.POST("/dlq/:id/replay", handler.ReplayDLQEvent)
 	}
 }
 
@@ -191,10 +261,12 @@ func RegisterEventBusRoutes(router *gin.Engine, manager EventBusManager) {
 type EventBusManager interface {
 	PublishEvent(event *EventBusEvent) (*EventPublishResponse, error)
 	ListEvents(tenantID, eventType, processed string) ([]*EventBusEvent, error)
+	AckEvent(eventID, subscriptionID, acknowledgedBy, message string) (*EventBusEvent, error)
 	CreateTopic(topic *EventTopic) (*EventTopic, error)
 	ListTopics() ([]*EventTopic, error)
 	CreateSubscription(sub *EventSubscription) (*EventSubscription, error)
 	GetSubscription(id string) (*EventSubscription, error)
 	ListSubscriptions(tenantID string) ([]*EventSubscription, error)
 	ListDLQEvents(tenantID string) ([]*DLQEvent, error)
+	ReplayDLQEvent(dlqID, replayToTopic, replayedBy string) (*EventPublishResponse, error)
 }

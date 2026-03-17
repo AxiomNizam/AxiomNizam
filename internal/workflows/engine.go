@@ -2,9 +2,13 @@ package workflows
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // WorkflowStep represents a single step in a workflow
@@ -75,18 +79,101 @@ type WorkflowEngine struct {
 	workflows  map[string]*Workflow
 	executions map[string]*WorkflowExecution
 	handlers   map[string]StepHandler
+	etcd       *clientv3.Client
+	stateKey   string
+}
+
+type workflowEngineState struct {
+	Workflows  map[string]*Workflow          `json:"workflows"`
+	Executions map[string]*WorkflowExecution `json:"executions"`
 }
 
 // StepHandler handles a specific step type
 type StepHandler func(ctx context.Context, step *WorkflowStep, input map[string]interface{}) (map[string]interface{}, error)
 
 // NewWorkflowEngine creates a new workflow engine
-func NewWorkflowEngine() *WorkflowEngine {
-	return &WorkflowEngine{
+func NewWorkflowEngine(etcd ...*clientv3.Client) *WorkflowEngine {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	}
+
+	we := &WorkflowEngine{
 		workflows:  make(map[string]*Workflow),
 		executions: make(map[string]*WorkflowExecution),
 		handlers:   make(map[string]StepHandler),
+		etcd:       etcdClient,
+		stateKey:   "axiomnizam:workflows:state",
 	}
+	we.loadState()
+	return we
+}
+
+func (we *WorkflowEngine) loadState() {
+	if we.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := we.etcd.Get(ctx, we.stateKey)
+	if err != nil {
+		log.Printf("workflows: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var state workflowEngineState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("workflows: failed to decode persisted state: %v", err)
+		return
+	}
+
+	if state.Workflows == nil {
+		state.Workflows = make(map[string]*Workflow)
+	}
+	if state.Executions == nil {
+		state.Executions = make(map[string]*WorkflowExecution)
+	}
+
+	we.workflows = state.Workflows
+	we.executions = state.Executions
+}
+
+func (we *WorkflowEngine) persistStateLocked() {
+	if we.etcd == nil {
+		return
+	}
+
+	state := workflowEngineState{
+		Workflows:  we.workflows,
+		Executions: we.executions,
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("workflows: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := we.etcd.Put(ctx, we.stateKey, string(payload)); err != nil {
+		log.Printf("workflows: failed to persist state to etcd: %v", err)
+	}
+}
+
+func (we *WorkflowEngine) ConfigurePersistence(etcd *clientv3.Client) {
+	we.mu.Lock()
+	we.etcd = etcd
+	if we.stateKey == "" {
+		we.stateKey = "axiomnizam:workflows:state"
+	}
+	we.mu.Unlock()
+	we.loadState()
 }
 
 // RegisterHandler registers a handler for a step type
@@ -106,6 +193,7 @@ func (we *WorkflowEngine) AddWorkflow(ctx context.Context, workflow *Workflow) e
 	defer we.mu.Unlock()
 
 	we.workflows[workflow.Name] = workflow
+	we.persistStateLocked()
 	return nil
 }
 
@@ -151,6 +239,7 @@ func (we *WorkflowEngine) Execute(ctx context.Context, workflowName string, trig
 
 	we.mu.Lock()
 	we.executions[execution.ID] = execution
+	we.persistStateLocked()
 	we.mu.Unlock()
 
 	// Execute steps sequentially
@@ -219,8 +308,11 @@ func (we *WorkflowEngine) Execute(ctx context.Context, workflowName string, trig
 
 		now := time.Now()
 		stepExec.EndTime = &now
+		we.mu.Lock()
 		execution.StepExecutions = append(execution.StepExecutions, stepExec)
 		execution.CompletedSteps = i + 1
+		we.persistStateLocked()
+		we.mu.Unlock()
 
 		if err != nil {
 			execution.Status = "failed"
@@ -229,6 +321,7 @@ func (we *WorkflowEngine) Execute(ctx context.Context, workflowName string, trig
 		}
 	}
 
+	we.mu.Lock()
 	// Mark as complete
 	if execution.Status != "failed" {
 		execution.Status = "success"
@@ -236,6 +329,8 @@ func (we *WorkflowEngine) Execute(ctx context.Context, workflowName string, trig
 
 	now := time.Now()
 	execution.EndTime = &now
+	we.persistStateLocked()
+	we.mu.Unlock()
 
 	return execution, nil
 }
@@ -293,6 +388,11 @@ var HTTPHandler = func(ctx context.Context, step *WorkflowStep, input map[string
 
 // GlobalWorkflowEngine is the package-level workflow engine
 var GlobalWorkflowEngine = NewWorkflowEngine()
+
+// ConfigureGlobalPersistence configures etcd persistence for the global workflow engine.
+func ConfigureGlobalPersistence(etcd *clientv3.Client) {
+	GlobalWorkflowEngine.ConfigurePersistence(etcd)
+}
 
 // Initialize builtin handlers
 func init() {

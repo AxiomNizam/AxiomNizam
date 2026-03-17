@@ -7,6 +7,7 @@ import (
 	"example.com/axiomnizam/internal/cdc"
 	"example.com/axiomnizam/internal/etl"
 	"github.com/gin-gonic/gin"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // ==============================================
@@ -19,11 +20,11 @@ type CDCETLHandler struct {
 	cdcEngine *cdc.PipelineEngine
 }
 
-func NewCDCETLHandler() *CDCETLHandler {
-	cdcCore := cdc.NewChangeDataCapture()
+func NewCDCETLHandler(etcd ...*clientv3.Client) *CDCETLHandler {
+	cdcCore := cdc.NewChangeDataCapture(etcd...)
 	return &CDCETLHandler{
-		etlEngine: etl.NewEngine(),
-		cdcEngine: cdc.NewPipelineEngine(cdcCore),
+		etlEngine: etl.NewEngine(etcd...),
+		cdcEngine: cdc.NewPipelineEngine(cdcCore, etcd...),
 	}
 }
 

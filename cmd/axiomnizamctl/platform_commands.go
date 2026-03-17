@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -100,6 +101,166 @@ var rbacCheckCmd = &cobra.Command{
 			"action":      action,
 		}
 		return postAndPrint("/api/v1/rbac/permissions/check", payload)
+	},
+}
+
+var rbacAccessRequestListCmd = &cobra.Command{
+	Use:   "access-request-list",
+	Short: "List RBAC access requests",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		principalID, _ := cmd.Flags().GetString("principal-id")
+		status, _ := cmd.Flags().GetString("status")
+
+		query := url.Values{}
+		if tenantID != "" {
+			query.Set("tenantId", tenantID)
+		}
+		if principalID != "" {
+			query.Set("principalId", principalID)
+		}
+		if status != "" {
+			query.Set("status", status)
+		}
+
+		path := "/api/v1/rbac/access-requests"
+		if encoded := query.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+
+		return getAndPrint(path)
+	},
+}
+
+var rbacAccessRequestCreateCmd = &cobra.Command{
+	Use:   "access-request-create",
+	Short: "Create an RBAC access request",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		principalID, _ := cmd.Flags().GetString("principal-id")
+		resourceType, _ := cmd.Flags().GetString("resource-type")
+		resourceID, _ := cmd.Flags().GetString("resource-id")
+		action, _ := cmd.Flags().GetString("action")
+		duration, _ := cmd.Flags().GetInt("duration")
+		justification, _ := cmd.Flags().GetString("justification")
+
+		tenantID = strings.TrimSpace(tenantID)
+		principalID = strings.TrimSpace(principalID)
+		resourceType = strings.TrimSpace(resourceType)
+		action = strings.TrimSpace(action)
+
+		if tenantID == "" || principalID == "" || resourceType == "" || action == "" {
+			return NewCommandError(ErrInvalidInput, "--tenant-id, --principal-id, --resource-type, and --action are required")
+		}
+
+		payload := map[string]interface{}{
+			"tenantId":     tenantID,
+			"principalId":  principalID,
+			"resourceType": resourceType,
+			"action":       action,
+		}
+		if strings.TrimSpace(resourceID) != "" {
+			payload["resourceId"] = strings.TrimSpace(resourceID)
+		}
+		if duration > 0 {
+			payload["duration"] = duration
+		}
+		if strings.TrimSpace(justification) != "" {
+			payload["justification"] = strings.TrimSpace(justification)
+		}
+
+		return postAndPrint("/api/v1/rbac/access-requests", payload)
+	},
+}
+
+var rbacAccessRequestApproveCmd = &cobra.Command{
+	Use:   "access-request-approve [request-id]",
+	Short: "Approve an RBAC access request",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		approvedBy, _ := cmd.Flags().GetString("approved-by")
+		approvedBy = strings.TrimSpace(approvedBy)
+		if approvedBy == "" {
+			return NewCommandError(ErrInvalidInput, "--approved-by is required")
+		}
+
+		payload := map[string]interface{}{"approvedBy": approvedBy}
+		return postAndPrint("/api/v1/rbac/access-requests/"+args[0]+"/approve", payload)
+	},
+}
+
+var rbacAccessRequestRejectCmd = &cobra.Command{
+	Use:   "access-request-reject [request-id]",
+	Short: "Reject an RBAC access request",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		rejectedBy, _ := cmd.Flags().GetString("rejected-by")
+		reason, _ := cmd.Flags().GetString("reason")
+
+		rejectedBy = strings.TrimSpace(rejectedBy)
+		if rejectedBy == "" {
+			return NewCommandError(ErrInvalidInput, "--rejected-by is required")
+		}
+
+		payload := map[string]interface{}{"rejectedBy": rejectedBy}
+		if strings.TrimSpace(reason) != "" {
+			payload["reason"] = reason
+		}
+
+		return postAndPrint("/api/v1/rbac/access-requests/"+args[0]+"/reject", payload)
+	},
+}
+
+var EventBusCmd = &cobra.Command{
+	Use:   "eventbus",
+	Short: "Manage event bus operations",
+}
+
+var eventBusAckCmd = &cobra.Command{
+	Use:   "ack [event-id]",
+	Short: "Acknowledge a processed event",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		subscriptionID, _ := cmd.Flags().GetString("subscription-id")
+		acknowledgedBy, _ := cmd.Flags().GetString("acknowledged-by")
+		message, _ := cmd.Flags().GetString("message")
+
+		acknowledgedBy = strings.TrimSpace(acknowledgedBy)
+		if acknowledgedBy == "" {
+			return NewCommandError(ErrInvalidInput, "--acknowledged-by is required")
+		}
+
+		payload := map[string]interface{}{
+			"acknowledgedBy": acknowledgedBy,
+		}
+		if strings.TrimSpace(subscriptionID) != "" {
+			payload["subscriptionId"] = strings.TrimSpace(subscriptionID)
+		}
+		if strings.TrimSpace(message) != "" {
+			payload["message"] = strings.TrimSpace(message)
+		}
+
+		return postAndPrint("/api/v1/eventbus/events/"+args[0]+"/ack", payload)
+	},
+}
+
+var eventBusDLQReplayCmd = &cobra.Command{
+	Use:   "dlq-replay [dlq-id]",
+	Short: "Replay an event from dead-letter queue",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		replayToTopic, _ := cmd.Flags().GetString("replay-to-topic")
+		replayedBy, _ := cmd.Flags().GetString("replayed-by")
+
+		payload := map[string]interface{}{}
+		if strings.TrimSpace(replayToTopic) != "" {
+			payload["replayToTopic"] = strings.TrimSpace(replayToTopic)
+		}
+		if strings.TrimSpace(replayedBy) != "" {
+			payload["replayedBy"] = strings.TrimSpace(replayedBy)
+		}
+
+		return postAndPrint("/api/v1/eventbus/dlq/"+args[0]+"/replay", payload)
 	},
 }
 
@@ -340,6 +501,80 @@ var traceGetCmd = &cobra.Command{
 	},
 }
 
+var traceIngestCmd = &cobra.Command{
+	Use:   "ingest",
+	Short: "Ingest a trace",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		service, _ := cmd.Flags().GetString("service")
+		operation, _ := cmd.Flags().GetString("operation")
+		traceID, _ := cmd.Flags().GetString("trace-id")
+
+		tenantID = strings.TrimSpace(tenantID)
+		service = strings.TrimSpace(service)
+		operation = strings.TrimSpace(operation)
+		traceID = strings.TrimSpace(traceID)
+
+		if tenantID == "" || service == "" || operation == "" {
+			return NewCommandError(ErrInvalidInput, "--tenant-id, --service, and --operation are required")
+		}
+
+		payload := map[string]interface{}{
+			"tenantId": tenantID,
+			"services": []string{service},
+			"spans": []map[string]interface{}{
+				{
+					"service":       service,
+					"operationName": operation,
+					"kind":          "SERVER",
+					"status":        "OK",
+				},
+			},
+		}
+		if traceID != "" {
+			payload["id"] = traceID
+		}
+
+		return postAndPrint("/api/v1/tracing/traces", payload)
+	},
+}
+
+var traceIngestionAuditListCmd = &cobra.Command{
+	Use:   "ingestion-audit-list",
+	Short: "List tracing ingestion audit logs",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tenantID, _ := cmd.Flags().GetString("tenant-id")
+		username, _ := cmd.Flags().GetString("username")
+		resourceType, _ := cmd.Flags().GetString("resource-type")
+		result, _ := cmd.Flags().GetString("result")
+		limit, _ := cmd.Flags().GetInt("limit")
+
+		query := url.Values{}
+		if strings.TrimSpace(tenantID) != "" {
+			query.Set("tenantId", strings.TrimSpace(tenantID))
+		}
+		if strings.TrimSpace(username) != "" {
+			query.Set("username", strings.TrimSpace(username))
+		}
+		if strings.TrimSpace(resourceType) != "" {
+			query.Set("resourceType", strings.TrimSpace(resourceType))
+		}
+		if strings.TrimSpace(result) != "" {
+			query.Set("result", strings.TrimSpace(result))
+		}
+		if limit > 0 {
+			query.Set("limit", fmt.Sprintf("%d", limit))
+		}
+
+		path := "/api/v1/tracing/ingestion/audit"
+		if encoded := query.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+
+		return getAndPrint(path)
+	},
+}
+
 var LineageAPICmd = &cobra.Command{
 	Use:   "lineagex",
 	Short: "Explore lineage graph APIs",
@@ -452,7 +687,36 @@ func printPrettyJSON(data interface{}) error {
 func init() {
 	TenantCmd.AddCommand(tenantListCmd, tenantGetCmd, tenantCreateCmd)
 
-	RBACCmd.AddCommand(rbacRoleListCmd, rbacRoleCreateCmd, rbacCheckCmd)
+	rbacAccessRequestListCmd.Flags().String("tenant-id", "", "Filter by tenant ID")
+	rbacAccessRequestListCmd.Flags().String("principal-id", "", "Filter by principal ID")
+	rbacAccessRequestListCmd.Flags().String("status", "", "Filter by status (PENDING|APPROVED|REJECTED|EXPIRED|CANCELLED)")
+	rbacAccessRequestCreateCmd.Flags().String("tenant-id", "", "Tenant ID")
+	rbacAccessRequestCreateCmd.Flags().String("principal-id", "", "Principal ID")
+	rbacAccessRequestCreateCmd.Flags().String("resource-type", "", "Resource type")
+	rbacAccessRequestCreateCmd.Flags().String("resource-id", "", "Resource identifier")
+	rbacAccessRequestCreateCmd.Flags().String("action", "", "Requested action")
+	rbacAccessRequestCreateCmd.Flags().Int("duration", 0, "Duration in seconds (0 means no expiry)")
+	rbacAccessRequestCreateCmd.Flags().String("justification", "", "Optional business justification")
+	rbacAccessRequestApproveCmd.Flags().String("approved-by", "", "Actor approving the access request")
+	rbacAccessRequestRejectCmd.Flags().String("rejected-by", "", "Actor rejecting the access request")
+	rbacAccessRequestRejectCmd.Flags().String("reason", "", "Optional rejection reason")
+
+	RBACCmd.AddCommand(
+		rbacRoleListCmd,
+		rbacRoleCreateCmd,
+		rbacCheckCmd,
+		rbacAccessRequestListCmd,
+		rbacAccessRequestCreateCmd,
+		rbacAccessRequestApproveCmd,
+		rbacAccessRequestRejectCmd,
+	)
+
+	eventBusAckCmd.Flags().String("subscription-id", "", "Optional subscription ID for ack attribution")
+	eventBusAckCmd.Flags().String("acknowledged-by", "", "Actor acknowledging the event")
+	eventBusAckCmd.Flags().String("message", "", "Optional ack note")
+	eventBusDLQReplayCmd.Flags().String("replay-to-topic", "", "Optional destination topic for replay")
+	eventBusDLQReplayCmd.Flags().String("replayed-by", "", "Optional actor replaying the event")
+	EventBusCmd.AddCommand(eventBusAckCmd, eventBusDLQReplayCmd)
 
 	WebhookCmd.AddCommand(webhookListCmd, webhookCreateCmd, webhookTestCmd)
 
@@ -469,7 +733,16 @@ func init() {
 
 	traceSearchCmd.Flags().String("service", "", "Service name")
 	traceSearchCmd.Flags().Int("limit", 20, "Maximum results")
-	TraceCmd.AddCommand(traceSearchCmd, traceGetCmd)
+	traceIngestCmd.Flags().String("tenant-id", "", "Tenant ID")
+	traceIngestCmd.Flags().String("service", "", "Service name")
+	traceIngestCmd.Flags().String("operation", "", "Operation name")
+	traceIngestCmd.Flags().String("trace-id", "", "Optional explicit trace ID")
+	traceIngestionAuditListCmd.Flags().String("tenant-id", "", "Filter by tenant ID")
+	traceIngestionAuditListCmd.Flags().String("username", "", "Filter by username")
+	traceIngestionAuditListCmd.Flags().String("resource-type", "", "Filter by resource type (trace|span)")
+	traceIngestionAuditListCmd.Flags().String("result", "", "Filter by result (SUCCESS|FAILURE)")
+	traceIngestionAuditListCmd.Flags().Int("limit", 100, "Maximum audit records")
+	TraceCmd.AddCommand(traceSearchCmd, traceGetCmd, traceIngestCmd, traceIngestionAuditListCmd)
 
 	LineageAPICmd.AddCommand(lineageGraphCmd, lineageImpactCmd)
 

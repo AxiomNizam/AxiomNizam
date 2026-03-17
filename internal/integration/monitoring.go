@@ -9,6 +9,7 @@ import (
 	"example.com/axiomnizam/internal/apibanks"
 	"example.com/axiomnizam/internal/mesh"
 	"example.com/axiomnizam/internal/metrics"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // HealthStatus represents system health
@@ -47,18 +48,75 @@ type HealthMonitor struct {
 	dataMesh        *mesh.DataMesh
 	bankManager     *apibanks.APIBankManager
 	metrics         *metrics.Metrics
+	etcd            *clientv3.Client
+	stateKey        string
+}
+
+type healthMonitorState struct {
+	StartTime       time.Time                  `json:"startTime"`
+	LastCheckTimes  map[string]time.Time       `json:"lastCheckTimes"`
+	ComponentStatus map[string]ComponentHealth `json:"componentStatus"`
 }
 
 // NewHealthMonitor creates a new health monitor
 func NewHealthMonitor() *HealthMonitor {
-	return &HealthMonitor{
+	hm := &HealthMonitor{
 		startTime:       time.Now(),
 		lastCheckTimes:  make(map[string]time.Time),
 		componentStatus: make(map[string]ComponentHealth),
 		dataMesh:        mesh.GlobalDataMesh,
 		bankManager:     apibanks.GlobalAPIBankManager,
 		metrics:         metrics.GlobalMetrics,
+		etcd:            integrationEtcdClient(),
+		stateKey:        "axiomnizam:integration:healthmonitor:state",
 	}
+	hm.loadState()
+	return hm
+}
+
+func (hm *HealthMonitor) ConfigurePersistence(etcd *clientv3.Client) {
+	hm.mu.Lock()
+	hm.etcd = etcd
+	if hm.stateKey == "" {
+		hm.stateKey = "axiomnizam:integration:healthmonitor:state"
+	}
+	hm.mu.Unlock()
+	hm.loadState()
+}
+
+func (hm *HealthMonitor) loadState() {
+	if hm.etcd == nil {
+		return
+	}
+
+	var state healthMonitorState
+	if !loadStateFromEtcd(hm.etcd, hm.stateKey, &state) {
+		return
+	}
+
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+	if !state.StartTime.IsZero() {
+		hm.startTime = state.StartTime
+	}
+	if state.LastCheckTimes != nil {
+		hm.lastCheckTimes = state.LastCheckTimes
+	}
+	if state.ComponentStatus != nil {
+		hm.componentStatus = state.ComponentStatus
+	}
+}
+
+func (hm *HealthMonitor) persistStateLocked() {
+	if hm.etcd == nil {
+		return
+	}
+
+	saveStateToEtcd(hm.etcd, hm.stateKey, healthMonitorState{
+		StartTime:       hm.startTime,
+		LastCheckTimes:  hm.lastCheckTimes,
+		ComponentStatus: hm.componentStatus,
+	})
 }
 
 // CheckHealth performs a complete health check
@@ -96,6 +154,7 @@ func (hm *HealthMonitor) CheckHealth(ctx context.Context) *SystemHealth {
 
 	for _, comp := range health.Components {
 		hm.componentStatus[comp.Component] = comp
+		hm.lastCheckTimes[comp.Component] = comp.LastChecked
 
 		switch comp.Status {
 		case Healthy:
@@ -119,6 +178,8 @@ func (hm *HealthMonitor) CheckHealth(ctx context.Context) *SystemHealth {
 	} else {
 		health.Status = Healthy
 	}
+
+	hm.persistStateLocked()
 
 	return health
 }
@@ -318,6 +379,13 @@ type AlertManager struct {
 	maxAlerts        int
 	healthMonitor    *HealthMonitor
 	metricsCollector *PlatformMetricsCollector
+	etcd             *clientv3.Client
+	stateKey         string
+}
+
+type alertManagerState struct {
+	Alerts    []Alert `json:"alerts"`
+	MaxAlerts int     `json:"maxAlerts"`
 }
 
 // Alert represents a system alert
@@ -332,12 +400,60 @@ type Alert struct {
 
 // NewAlertManager creates alert manager
 func NewAlertManager(maxAlerts int) *AlertManager {
-	return &AlertManager{
+	am := &AlertManager{
 		alerts:           make([]Alert, 0, maxAlerts),
 		maxAlerts:        maxAlerts,
 		healthMonitor:    NewHealthMonitor(),
 		metricsCollector: NewPlatformMetricsCollector(),
+		etcd:             integrationEtcdClient(),
+		stateKey:         "axiomnizam:integration:alerts:state",
 	}
+	am.loadState()
+	return am
+}
+
+func (am *AlertManager) ConfigurePersistence(etcd *clientv3.Client) {
+	am.mu.Lock()
+	am.etcd = etcd
+	if am.stateKey == "" {
+		am.stateKey = "axiomnizam:integration:alerts:state"
+	}
+	if am.healthMonitor != nil {
+		am.healthMonitor.ConfigurePersistence(etcd)
+	}
+	am.mu.Unlock()
+	am.loadState()
+}
+
+func (am *AlertManager) loadState() {
+	if am.etcd == nil {
+		return
+	}
+
+	var state alertManagerState
+	if !loadStateFromEtcd(am.etcd, am.stateKey, &state) {
+		return
+	}
+
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	if state.Alerts != nil {
+		am.alerts = state.Alerts
+	}
+	if state.MaxAlerts > 0 {
+		am.maxAlerts = state.MaxAlerts
+	}
+}
+
+func (am *AlertManager) persistStateLocked() {
+	if am.etcd == nil {
+		return
+	}
+
+	saveStateToEtcd(am.etcd, am.stateKey, alertManagerState{
+		Alerts:    am.alerts,
+		MaxAlerts: am.maxAlerts,
+	})
 }
 
 // GenerateAlerts generates alerts based on system state
@@ -371,6 +487,7 @@ func (am *AlertManager) GenerateAlerts(ctx context.Context) []Alert {
 	if len(am.alerts) > am.maxAlerts {
 		am.alerts = am.alerts[len(am.alerts)-am.maxAlerts:]
 	}
+	am.persistStateLocked()
 
 	return newAlerts
 }

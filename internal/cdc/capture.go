@@ -4,22 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // ChangeEvent represents a data change event
 type ChangeEvent struct {
-	ID            string            `json:"id"`
-	Timestamp     time.Time         `json:"timestamp"`
-	TableName     string            `json:"table_name"`
-	Operation     string            `json:"operation"` // INSERT, UPDATE, DELETE
+	ID            string                 `json:"id"`
+	Timestamp     time.Time              `json:"timestamp"`
+	TableName     string                 `json:"table_name"`
+	Operation     string                 `json:"operation"` // INSERT, UPDATE, DELETE
 	BeforeData    map[string]interface{} `json:"before_data,omitempty"`
 	AfterData     map[string]interface{} `json:"after_data,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
-	SourceID      string            `json:"source_id"`
-	Sequence      int64             `json:"sequence"`
-	TransactionID string            `json:"transaction_id,omitempty"`
+	Metadata      map[string]string      `json:"metadata,omitempty"`
+	SourceID      string                 `json:"source_id"`
+	Sequence      int64                  `json:"sequence"`
+	TransactionID string                 `json:"transaction_id,omitempty"`
 }
 
 // CDCStream represents a stream of changes
@@ -34,18 +37,32 @@ type CDCStream struct {
 
 // ChangeDataCapture manages CDC operations
 type ChangeDataCapture struct {
-	mu               sync.RWMutex
-	streams          map[string]*CDCStream
-	events           []*ChangeEvent
-	webhooks         map[string]*WebhookSubscription
-	subscribers      map[string][]chan *ChangeEvent
-	eventSequence    int64
-	maxEvents        int
-	handlers         map[string]func(*ChangeEvent) error
-	pollingInterval  time.Duration
-	lastPolledAt     map[string]time.Time
-	eventBuffer      map[string][]*ChangeEvent
-	bufferSize       int
+	mu              sync.RWMutex
+	streams         map[string]*CDCStream
+	events          []*ChangeEvent
+	webhooks        map[string]*WebhookSubscription
+	subscribers     map[string][]chan *ChangeEvent
+	eventSequence   int64
+	maxEvents       int
+	handlers        map[string]func(*ChangeEvent) error
+	pollingInterval time.Duration
+	lastPolledAt    map[string]time.Time
+	eventBuffer     map[string][]*ChangeEvent
+	bufferSize      int
+	etcd            *clientv3.Client
+	stateKey        string
+}
+
+type changeDataCaptureState struct {
+	Streams         map[string]*CDCStream           `json:"streams"`
+	Events          []*ChangeEvent                  `json:"events"`
+	Webhooks        map[string]*WebhookSubscription `json:"webhooks"`
+	EventSequence   int64                           `json:"event_sequence"`
+	MaxEvents       int                             `json:"max_events"`
+	PollingInterval time.Duration                   `json:"polling_interval"`
+	LastPolledAt    map[string]time.Time            `json:"last_polled_at"`
+	EventBuffer     map[string][]*ChangeEvent       `json:"event_buffer"`
+	BufferSize      int                             `json:"buffer_size"`
 }
 
 // WebhookSubscription represents a webhook subscription
@@ -63,9 +80,9 @@ type WebhookSubscription struct {
 
 // RetryPolicy defines retry behavior
 type RetryPolicy struct {
-	MaxRetries      int
-	InitialBackoff  time.Duration
-	MaxBackoff      time.Duration
+	MaxRetries        int
+	InitialBackoff    time.Duration
+	MaxBackoff        time.Duration
 	BackoffMultiplier float64
 }
 
@@ -85,18 +102,107 @@ type SubscriptionFilter struct {
 }
 
 // NewChangeDataCapture creates a new CDC instance
-func NewChangeDataCapture() *ChangeDataCapture {
-	return &ChangeDataCapture{
-		streams:          make(map[string]*CDCStream),
-		events:           make([]*ChangeEvent, 0),
-		webhooks:         make(map[string]*WebhookSubscription),
-		subscribers:      make(map[string][]chan *ChangeEvent),
-		handlers:         make(map[string]func(*ChangeEvent) error),
-		pollingInterval:  5 * time.Second,
-		lastPolledAt:     make(map[string]time.Time),
-		eventBuffer:      make(map[string][]*ChangeEvent),
-		bufferSize:       1000,
-		maxEvents:        100000,
+func NewChangeDataCapture(etcd ...*clientv3.Client) *ChangeDataCapture {
+	var etcdClient *clientv3.Client
+	if len(etcd) > 0 {
+		etcdClient = etcd[0]
+	}
+
+	cdc := &ChangeDataCapture{
+		streams:         make(map[string]*CDCStream),
+		events:          make([]*ChangeEvent, 0),
+		webhooks:        make(map[string]*WebhookSubscription),
+		subscribers:     make(map[string][]chan *ChangeEvent),
+		handlers:        make(map[string]func(*ChangeEvent) error),
+		pollingInterval: 5 * time.Second,
+		lastPolledAt:    make(map[string]time.Time),
+		eventBuffer:     make(map[string][]*ChangeEvent),
+		bufferSize:      1000,
+		maxEvents:       100000,
+		etcd:            etcdClient,
+		stateKey:        "axiomnizam:cdc:core:state",
+	}
+	cdc.loadState()
+	return cdc
+}
+
+func (cdc *ChangeDataCapture) loadState() {
+	if cdc.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := cdc.etcd.Get(ctx, cdc.stateKey)
+	if err != nil {
+		log.Printf("cdc-core: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var state changeDataCaptureState
+	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+		log.Printf("cdc-core: failed to decode persisted state: %v", err)
+		return
+	}
+
+	if state.Streams != nil {
+		cdc.streams = state.Streams
+	}
+	if state.Events != nil {
+		cdc.events = state.Events
+	}
+	if state.Webhooks != nil {
+		cdc.webhooks = state.Webhooks
+	}
+	if state.LastPolledAt != nil {
+		cdc.lastPolledAt = state.LastPolledAt
+	}
+	if state.EventBuffer != nil {
+		cdc.eventBuffer = state.EventBuffer
+	}
+	cdc.eventSequence = state.EventSequence
+	if state.MaxEvents > 0 {
+		cdc.maxEvents = state.MaxEvents
+	}
+	if state.PollingInterval > 0 {
+		cdc.pollingInterval = state.PollingInterval
+	}
+	if state.BufferSize > 0 {
+		cdc.bufferSize = state.BufferSize
+	}
+}
+
+func (cdc *ChangeDataCapture) persistStateLocked() {
+	if cdc.etcd == nil {
+		return
+	}
+
+	state := changeDataCaptureState{
+		Streams:         cdc.streams,
+		Events:          cdc.events,
+		Webhooks:        cdc.webhooks,
+		EventSequence:   cdc.eventSequence,
+		MaxEvents:       cdc.maxEvents,
+		PollingInterval: cdc.pollingInterval,
+		LastPolledAt:    cdc.lastPolledAt,
+		EventBuffer:     cdc.eventBuffer,
+		BufferSize:      cdc.bufferSize,
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		log.Printf("cdc-core: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := cdc.etcd.Put(ctx, cdc.stateKey, string(payload)); err != nil {
+		log.Printf("cdc-core: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -130,6 +236,7 @@ func (cdc *ChangeDataCapture) CaptureChange(ctx context.Context, event *ChangeEv
 
 	// Update last polled
 	cdc.lastPolledAt[event.TableName] = time.Now()
+	cdc.persistStateLocked()
 
 	return nil
 }
@@ -252,6 +359,7 @@ func (cdc *ChangeDataCapture) AddWebhook(webhook *WebhookSubscription) error {
 	}
 
 	cdc.webhooks[webhook.ID] = webhook
+	cdc.persistStateLocked()
 	return nil
 }
 
@@ -265,6 +373,7 @@ func (cdc *ChangeDataCapture) RemoveWebhook(webhookID string) error {
 	}
 
 	delete(cdc.webhooks, webhookID)
+	cdc.persistStateLocked()
 	return nil
 }
 
@@ -340,6 +449,7 @@ func (cdc *ChangeDataCapture) CreateStream(tableName string) (*CDCStream, error)
 	}
 
 	cdc.streams[streamID] = stream
+	cdc.persistStateLocked()
 	return stream, nil
 }
 
@@ -409,14 +519,14 @@ func (cdc *ChangeDataCapture) GetCDCStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_events":      len(cdc.events),
-		"total_streams":     len(cdc.streams),
-		"total_webhooks":    len(cdc.webhooks),
-		"active_streams":    cdc.countActiveStreams(),
-		"insert_events":     insertCount,
-		"update_events":     updateCount,
-		"delete_events":     deleteCount,
-		"sequence_number":   cdc.eventSequence,
+		"total_events":       len(cdc.events),
+		"total_streams":      len(cdc.streams),
+		"total_webhooks":     len(cdc.webhooks),
+		"active_streams":     cdc.countActiveStreams(),
+		"insert_events":      insertCount,
+		"update_events":      updateCount,
+		"delete_events":      deleteCount,
+		"sequence_number":    cdc.eventSequence,
 		"buffer_utilization": cdc.getBufferUtilization(),
 	}
 }

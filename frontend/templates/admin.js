@@ -15,6 +15,10 @@ let filteredMethod = 'ALL';
 let currentCSVUploadId = null;
 let currentDashMappings = [];
 let builderDataServers = [];
+let customAPIById = {};
+let graphQLAPIById = {};
+let graphQLFormMode = 'create';
+let editingGraphQLApiId = '';
 
 const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
@@ -60,6 +64,7 @@ window.addEventListener('DOMContentLoaded', function() {
     setupScanDropZone();
     loadScannerHealth();
     applyRoleRestrictions();
+    initAdminCertificateActions();
 });
 
 function switchTab(tabName) {
@@ -76,8 +81,10 @@ function switchTab(tabName) {
     if (tabName === 'csv-upload') { loadCSVHistory(); }
     if (tabName === 'converter') { loadConverterDropdowns(); loadConversionHistory(); }
     if (tabName === 'file-scanner') { loadScanHistory(); loadScannerHealth(); }
+    if (tabName === 'api-testing') { loadAPIs(); }
     if (tabName === 'graphql-studio') { loadAdminGraphQLSchemaInfo(); }
     if (tabName === 'control-plane') { refreshAdminControlPlaneData(); }
+    if (tabName === 'settings') { loadAdminCertificatePanel(); }
 }
 
 // ===================================================================
@@ -108,6 +115,7 @@ function loadCustomAPIs() {
 
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
+        customAPIById = {};
         var el = document.getElementById('apiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -118,9 +126,13 @@ function loadCustomAPIs() {
             '<th>Method</th><th>Name</th><th>Path</th><th>Category</th><th>Source DB</th><th>Source Server</th><th>Status</th><th>Hits</th><th>Actions</th>' +
             '</tr></thead><tbody>';
         list.forEach(function(api) {
+            customAPIById[api.id] = api;
             var safeId = api.id.replace(/'/g, "\\'");
             var actionsHtml = '<button class="btn-sm btn-test" onclick="testCustomAPI(\'' + safeId + '\')">Test</button> ';
             if (canModify()) {
+                var isActive = (api.status || '').toLowerCase() === 'active';
+                actionsHtml += '<button class="btn-sm btn-edit" onclick="openEditCustomAPI(\'' + safeId + '\')">Edit</button> ';
+                actionsHtml += '<button class="btn-sm btn-toggle" onclick="toggleCustomAPIStatus(\'' + safeId + '\')">' + (isActive ? 'Deactivate' : 'Activate') + '</button> ';
                 actionsHtml += '<button class="btn-sm btn-del" onclick="deleteCustomAPI(\'' + safeId + '\')">Del</button>';
             }
             html += '<tr>' +
@@ -162,6 +174,19 @@ function toggleCacheTTL() {
     if (group) group.style.display = checked ? 'block' : 'none';
 }
 
+function countSQLPlaceholders(query) {
+    var m = String(query || '').match(/\?/g);
+    return m ? m.length : 0;
+}
+
+function getSQLTemplateFromAPI(api) {
+    if (api && api.sql_template) return String(api.sql_template).trim();
+    if (api && api.mock_response && typeof api.mock_response === 'object' && api.mock_response.query) {
+        return String(api.mock_response.query).trim();
+    }
+    return '';
+}
+
 function submitCreateAPI(e) {
     e.preventDefault();
     var mockRaw = document.getElementById('apiMockResponseInput').value.trim();
@@ -180,6 +205,9 @@ function submitCreateAPI(e) {
         });
     }
 
+    var sqlTemplate = (document.getElementById('apiSQLTemplateInput').value || '').trim();
+    var sqlPlaceholderCount = countSQLPlaceholders(sqlTemplate);
+
     var body = {
         api_type: 'rest',
         name: document.getElementById('apiNameInput').value,
@@ -193,9 +221,19 @@ function submitCreateAPI(e) {
         rate_limit: parseInt(document.getElementById('apiRateLimitInput').value) || 0,
         cache_enabled: document.getElementById('apiCacheInput').checked,
         cache_ttl: parseInt(document.getElementById('apiCacheTTLInput').value) || 300,
+        sql_template: sqlTemplate,
         mock_response: mockResp,
         query_params: queryParams
     };
+
+    if (body.source_database && !body.sql_template) {
+        alert('SQL Template is required when Source Database is selected.');
+        return;
+    }
+    if (sqlPlaceholderCount > 0 && queryParams.length === 0) {
+        alert('Define Query Parameters for each SQL placeholder (?); one parameter per placeholder in order.');
+        return;
+    }
 
     postJSON('/api/v1/builder/apis', body).then(function(d) {
         if (d.status === 'success') {
@@ -209,13 +247,17 @@ function submitCreateAPI(e) {
     });
 }
 
-function loadBuilderDataSources() {
+function loadBuilderDataSources(onDone) {
     fetchJSON('/api/admin/database/servers').then(function(d) {
         builderDataServers = d.servers || [];
 
         var dbSelect = document.getElementById('apiSourceDatabaseInput');
         var gqlDbSelect = document.getElementById('gqlSourceDatabaseInput');
-        if (!dbSelect && !gqlDbSelect) return;
+        var editDbSelect = document.getElementById('editApiSourceDatabaseInput');
+        if (!dbSelect && !gqlDbSelect && !editDbSelect) {
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
 
         var existing = {};
         DEFAULT_BUILDER_DATABASES.forEach(function(db) { existing[db] = true; });
@@ -237,13 +279,20 @@ function loadBuilderDataSources() {
 
         populateDatabaseSelect(dbSelect);
         populateDatabaseSelect(gqlDbSelect);
+        populateDatabaseSelect(editDbSelect);
 
         updateBuilderSourceServers();
         updateGraphQLBuilderSourceServers();
+        updateEditBuilderSourceServers();
+        if (typeof onDone === 'function') onDone();
     }).catch(function() {
         var dbSelect = document.getElementById('apiSourceDatabaseInput');
         var gqlDbSelect = document.getElementById('gqlSourceDatabaseInput');
-        if (!dbSelect && !gqlDbSelect) return;
+        var editDbSelect = document.getElementById('editApiSourceDatabaseInput');
+        if (!dbSelect && !gqlDbSelect && !editDbSelect) {
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
 
         function populateDefault(selectEl) {
             if (!selectEl) return;
@@ -259,15 +308,40 @@ function loadBuilderDataSources() {
 
         populateDefault(dbSelect);
         populateDefault(gqlDbSelect);
+        populateDefault(editDbSelect);
 
         updateBuilderSourceServers();
         updateGraphQLBuilderSourceServers();
+        updateEditBuilderSourceServers();
+        if (typeof onDone === 'function') onDone();
     });
 }
 
 function updateBuilderSourceServers() {
     var dbTypeEl = document.getElementById('apiSourceDatabaseInput');
     var serverEl = document.getElementById('apiSourceServerInput');
+    if (!dbTypeEl || !serverEl) return;
+
+    var selectedDB = (dbTypeEl.value || '').trim();
+    var previouslySelected = serverEl.value;
+    var filtered = (builderDataServers || []).filter(function(s) {
+        return !selectedDB || s.db_type === selectedDB;
+    });
+
+    serverEl.innerHTML = '<option value="">Default server for selected database</option>';
+    filtered.forEach(function(s) {
+        var name = (s.name || s.key || 'server') + (s.connected ? '' : ' (disconnected)');
+        serverEl.innerHTML += '<option value="' + escapeHtml(s.key || '') + '">' + escapeHtml(name) + '</option>';
+    });
+
+    if (previouslySelected && filtered.some(function(s) { return s.key === previouslySelected; })) {
+        serverEl.value = previouslySelected;
+    }
+}
+
+function updateEditBuilderSourceServers() {
+    var dbTypeEl = document.getElementById('editApiSourceDatabaseInput');
+    var serverEl = document.getElementById('editApiSourceServerInput');
     if (!dbTypeEl || !serverEl) return;
 
     var selectedDB = (dbTypeEl.value || '').trim();
@@ -310,6 +384,7 @@ function loadGraphQLCustomAPIs() {
 
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
+        graphQLAPIById = {};
         var el = document.getElementById('graphqlApiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -322,9 +397,13 @@ function loadGraphQLCustomAPIs() {
             '</tr></thead><tbody>';
 
         list.forEach(function(api) {
+            graphQLAPIById[api.id] = api;
             var safeId = api.id.replace(/'/g, "\\'");
             var actionsHtml = '<button class="btn-sm btn-test" onclick="testGraphQLCustomAPI(\'' + safeId + '\')">Test</button> ';
             if (canModify()) {
+                var isActive = (api.status || '').toLowerCase() === 'active';
+                actionsHtml += '<button class="btn-sm btn-edit" onclick="openEditGraphQLCustomAPI(\'' + safeId + '\')">Edit</button> ';
+                actionsHtml += '<button class="btn-sm btn-toggle" onclick="toggleGraphQLCustomAPIStatus(\'' + safeId + '\')">' + (isActive ? 'Deactivate' : 'Activate') + '</button> ';
                 actionsHtml += '<button class="btn-sm btn-del" onclick="deleteGraphQLCustomAPI(\'' + safeId + '\')">Del</button>';
             }
             html += '<tr>' +
@@ -346,6 +425,17 @@ function loadGraphQLCustomAPIs() {
         var el = document.getElementById('graphqlApiBuilderList');
         if (el) el.innerHTML = '<div class="error-state">Failed to load GraphQL APIs</div>';
     });
+}
+
+function resetGraphQLFormMode() {
+    graphQLFormMode = 'create';
+    editingGraphQLApiId = '';
+
+    var titleEl = document.querySelector('#createGraphQLAPIModal .modal-header h2');
+    if (titleEl) titleEl.textContent = '🧩 Create GraphQL API';
+
+    var submitBtn = document.querySelector('#createGraphQLAPIForm button[type="submit"]');
+    if (submitBtn) submitBtn.textContent = 'Create GraphQL API';
 }
 
 function updateGraphQLBuilderSourceServers() {
@@ -372,11 +462,13 @@ function updateGraphQLBuilderSourceServers() {
 
 function openCreateGraphQLAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin, manager, or system-manager.'); return; }
+    resetGraphQLFormMode();
     loadBuilderDataSources();
     document.getElementById('createGraphQLAPIModal').style.display = 'flex';
 }
 
 function closeCreateGraphQLAPIModal() {
+    resetGraphQLFormMode();
     document.getElementById('createGraphQLAPIModal').style.display = 'none';
     document.getElementById('createGraphQLAPIForm').reset();
     var ttlGroup = document.getElementById('gqlCacheTTLGroup');
@@ -416,7 +508,6 @@ function submitCreateGraphQLAPI(e) {
     }
 
     var body = {
-        api_type: 'graphql',
         name: document.getElementById('gqlApiNameInput').value,
         method: 'POST',
         path: (document.getElementById('gqlPathInput').value || '/api/graphql').trim(),
@@ -434,14 +525,28 @@ function submitCreateGraphQLAPI(e) {
         query_params: parseBuilderParams(document.getElementById('gqlQueryParamsInput').value.trim())
     };
 
-    postJSON('/api/v1/builder/apis', body).then(function(d) {
+    var isEditMode = graphQLFormMode === 'edit' && !!editingGraphQLApiId;
+    var req;
+    if (isEditMode) {
+        body.api_type = 'graphql';
+        req = putJSON('/api/v1/builder/apis/' + encodeURIComponent(editingGraphQLApiId), body);
+    } else {
+        body.api_type = 'graphql';
+        req = postJSON('/api/v1/builder/apis', body);
+    }
+
+    req.then(function(d) {
         if (d.status === 'success') {
             closeCreateGraphQLAPIModal();
             loadGraphQLBuilderSummary();
             loadGraphQLCustomAPIs();
-            addLog('Created GraphQL API: ' + body.name, 'info');
+            if (isEditMode) {
+                addLog('Updated GraphQL API: ' + body.name, 'info');
+            } else {
+                addLog('Created GraphQL API: ' + body.name, 'info');
+            }
         } else {
-            alert(d.error || 'Failed to create GraphQL API');
+            alert(d.error || 'Failed to save GraphQL API');
         }
     });
 }
@@ -455,7 +560,9 @@ function testGraphQLCustomAPI(id) {
 
 function deleteGraphQLCustomAPI(id) {
     if (!canModify()) { alert('You do not have permission to delete APIs. Contact an admin, manager, or system-manager.'); return; }
-    if (!confirm('Delete this GraphQL API?')) return;
+    var api = graphQLAPIById[id] || {};
+    var apiName = api.name || id;
+    if (!confirmDeleteAPI('GraphQL API', apiName)) return;
     deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
         if (d.status === 'success' || d.status === 'ok') {
             addLog('Deleted GraphQL API: ' + id, 'warn');
@@ -467,10 +574,181 @@ function deleteGraphQLCustomAPI(id) {
     });
 }
 
+function openEditGraphQLCustomAPI(id) {
+    if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+    var api = graphQLAPIById[id];
+    if (!api) { alert('GraphQL API details not found. Please refresh and try again.'); return; }
+
+    graphQLFormMode = 'edit';
+    editingGraphQLApiId = id;
+
+    var titleEl = document.querySelector('#createGraphQLAPIModal .modal-header h2');
+    if (titleEl) titleEl.textContent = '✏️ Edit GraphQL API';
+    var submitBtn = document.querySelector('#createGraphQLAPIForm button[type="submit"]');
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+
+    loadBuilderDataSources(function() {
+        document.getElementById('gqlApiNameInput').value = api.name || '';
+        document.getElementById('gqlApiCategoryInput').value = api.category || 'custom';
+        document.getElementById('gqlOperationNameInput').value = api.graphql_operation_name || '';
+        document.getElementById('gqlPathInput').value = (api.path || '/api/graphql').trim();
+        document.getElementById('gqlSourceDatabaseInput').value = api.source_database || '';
+        updateGraphQLBuilderSourceServers();
+        document.getElementById('gqlSourceServerInput').value = api.source_server || '';
+        document.getElementById('gqlDescInput').value = api.description || '';
+        document.getElementById('gqlQueryInput').value = api.graphql_query || '';
+        document.getElementById('gqlAuthInput').checked = !!api.auth_required;
+        document.getElementById('gqlRateLimitInput').value = api.rate_limit || 0;
+        document.getElementById('gqlCacheInput').checked = !!api.cache_enabled;
+        document.getElementById('gqlCacheTTLInput').value = api.cache_ttl || 300;
+        toggleGraphQLCacheTTL();
+        document.getElementById('gqlMockResponseInput').value = api.mock_response ? JSON.stringify(api.mock_response, null, 2) : '';
+
+        var qp = Array.isArray(api.query_params) ? api.query_params : [];
+        var qpLines = qp.map(function(p) {
+            var pName = (p && p.name) ? p.name : '';
+            var pType = (p && p.type) ? p.type : 'string';
+            var pReq = (p && p.required) ? 'true' : 'false';
+            return pName + ':' + pType + ':' + pReq;
+        });
+        document.getElementById('gqlQueryParamsInput').value = qpLines.join('\n');
+
+        document.getElementById('createGraphQLAPIModal').style.display = 'flex';
+    });
+}
+
+function toggleGraphQLCustomAPIStatus(id) {
+    if (!canModify()) { alert('You do not have permission to update API status. Contact an admin, manager, or system-manager.'); return; }
+
+    var api = graphQLAPIById[id];
+    if (!api) { alert('GraphQL API details not found. Please refresh and try again.'); return; }
+
+    var currentStatus = String(api.status || '').toLowerCase();
+    var nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
+
+    putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), { status: nextStatus }).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') {
+            addLog('Updated GraphQL API status: ' + id + ' -> ' + nextStatus, 'info');
+            loadGraphQLBuilderSummary();
+            loadGraphQLCustomAPIs();
+        } else {
+            alert(d.error || 'Failed to update GraphQL API status');
+        }
+    }).catch(function() {
+        alert('Failed to update GraphQL API status');
+    });
+}
+
 function testCustomAPI(id) {
     postJSON('/api/v1/builder/apis/' + id + '/test', {}).then(function(d) {
         showResponse('API Test Result', 200, d, (d.method || 'GET') + ' ' + (d.path || ''));
         addLog('Tested API: ' + id, 'info');
+    });
+}
+
+function openEditCustomAPI(id) {
+    if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+    var api = customAPIById[id];
+    if (!api) { alert('API details not found. Please refresh and try again.'); return; }
+
+    loadBuilderDataSources(function() {
+        document.getElementById('editApiIdInput').value = api.id || '';
+        document.getElementById('editApiNameInput').value = api.name || '';
+        document.getElementById('editApiMethodInput').value = api.method || 'GET';
+        document.getElementById('editApiPathInput').value = api.path || '';
+        document.getElementById('editApiCategoryInput').value = api.category || 'custom';
+        document.getElementById('editApiSourceDatabaseInput').value = api.source_database || '';
+        updateEditBuilderSourceServers();
+        document.getElementById('editApiSourceServerInput').value = api.source_server || '';
+        document.getElementById('editApiDescInput').value = api.description || '';
+        document.getElementById('editApiSQLTemplateInput').value = getSQLTemplateFromAPI(api);
+        document.getElementById('editApiAuthInput').checked = !!api.auth_required;
+        document.getElementById('editApiCacheInput').checked = !!api.cache_enabled;
+        document.getElementById('editApiCacheTTLInput').value = api.cache_ttl || 300;
+        toggleEditCacheTTL();
+        document.getElementById('editApiRateLimitInput').value = api.rate_limit || 0;
+        document.getElementById('editApiStatusInput').value = api.status || 'active';
+        document.getElementById('editAPIModal').style.display = 'flex';
+    });
+}
+
+function closeEditAPIModal() {
+    document.getElementById('editAPIModal').style.display = 'none';
+    document.getElementById('editAPIForm').reset();
+    var ttlGroup = document.getElementById('editCacheTTLGroup');
+    if (ttlGroup) ttlGroup.style.display = 'none';
+}
+
+function toggleEditCacheTTL() {
+    var checked = document.getElementById('editApiCacheInput').checked;
+    var group = document.getElementById('editCacheTTLGroup');
+    if (group) group.style.display = checked ? 'block' : 'none';
+}
+
+function submitEditAPI(e) {
+    e.preventDefault();
+    if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+
+    var id = document.getElementById('editApiIdInput').value;
+    if (!id) {
+        alert('Invalid API ID');
+        return;
+    }
+
+    var body = {
+        name: document.getElementById('editApiNameInput').value,
+        method: document.getElementById('editApiMethodInput').value,
+        path: document.getElementById('editApiPathInput').value,
+        description: document.getElementById('editApiDescInput').value,
+        sql_template: (document.getElementById('editApiSQLTemplateInput').value || '').trim(),
+        category: document.getElementById('editApiCategoryInput').value,
+        source_database: (document.getElementById('editApiSourceDatabaseInput').value || '').trim(),
+        source_server: (document.getElementById('editApiSourceServerInput').value || '').trim(),
+        auth_required: document.getElementById('editApiAuthInput').checked,
+        cache_enabled: document.getElementById('editApiCacheInput').checked,
+        cache_ttl: parseInt(document.getElementById('editApiCacheTTLInput').value, 10) || 300,
+        rate_limit: parseInt(document.getElementById('editApiRateLimitInput').value, 10) || 0,
+        status: document.getElementById('editApiStatusInput').value
+    };
+
+    if (body.source_database && !body.sql_template) {
+        alert('SQL Template is required when Source Database is selected.');
+        return;
+    }
+
+    putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), body).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') {
+            closeEditAPIModal();
+            loadBuilderSummary();
+            loadCustomAPIs();
+            addLog('Updated API: ' + id, 'info');
+        } else {
+            alert(d.error || 'Failed to update API');
+        }
+    }).catch(function() {
+        alert('Failed to update API');
+    });
+}
+
+function toggleCustomAPIStatus(id) {
+    if (!canModify()) { alert('You do not have permission to update API status. Contact an admin, manager, or system-manager.'); return; }
+
+    var api = customAPIById[id];
+    if (!api) { alert('API details not found. Please refresh and try again.'); return; }
+
+    var currentStatus = String(api.status || '').toLowerCase();
+    var nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
+
+    putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), { status: nextStatus }).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') {
+            addLog('Updated API status: ' + id + ' -> ' + nextStatus, 'info');
+            loadBuilderSummary();
+            loadCustomAPIs();
+        } else {
+            alert(d.error || 'Failed to update API status');
+        }
+    }).catch(function() {
+        alert('Failed to update API status');
     });
 }
 
@@ -740,49 +1018,146 @@ function loadConversionHistory() {
 // API Testing (original functionality)
 // ===================================================================
 function loadAPIs() {
-    var apiCategories = {
-        'Health & Status': [
-            { method: 'GET', path: '/health', url: BACKEND_URL + '/health', description: 'Health check', auth: false },
-            { method: 'GET', path: '/status', url: BACKEND_URL + '/status', description: 'Check all connections', auth: false },
-        ],
-        'Notifications': [
-            { method: 'POST', path: '/api/notifications/send', url: BACKEND_URL + '/api/notifications/send', description: 'Send custom notification', auth: true, body: {title: 'Test', message: 'Test notification'} },
-            { method: 'POST', path: '/api/notifications/health', url: BACKEND_URL + '/api/notifications/health', description: 'Send health notification', auth: true },
-            { method: 'POST', path: '/api/notifications/status', url: BACKEND_URL + '/api/notifications/status', description: 'Send status notification', auth: true },
-        ],
-        'Admin - Database': [
-            { method: 'GET', path: '/api/admin/database/list', url: BACKEND_URL + '/api/admin/database/list?db_type=mysql', description: 'List databases', auth: true },
-            { method: 'POST', path: '/api/admin/database/create', url: BACKEND_URL + '/api/admin/database/create', description: 'Create database', auth: true, body: {database_name: 'test_db', db_type: 'mysql'} },
-        ],
-        'MySQL CRUD': [
-            { method: 'GET', path: '/api/mysql/users', url: BACKEND_URL + '/api/mysql/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/mysql/users', url: BACKEND_URL + '/api/mysql/users', description: 'Create user', auth: true, body: {name: 'John Doe', email: 'john@example.com'} },
-        ],
-        'PostgreSQL CRUD': [
-            { method: 'GET', path: '/api/postgres/users', url: BACKEND_URL + '/api/postgres/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/postgres/users', url: BACKEND_URL + '/api/postgres/users', description: 'Create user', auth: true, body: {name: 'Jane Doe', email: 'jane@example.com'} },
-        ],
-    };
-
-    var html = '';
-    for (var category in apiCategories) {
-        var apis = apiCategories[category];
-        html += '<div class="api-category"><div class="category-header">' + category + '</div><div class="api-items">';
-        for (var i = 0; i < apis.length; i++) {
-            var api = apis[i];
-            html += '<button class="api-test-btn api-method-' + api.method.toLowerCase() + '" ' +
-                'onclick="testAPI(\'' + api.method + '\', \'' + api.url + '\', ' +
-                (api.body ? JSON.stringify(api.body).replace(/'/g, '&#39;') : 'null') + ', \'' + api.description + '\')">' +
-                '<span class="api-method ' + api.method.toLowerCase() + '">' + api.method + '</span>' +
-                '<span style="font-weight:500">' + api.path + '</span>' +
-                '<span style="font-size:0.85em;color:#999">' + api.description + '</span>' +
-                '</button>';
-        }
-        html += '</div></div>';
-    }
-
     var el = document.getElementById('apiCategories');
-    if (el) el.innerHTML = html;
+    if (el) el.innerHTML = '<div class="loading">Loading custom runtime endpoints...</div>';
+
+    Promise.all([
+        fetchJSON('/api/v1/builder/apis?api_type=rest&status=active').catch(function() { return { apis: [] }; }),
+        fetchJSON('/api/v1/builder/apis?api_type=graphql&status=active').catch(function() { return { apis: [] }; })
+    ]).then(function(results) {
+        var restAPIs = (results[0] && results[0].apis) ? results[0].apis : [];
+        var graphqlAPIs = (results[1] && results[1].apis) ? results[1].apis : [];
+
+        var categories = {
+            'Core Platform': [
+                { method: 'GET', path: '/health', url: BACKEND_URL + '/health', description: 'Health check', body: null },
+                { method: 'GET', path: '/status', url: BACKEND_URL + '/status', description: 'Platform status', body: null }
+            ],
+            'Notifications': [
+                {
+                    method: 'POST',
+                    path: '/api/v1/notifications/send',
+                    url: BACKEND_URL + '/api/v1/notifications/send',
+                    description: 'Send custom notification to Discord',
+                    body: {
+                        title: 'AxiomNizam Notification',
+                        message: 'Notification API restored and working.',
+                        type: 'info'
+                    }
+                },
+                {
+                    method: 'POST',
+                    path: '/api/v1/notifications/health',
+                    url: BACKEND_URL + '/api/v1/notifications/health',
+                    description: 'Send health check notification',
+                    body: null
+                },
+                {
+                    method: 'POST',
+                    path: '/api/v1/notifications/status',
+                    url: BACKEND_URL + '/api/v1/notifications/status',
+                    description: 'Send platform status notification',
+                    body: null
+                },
+                {
+                    method: 'GET',
+                    path: '/api/v1/notifications/status',
+                    url: BACKEND_URL + '/api/v1/notifications/status',
+                    description: 'Get notification service status',
+                    body: null
+                }
+            ],
+            'Custom REST Runtime (API Builder)': restAPIs.map(function(api) {
+                var method = String(api.method || 'GET').toUpperCase();
+                var runtimePath = normalizeRuntimePath(api.path || '/');
+                var url = BACKEND_URL + '/api/custom' + (runtimePath === '/' ? '' : runtimePath);
+                var body = null;
+                if (method !== 'GET') {
+                    var paramsBody = {};
+                    (api.query_params || []).forEach(function(p) {
+                        paramsBody[p.name] = sampleParamValue(p);
+                    });
+                    body = { params: paramsBody };
+                } else if ((api.query_params || []).length > 0) {
+                    var queryPairs = [];
+                    api.query_params.forEach(function(p) {
+                        queryPairs.push(encodeURIComponent(p.name) + '=' + encodeURIComponent(sampleParamValue(p)));
+                    });
+                    if (queryPairs.length > 0) {
+                        url += (url.indexOf('?') >= 0 ? '&' : '?') + queryPairs.join('&');
+                    }
+                }
+
+                return {
+                    method: method,
+                    path: '/api/custom' + (runtimePath === '/' ? '' : runtimePath),
+                    url: url,
+                    description: api.name || 'Custom runtime API',
+                    body: body
+                };
+            }),
+            'Custom GraphQL Runtime (API Builder)': graphqlAPIs.map(function(api) {
+                return {
+                    method: String(api.method || 'POST').toUpperCase(),
+                    path: api.path || '/api/graphql',
+                    url: BACKEND_URL + normalizeRuntimePath(api.path || '/api/graphql'),
+                    description: api.name || 'Custom GraphQL API',
+                    body: {
+                        query: api.graphql_query || 'query { __typename }',
+                        operationName: api.graphql_operation_name || '',
+                        variables: {}
+                    }
+                };
+            })
+        };
+
+        var html = '';
+        for (var category in categories) {
+            var apis = categories[category] || [];
+            if (apis.length === 0) continue;
+            html += '<div class="api-category"><div class="category-header">' + escapeHtml(category) + '</div><div class="api-items">';
+            for (var i = 0; i < apis.length; i++) {
+                var api = apis[i];
+                html += '<button class="api-test-btn api-method-' + String(api.method || 'GET').toLowerCase() + '" ' +
+                    'onclick="testAPI(\'' + api.method + '\', \'' + api.url + '\', ' +
+                    (api.body ? JSON.stringify(api.body).replace(/'/g, '&#39;') : 'null') + ', \'' + escapeHtml(api.description).replace(/'/g, '&#39;') + '\')">' +
+                    '<span class="api-method ' + String(api.method || 'GET').toLowerCase() + '">' + escapeHtml(String(api.method || 'GET')) + '</span>' +
+                    '<span style="font-weight:500">' + escapeHtml(api.path) + '</span>' +
+                    '<span style="font-size:0.85em;color:#999">' + escapeHtml(api.description) + '</span>' +
+                    '</button>';
+            }
+            html += '</div></div>';
+        }
+
+        if (!html) {
+            html = '<div class="empty-state">No custom APIs available yet. Create APIs in API Builder and return here to test runtime endpoints.</div>';
+        }
+
+        if (el) el.innerHTML = html;
+        filterAPIs();
+    }).catch(function() {
+        if (el) el.innerHTML = '<div class="error-state">Failed to load runtime endpoints</div>';
+    });
+}
+
+function normalizeRuntimePath(path) {
+    var normalized = '/' + String(path || '').trim().replace(/^\/+|\/+$/g, '');
+    if (normalized === '/api/custom') return '/';
+    if (normalized.indexOf('/api/custom/') === 0) {
+        normalized = normalized.replace('/api/custom', '');
+        normalized = '/' + normalized.trim().replace(/^\/+|\/+$/g, '');
+    }
+    if (normalized === '/api/graphql') return '/api/graphql';
+    return normalized;
+}
+
+function sampleParamValue(param) {
+    if (!param) return 'sample';
+    if (param.default && String(param.default).trim() !== '') return param.default;
+    var t = String(param.type || '').toLowerCase();
+    if (t === 'int' || t === 'integer' || t === 'number' || t === 'float' || t === 'decimal') return 1;
+    if (t === 'bool' || t === 'boolean') return true;
+    return 'sample';
 }
 
 function filterAPIs() {
@@ -811,7 +1186,7 @@ function testAPI(method, url, body, description) {
         headers: getAuthHeaders()
     };
 
-    if (body && (method === 'POST' || method === 'PUT')) {
+    if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
         options.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
 
@@ -1197,6 +1572,79 @@ function refreshAdminControlPlaneData() {
     });
 }
 
+function getAdminCertName() {
+    var el = document.getElementById('adminCertName');
+    if (!el) return '';
+    return (el.value || '').trim();
+}
+
+function setAdminCertificateOutput(title, payload) {
+    var el = document.getElementById('adminCertificateOutput');
+    if (!el) return;
+    el.textContent = title + '\n\n' + JSON.stringify(payload, null, 2);
+}
+
+function loadAdminCertificatePanel() {
+    var el = document.getElementById('adminCertificateOutput');
+    if (el && !el.textContent.trim()) {
+        el.textContent = 'Kubernetes certificate status will appear here.';
+    }
+}
+
+function initAdminCertificateActions() {
+    var checkBtn = document.getElementById('adminCertCheckBtn');
+    var dryRunBtn = document.getElementById('adminCertDryRunBtn');
+    var renewBtn = document.getElementById('adminCertRenewBtn');
+
+    if (checkBtn && !checkBtn.dataset.bound) {
+        checkBtn.addEventListener('click', function() { adminCheckCertificateExpiry(); });
+        checkBtn.dataset.bound = '1';
+    }
+    if (dryRunBtn && !dryRunBtn.dataset.bound) {
+        dryRunBtn.addEventListener('click', function() { adminRenewCertificate(true); });
+        dryRunBtn.dataset.bound = '1';
+    }
+    if (renewBtn && !renewBtn.dataset.bound) {
+        renewBtn.addEventListener('click', function() { adminRenewCertificate(false); });
+        renewBtn.dataset.bound = '1';
+    }
+}
+
+function adminCheckCertificateExpiry() {
+    if (!ensureControlPlaneWrite('view certificate status')) return;
+
+    var cert = getAdminCertName();
+    var path = '/api/admin/certificates/status';
+    if (cert) {
+        path += '?cert=' + encodeURIComponent(cert);
+    }
+
+    adminApiCall('GET', path).then(function(result) {
+        setAdminCertificateOutput('Certificate status', result.data);
+        addLog('Checked certificate expiry' + (cert ? ' for ' + cert : ''), 'info');
+    }).catch(function(err) {
+        setAdminCertificateOutput('Certificate status failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+function adminRenewCertificate(dryRun) {
+    if (!ensureControlPlaneWrite('renew certificates')) return;
+
+    var cert = getAdminCertName();
+    var body = { dry_run: !!dryRun };
+    if (cert) body.cert = cert;
+
+    adminApiCall('POST', '/api/admin/certificates/renew', body).then(function(result) {
+        setAdminCertificateOutput(dryRun ? 'Certificate renew dry run' : 'Certificate renew result', result.data);
+        addLog((dryRun ? 'Prepared' : 'Triggered') + ' certificate renewal' + (cert ? ' for ' + cert : ''), dryRun ? 'info' : 'warn');
+    }).catch(function(err) {
+        setAdminCertificateOutput('Certificate renew failed', { error: err.message, details: err.response || {} });
+    });
+}
+
+window.adminCheckCertificateExpiry = adminCheckCertificateExpiry;
+window.adminRenewCertificate = adminRenewCertificate;
+
 // ===================================================================
 // File Scanner (SafeGate Pipeline)
 // ===================================================================
@@ -1329,8 +1777,10 @@ window.onclick = function(event) {
     if (event.target === responseModal) responseModal.style.display = 'none';
     var createModal = document.getElementById('createAPIModal');
     if (event.target === createModal) createModal.style.display = 'none';
+    var editModal = document.getElementById('editAPIModal');
+    if (event.target === editModal) editModal.style.display = 'none';
     var createGraphQLModal = document.getElementById('createGraphQLAPIModal');
-    if (event.target === createGraphQLModal) createGraphQLModal.style.display = 'none';
+    if (event.target === createGraphQLModal) closeCreateGraphQLAPIModal();
 };
 
 // ===================================================================
@@ -1372,10 +1822,30 @@ function applyRoleRestrictions() {
     }
 }
 
+function confirmDeleteAPI(kindLabel, apiName) {
+    var label = kindLabel || 'API';
+    var name = String(apiName || '').trim() || 'unnamed-api';
+    if (!confirm('Delete ' + label + ' "' + name + '"? This action cannot be undone.')) {
+        return false;
+    }
+
+    var ack = prompt('Type DELETE to confirm deleting "' + name + '"');
+    if (ack === null) {
+        return false;
+    }
+    if (String(ack).trim().toUpperCase() !== 'DELETE') {
+        alert('Delete cancelled: confirmation text did not match DELETE.');
+        return false;
+    }
+    return true;
+}
+
 // Override delete/create functions for role checks
 function deleteCustomAPI(id) {
     if (!canModify()) { alert('You do not have permission to delete APIs. Contact an admin or manager.'); return; }
-    if (!confirm('Delete this API?')) return;
+    var api = customAPIById[id] || {};
+    var apiName = api.name || id;
+    if (!confirmDeleteAPI('REST API', apiName)) return;
     deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
         if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); }
         else { alert(d.error || 'Failed to delete API'); }

@@ -1,3 +1,11 @@
+const GOVERNANCE_API_BASE = window.BACKEND_URL || 'http://localhost:8000';
+
+function governanceURL(path) {
+    if (!path) return GOVERNANCE_API_BASE;
+    if (/^https?:\/\//i.test(path)) return path;
+    return GOVERNANCE_API_BASE + path;
+}
+
 function governanceHeaders() {
     return (typeof getAuthHeaders === 'function') ? getAuthHeaders() : { 'Content-Type': 'application/json' };
 }
@@ -52,7 +60,7 @@ function renderRoleList(items) {
 }
 
 async function governanceFetch(path, method, body) {
-    const response = await fetch(path, {
+    const response = await fetch(governanceURL(path), {
         method: method || 'GET',
         headers: governanceHeaders(),
         body: body ? JSON.stringify(body) : undefined

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"example.com/axiomnizam/internal/output"
 
@@ -117,8 +118,8 @@ var WorkflowRunCmd = &cobra.Command{
 }
 
 var WorkflowStatusCmd = &cobra.Command{
-	Use:   "status [name]",
-	Short: "Get workflow status",
+	Use:   "status [name|execution-id]",
+	Short: "Get workflow or execution status",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		handleWorkflowStatus(args[0])
@@ -358,14 +359,56 @@ func handleWorkflowRun(name string) {
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		fmt.Printf("✅ Workflow '%s' started\n", name)
+		var runResponse struct {
+			Message   string `json:"message"`
+			Status    string `json:"status"`
+			Execution struct {
+				ID     string `json:"id"`
+				Status string `json:"status"`
+			} `json:"execution"`
+		}
+
+		if err := response.JSON(&runResponse); err != nil {
+			fmt.Printf("✅ Workflow '%s' started\n", name)
+			return
+		}
+
+		execID := runResponse.Execution.ID
+		execStatus := runResponse.Execution.Status
+		if execStatus == "" {
+			execStatus = runResponse.Status
+		}
+
+		if runResponse.Message != "" {
+			fmt.Printf("✅ %s\n", runResponse.Message)
+		} else {
+			fmt.Printf("✅ Workflow '%s' executed\n", name)
+		}
+
+		if execID != "" {
+			fmt.Printf("   Execution ID: %s\n", execID)
+		}
+		if execStatus != "" {
+			fmt.Printf("   Status: %s\n", execStatus)
+		}
 	} else {
 		fmt.Printf("❌ Failed: %s\n", response.Status)
 	}
 }
 
-func handleWorkflowStatus(name string) {
-	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, name), nil)
+func handleWorkflowStatus(target string) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		output.PrintError(output.ErrInvalidInput, "workflow name or execution id is required")
+		return
+	}
+
+	if looksLikeWorkflowExecutionID(target) {
+		handleWorkflowExecutionStatus(target)
+		return
+	}
+
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/namespaces/%s/workflows/%s", namespace, target), nil)
 	if err != nil {
 		output.PrintError(output.ErrServerError, err.Error())
 		return
@@ -377,10 +420,18 @@ func handleWorkflowStatus(name string) {
 		return
 	}
 
-	_ = workflow["metadata"].(map[string]interface{})
-	status := workflow["status"].(map[string]interface{})
+	statusRaw, ok := workflow["status"]
+	if !ok {
+		output.PrintError(output.ErrInvalidInput, "Workflow response missing status")
+		return
+	}
+	status, ok := statusRaw.(map[string]interface{})
+	if !ok {
+		output.PrintError(output.ErrInvalidInput, "Invalid workflow status response")
+		return
+	}
 
-	fmt.Printf("\n📊 Workflow: %s\n", name)
+	fmt.Printf("\n📊 Workflow: %s\n", target)
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	if phase, ok := status["phase"]; ok {
 		fmt.Printf("Status:      %v\n", phase)
@@ -395,6 +446,54 @@ func handleWorkflowStatus(name string) {
 		fmt.Printf("Next Run:    %v\n", nextRun)
 	}
 	fmt.Println()
+}
+
+func handleWorkflowExecutionStatus(executionID string) {
+	response, err := apiClient.Get(context.Background(), fmt.Sprintf("/api/v1/workflows/executions/%s", executionID), nil)
+	if err != nil {
+		output.PrintError(output.ErrServerError, err.Error())
+		return
+	}
+
+	var execution map[string]interface{}
+	if err := response.JSON(&execution); err != nil {
+		output.PrintError(output.ErrInvalidInput, "Failed to parse execution response")
+		return
+	}
+
+	fmt.Printf("\n📊 Workflow Execution: %s\n", executionID)
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	if workflowName, ok := execution["workflowName"]; ok {
+		fmt.Printf("Workflow:    %v\n", workflowName)
+	}
+	if status, ok := execution["status"]; ok {
+		fmt.Printf("Status:      %v\n", status)
+	}
+	if completed, ok := execution["completedSteps"]; ok {
+		fmt.Printf("Completed:   %v", completed)
+		if total, ok := execution["totalSteps"]; ok {
+			fmt.Printf("/%v", total)
+		}
+		fmt.Printf(" steps\n")
+	}
+	if startedAt, ok := execution["startTime"]; ok {
+		fmt.Printf("Started At:  %v\n", startedAt)
+	}
+	if endedAt, ok := execution["endTime"]; ok {
+		fmt.Printf("Ended At:    %v\n", endedAt)
+	}
+	if errValue, ok := execution["error"]; ok {
+		if errText := strings.TrimSpace(fmt.Sprintf("%v", errValue)); errText != "" {
+			fmt.Printf("Error:       %s\n", errText)
+		}
+	}
+	fmt.Println()
+}
+
+func looksLikeWorkflowExecutionID(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(normalized, "exec-") || strings.HasPrefix(normalized, "execution-")
 }
 
 func handleWorkflowDescribe(name string) {

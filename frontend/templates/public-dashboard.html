@@ -3,7 +3,7 @@
     <!-- Header Section -->
     <div class="dashboard-header">
         <div class="header-content">
-            <h1>🚀 AxiomNizam Dashboard</h1>
+            <h1><img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" style="height: 1.2em; vertical-align: bottom; margin-right: 8px;"> AxiomNizam Dashboard</h1>
             <p class="subtitle">Real-time Backend Status & API Monitor</p>
         </div>
     </div>
@@ -57,8 +57,8 @@
     <!-- APIs Section -->
     <div class="apis-section">
         <div class="section-header">
-            <h2>📦 Available APIs</h2>
-            <p>Click any endpoint for details</p>
+            <h2>📦 Available Runtime APIs</h2>
+            <p>Live API Builder catalog filtered by RBAC and active status</p>
         </div>
         <div id="apisContent" class="apis-grid loading">Loading...</div>
     </div>
@@ -67,5 +67,5 @@
     <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
 </div>
 
-<script src="/static/dashboard.js"></script>
+<script src="/static/dashboard.js?v=20260317-4"></script>
 {{ end }}

@@ -322,6 +322,45 @@ func (m *persistentEventBusManager) ListEvents(tenantID, eventType, processed st
 	return res, nil
 }
 
+func (m *persistentEventBusManager) AckEvent(eventID, subscriptionID, acknowledgedBy, message string) (*eventbus.EventBusEvent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	event, ok := m.state.Events[eventID]
+	if !ok {
+		return nil, fmt.Errorf("event not found")
+	}
+
+	now := time.Now()
+	event.IsProcessed = true
+	event.ProcessedAt = now
+
+	if event.Metadata == nil {
+		event.Metadata = map[string]string{}
+	}
+	if acknowledgedBy != "" {
+		event.Metadata["acknowledgedBy"] = acknowledgedBy
+	}
+	event.Metadata["acknowledgedAt"] = now.UTC().Format(time.RFC3339)
+	if message != "" {
+		event.Metadata["ackMessage"] = message
+	}
+	if subscriptionID != "" {
+		event.Metadata["subscriptionId"] = subscriptionID
+		if sub, exists := m.state.Subscriptions[subscriptionID]; exists {
+			sub.ProcessedCount++
+			sub.LastProcessed = now
+			sub.UpdatedAt = now
+			if event.EventSequence > sub.Offset {
+				sub.Offset = event.EventSequence
+			}
+		}
+	}
+
+	m.persist()
+	return event, nil
+}
+
 func (m *persistentEventBusManager) CreateTopic(topic *eventbus.EventTopic) (*eventbus.EventTopic, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -395,6 +434,64 @@ func (m *persistentEventBusManager) ListDLQEvents(tenantID string) ([]*eventbus.
 		res = append(res, e)
 	}
 	return res, nil
+}
+
+func (m *persistentEventBusManager) ReplayDLQEvent(dlqID, replayToTopic, replayedBy string) (*eventbus.EventPublishResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	dlqEvent, ok := m.state.DLQ[dlqID]
+	if !ok {
+		return nil, fmt.Errorf("dlq event not found")
+	}
+
+	topic := replayToTopic
+	if topic == "" {
+		topic = dlqEvent.ReplayToTopic
+	}
+	if topic == "" {
+		topic = dlqEvent.Topic
+	}
+	if topic == "" {
+		topic = dlqEvent.Event.Type
+	}
+	if topic == "" {
+		return nil, fmt.Errorf("replay topic is required")
+	}
+
+	now := time.Now()
+	replayEvent := dlqEvent.Event
+	replayEvent.ID = platformID("event")
+	replayEvent.Type = topic
+	replayEvent.Timestamp = now
+	replayEvent.IsProcessed = false
+	replayEvent.ProcessedAt = time.Time{}
+	replayEvent.DeadLettered = false
+	replayEvent.RetryCount = dlqEvent.FailureCount + 1
+	if replayEvent.Metadata == nil {
+		replayEvent.Metadata = map[string]string{}
+	}
+	replayEvent.Metadata["replayedFromDLQ"] = dlqID
+	if replayedBy != "" {
+		replayEvent.Metadata["replayedBy"] = replayedBy
+	}
+
+	m.state.Events[replayEvent.ID] = &replayEvent
+	if topicState := m.state.Topics[topic]; topicState != nil {
+		topicState.MessageCount++
+	}
+
+	dlqEvent.ManuallyResolved = true
+	dlqEvent.ResolutionAction = "retry"
+	dlqEvent.ResolutionTime = now
+	dlqEvent.ReplayToTopic = topic
+
+	m.persist()
+	return &eventbus.EventPublishResponse{
+		EventID:   replayEvent.ID,
+		Timestamp: replayEvent.Timestamp,
+		Topic:     replayEvent.Type,
+	}, nil
 }
 
 // ---------- Streaming ----------
@@ -1344,9 +1441,10 @@ func (m *persistentLineageCoreManager) GetLineageStatistics() (*lineage.LineageS
 // ---------- Tracing Core (used by adapter) ----------
 
 type persistentTracingState struct {
-	Traces   map[string]*tracing.Trace        `json:"traces"`
-	Spans    map[string]*tracing.Span         `json:"spans"`
-	Services map[string]*tracing.TraceMetrics `json:"services"`
+	Traces   map[string]*tracing.Trace         `json:"traces"`
+	Spans    map[string]*tracing.Span          `json:"spans"`
+	Services map[string]*tracing.TraceMetrics  `json:"services"`
+	Audits   []*tracing.TraceIngestionAuditLog `json:"audits"`
 }
 
 type persistentTracingCoreManager struct {
@@ -1362,6 +1460,7 @@ func newPersistentTracingCoreManager(store *platformStateStore) *persistentTraci
 			Traces:   make(map[string]*tracing.Trace),
 			Spans:    make(map[string]*tracing.Span),
 			Services: make(map[string]*tracing.TraceMetrics),
+			Audits:   make([]*tracing.TraceIngestionAuditLog, 0, 256),
 		},
 	}
 	if err := store.loadJSON(platformStateKeyTracing, &m.state); err != nil {
@@ -1376,7 +1475,297 @@ func newPersistentTracingCoreManager(store *platformStateStore) *persistentTraci
 	if m.state.Services == nil {
 		m.state.Services = make(map[string]*tracing.TraceMetrics)
 	}
+	if m.state.Audits == nil {
+		m.state.Audits = make([]*tracing.TraceIngestionAuditLog, 0, 256)
+	}
 	return m
+}
+
+func (m *persistentTracingCoreManager) persist() {
+	if err := m.store.saveJSON(platformStateKeyTracing, &m.state); err != nil {
+		log.Printf("tracing state persist failed: %v", err)
+	}
+}
+
+func normalizeTraceForPersistence(trace *tracing.Trace) {
+	if trace == nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	if trace.ID == "" {
+		trace.ID = platformID("trace")
+	}
+	if trace.StartTime.IsZero() {
+		trace.StartTime = now
+	}
+	if trace.EndTime.IsZero() {
+		trace.EndTime = trace.StartTime
+	}
+	if trace.Duration <= 0 {
+		trace.Duration = trace.EndTime.Sub(trace.StartTime).Milliseconds()
+	}
+
+	if trace.TotalSpans == 0 {
+		trace.TotalSpans = len(trace.Spans)
+	}
+
+	serviceSet := make(map[string]bool)
+	errorSpans := 0
+	for i := range trace.Spans {
+		span := &trace.Spans[i]
+		if span.ID == "" {
+			span.ID = platformID("span")
+		}
+		if span.TraceID == "" {
+			span.TraceID = trace.ID
+		}
+		if span.TenantID == "" {
+			span.TenantID = trace.TenantID
+		}
+		if span.Service != "" {
+			serviceSet[span.Service] = true
+		}
+		if span.Error || span.Status == tracing.SpanStatusError {
+			errorSpans++
+		}
+	}
+
+	if len(trace.Services) == 0 && len(serviceSet) > 0 {
+		trace.Services = make([]string, 0, len(serviceSet))
+		for svc := range serviceSet {
+			trace.Services = append(trace.Services, svc)
+		}
+	}
+
+	trace.ErrorSpans = errorSpans
+	if trace.Status == "" {
+		if errorSpans > 0 {
+			trace.Status = "error"
+		} else {
+			trace.Status = "success"
+		}
+	}
+}
+
+func recalculateTraceForPersistence(trace *tracing.Trace) {
+	if trace == nil {
+		return
+	}
+
+	serviceSet := make(map[string]bool)
+	errorSpans := 0
+	for _, span := range trace.Spans {
+		if span.Service != "" {
+			serviceSet[span.Service] = true
+		}
+		if span.Error || span.Status == tracing.SpanStatusError {
+			errorSpans++
+		}
+	}
+
+	trace.TotalSpans = len(trace.Spans)
+	trace.ErrorSpans = errorSpans
+	if errorSpans > 0 {
+		trace.Status = "error"
+	} else if trace.Status == "" || strings.EqualFold(trace.Status, "error") {
+		trace.Status = "success"
+	}
+
+	trace.Services = trace.Services[:0]
+	for svc := range serviceSet {
+		trace.Services = append(trace.Services, svc)
+	}
+
+	if len(trace.Spans) > 0 {
+		start := trace.Spans[0].StartTime
+		end := trace.Spans[0].EndTime
+		for _, span := range trace.Spans[1:] {
+			if !span.StartTime.IsZero() && (start.IsZero() || span.StartTime.Before(start)) {
+				start = span.StartTime
+			}
+			if span.EndTime.After(end) {
+				end = span.EndTime
+			}
+		}
+		if !start.IsZero() {
+			trace.StartTime = start
+		}
+		if !end.IsZero() {
+			trace.EndTime = end
+		}
+		if !trace.EndTime.IsZero() && !trace.StartTime.IsZero() {
+			trace.Duration = trace.EndTime.Sub(trace.StartTime).Milliseconds()
+		}
+	}
+}
+
+func (m *persistentTracingCoreManager) IngestTrace(trace *tracing.Trace) (*tracing.Trace, error) {
+	if trace == nil {
+		return nil, fmt.Errorf("trace payload is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	normalizeTraceForPersistence(trace)
+	m.state.Traces[trace.ID] = trace
+
+	for i := range trace.Spans {
+		span := trace.Spans[i]
+		if span.ID == "" {
+			span.ID = platformID("span")
+		}
+		if span.TraceID == "" {
+			span.TraceID = trace.ID
+		}
+		if span.TenantID == "" {
+			span.TenantID = trace.TenantID
+		}
+		trace.Spans[i] = span
+		spanCopy := span
+		m.state.Spans[span.ID] = &spanCopy
+	}
+
+	svc := traceServiceName(trace)
+	if svc != "" {
+		if m.state.Services[svc] == nil {
+			m.state.Services[svc] = &tracing.TraceMetrics{Service: svc}
+		}
+		m.state.Services[svc].TraceCount++
+		if trace.ErrorSpans > 0 || strings.EqualFold(trace.Status, "error") {
+			m.state.Services[svc].ErrorTraceCount++
+		}
+	}
+
+	m.persist()
+	return trace, nil
+}
+
+func (m *persistentTracingCoreManager) IngestSpan(span *tracing.Span) (*tracing.Span, error) {
+	if span == nil {
+		return nil, fmt.Errorf("span payload is required")
+	}
+	if strings.TrimSpace(span.TraceID) == "" {
+		return nil, fmt.Errorf("traceId is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	trace, exists := m.state.Traces[span.TraceID]
+	if !exists {
+		return nil, fmt.Errorf("trace not found")
+	}
+
+	now := time.Now().UTC()
+	if span.ID == "" {
+		span.ID = platformID("span")
+	}
+	if span.TenantID == "" {
+		span.TenantID = trace.TenantID
+	}
+	if span.StartTime.IsZero() {
+		span.StartTime = now
+	}
+	if span.EndTime.IsZero() {
+		span.EndTime = span.StartTime
+	}
+	if span.Duration <= 0 {
+		span.Duration = span.EndTime.Sub(span.StartTime).Microseconds()
+	}
+
+	spanCopy := *span
+	m.state.Spans[spanCopy.ID] = &spanCopy
+
+	updated := false
+	for i := range trace.Spans {
+		if trace.Spans[i].ID == spanCopy.ID {
+			trace.Spans[i] = spanCopy
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		trace.Spans = append(trace.Spans, spanCopy)
+	}
+
+	recalculateTraceForPersistence(trace)
+
+	svc := traceServiceName(trace)
+	if svc != "" {
+		if m.state.Services[svc] == nil {
+			m.state.Services[svc] = &tracing.TraceMetrics{Service: svc}
+		}
+		if spanCopy.Error || spanCopy.Status == tracing.SpanStatusError {
+			m.state.Services[svc].ErrorTraceCount++
+		}
+	}
+
+	m.persist()
+	return &spanCopy, nil
+}
+
+func (m *persistentTracingCoreManager) RecordIngestionAudit(entry *tracing.TraceIngestionAuditLog) error {
+	if entry == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if entry.ID == "" {
+		entry.ID = platformID("trace-audit")
+	}
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now().UTC()
+	}
+
+	m.state.Audits = append(m.state.Audits, entry)
+	if len(m.state.Audits) > 10000 {
+		m.state.Audits = append([]*tracing.TraceIngestionAuditLog(nil), m.state.Audits[len(m.state.Audits)-10000:]...)
+	}
+
+	m.persist()
+	return nil
+}
+
+func (m *persistentTracingCoreManager) ListIngestionAudits(filter *tracing.TraceIngestionAuditFilter) ([]*tracing.TraceIngestionAuditLog, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if filter == nil {
+		filter = &tracing.TraceIngestionAuditFilter{}
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	results := make([]*tracing.TraceIngestionAuditLog, 0, limit)
+	for i := len(m.state.Audits) - 1; i >= 0; i-- {
+		entry := m.state.Audits[i]
+		if filter.TenantID != "" && !strings.EqualFold(strings.TrimSpace(entry.TenantID), strings.TrimSpace(filter.TenantID)) {
+			continue
+		}
+		if filter.Username != "" && !strings.EqualFold(strings.TrimSpace(entry.Username), strings.TrimSpace(filter.Username)) {
+			continue
+		}
+		if filter.ResourceType != "" && !strings.EqualFold(strings.TrimSpace(entry.ResourceType), strings.TrimSpace(filter.ResourceType)) {
+			continue
+		}
+		if filter.Result != "" && !strings.EqualFold(strings.TrimSpace(entry.Result), strings.TrimSpace(filter.Result)) {
+			continue
+		}
+
+		results = append(results, entry)
+		if len(results) >= limit {
+			break
+		}
+	}
+
+	return results, nil
 }
 
 func (m *persistentTracingCoreManager) GetTrace(id string) (*tracing.Trace, error) {
@@ -1835,10 +2224,45 @@ func (m *persistentRBACCoreManager) CreateAccessRequest(req *rbac.AccessRequest)
 	if req.RequestedAt.IsZero() {
 		req.RequestedAt = time.Now()
 	}
+	if req.Duration > 0 && req.ExpiresAt.IsZero() {
+		req.ExpiresAt = req.RequestedAt.Add(time.Duration(req.Duration) * time.Second)
+	}
 	req.Status = rbac.RequestStatusPending
 	m.state.AccessRequests[req.ID] = req
 	m.persist()
 	return req, nil
+}
+
+func (m *persistentRBACCoreManager) ListAccessRequests(tenantID, principalID, status string) ([]*rbac.AccessRequest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	statusFilter, hasStatusFilter := normalizeAccessRequestStatus(status)
+	result := make([]*rbac.AccessRequest, 0, len(m.state.AccessRequests))
+	changed := false
+
+	for _, req := range m.state.AccessRequests {
+		if maybeExpireAccessRequest(req, now) {
+			changed = true
+		}
+		if tenantID != "" && req.TenantID != tenantID {
+			continue
+		}
+		if principalID != "" && req.PrincipalID != principalID {
+			continue
+		}
+		if hasStatusFilter && req.Status != statusFilter {
+			continue
+		}
+		result = append(result, req)
+	}
+
+	if changed {
+		m.persist()
+	}
+
+	return result, nil
 }
 
 func (m *persistentRBACCoreManager) ApproveAccessRequest(requestID, approverID string) error {
@@ -1847,6 +2271,13 @@ func (m *persistentRBACCoreManager) ApproveAccessRequest(requestID, approverID s
 	req, ok := m.state.AccessRequests[requestID]
 	if !ok {
 		return fmt.Errorf("request not found")
+	}
+	if maybeExpireAccessRequest(req, time.Now()) {
+		m.persist()
+		return fmt.Errorf("request expired")
+	}
+	if req.Status != rbac.RequestStatusPending {
+		return fmt.Errorf("request is not pending")
 	}
 	req.Status = rbac.RequestStatusApproved
 	req.ApprovedAt = time.Now()
@@ -1863,12 +2294,76 @@ func (m *persistentRBACCoreManager) ApproveAccessRequest(requestID, approverID s
 	return nil
 }
 
+func (m *persistentRBACCoreManager) RejectAccessRequest(requestID, approverID, reason string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	req, ok := m.state.AccessRequests[requestID]
+	if !ok {
+		return fmt.Errorf("request not found")
+	}
+	if maybeExpireAccessRequest(req, time.Now()) {
+		m.persist()
+		return fmt.Errorf("request expired")
+	}
+	if req.Status != rbac.RequestStatusPending {
+		return fmt.Errorf("request is not pending")
+	}
+	req.Status = rbac.RequestStatusRejected
+	req.RejectedAt = time.Now()
+	req.RejectionReason = reason
+	if req.Metadata == nil {
+		req.Metadata = map[string]interface{}{}
+	}
+	req.Metadata["rejectedBy"] = approverID
+	m.persist()
+	return nil
+}
+
 func (m *persistentRBACCoreManager) GetAccessRequest(id string) (*rbac.AccessRequest, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	req, ok := m.state.AccessRequests[id]
 	if !ok {
 		return nil, fmt.Errorf("request not found")
 	}
+	if maybeExpireAccessRequest(req, time.Now()) {
+		m.persist()
+	}
 	return req, nil
+}
+
+func normalizeAccessRequestStatus(status string) (rbac.RequestStatus, bool) {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "":
+		return "", false
+	case string(rbac.RequestStatusPending):
+		return rbac.RequestStatusPending, true
+	case string(rbac.RequestStatusApproved):
+		return rbac.RequestStatusApproved, true
+	case string(rbac.RequestStatusRejected):
+		return rbac.RequestStatusRejected, true
+	case string(rbac.RequestStatusExpired):
+		return rbac.RequestStatusExpired, true
+	case string(rbac.RequestStatusCancelled):
+		return rbac.RequestStatusCancelled, true
+	default:
+		return "", false
+	}
+}
+
+func maybeExpireAccessRequest(req *rbac.AccessRequest, now time.Time) bool {
+	if req == nil {
+		return false
+	}
+	if req.Status != rbac.RequestStatusPending {
+		return false
+	}
+	if req.ExpiresAt.IsZero() {
+		return false
+	}
+	if req.ExpiresAt.After(now) {
+		return false
+	}
+	req.Status = rbac.RequestStatusExpired
+	return true
 }

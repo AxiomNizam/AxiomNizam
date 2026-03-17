@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -164,8 +166,29 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 	return nil
 }
 
-// DemoJWTSecret is the HMAC secret used for demo account tokens
-const DemoJWTSecret = "axiomnizam-demo-secret-key-2024"
+var demoJWTSecret = loadDemoJWTSecret()
+
+func loadDemoJWTSecret() string {
+	if secret := strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")); secret != "" {
+		return secret
+	}
+
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err == nil {
+		generated := base64.RawURLEncoding.EncodeToString(b)
+		log.Printf("⚠️  DEMO_JWT_SECRET is not set, using generated ephemeral demo token secret")
+		return generated
+	}
+
+	fallback := fmt.Sprintf("ephemeral-demo-secret-%d", time.Now().UnixNano())
+	log.Printf("⚠️  DEMO_JWT_SECRET generation failed, falling back to process-ephemeral secret")
+	return fallback
+}
+
+// DemoJWTSecret returns the HMAC secret used for demo account tokens.
+func DemoJWTSecret() string {
+	return demoJWTSecret
+}
 
 // ValidateDemoToken validates an HMAC-signed demo token
 func (tv *TokenValidator) ValidateDemoToken(tokenString string) (*Claims, error) {
@@ -173,7 +196,7 @@ func (tv *TokenValidator) ValidateDemoToken(tokenString string) (*Claims, error)
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(DemoJWTSecret), nil
+		return []byte(DemoJWTSecret()), nil
 	})
 	if err != nil || !token.Valid {
 		return nil, fmt.Errorf("invalid demo token")

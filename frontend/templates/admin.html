@@ -7,10 +7,29 @@
             <h1>🔧 Admin Dashboard</h1>
             <p class="subtitle">API Builder · File Analytics · Dashboard Converter · File Scanner</p>
         </div>
+        
+        <div class="header-stats" id="adminHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Rate Limit</span>
+                <span class="stat-value">24 / 100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Token Time</span>
+                <span class="stat-value" id="headerTokenExpiry">59m 12s</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Current IP</span>
+                <span class="stat-value" id="headerCurrentIP">...</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">System</span>
+                <span class="stat-value" style="color: var(--primary-color);">Secure</span>
+            </div>
+        </div>
+
         <div class="header-right">
-            <div class="user-info">
-                <span id="adminUserName">Admin</span>
-                <button class="logout-btn" onclick="logout()" title="Logout">🚪 Logout</button>
+            <div class="branding-logo" style="display: flex; align-items: center; justify-content: center;">
+                <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height: 180px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
             </div>
         </div>
     </div>
@@ -230,10 +249,14 @@
     <!-- ===================== API TESTING TAB ===================== -->
     <div id="api-testing" class="tab-content">
         <div class="api-testing-section">
+            <div class="section-header">
+                <h3>Custom API Runtime Testing</h3>
+                <button class="btn-secondary" onclick="loadAPIs()">Refresh Runtime Endpoints</button>
+            </div>
             <!-- API Search & Filter -->
             <div class="api-controls">
                 <div class="search-box">
-                    <input type="text" id="apiSearch" placeholder="🔍 Search APIs..." onkeyup="filterAPIs()">
+                    <input type="text" id="apiSearch" placeholder="🔍 Search custom runtime endpoints..." onkeyup="filterAPIs()">
                 </div>
                 <div class="filter-buttons">
                     <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
@@ -421,6 +444,22 @@
                 </div>
             </div>
         </div>
+
+        <div class="settings-section" style="margin-top:16px;">
+            <h3>Kubernetes Certificate Management</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label for="adminCertName">Certificate Name (optional)</label>
+                    <input type="text" id="adminCertName" placeholder="all or apiserver" value="all">
+                </div>
+            </div>
+            <div class="cp-actions">
+                <button id="adminCertCheckBtn" class="btn-secondary">Check Expiry</button>
+                <button id="adminCertDryRunBtn" class="btn-warning">Renew (Dry Run)</button>
+                <button id="adminCertRenewBtn" class="btn-danger">Renew Now</button>
+            </div>
+            <pre id="adminCertificateOutput" class="cp-output">Certificate lifecycle status will appear here.</pre>
+        </div>
     </div>
 </div>
 
@@ -506,6 +545,10 @@
                         <label for="apiCacheTTLInput">Cache TTL (seconds)</label>
                         <input type="number" id="apiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
                     </div>
+                </div>
+                <div class="form-group">
+                    <label for="apiSQLTemplateInput">SQL Template (read-only, use ? placeholders)</label>
+                    <textarea id="apiSQLTemplateInput" rows="4" placeholder="SELECT id, name FROM users LIMIT ? OFFSET ?"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="apiMockResponseInput">Mock Response (JSON)</label>
@@ -613,6 +656,174 @@ search:string:false"></textarea>
     </div>
 </div>
 
+<!-- Edit API Modal -->
+<div id="editAPIModal" class="modal">
+    <div class="modal-content" style="max-width:700px;">
+        <div class="modal-header">
+            <h2>✏️ Edit Custom API</h2>
+            <button class="modal-close" onclick="closeEditAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editAPIForm" onsubmit="submitEditAPI(event)">
+                <input type="hidden" id="editApiIdInput">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiNameInput">API Name</label>
+                        <input type="text" id="editApiNameInput" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiCategoryInput">Category</label>
+                        <select id="editApiCategoryInput">
+                            <option value="custom">Custom</option>
+                            <option value="e-commerce">E-Commerce</option>
+                            <option value="analytics">Analytics</option>
+                            <option value="external">External</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="iot">IoT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiMethodInput">HTTP Method</label>
+                        <select id="editApiMethodInput">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiPathInput">Path</label>
+                        <input type="text" id="editApiPathInput" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiStatusInput">Status</label>
+                        <select id="editApiStatusInput">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiRateLimitInput">Rate Limit (req/min)</label>
+                        <input type="number" id="editApiRateLimitInput" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiSourceDatabaseInput">Source Database</label>
+                        <select id="editApiSourceDatabaseInput" onchange="updateEditBuilderSourceServers()">
+                            <option value="">Select database...</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="mariadb">MariaDB</option>
+                            <option value="percona">Percona</option>
+                            <option value="oracle">Oracle</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiSourceServerInput">Source Server</label>
+                        <select id="editApiSourceServerInput">
+                            <option value="">Default server for selected database</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="editApiDescInput">Description</label>
+                    <textarea id="editApiDescInput" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editApiSQLTemplateInput">SQL Template (read-only, use ? placeholders)</label>
+                    <textarea id="editApiSQLTemplateInput" rows="4" placeholder="SELECT id, name FROM users LIMIT ? OFFSET ?"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="editApiAuthInput"> Requires Authentication</label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="editApiCacheInput" onchange="toggleEditCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="editCacheTTLGroup" style="display:none">
+                        <label for="editApiCacheTTLInput">Cache TTL (seconds)</label>
+                        <input type="number" id="editApiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Save Changes</button>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js"></script>
+<script src="/static/admin.js?v=20260317-5"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Fetch IP
+        fetch('https://api.ipify.org?format=json').then(r => r.json()).then(data => {
+            document.querySelectorAll('[id$="CurrentIP"]').forEach(el => el.textContent = data.ip);
+        }).catch(e => console.log('IP fetch failed', e));
+
+        // Setup live token countdown
+        let tokenSeconds = 0;
+        const updateTokenTime = () => {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                     const payload = JSON.parse(atob(token.split('.')[1]));
+                     if (payload.exp) {
+                         tokenSeconds = payload.exp - Math.floor(Date.now() / 1000);
+                     }
+                } catch(e) {}
+            }
+        };
+        updateTokenTime();
+
+        setInterval(() => {
+            if (tokenSeconds > 0) {
+                tokenSeconds--;
+                const wH = Math.floor(tokenSeconds / 3600);
+                const wM = Math.floor((tokenSeconds % 3600) / 60);
+                const wS = tokenSeconds % 60;
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+                });
+            } else {
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => el.textContent = "Expired");
+            }
+        }, 1000);
+
+        // Listen for all fetch responses to catch rate limit headers
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch.apply(this, args);
+            try {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const limit = response.headers.get('X-RateLimit-Limit');
+                if (remaining && limit) {
+                    document.querySelectorAll('.stat-box').forEach(box => {
+                        const label = box.querySelector('.stat-label');
+                        if (label && label.textContent.includes('Rate Limit')) {
+                            const val = box.querySelector('.stat-value');
+                            if (val) {
+                                val.textContent = `${remaining} / ${limit}`;
+                                if (parseInt(remaining) < 50) {
+                                    val.style.color = '#ef4444'; // Red warning if low
+                                } else {
+                                    val.style.color = 'var(--primary-color)';
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
+            return response;
+        };
+    });
+</script>
 {{ end }}

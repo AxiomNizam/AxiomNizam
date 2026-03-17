@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AxiomNizam Admin Dashboard</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+    <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
     <style>
         * {
             margin: 0;
@@ -13,8 +13,8 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #004D38 0%, #002218 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -55,7 +55,7 @@
         }
 
         .login-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #008C63 0%, #004D38 100%);
             color: white;
             border: none;
             padding: 16px 40px;
@@ -68,7 +68,7 @@
 
         .login-btn:hover {
             transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 10px 25px rgba(0, 140, 99, 0.4);
         }
 
         /* Dashboard */
@@ -138,8 +138,8 @@
         }
 
         .tab-btn.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
+            color: #008C63;
+            border-bottom-color: #008C63;
         }
 
         .tab-content {
@@ -174,7 +174,7 @@
             background: #f8f9fa;
             padding: 15px;
             border-radius: 8px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #008C63;
         }
 
         .status-label {
@@ -219,10 +219,10 @@
         .api-category-title {
             font-size: 1.1em;
             font-weight: 600;
-            color: #667eea;
+            color: #008C63;
             margin-bottom: 12px;
             padding-bottom: 8px;
-            border-bottom: 2px solid #667eea;
+            border-bottom: 2px solid #008C63;
         }
 
         .api-buttons-grid {
@@ -247,8 +247,8 @@
         }
 
         .api-test-btn:hover {
-            border-color: #667eea;
-            background: #667eea;
+            border-color: #008C63;
+            background: #008C63;
             color: white;
             transform: translateY(-2px);
         }
@@ -279,7 +279,7 @@
             border-radius: 10px;
             padding: 20px;
             margin-top: 20px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #008C63;
         }
 
         .response-section h3 {
@@ -296,7 +296,7 @@
 
         pre {
             margin: 0;
-            font-family: 'Courier New', monospace;
+            font-family: var(--font-mono, 'Consolas', monospace);
             font-size: 0.85em;
             color: #333;
         }
@@ -359,13 +359,13 @@
 
         .loading {
             text-align: center;
-            color: #667eea;
+            color: #008C63;
             font-size: 1.1em;
         }
 
         .spinner {
             border: 4px solid #f0f0f0;
-            border-top: 4px solid #667eea;
+            border-top: 4px solid #008C63;
             border-radius: 50%;
             width: 30px;
             height: 30px;
@@ -398,7 +398,7 @@
     <!-- Login Screen -->
     <div id="loginScreen" class="login-screen">
         <div class="login-box">
-            <h1>🚀 AxiomNizam</h1>
+            <h1><img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" style="height: 1.2em; vertical-align: bottom; margin-right: 8px;"> AxiomNizam</h1>
             <p>Admin Dashboard & API Testing Suite</p>
             <button class="login-btn" onclick="initiateKeycloakLogin()">🔐 Login with Keycloak</button>
         </div>
@@ -408,7 +408,7 @@
     <div id="dashboard" class="dashboard">
         <div class="container">
             <header>
-                <h1>🚀 AxiomNizam Admin Dashboard</h1>
+                <h1><img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" style="height: 1.2em; vertical-align: bottom; margin-right: 8px;"> AxiomNizam Admin Dashboard</h1>
                 <div class="header-info">
                     <div class="user-info">👤 <span id="userName">Admin</span></div>
                     <button class="logout-btn" onclick="logout()">Logout</button>
@@ -469,6 +469,6 @@
         </div>
     </div>
 
-    <script src="/static/admin-dashboard.js"></script>
+    <script src="/static/admin-dashboard.js?v=20260317-4"></script>
 </body>
 </html>

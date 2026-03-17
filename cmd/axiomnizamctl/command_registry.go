@@ -41,7 +41,7 @@ func resourceCommands() []*cobra.Command {
 }
 
 func platformCommands() []*cobra.Command {
-	return []*cobra.Command{ApiBankCmd, MeshCmd, TenantCmd, RBACCmd, WebhookCmd, StreamCmd, ExportCmd, BulkCmd, VersioningCmd, TraceCmd, LineageAPICmd, IncidentCmd}
+	return []*cobra.Command{ApiBankCmd, MeshCmd, TenantCmd, RBACCmd, EventBusCmd, WebhookCmd, StreamCmd, ExportCmd, BulkCmd, VersioningCmd, TraceCmd, LineageAPICmd, IncidentCmd}
 }
 
 func integrationCommands() []*cobra.Command {
@@ -49,7 +49,7 @@ func integrationCommands() []*cobra.Command {
 }
 
 func adminCommands() []*cobra.Command {
-	return []*cobra.Command{ConfigCmd, StatusCmd, EventsCmd, DiffCmd}
+	return []*cobra.Command{ConfigCmd, StatusCmd, EventsCmd, DiffCmd, CertCmd}
 }
 
 func utilityCommands() []*cobra.Command {

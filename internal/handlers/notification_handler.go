@@ -126,6 +126,14 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 		Embeds:  []DiscordEmbed{embed},
 	}
 
+	if h.discordWebhookURL == "" {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Discord webhook URL is not configured",
+		})
+		return
+	}
+
 	// Send to Discord
 	if err := h.sendToDiscord(msg); err != nil {
 		log.Printf("❌ Failed to send Discord notification: %v", err)
@@ -174,6 +182,14 @@ func (h *NotificationHandler) SendHealthNotification(c *gin.Context) {
 	msg := DiscordMessage{
 		Content: "🔔 **Health Check** - All systems monitoring",
 		Embeds:  []DiscordEmbed{embed},
+	}
+
+	if h.discordWebhookURL == "" {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Discord webhook URL is not configured",
+		})
+		return
 	}
 
 	if err := h.sendToDiscord(msg); err != nil {
@@ -225,6 +241,14 @@ func (h *NotificationHandler) SendStatusNotification(c *gin.Context) {
 		Embeds:  []DiscordEmbed{embed},
 	}
 
+	if h.discordWebhookURL == "" {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Discord webhook URL is not configured",
+		})
+		return
+	}
+
 	if err := h.sendToDiscord(msg); err != nil {
 		log.Printf("❌ Failed to send status notification: %v", err)
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -263,6 +287,10 @@ func (h *NotificationHandler) GetNotificationStatus(c *gin.Context) {
 
 // sendToDiscord sends message to Discord webhook
 func (h *NotificationHandler) sendToDiscord(msg DiscordMessage) error {
+	if h.discordWebhookURL == "" {
+		return fmt.Errorf("Discord webhook URL is not configured")
+	}
+
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)

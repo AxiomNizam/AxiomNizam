@@ -59,6 +59,12 @@ func defaultPathForRole(role string) string {
 	}
 }
 
+func setNoCacheHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+}
+
 func requireFrontendRoles(allowed ...string) gin.HandlerFunc {
 	allowedSet := make(map[string]bool, len(allowed))
 	for _, role := range allowed {
@@ -71,7 +77,7 @@ func requireFrontendRoles(allowed ...string) gin.HandlerFunc {
 			authToken, _ = c.Cookie("authToken")
 		}
 		if authToken == "" {
-			c.Redirect(http.StatusFound, "/")
+			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
 		}
@@ -122,7 +128,8 @@ func main() {
 	router.Static("/static", "templates/")
 
 	// Routes
-	router.GET("/", dashboardHandler)
+	router.GET("/", requireFrontendRoles("admin", "system-manager", "manager", "user"), dashboardHandler)
+	router.GET("/login", loginHandler)
 	router.GET("/admin", adminHandler)
 	router.GET("/system-manager", systemManagerHandler)
 	router.GET("/manager", managerHandler)
@@ -161,8 +168,16 @@ func main() {
 
 // dashboardHandler serves the public dashboard
 func dashboardHandler(c *gin.Context) {
-	isAuth := c.GetBool("isAuthenticated")
-	userName := c.GetString("userName")
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+	isAuth := authToken != ""
+
+	userName := "User"
+	if fromCookie, _ := c.Cookie("userName"); strings.TrimSpace(fromCookie) != "" {
+		userName = fromCookie
+	}
 
 	health, _ := fetchHealth()
 
@@ -175,6 +190,23 @@ func dashboardHandler(c *gin.Context) {
 		"backendURL":  backendURL,
 		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
 		"health":      health,
+	})
+}
+
+// loginHandler serves login-focused entrypoint for unauthenticated users.
+func loginHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+	health, _ := fetchHealth()
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":       "AxiomNizam - Login",
+		"pageName":    "public-dashboard",
+		"page":        "public-dashboard",
+		"isAuth":      false,
+		"userName":    "Guest",
+		"backendURL":  backendURL,
+		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
+		"health":      health,
+		"forceLogin":  true,
 	})
 }
 
@@ -201,6 +233,8 @@ func adminHandler(c *gin.Context) {
 
 // managerHandler serves the manager portal
 func managerHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
 	authToken := c.GetHeader("Authorization")
 	if authToken == "" {
 		authToken, _ = c.Cookie("authToken")
@@ -248,6 +282,10 @@ func analyticsHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
+	embedded := c.Query("embed") == "1" || strings.EqualFold(c.Query("embed"), "true")
+	if embedded {
+		setNoCacheHeaders(c)
+	}
 	userName := "User"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
@@ -255,6 +293,7 @@ func analyticsHandler(c *gin.Context) {
 		"pageName":   "analytics-dashboard",
 		"page":       "analytics-dashboard",
 		"isAuth":     isAuth,
+		"embedded":   embedded,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})
@@ -288,6 +327,10 @@ func netintelHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
+	embedded := c.Query("embed") == "1" || strings.EqualFold(c.Query("embed"), "true")
+	if embedded {
+		setNoCacheHeaders(c)
+	}
 	userName := "User"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
@@ -295,6 +338,7 @@ func netintelHandler(c *gin.Context) {
 		"pageName":   "netintel-dashboard",
 		"page":       "netintel-dashboard",
 		"isAuth":     isAuth,
+		"embedded":   embedded,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})
@@ -368,6 +412,10 @@ func gisHandler(c *gin.Context) {
 	}
 
 	isAuth := authToken != ""
+	embedded := c.Query("embed") == "1" || strings.EqualFold(c.Query("embed"), "true")
+	if embedded {
+		setNoCacheHeaders(c)
+	}
 	userName := "User"
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
@@ -375,6 +423,7 @@ func gisHandler(c *gin.Context) {
 		"pageName":   "gis-dashboard",
 		"page":       "gis-dashboard",
 		"isAuth":     isAuth,
+		"embedded":   embedded,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})

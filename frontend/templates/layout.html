@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }}</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="stylesheet" href="/static/responsive.css">
+    <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/style.css?v=20260318-9">
+    <link rel="stylesheet" href="/static/responsive.css?v=20260318-9">
     <link rel="stylesheet" href="/static/gis-dashboard.css">
     <link rel="stylesheet" href="/static/analytics-dashboard.css">
     <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
@@ -17,14 +18,24 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <!-- Chart.js for Analytics dashboard -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    {{ if .embedded }}
+    <style>
+        .navbar, .footer { display: none !important; }
+        .main-content { max-width: 100%; margin: 0; padding: 0; }
+        .app-container { min-height: auto; }
+    </style>
+    {{ end }}
 </head>
 <body>
     <div class="app-container">
         <!-- Navigation Bar -->
+        {{ if not .embedded }}
         <nav class="navbar">
             <div class="nav-container">
                 <div class="nav-logo">
-                    <span class="logo-icon">⚙️</span>
+                    <span class="logo-icon">
+                        <img src="/static/axiomnizam-logo-minimal.svg?v=20260318-11" alt="AxiomNizam logo">
+                    </span>
                     <span class="logo-text">AxiomNizam</span>
                 </div>
                 
@@ -49,32 +60,46 @@
                         <span class="nav-icon">📡</span>
                         <span>NetIntel</span>
                     </a>
-                    <a href="/governance" class="nav-link {{ if eq .page "governance-dashboard" }}active{{ end }}" id="nav-governance" style="display:none">
-                        <span class="nav-icon">🏛️</span>
-                        <span>Governance</span>
-                    </a>
-                    <a href="/operations-center" class="nav-link {{ if eq .page "operations-center" }}active{{ end }}" id="nav-ops" style="display:none">
-                        <span class="nav-icon">🛠️</span>
-                        <span>Operations</span>
-                    </a>
-                    <a href="/lineage-version" class="nav-link {{ if eq .page "version-lineage-dashboard" }}active{{ end }}" id="nav-lineage" style="display:none">
-                        <span class="nav-icon">🧭</span>
-                        <span>Lineage</span>
-                    </a>
-                    {{ if .isAuth }}
-                    <a href="/admin" class="nav-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
-                        <span class="nav-icon">🔧</span>
-                        <span>Admin</span>
-                    </a>
-                    <a href="/system-manager" class="nav-link {{ if eq .page "system-manager" }}active{{ end }}" id="nav-sysmanager" style="display:none">
-                        <span class="nav-icon">🖥️</span>
-                        <span>System Manager</span>
-                    </a>
-                    <a href="/manager" class="nav-link {{ if eq .page "manager" }}active{{ end }}" id="nav-manager" style="display:none">
-                        <span class="nav-icon">📋</span>
-                        <span>Manager</span>
-                    </a>
-                    {{ end }}
+
+                    <div class="nav-dropdown" id="nav-more-wrap">
+                        <button
+                            class="nav-more-btn {{ if or (eq .page "governance-dashboard") (eq .page "operations-center") (eq .page "version-lineage-dashboard") (eq .page "admin") (eq .page "system-manager") (eq .page "manager") }}active{{ end }}"
+                            id="navMoreBtn"
+                            onclick="toggleNavMoreMenu(event)">
+                            <span class="nav-icon">☰</span>
+                            <span class="nav-more-label">More</span>
+                            <span class="nav-more-caret">▾</span>
+                        </button>
+
+                        <div class="nav-dropdown-menu" id="navMoreMenu">
+                            <a href="/governance" class="nav-dropdown-link {{ if eq .page "governance-dashboard" }}active{{ end }}" id="nav-governance" style="display:none">
+                                <span class="nav-icon">🏛️</span>
+                                <span>Governance</span>
+                            </a>
+                            <a href="/operations-center" class="nav-dropdown-link {{ if eq .page "operations-center" }}active{{ end }}" id="nav-ops" style="display:none">
+                                <span class="nav-icon">🛠️</span>
+                                <span>Operations</span>
+                            </a>
+                            <a href="/lineage-version" class="nav-dropdown-link {{ if eq .page "version-lineage-dashboard" }}active{{ end }}" id="nav-lineage" style="display:none">
+                                <span class="nav-icon">🧭</span>
+                                <span>Lineage</span>
+                            </a>
+                            {{ if .isAuth }}
+                            <a href="/admin" class="nav-dropdown-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
+                                <span class="nav-icon">🔧</span>
+                                <span>Admin</span>
+                            </a>
+                            <a href="/system-manager" class="nav-dropdown-link {{ if eq .page "system-manager" }}active{{ end }}" id="nav-sysmanager" style="display:none">
+                                <span class="nav-icon">🖥️</span>
+                                <span>System Manager</span>
+                            </a>
+                            <a href="/manager" class="nav-dropdown-link {{ if eq .page "manager" }}active{{ end }}" id="nav-manager" style="display:none">
+                                <span class="nav-icon">📋</span>
+                                <span>Manager</span>
+                            </a>
+                            {{ end }}
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="nav-right">
@@ -93,6 +118,7 @@
                 </div>
             </div>
         </nav>
+        {{ end }}
 
         <!-- Main Content -->
         <main class="main-content">
@@ -122,6 +148,7 @@
         </main>
 
         <!-- Footer -->
+        {{ if not .embedded }}
         <footer class="footer">
             <div class="footer-content">
                 <p>&copy; 2026 AxiomNizam - All Rights Reserved</p>
@@ -132,6 +159,7 @@
                 </div>
             </div>
         </footer>
+        {{ end }}
     </div>
 
     <!-- Login Modal -->
@@ -153,7 +181,7 @@
                     </div>
                     <button type="submit" class="btn-primary btn-large">Login with Keycloak</button>
                 </form>
-                <p class="login-hint">Demo accounts: admin/admin | sysadmin/sysadmin | manager/manager | user/user</p>
+                <p class="login-hint">AxiomNixam oAuth(Role): admin | sysadmin | manager | user</p>
             </div>
         </div>
     </div>
@@ -171,9 +199,11 @@
         </div>
     </div>
 
-    <script src="/static/auth.js"></script>
     <script>
         window.BACKEND_URL = '{{ .backendURL }}';
+    </script>
+    <script src="/static/auth.js"></script>
+    <script>
 
         // Theme management
         function initTheme() {
@@ -203,28 +233,217 @@
             }
         }
 
-        // Check authentication on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            initTheme();
-            const token = localStorage.getItem('authToken');
-            if (!token && window.location.pathname !== '/') {
-                window.location.href = '/';
+        function toggleNavMoreMenu(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            const wrap = document.getElementById('nav-more-wrap');
+            if (!wrap) return;
+            wrap.classList.toggle('open');
+        }
+
+        function closeNavMoreMenu() {
+            const wrap = document.getElementById('nav-more-wrap');
+            if (wrap) {
+                wrap.classList.remove('open');
+            }
+        }
+
+        function normalizeUserRole(rawRole) {
+            const role = String(rawRole || '').toLowerCase().trim();
+            if (!role) return 'user';
+            if (role === 'administrator' || role === 'superadmin' || role === 'super-admin') return 'admin';
+            if (role === 'system_manager' || role === 'system manager' || role === 'sysadmin' || role === 'sys-admin') return 'system-manager';
+            if (role === 'mgr') return 'manager';
+            return role;
+        }
+
+        function readCookieValue(name) {
+            const cookieName = name + '=';
+            const chunks = document.cookie.split(';');
+            for (let i = 0; i < chunks.length; i++) {
+                const item = chunks[i].trim();
+                if (item.indexOf(cookieName) === 0) {
+                    return decodeURIComponent(item.substring(cookieName.length));
+                }
+            }
+            return '';
+        }
+
+        function applyRoleNavVisibility() {
+            const storedRole = localStorage.getItem('userRole') || localStorage.getItem('role') || readCookieValue('userRole') || '';
+            const storedName = (localStorage.getItem('userName') || readCookieValue('userName') || '').toLowerCase().trim();
+            const hasAuthToken = !!(localStorage.getItem('authToken') || readCookieValue('authToken'));
+
+            let role = normalizeUserRole(storedRole || 'user');
+            if (role === 'user' && storedName) {
+                if (storedName === 'sysadmin') role = 'system-manager';
+                if (storedName === 'admin') role = 'admin';
+                if (storedName === 'manager') role = 'manager';
             }
 
-            // Show only role-appropriate nav links
-            const role = localStorage.getItem('userRole') || 'user';
             const navAdmin = document.getElementById('nav-admin');
             const navSysManager = document.getElementById('nav-sysmanager');
             const navManager = document.getElementById('nav-manager');
             const navGovernance = document.getElementById('nav-governance');
             const navOps = document.getElementById('nav-ops');
             const navLineage = document.getElementById('nav-lineage');
-            if (navAdmin) navAdmin.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
-            if (navSysManager) navSysManager.style.display = (role === 'system-manager') ? '' : 'none';
-            if (navManager) navManager.style.display = (role === 'manager') ? '' : 'none';
-            if (navGovernance) navGovernance.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
-            if (navOps) navOps.style.display = (role === 'admin' || role === 'system-manager' || role === 'manager') ? '' : 'none';
-            if (navLineage) navLineage.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
+
+            const isAdmin = role === 'admin';
+            const isSystemManager = role === 'system-manager';
+            const isManager = role === 'manager';
+
+            if (navAdmin) navAdmin.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+            if (navSysManager) navSysManager.style.display = isSystemManager ? '' : 'none';
+            if (navManager) navManager.style.display = isManager ? '' : 'none';
+            if (navGovernance) navGovernance.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+            if (navOps) navOps.style.display = (isAdmin || isSystemManager || isManager) ? '' : 'none';
+            if (navLineage) navLineage.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+
+            const navMoreWrap = document.getElementById('nav-more-wrap');
+            const navMoreMenu = document.getElementById('navMoreMenu');
+            if (navMoreWrap && navMoreMenu) {
+                let hasVisibleMoreItems = Array.from(navMoreMenu.querySelectorAll('.nav-dropdown-link'))
+                    .some((link) => link.style.display !== 'none');
+
+                // Keep More menu useful if auth is present but role propagation is delayed.
+                if (!hasVisibleMoreItems && hasAuthToken && navOps) {
+                    navOps.style.display = '';
+                    hasVisibleMoreItems = true;
+                }
+
+                navMoreWrap.style.display = hasVisibleMoreItems ? '' : 'none';
+                if (!hasVisibleMoreItems) {
+                    navMoreWrap.classList.remove('open');
+                }
+            }
+        }
+
+        function initTabNavigationScrollUX() {
+            const tabBars = document.querySelectorAll('.tab-navigation');
+            tabBars.forEach(function(tabBar) {
+                if (tabBar.dataset.scrollUxInit === '1') {
+                    return;
+                }
+                tabBar.dataset.scrollUxInit = '1';
+
+                // Make mouse-wheel scroll horizontally on desktop.
+                tabBar.addEventListener('wheel', function(event) {
+                    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+                        return;
+                    }
+                    tabBar.scrollLeft += event.deltaY;
+                    event.preventDefault();
+                }, { passive: false });
+
+                let dragging = false;
+                let dragStarted = false;
+                let startX = 0;
+                let startLeft = 0;
+                let suppressClick = false;
+                let activePointerId = null;
+
+                tabBar.addEventListener('pointerdown', function(event) {
+                    if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') {
+                        return;
+                    }
+                    if (event.button !== 0) {
+                        return;
+                    }
+                    dragging = true;
+                    dragStarted = false;
+                    suppressClick = false;
+                    activePointerId = event.pointerId;
+                    startX = event.clientX;
+                    startLeft = tabBar.scrollLeft;
+                });
+
+                tabBar.addEventListener('pointermove', function(event) {
+                    if (!dragging) {
+                        return;
+                    }
+                    const deltaX = event.clientX - startX;
+                    if (!dragStarted && Math.abs(deltaX) > 6) {
+                        dragStarted = true;
+                        tabBar.classList.add('is-dragging');
+                        if (tabBar.setPointerCapture) {
+                            tabBar.setPointerCapture(event.pointerId);
+                        }
+                    }
+                    if (!dragStarted) {
+                        return;
+                    }
+                    tabBar.scrollLeft = startLeft - deltaX;
+                    suppressClick = true;
+                    event.preventDefault();
+                });
+
+                const stopDragging = function() {
+                    if (!dragging) {
+                        return;
+                    }
+                    dragging = false;
+                    if (dragStarted) {
+                        tabBar.classList.remove('is-dragging');
+                        dragStarted = false;
+                    }
+                    if (tabBar.releasePointerCapture && activePointerId !== null && tabBar.hasPointerCapture && tabBar.hasPointerCapture(activePointerId)) {
+                        tabBar.releasePointerCapture(activePointerId);
+                    }
+                    activePointerId = null;
+
+                    // Keep suppression for the immediate synthetic click after drag.
+                    if (suppressClick) {
+                        window.setTimeout(function() {
+                            suppressClick = false;
+                        }, 0);
+                    }
+                };
+
+                tabBar.addEventListener('pointerup', stopDragging);
+                tabBar.addEventListener('pointercancel', stopDragging);
+                tabBar.addEventListener('pointerleave', stopDragging);
+
+                tabBar.querySelectorAll('.tab-btn').forEach(function(tabBtn) {
+                    tabBtn.addEventListener('click', function(event) {
+                        if (suppressClick) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }
+                    });
+                });
+            });
+        }
+
+        // Check authentication on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            initTheme();
+            const token = localStorage.getItem('authToken');
+            if (!token && window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+
+            // Role can be populated asynchronously after auth bootstrap.
+            applyRoleNavVisibility();
+            setTimeout(applyRoleNavVisibility, 350);
+            setTimeout(applyRoleNavVisibility, 1200);
+            window.addEventListener('focus', applyRoleNavVisibility);
+            initTabNavigationScrollUX();
+
+            {{ if .forceLogin }}
+            openLoginModal();
+            {{ end }}
+        });
+
+        window.addEventListener('storage', function(event) {
+            if (!event || !event.key) {
+                applyRoleNavVisibility();
+                return;
+            }
+            if (event.key === 'userRole' || event.key === 'role' || event.key === 'authToken' || event.key === 'userName') {
+                applyRoleNavVisibility();
+            }
         });
 
         function openLoginModal() {
@@ -240,11 +459,21 @@
         }
 
         window.onclick = function(event) {
+            if (!event.target.closest('#nav-more-wrap')) {
+                closeNavMoreMenu();
+            }
+
             const modal = document.getElementById('loginModal');
             if (event.target === modal) {
                 modal.style.display = 'none';
             }
         };
+
+        window.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeNavMoreMenu();
+            }
+        });
     </script>
 </body>
 </html>

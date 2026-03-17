@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"example.com/axiomnizam/internal/output"
 
@@ -111,7 +112,7 @@ var DataSourceUpdateCmd = &cobra.Command{
 var JobCmd = &cobra.Command{
 	Use:   "job",
 	Short: "Manage jobs",
-	Long:  "Create, list, run, get, view logs, and cancel jobs",
+	Long:  "Create, list, run, get, view logs, cancel, and manage schedules for jobs",
 }
 
 var JobCreateCmd = &cobra.Command{
@@ -203,6 +204,33 @@ var JobStatusCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		handleJobStatus(args[0])
+	},
+}
+
+var JobScheduleListCmd = &cobra.Command{
+	Use:   "schedule-list",
+	Short: "List all job schedules",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleJobScheduleList()
+	},
+}
+
+var JobScheduleSetCmd = &cobra.Command{
+	Use:   "schedule-set [job-id]",
+	Short: "Set or update a job schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		schedule, _ := cmd.Flags().GetString("schedule")
+		return handleJobScheduleSet(args[0], schedule)
+	},
+}
+
+var JobScheduleRemoveCmd = &cobra.Command{
+	Use:   "schedule-remove [job-id]",
+	Short: "Remove a job schedule",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleJobScheduleRemove(args[0])
 	},
 }
 
@@ -770,6 +798,26 @@ func handleJobStatus(jobID string) {
 	}
 }
 
+func handleJobScheduleList() error {
+	return getAndPrint("/api/v1/jobs/schedules")
+}
+
+func handleJobScheduleSet(jobID, schedule string) error {
+	schedule = strings.TrimSpace(schedule)
+	if schedule == "" {
+		return NewCommandError(ErrInvalidInput, "--schedule is required")
+	}
+
+	payload := map[string]interface{}{
+		"schedule": schedule,
+	}
+	return postAndPrint(fmt.Sprintf("/api/v1/jobs/%s/schedule", jobID), payload)
+}
+
+func handleJobScheduleRemove(jobID string) error {
+	return deleteAndPrint(fmt.Sprintf("/api/v1/jobs/%s/schedule", jobID))
+}
+
 func init() {
 	DataSourceCmd.AddCommand(DataSourceCreateCmd)
 	DataSourceCmd.AddCommand(DataSourceListCmd)
@@ -794,6 +842,10 @@ func init() {
 	JobCmd.AddCommand(JobDescribeCmd)
 	JobCmd.AddCommand(JobDiffCmd)
 	JobCmd.AddCommand(JobStatusCmd)
+	JobCmd.AddCommand(JobScheduleListCmd)
+	JobCmd.AddCommand(JobScheduleSetCmd)
+	JobCmd.AddCommand(JobScheduleRemoveCmd)
 
 	JobDiffCmd.Flags().StringP("filename", "f", "", "YAML file path")
+	JobScheduleSetCmd.Flags().String("schedule", "", "Schedule expression (for example: 15m or cron expression)")
 }

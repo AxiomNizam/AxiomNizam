@@ -7,10 +7,29 @@
             <h1>📋 Manager Portal</h1>
             <p class="subtitle">APIs · GIS · Analytics · NetIntel · Dashboards — View &amp; Edit</p>
         </div>
+        
+        <div class="header-stats" id="managerHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Rate Limit</span>
+                <span class="stat-value">18 / 100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Token Time</span>
+                <span class="stat-value" id="managerTokenExpiry">45m 30s</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Current IP</span>
+                <span class="stat-value" id="managerCurrentIP">...</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Status</span>
+                <span class="stat-value" style="color: var(--primary-color);">Active</span>
+            </div>
+        </div>
+
         <div class="header-right">
-            <div class="user-info">
-                <span id="managerUserName">Manager</span>
-                <button class="logout-btn" onclick="logout()" title="Logout">🚪 Logout</button>
+            <div class="branding-logo" style="display: flex; align-items: center; justify-content: center;">
+                <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height: 180px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
             </div>
         </div>
     </div>
@@ -81,21 +100,21 @@
     <!-- ===================== GIS TAB ===================== -->
     <div id="mgr-gis" class="tab-content">
         <div class="iframe-wrapper">
-            <iframe src="/gis" title="GIS Dashboard" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+            <iframe id="mgrGisFrame" src="/gis?embed=1&from=manager&v=3" title="GIS Dashboard" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
         </div>
     </div>
 
     <!-- ===================== ANALYTICS TAB ===================== -->
     <div id="mgr-analytics" class="tab-content">
         <div class="iframe-wrapper">
-            <iframe src="/analytics" title="Analytics Dashboard" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+            <iframe id="mgrAnalyticsFrame" src="/analytics?embed=1&from=manager&v=3" title="Analytics Dashboard" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
         </div>
     </div>
 
     <!-- ===================== NETINTEL TAB ===================== -->
     <div id="mgr-netintel" class="tab-content">
         <div class="iframe-wrapper">
-            <iframe src="/netintel" title="Network Intelligence" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+            <iframe id="mgrNetintelFrame" src="/netintel?embed=1&from=manager&v=3" title="Network Intelligence" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
         </div>
     </div>
 </div>
@@ -187,4 +206,68 @@
 </div>
 
 <script src="/static/manager.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Fetch IP
+        fetch('https://api.ipify.org?format=json').then(r => r.json()).then(data => {
+            document.querySelectorAll('[id$="CurrentIP"]').forEach(el => el.textContent = data.ip);
+        }).catch(e => console.log('IP fetch failed', e));
+
+        // Setup live token countdown
+        let tokenSeconds = 0;
+        const updateTokenTime = () => {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                     const payload = JSON.parse(atob(token.split('.')[1]));
+                     if (payload.exp) {
+                         tokenSeconds = payload.exp - Math.floor(Date.now() / 1000);
+                     }
+                } catch(e) {}
+            }
+        };
+        updateTokenTime();
+
+        setInterval(() => {
+            if (tokenSeconds > 0) {
+                tokenSeconds--;
+                const wH = Math.floor(tokenSeconds / 3600);
+                const wM = Math.floor((tokenSeconds % 3600) / 60);
+                const wS = tokenSeconds % 60;
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+                });
+            } else {
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => el.textContent = "Expired");
+            }
+        }, 1000);
+
+        // Listen for all fetch responses to catch rate limit headers
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch.apply(this, args);
+            try {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const limit = response.headers.get('X-RateLimit-Limit');
+                if (remaining && limit) {
+                    document.querySelectorAll('.stat-box').forEach(box => {
+                        const label = box.querySelector('.stat-label');
+                        if (label && label.textContent.includes('Rate Limit')) {
+                            const val = box.querySelector('.stat-value');
+                            if (val) {
+                                val.textContent = `${remaining} / ${limit}`;
+                                if (parseInt(remaining) < 50) {
+                                    val.style.color = '#ef4444'; // Red warning if low
+                                } else {
+                                    val.style.color = 'var(--primary-color)';
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
+            return response;
+        };
+    });
+</script>
 {{ end }}

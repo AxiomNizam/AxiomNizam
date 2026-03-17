@@ -77,7 +77,9 @@ type rbacManagerAdapter struct {
 		CheckPermission(subjectID, resource, action string) (bool, error)
 		ListPermissions(roleID string) ([]*rbac.Permission, error)
 		CreateAccessRequest(request *rbac.AccessRequest) (*rbac.AccessRequest, error)
+		ListAccessRequests(tenantID, principalID, status string) ([]*rbac.AccessRequest, error)
 		ApproveAccessRequest(requestID, approverID string) error
+		RejectAccessRequest(requestID, approverID, reason string) error
 		GetAccessRequest(id string) (*rbac.AccessRequest, error)
 	}
 }
@@ -168,8 +170,19 @@ func (a *rbacManagerAdapter) CreateAccessRequest(req *rbac.AccessRequest) (*rbac
 	return a.base.CreateAccessRequest(req)
 }
 
+func (a *rbacManagerAdapter) ListAccessRequests(tenantID, principalID, status string) ([]*rbac.AccessRequest, error) {
+	return a.base.ListAccessRequests(tenantID, principalID, status)
+}
+
 func (a *rbacManagerAdapter) ApproveAccessRequest(id, approvedBy string) (*rbac.AccessRequest, error) {
 	if err := a.base.ApproveAccessRequest(id, approvedBy); err != nil {
+		return nil, err
+	}
+	return a.base.GetAccessRequest(id)
+}
+
+func (a *rbacManagerAdapter) RejectAccessRequest(id, rejectedBy, reason string) (*rbac.AccessRequest, error) {
+	if err := a.base.RejectAccessRequest(id, rejectedBy, reason); err != nil {
 		return nil, err
 	}
 	return a.base.GetAccessRequest(id)
@@ -336,6 +349,11 @@ func (a *lineageManagerAdapter) GetStatistics(tenantID string) (*lineage.Lineage
 // tracingManagerAdapter bridges handler interface to in-memory tracing manager.
 type tracingManagerAdapter struct {
 	base interface {
+		IngestTrace(trace *tracing.Trace) (*tracing.Trace, error)
+		IngestSpan(span *tracing.Span) (*tracing.Span, error)
+		RecordIngestionAudit(entry *tracing.TraceIngestionAuditLog) error
+		ListIngestionAudits(filter *tracing.TraceIngestionAuditFilter) ([]*tracing.TraceIngestionAuditLog, error)
+
 		GetTrace(id string) (*tracing.Trace, error)
 		SearchTraces(req *tracing.TraceSearchRequest) ([]*tracing.Trace, error)
 		GetSpan(id string) (*tracing.Span, error)
@@ -344,6 +362,22 @@ type tracingManagerAdapter struct {
 		GetOperationMetrics(service, operation string) (*tracing.SpanMetrics, error)
 		AnalyzeErrors(service string) ([]*tracing.ErrorAnalysis, error)
 	}
+}
+
+func (a *tracingManagerAdapter) IngestTrace(trace *tracing.Trace) (*tracing.Trace, error) {
+	return a.base.IngestTrace(trace)
+}
+
+func (a *tracingManagerAdapter) IngestSpan(span *tracing.Span) (*tracing.Span, error) {
+	return a.base.IngestSpan(span)
+}
+
+func (a *tracingManagerAdapter) RecordIngestionAudit(entry *tracing.TraceIngestionAuditLog) error {
+	return a.base.RecordIngestionAudit(entry)
+}
+
+func (a *tracingManagerAdapter) ListIngestionAudits(filter *tracing.TraceIngestionAuditFilter) ([]*tracing.TraceIngestionAuditLog, error) {
+	return a.base.ListIngestionAudits(filter)
 }
 
 func (a *tracingManagerAdapter) GetTrace(traceID string) (*tracing.Trace, error) {

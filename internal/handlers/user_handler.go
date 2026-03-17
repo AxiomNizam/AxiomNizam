@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -51,13 +53,66 @@ type PlatformUserHandler struct {
 	mu           sync.RWMutex
 	users        map[string]*PlatformUser
 	keycloakSync *keycloakUserSync
+	etcd         *clientv3.Client
+	stateKey     string
 }
 
 // NewPlatformUserHandler creates a new platform user handler
-func NewPlatformUserHandler() *PlatformUserHandler {
-	return &PlatformUserHandler{
+func NewPlatformUserHandler(etcd *clientv3.Client) *PlatformUserHandler {
+	h := &PlatformUserHandler{
 		users:        make(map[string]*PlatformUser),
 		keycloakSync: newKeycloakUserSync(),
+		etcd:         etcd,
+		stateKey:     "axiomnizam:platform:users",
+	}
+	h.loadState()
+	return h
+}
+
+func (h *PlatformUserHandler) loadState() {
+	if h.etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.etcd.Get(ctx, h.stateKey)
+	if err != nil {
+		log.Printf("platform-users: failed to load persisted state from etcd: %v", err)
+		return
+	}
+	if len(resp.Kvs) == 0 {
+		return
+	}
+
+	var users map[string]*PlatformUser
+	if err := json.Unmarshal(resp.Kvs[0].Value, &users); err != nil {
+		log.Printf("platform-users: failed to decode persisted state: %v", err)
+		return
+	}
+	if users == nil {
+		users = make(map[string]*PlatformUser)
+	}
+	h.users = users
+}
+
+func (h *PlatformUserHandler) persistStateLocked() {
+	if h.etcd == nil {
+		return
+	}
+
+	payload, err := json.Marshal(h.users)
+	if err != nil {
+		log.Printf("platform-users: failed to encode state: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
+		log.Printf("platform-users: failed to persist state to etcd: %v", err)
 	}
 }
 
@@ -265,6 +320,126 @@ func (k *keycloakUserSync) assignRealmRole(token, userID, role string) error {
 	return nil
 }
 
+func (k *keycloakUserSync) listUserRealmRoles(token, userID string) ([]map[string]interface{}, error) {
+	endpoint := fmt.Sprintf("%s/admin/realms/%s/users/%s/role-mappings/realm", k.baseURL, url.PathEscape(k.targetRealm), url.PathEscape(userID))
+	status, body, _, err := k.doJSON(http.MethodGet, endpoint, token, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("failed to list user realm roles: %s", strings.TrimSpace(string(body)))
+	}
+
+	var roles []map[string]interface{}
+	if len(body) == 0 {
+		return roles, nil
+	}
+	if err := json.Unmarshal(body, &roles); err != nil {
+		return nil, err
+	}
+	return roles, nil
+}
+
+func (k *keycloakUserSync) removeRealmRoles(token, userID string, roles []map[string]interface{}) error {
+	if len(roles) == 0 {
+		return nil
+	}
+
+	endpoint := fmt.Sprintf("%s/admin/realms/%s/users/%s/role-mappings/realm", k.baseURL, url.PathEscape(k.targetRealm), url.PathEscape(userID))
+	status, body, _, err := k.doJSON(http.MethodDelete, endpoint, token, roles)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusNoContent {
+		return fmt.Errorf("failed to remove realm roles: %s", strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func isManagedPlatformRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "admin", "manager", "user", "system-manager", "sysadmin", "system_admin", "system-admin":
+		return true
+	default:
+		return false
+	}
+}
+
+func (k *keycloakUserSync) UpdateUserRole(username, role string) error {
+	if k == nil {
+		return nil
+	}
+
+	normalizedRole := strings.ToLower(strings.TrimSpace(role))
+	if normalizedRole == "" {
+		return nil
+	}
+
+	token, err := k.getAdminAccessToken()
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to authenticate with keycloak admin API"}
+	}
+
+	userID, err := k.findUserID(token, username)
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to locate keycloak user for role update"}
+	}
+
+	existingRoles, err := k.listUserRealmRoles(token, userID)
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to read keycloak user roles"}
+	}
+
+	toRemove := make([]map[string]interface{}, 0)
+	for _, roleRep := range existingRoles {
+		name, _ := roleRep["name"].(string)
+		if isManagedPlatformRole(name) {
+			toRemove = append(toRemove, roleRep)
+		}
+	}
+
+	if err := k.removeRealmRoles(token, userID, toRemove); err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to remove previous keycloak role mappings"}
+	}
+
+	if err := k.assignRealmRole(token, userID, normalizedRole); err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to assign updated keycloak role mapping"}
+	}
+
+	return nil
+}
+
+func (k *keycloakUserSync) UpdateUserEnabled(username string, enabled bool) error {
+	if k == nil {
+		return nil
+	}
+
+	token, err := k.getAdminAccessToken()
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to authenticate with keycloak admin API"}
+	}
+
+	userID, err := k.findUserID(token, username)
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to locate keycloak user for status update"}
+	}
+
+	endpoint := fmt.Sprintf("%s/admin/realms/%s/users/%s", k.baseURL, url.PathEscape(k.targetRealm), url.PathEscape(userID))
+	status, body, _, err := k.doJSON(http.MethodPut, endpoint, token, map[string]interface{}{"enabled": enabled})
+	if err != nil {
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: "failed to connect to keycloak admin API"}
+	}
+	if status != http.StatusNoContent {
+		message := strings.TrimSpace(string(body))
+		if message == "" {
+			message = "failed to update keycloak user status"
+		}
+		return &keycloakSyncError{StatusCode: http.StatusBadGateway, Message: message}
+	}
+
+	return nil
+}
+
 func (k *keycloakUserSync) CreateUser(username, email, password, role string) error {
 	if k == nil {
 		return nil
@@ -468,6 +643,7 @@ func (h *PlatformUserHandler) CreatePlatformUser(c *gin.Context) {
 
 	h.mu.Lock()
 	h.users[user.ID] = user
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -487,41 +663,92 @@ func (h *PlatformUserHandler) UpdatePlatformUser(c *gin.Context) {
 		return
 	}
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	user, exists := h.users[id]
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "User not found"})
-		return
-	}
-
-	if req.Email != "" {
-		user.Email = strings.TrimSpace(req.Email)
-	}
+	normalizedEmail := strings.TrimSpace(req.Email)
+	normalizedRole := ""
 	if req.Role != "" {
 		role := strings.ToLower(strings.TrimSpace(req.Role))
 		if !validPlatformRoles[role] {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid role. Must be admin, manager, or user"})
 			return
 		}
-		user.Role = role
+		normalizedRole = role
 	}
+
+	normalizedStatus := ""
 	if req.Status != "" {
 		status := strings.ToLower(strings.TrimSpace(req.Status))
-		if status != "active" && status != "disabled" {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid status. Must be active or disabled"})
+		switch status {
+		case "active", "enabled":
+			normalizedStatus = "active"
+		case "disabled", "inactive", "deactive", "deactivated":
+			normalizedStatus = "disabled"
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Invalid status. Must be active/disabled (inactive/deactive also accepted)"})
 			return
 		}
-		user.Status = status
+	}
+
+	h.mu.RLock()
+	user, exists := h.users[id]
+	h.mu.RUnlock()
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "User not found"})
+		return
+	}
+
+	if normalizedRole != "" && h.keycloakSync != nil {
+		if err := h.keycloakSync.UpdateUserRole(user.Username, normalizedRole); err != nil {
+			var syncErr *keycloakSyncError
+			if errors.As(err, &syncErr) {
+				c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": syncErr.Message})
+				return
+			}
+			c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": "failed to sync updated role to keycloak: " + err.Error()})
+			return
+		}
+	}
+
+	if normalizedStatus != "" && h.keycloakSync != nil {
+		enabled := normalizedStatus == "active"
+		if err := h.keycloakSync.UpdateUserEnabled(user.Username, enabled); err != nil {
+			var syncErr *keycloakSyncError
+			if errors.As(err, &syncErr) {
+				c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": syncErr.Message})
+				return
+			}
+			c.JSON(http.StatusBadGateway, gin.H{"status": "error", "error": "failed to sync updated status to keycloak: " + err.Error()})
+			return
+		}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	user, exists = h.users[id]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "User not found"})
+		return
+	}
+
+	if req.Email != "" {
+		user.Email = normalizedEmail
+	}
+	if normalizedRole != "" {
+		user.Role = normalizedRole
+	}
+	if normalizedStatus != "" {
+		user.Status = normalizedStatus
 	}
 	user.UpdatedAt = time.Now()
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": fmt.Sprintf("User '%s' updated successfully", user.Username),
 		"user":    user,
 	})
+
+	return
 }
 
 // DeletePlatformUser deletes a platform user
@@ -539,6 +766,7 @@ func (h *PlatformUserHandler) DeletePlatformUser(c *gin.Context) {
 
 	username := user.Username
 	delete(h.users, id)
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
