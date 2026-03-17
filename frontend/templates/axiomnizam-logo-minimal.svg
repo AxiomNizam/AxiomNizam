@@ -1,0 +1,33 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+  <title id="t">AxiomNizam Logo Minimal</title>
+  <desc id="d">Minimal Islamic-inspired emblem with crescent and Quran pages, using Bangladesh and Iran colors.</desc>
+
+  <circle cx="64" cy="64" r="58" fill="#006A4E"/>
+  <circle cx="64" cy="64" r="55" stroke="rgba(255,255,255,0.5)" stroke-width="2"/>
+  <circle cx="64" cy="64" r="21" fill="#F42A41"/>
+
+  <path d="M64 30C55 30 47 37.2 47 46C47 54.8 55 62 64 62C72.2 62 79.2 56.2 80.9 48.4C79.2 52.8 74.8 56 69.8 56C63.3 56 58 50.7 58 44.2C58 37.7 63.3 32.4 69.8 32.4C74.7 32.4 79.1 35.6 80.8 40C78.9 34.2 73.9 30 64 30Z" fill="#FFFFFF"/>
+  <path d="M80.5 36.5L82 39.8L85.6 40.1L82.9 42.5L83.7 46L80.5 44.1L77.3 46L78.1 42.5L75.4 40.1L79 39.8L80.5 36.5Z" fill="#F42A41"/>
+
+  <!-- Quran pages adapted from the main logo -->
+  <g transform="translate(24 71)">
+    <path d="M0 29V18.5C0 13.8 3.6 10 8.2 10H30.5C35.3 10 40 11.8 44 15.1V38.5C40.2 35.4 35.2 33.6 30.3 33.6H8.2C3.7 33.6 0 30 0 25.5V29Z" fill="#FFFFFF"/>
+    <path d="M80 29V18.5C80 13.8 76.4 10 71.8 10H49.5C44.7 10 40 11.8 36 15.1V38.5C39.8 35.4 44.8 33.6 49.7 33.6H71.8C76.3 33.6 80 30 80 25.5V29Z" fill="#FFFFFF"/>
+
+    <path d="M0 29V18.5C0 13.8 3.6 10 8.2 10H30.5C35.3 10 40 11.8 44 15.1V38.5C40.2 35.4 35.2 33.6 30.3 33.6H8.2C3.7 33.6 0 30 0 25.5" stroke="#005A43" stroke-width="2"/>
+    <path d="M80 29V18.5C80 13.8 76.4 10 71.8 10H49.5C44.7 10 40 11.8 36 15.1V38.5C39.8 35.4 44.8 33.6 49.7 33.6H71.8C76.3 33.6 80 30 80 25.5" stroke="#005A43" stroke-width="2"/>
+
+    <line x1="40" y1="15" x2="40" y2="40" stroke="#F42A41" stroke-width="2.4" stroke-linecap="round"/>
+
+    <!-- Arabic ayat text fitted inside the Quran pages -->
+    <text x="37" y="16.4" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="2.25" fill="#0A8A66">الَّذِي عَلَّمَ بِالْقَلَمِ</text>
+    <text x="37" y="20.0" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="2.25" fill="#F42A41">عَلَّمَ الْإِنسَانَ مَا لَمْ يَعْلَمْ</text>
+
+    <text x="77" y="15.8" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#0A8A66">إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ</text>
+    <text x="77" y="18.9" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#F42A41">وَنَكْتُبُ مَا قَدَّمُوا</text>
+    <text x="77" y="22.0" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#0A8A66">وَآثَارَهُمْ ۚ وَكُلَّ شَيْءٍ</text>
+    <text x="77" y="25.1" text-anchor="end" direction="rtl" unicode-bidi="plaintext" textLength="30" lengthAdjust="spacingAndGlyphs" font-family="Amiri, Noto Naskh Arabic, Scheherazade New, serif" font-size="1.72" fill="#F42A41">أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ</text>
+  </g>
+
+  <rect x="24" y="110" width="80" height="4" rx="2" fill="#239F40"/>
+</svg>
