@@ -16,6 +16,9 @@ let currentCSVUploadId = null;
 let currentDashMappings = [];
 let builderDataServers = [];
 let customAPIById = {};
+let graphQLAPIById = {};
+let graphQLFormMode = 'create';
+let editingGraphQLApiId = '';
 
 const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
@@ -381,6 +384,7 @@ function loadGraphQLCustomAPIs() {
 
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
+        graphQLAPIById = {};
         var el = document.getElementById('graphqlApiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -393,9 +397,13 @@ function loadGraphQLCustomAPIs() {
             '</tr></thead><tbody>';
 
         list.forEach(function(api) {
+            graphQLAPIById[api.id] = api;
             var safeId = api.id.replace(/'/g, "\\'");
             var actionsHtml = '<button class="btn-sm btn-test" onclick="testGraphQLCustomAPI(\'' + safeId + '\')">Test</button> ';
             if (canModify()) {
+                var isActive = (api.status || '').toLowerCase() === 'active';
+                actionsHtml += '<button class="btn-sm btn-edit" onclick="openEditGraphQLCustomAPI(\'' + safeId + '\')">Edit</button> ';
+                actionsHtml += '<button class="btn-sm btn-toggle" onclick="toggleGraphQLCustomAPIStatus(\'' + safeId + '\')">' + (isActive ? 'Deactivate' : 'Activate') + '</button> ';
                 actionsHtml += '<button class="btn-sm btn-del" onclick="deleteGraphQLCustomAPI(\'' + safeId + '\')">Del</button>';
             }
             html += '<tr>' +
@@ -417,6 +425,17 @@ function loadGraphQLCustomAPIs() {
         var el = document.getElementById('graphqlApiBuilderList');
         if (el) el.innerHTML = '<div class="error-state">Failed to load GraphQL APIs</div>';
     });
+}
+
+function resetGraphQLFormMode() {
+    graphQLFormMode = 'create';
+    editingGraphQLApiId = '';
+
+    var titleEl = document.querySelector('#createGraphQLAPIModal .modal-header h2');
+    if (titleEl) titleEl.textContent = '🧩 Create GraphQL API';
+
+    var submitBtn = document.querySelector('#createGraphQLAPIForm button[type="submit"]');
+    if (submitBtn) submitBtn.textContent = 'Create GraphQL API';
 }
 
 function updateGraphQLBuilderSourceServers() {
@@ -443,11 +462,13 @@ function updateGraphQLBuilderSourceServers() {
 
 function openCreateGraphQLAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin, manager, or system-manager.'); return; }
+    resetGraphQLFormMode();
     loadBuilderDataSources();
     document.getElementById('createGraphQLAPIModal').style.display = 'flex';
 }
 
 function closeCreateGraphQLAPIModal() {
+    resetGraphQLFormMode();
     document.getElementById('createGraphQLAPIModal').style.display = 'none';
     document.getElementById('createGraphQLAPIForm').reset();
     var ttlGroup = document.getElementById('gqlCacheTTLGroup');
@@ -487,7 +508,6 @@ function submitCreateGraphQLAPI(e) {
     }
 
     var body = {
-        api_type: 'graphql',
         name: document.getElementById('gqlApiNameInput').value,
         method: 'POST',
         path: (document.getElementById('gqlPathInput').value || '/api/graphql').trim(),
@@ -505,14 +525,28 @@ function submitCreateGraphQLAPI(e) {
         query_params: parseBuilderParams(document.getElementById('gqlQueryParamsInput').value.trim())
     };
 
-    postJSON('/api/v1/builder/apis', body).then(function(d) {
+    var isEditMode = graphQLFormMode === 'edit' && !!editingGraphQLApiId;
+    var req;
+    if (isEditMode) {
+        body.api_type = 'graphql';
+        req = putJSON('/api/v1/builder/apis/' + encodeURIComponent(editingGraphQLApiId), body);
+    } else {
+        body.api_type = 'graphql';
+        req = postJSON('/api/v1/builder/apis', body);
+    }
+
+    req.then(function(d) {
         if (d.status === 'success') {
             closeCreateGraphQLAPIModal();
             loadGraphQLBuilderSummary();
             loadGraphQLCustomAPIs();
-            addLog('Created GraphQL API: ' + body.name, 'info');
+            if (isEditMode) {
+                addLog('Updated GraphQL API: ' + body.name, 'info');
+            } else {
+                addLog('Created GraphQL API: ' + body.name, 'info');
+            }
         } else {
-            alert(d.error || 'Failed to create GraphQL API');
+            alert(d.error || 'Failed to save GraphQL API');
         }
     });
 }
@@ -535,6 +569,71 @@ function deleteGraphQLCustomAPI(id) {
         } else {
             alert(d.error || 'Failed to delete GraphQL API');
         }
+    });
+}
+
+function openEditGraphQLCustomAPI(id) {
+    if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+    var api = graphQLAPIById[id];
+    if (!api) { alert('GraphQL API details not found. Please refresh and try again.'); return; }
+
+    graphQLFormMode = 'edit';
+    editingGraphQLApiId = id;
+
+    var titleEl = document.querySelector('#createGraphQLAPIModal .modal-header h2');
+    if (titleEl) titleEl.textContent = '✏️ Edit GraphQL API';
+    var submitBtn = document.querySelector('#createGraphQLAPIForm button[type="submit"]');
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+
+    loadBuilderDataSources(function() {
+        document.getElementById('gqlApiNameInput').value = api.name || '';
+        document.getElementById('gqlApiCategoryInput').value = api.category || 'custom';
+        document.getElementById('gqlOperationNameInput').value = api.graphql_operation_name || '';
+        document.getElementById('gqlPathInput').value = (api.path || '/api/graphql').trim();
+        document.getElementById('gqlSourceDatabaseInput').value = api.source_database || '';
+        updateGraphQLBuilderSourceServers();
+        document.getElementById('gqlSourceServerInput').value = api.source_server || '';
+        document.getElementById('gqlDescInput').value = api.description || '';
+        document.getElementById('gqlQueryInput').value = api.graphql_query || '';
+        document.getElementById('gqlAuthInput').checked = !!api.auth_required;
+        document.getElementById('gqlRateLimitInput').value = api.rate_limit || 0;
+        document.getElementById('gqlCacheInput').checked = !!api.cache_enabled;
+        document.getElementById('gqlCacheTTLInput').value = api.cache_ttl || 300;
+        toggleGraphQLCacheTTL();
+        document.getElementById('gqlMockResponseInput').value = api.mock_response ? JSON.stringify(api.mock_response, null, 2) : '';
+
+        var qp = Array.isArray(api.query_params) ? api.query_params : [];
+        var qpLines = qp.map(function(p) {
+            var pName = (p && p.name) ? p.name : '';
+            var pType = (p && p.type) ? p.type : 'string';
+            var pReq = (p && p.required) ? 'true' : 'false';
+            return pName + ':' + pType + ':' + pReq;
+        });
+        document.getElementById('gqlQueryParamsInput').value = qpLines.join('\n');
+
+        document.getElementById('createGraphQLAPIModal').style.display = 'flex';
+    });
+}
+
+function toggleGraphQLCustomAPIStatus(id) {
+    if (!canModify()) { alert('You do not have permission to update API status. Contact an admin, manager, or system-manager.'); return; }
+
+    var api = graphQLAPIById[id];
+    if (!api) { alert('GraphQL API details not found. Please refresh and try again.'); return; }
+
+    var currentStatus = String(api.status || '').toLowerCase();
+    var nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
+
+    putJSON('/api/v1/builder/apis/' + encodeURIComponent(id), { status: nextStatus }).then(function(d) {
+        if (d.status === 'success' || d.status === 'ok') {
+            addLog('Updated GraphQL API status: ' + id + ' -> ' + nextStatus, 'info');
+            loadGraphQLBuilderSummary();
+            loadGraphQLCustomAPIs();
+        } else {
+            alert(d.error || 'Failed to update GraphQL API status');
+        }
+    }).catch(function() {
+        alert('Failed to update GraphQL API status');
     });
 }
 
@@ -1645,7 +1744,7 @@ window.onclick = function(event) {
     var editModal = document.getElementById('editAPIModal');
     if (event.target === editModal) editModal.style.display = 'none';
     var createGraphQLModal = document.getElementById('createGraphQLAPIModal');
-    if (event.target === createGraphQLModal) createGraphQLModal.style.display = 'none';
+    if (event.target === createGraphQLModal) closeCreateGraphQLAPIModal();
 };
 
 // ===================================================================
