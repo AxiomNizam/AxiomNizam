@@ -220,8 +220,8 @@
         window.addEventListener('DOMContentLoaded', function() {
             initTheme();
             const token = localStorage.getItem('authToken');
-            if (!token && window.location.pathname !== '/') {
-                window.location.href = '/';
+            if (!token && window.location.pathname !== '/login') {
+                window.location.href = '/login';
             }
 
             // Show only role-appropriate nav links
@@ -238,6 +238,10 @@
             if (navGovernance) navGovernance.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
             if (navOps) navOps.style.display = (role === 'admin' || role === 'system-manager' || role === 'manager') ? '' : 'none';
             if (navLineage) navLineage.style.display = (role === 'admin' || role === 'system-manager') ? '' : 'none';
+
+            {{ if .forceLogin }}
+            openLoginModal();
+            {{ end }}
         });
 
         function openLoginModal() {

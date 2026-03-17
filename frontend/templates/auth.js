@@ -82,7 +82,8 @@ function canAccessPath(path, role) {
 }
 
 function isProtectedPath(path) {
-    return path === '/admin' ||
+    return path === '/' ||
+        path === '/admin' ||
         path === '/system-manager' ||
         path === '/manager' ||
         path === '/governance' ||
@@ -115,7 +116,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
     const path = window.location.pathname;
     if (!authToken && isProtectedPath(path)) {
-        window.location.href = '/';
+        window.location.href = '/login';
         return;
     }
 
@@ -215,7 +216,7 @@ function logout() {
     localStorage.removeItem('userRole');
     localStorage.removeItem('refreshToken');
     clearAuthCookies();
-    window.location.href = '/';
+    window.location.href = '/login';
 }
 
 // Decode JWT token and extract user role

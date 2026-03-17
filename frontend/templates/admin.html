@@ -230,10 +230,14 @@
     <!-- ===================== API TESTING TAB ===================== -->
     <div id="api-testing" class="tab-content">
         <div class="api-testing-section">
+            <div class="section-header">
+                <h3>Custom API Runtime Testing</h3>
+                <button class="btn-secondary" onclick="loadAPIs()">Refresh Runtime Endpoints</button>
+            </div>
             <!-- API Search & Filter -->
             <div class="api-controls">
                 <div class="search-box">
-                    <input type="text" id="apiSearch" placeholder="🔍 Search APIs..." onkeyup="filterAPIs()">
+                    <input type="text" id="apiSearch" placeholder="🔍 Search custom runtime endpoints..." onkeyup="filterAPIs()">
                 </div>
                 <div class="filter-buttons">
                     <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
@@ -738,5 +742,5 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260317-2"></script>
+<script src="/static/admin.js?v=20260317-3"></script>
 {{ end }}

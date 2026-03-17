@@ -78,6 +78,7 @@ function switchTab(tabName) {
     if (tabName === 'csv-upload') { loadCSVHistory(); }
     if (tabName === 'converter') { loadConverterDropdowns(); loadConversionHistory(); }
     if (tabName === 'file-scanner') { loadScanHistory(); loadScannerHealth(); }
+    if (tabName === 'api-testing') { loadAPIs(); }
     if (tabName === 'graphql-studio') { loadAdminGraphQLSchemaInfo(); }
     if (tabName === 'control-plane') { refreshAdminControlPlaneData(); }
     if (tabName === 'settings') { loadAdminCertificatePanel(); }
@@ -916,49 +917,112 @@ function loadConversionHistory() {
 // API Testing (original functionality)
 // ===================================================================
 function loadAPIs() {
-    var apiCategories = {
-        'Health & Status': [
-            { method: 'GET', path: '/health', url: BACKEND_URL + '/health', description: 'Health check', auth: false },
-            { method: 'GET', path: '/status', url: BACKEND_URL + '/status', description: 'Check all connections', auth: false },
-        ],
-        'Notifications': [
-            { method: 'POST', path: '/api/notifications/send', url: BACKEND_URL + '/api/notifications/send', description: 'Send custom notification', auth: true, body: {title: 'Test', message: 'Test notification'} },
-            { method: 'POST', path: '/api/notifications/health', url: BACKEND_URL + '/api/notifications/health', description: 'Send health notification', auth: true },
-            { method: 'POST', path: '/api/notifications/status', url: BACKEND_URL + '/api/notifications/status', description: 'Send status notification', auth: true },
-        ],
-        'Admin - Database': [
-            { method: 'GET', path: '/api/admin/database/list', url: BACKEND_URL + '/api/admin/database/list?db_type=mysql', description: 'List databases', auth: true },
-            { method: 'POST', path: '/api/admin/database/create', url: BACKEND_URL + '/api/admin/database/create', description: 'Create database', auth: true, body: {database_name: 'test_db', db_type: 'mysql'} },
-        ],
-        'MySQL CRUD': [
-            { method: 'GET', path: '/api/mysql/users', url: BACKEND_URL + '/api/mysql/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/mysql/users', url: BACKEND_URL + '/api/mysql/users', description: 'Create user', auth: true, body: {name: 'John Doe', email: 'john@example.com'} },
-        ],
-        'PostgreSQL CRUD': [
-            { method: 'GET', path: '/api/postgres/users', url: BACKEND_URL + '/api/postgres/users', description: 'List all users', auth: true },
-            { method: 'POST', path: '/api/postgres/users', url: BACKEND_URL + '/api/postgres/users', description: 'Create user', auth: true, body: {name: 'Jane Doe', email: 'jane@example.com'} },
-        ],
-    };
-
-    var html = '';
-    for (var category in apiCategories) {
-        var apis = apiCategories[category];
-        html += '<div class="api-category"><div class="category-header">' + category + '</div><div class="api-items">';
-        for (var i = 0; i < apis.length; i++) {
-            var api = apis[i];
-            html += '<button class="api-test-btn api-method-' + api.method.toLowerCase() + '" ' +
-                'onclick="testAPI(\'' + api.method + '\', \'' + api.url + '\', ' +
-                (api.body ? JSON.stringify(api.body).replace(/'/g, '&#39;') : 'null') + ', \'' + api.description + '\')">' +
-                '<span class="api-method ' + api.method.toLowerCase() + '">' + api.method + '</span>' +
-                '<span style="font-weight:500">' + api.path + '</span>' +
-                '<span style="font-size:0.85em;color:#999">' + api.description + '</span>' +
-                '</button>';
-        }
-        html += '</div></div>';
-    }
-
     var el = document.getElementById('apiCategories');
-    if (el) el.innerHTML = html;
+    if (el) el.innerHTML = '<div class="loading">Loading custom runtime endpoints...</div>';
+
+    Promise.all([
+        fetchJSON('/api/v1/builder/apis?api_type=rest&status=active').catch(function() { return { apis: [] }; }),
+        fetchJSON('/api/v1/builder/apis?api_type=graphql&status=active').catch(function() { return { apis: [] }; })
+    ]).then(function(results) {
+        var restAPIs = (results[0] && results[0].apis) ? results[0].apis : [];
+        var graphqlAPIs = (results[1] && results[1].apis) ? results[1].apis : [];
+
+        var categories = {
+            'Core Platform': [
+                { method: 'GET', path: '/health', url: BACKEND_URL + '/health', description: 'Health check', body: null },
+                { method: 'GET', path: '/status', url: BACKEND_URL + '/status', description: 'Platform status', body: null }
+            ],
+            'Custom REST Runtime (API Builder)': restAPIs.map(function(api) {
+                var method = String(api.method || 'GET').toUpperCase();
+                var runtimePath = normalizeRuntimePath(api.path || '/');
+                var url = BACKEND_URL + '/api/custom' + (runtimePath === '/' ? '' : runtimePath);
+                var body = null;
+                if (method !== 'GET') {
+                    var paramsBody = {};
+                    (api.query_params || []).forEach(function(p) {
+                        paramsBody[p.name] = sampleParamValue(p);
+                    });
+                    body = { params: paramsBody };
+                } else if ((api.query_params || []).length > 0) {
+                    var queryPairs = [];
+                    api.query_params.forEach(function(p) {
+                        queryPairs.push(encodeURIComponent(p.name) + '=' + encodeURIComponent(sampleParamValue(p)));
+                    });
+                    if (queryPairs.length > 0) {
+                        url += (url.indexOf('?') >= 0 ? '&' : '?') + queryPairs.join('&');
+                    }
+                }
+
+                return {
+                    method: method,
+                    path: '/api/custom' + (runtimePath === '/' ? '' : runtimePath),
+                    url: url,
+                    description: api.name || 'Custom runtime API',
+                    body: body
+                };
+            }),
+            'Custom GraphQL Runtime (API Builder)': graphqlAPIs.map(function(api) {
+                return {
+                    method: String(api.method || 'POST').toUpperCase(),
+                    path: api.path || '/api/graphql',
+                    url: BACKEND_URL + normalizeRuntimePath(api.path || '/api/graphql'),
+                    description: api.name || 'Custom GraphQL API',
+                    body: {
+                        query: api.graphql_query || 'query { __typename }',
+                        operationName: api.graphql_operation_name || '',
+                        variables: {}
+                    }
+                };
+            })
+        };
+
+        var html = '';
+        for (var category in categories) {
+            var apis = categories[category] || [];
+            if (apis.length === 0) continue;
+            html += '<div class="api-category"><div class="category-header">' + escapeHtml(category) + '</div><div class="api-items">';
+            for (var i = 0; i < apis.length; i++) {
+                var api = apis[i];
+                html += '<button class="api-test-btn api-method-' + String(api.method || 'GET').toLowerCase() + '" ' +
+                    'onclick="testAPI(\'' + api.method + '\', \'' + api.url + '\', ' +
+                    (api.body ? JSON.stringify(api.body).replace(/'/g, '&#39;') : 'null') + ', \'' + escapeHtml(api.description).replace(/'/g, '&#39;') + '\')">' +
+                    '<span class="api-method ' + String(api.method || 'GET').toLowerCase() + '">' + escapeHtml(String(api.method || 'GET')) + '</span>' +
+                    '<span style="font-weight:500">' + escapeHtml(api.path) + '</span>' +
+                    '<span style="font-size:0.85em;color:#999">' + escapeHtml(api.description) + '</span>' +
+                    '</button>';
+            }
+            html += '</div></div>';
+        }
+
+        if (!html) {
+            html = '<div class="empty-state">No custom APIs available yet. Create APIs in API Builder and return here to test runtime endpoints.</div>';
+        }
+
+        if (el) el.innerHTML = html;
+        filterAPIs();
+    }).catch(function() {
+        if (el) el.innerHTML = '<div class="error-state">Failed to load runtime endpoints</div>';
+    });
+}
+
+function normalizeRuntimePath(path) {
+    var normalized = '/' + String(path || '').trim().replace(/^\/+|\/+$/g, '');
+    if (normalized === '/api/custom') return '/';
+    if (normalized.indexOf('/api/custom/') === 0) {
+        normalized = normalized.replace('/api/custom', '');
+        normalized = '/' + normalized.trim().replace(/^\/+|\/+$/g, '');
+    }
+    if (normalized === '/api/graphql') return '/api/graphql';
+    return normalized;
+}
+
+function sampleParamValue(param) {
+    if (!param) return 'sample';
+    if (param.default && String(param.default).trim() !== '') return param.default;
+    var t = String(param.type || '').toLowerCase();
+    if (t === 'int' || t === 'integer' || t === 'number' || t === 'float' || t === 'decimal') return 1;
+    if (t === 'bool' || t === 'boolean') return true;
+    return 'sample';
 }
 
 function filterAPIs() {
@@ -987,7 +1051,7 @@ function testAPI(method, url, body, description) {
         headers: getAuthHeaders()
     };
 
-    if (body && (method === 'POST' || method === 'PUT')) {
+    if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
         options.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
 

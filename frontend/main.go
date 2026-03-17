@@ -77,7 +77,7 @@ func requireFrontendRoles(allowed ...string) gin.HandlerFunc {
 			authToken, _ = c.Cookie("authToken")
 		}
 		if authToken == "" {
-			c.Redirect(http.StatusFound, "/")
+			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
 		}
@@ -128,7 +128,8 @@ func main() {
 	router.Static("/static", "templates/")
 
 	// Routes
-	router.GET("/", dashboardHandler)
+	router.GET("/", requireFrontendRoles("admin", "system-manager", "manager", "user"), dashboardHandler)
+	router.GET("/login", loginHandler)
 	router.GET("/admin", adminHandler)
 	router.GET("/system-manager", systemManagerHandler)
 	router.GET("/manager", managerHandler)
@@ -167,8 +168,16 @@ func main() {
 
 // dashboardHandler serves the public dashboard
 func dashboardHandler(c *gin.Context) {
-	isAuth := c.GetBool("isAuthenticated")
-	userName := c.GetString("userName")
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+	isAuth := authToken != ""
+
+	userName := "User"
+	if fromCookie, _ := c.Cookie("userName"); strings.TrimSpace(fromCookie) != "" {
+		userName = fromCookie
+	}
 
 	health, _ := fetchHealth()
 
@@ -181,6 +190,23 @@ func dashboardHandler(c *gin.Context) {
 		"backendURL":  backendURL,
 		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
 		"health":      health,
+	})
+}
+
+// loginHandler serves login-focused entrypoint for unauthenticated users.
+func loginHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+	health, _ := fetchHealth()
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":       "AxiomNizam - Login",
+		"pageName":    "public-dashboard",
+		"page":        "public-dashboard",
+		"isAuth":      false,
+		"userName":    "Guest",
+		"backendURL":  backendURL,
+		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
+		"health":      health,
+		"forceLogin":  true,
 	})
 }
 

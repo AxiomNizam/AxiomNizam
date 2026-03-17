@@ -171,108 +171,123 @@ function displayBackendInfo() {
     }
 }
 
-function loadAPIs() {
-    const apiCategories = {
-        'Health & Status': [
-            { method: 'GET', path: '/health', description: 'Health check (no auth)' },
-            { method: 'GET', path: '/status', description: 'Check all connections (no auth)' },
-        ],
-        'MySQL': [
-            { method: 'GET', path: '/api/mysql/users', description: 'List all users', auth: 'required' },
-            { method: 'POST', path: '/api/mysql/users', description: 'Create user', auth: 'admin' },
-            { method: 'PUT', path: '/api/mysql/users/:id', description: 'Update user', auth: 'admin' },
-            { method: 'DELETE', path: '/api/mysql/users/:id', description: 'Delete user', auth: 'admin' },
-        ],
-        'PostgreSQL': [
-            { method: 'GET', path: '/api/postgres/users', description: 'List all users', auth: 'required' },
-            { method: 'POST', path: '/api/postgres/users', description: 'Create user', auth: 'admin' },
-            { method: 'PUT', path: '/api/postgres/users/:id', description: 'Update user', auth: 'admin' },
-            { method: 'DELETE', path: '/api/postgres/users/:id', description: 'Delete user', auth: 'admin' },
-        ],
-        'MariaDB': [
-            { method: 'GET', path: '/api/mariadb/users', description: 'List all users', auth: 'required' },
-            { method: 'POST', path: '/api/mariadb/users', description: 'Create user', auth: 'admin' },
-            { method: 'PUT', path: '/api/mariadb/users/:id', description: 'Update user', auth: 'admin' },
-            { method: 'DELETE', path: '/api/mariadb/users/:id', description: 'Delete user', auth: 'admin' },
-        ],
-        'MongoDB': [
-            { method: 'GET', path: '/api/mongodb/users', description: 'List all users', auth: 'required' },
-            { method: 'POST', path: '/api/mongodb/users', description: 'Create user', auth: 'admin' },
-            { method: 'PUT', path: '/api/mongodb/users/:id', description: 'Update user', auth: 'admin' },
-            { method: 'DELETE', path: '/api/mongodb/users/:id', description: 'Delete user', auth: 'admin' },
-        ],
-        'Notifications': [
-            { method: 'POST', path: '/api/notifications/send', description: 'Send custom notification', auth: 'required' },
-            { method: 'POST', path: '/api/notifications/health', description: 'Send health notification', auth: 'required' },
-            { method: 'POST', path: '/api/notifications/status', description: 'Send status notification', auth: 'required' },
-        ],
-    };
-
-    let html = '';
-    for (const [category, apis] of Object.entries(apiCategories)) {
-        html += '<div style="margin-bottom: 20px;"><strong style="font-size: 1.1em;">' + category + '</strong>';
-        html += '<div class="api-grid">';
-        
-        for (let i = 0; i < apis.length; i++) {
-            const api = apis[i];
-            const methodClass = api.method.toLowerCase();
-            html += '<div class="api-item">' +
-                '<span class="api-method ' + methodClass + '">' + api.method + '</span>' +
-                '<div class="api-path">' + api.path + '</div>' +
-                '<div class="api-description">' + api.description + '</div>';
-            if (api.auth) {
-                html += '<span class="api-auth" style="background: rgba(239, 68, 68, 0.2); color: var(--danger-color); padding: 3px 8px; border-radius: 3px; font-size: 0.75em;">Auth: ' + api.auth + '</span>';
-            }
-            html += '</div>';
+function readDashboardCookie(name) {
+    const prefix = name + '=';
+    const parts = document.cookie.split(';');
+    for (let i = 0; i < parts.length; i++) {
+        const item = parts[i].trim();
+        if (item.startsWith(prefix)) {
+            return decodeURIComponent(item.substring(prefix.length));
         }
-        
-        html += '</div></div>';
     }
-    
-    const apisContent = document.getElementById('apisContent');
-    if (apisContent) {
-        apisContent.innerHTML = html;
-    }
-
-    // Also load custom APIs from API Builder (visible after login)
-    loadCustomBuilderAPIs();
+    return '';
 }
 
-function loadCustomBuilderAPIs() {
-    var token = localStorage.getItem('authToken');
-    var headers = {};
-    if (token) headers['Authorization'] = 'Bearer ' + token;
-    headers['Content-Type'] = 'application/json';
+function getDashboardAuthToken() {
+    return localStorage.getItem('authToken') || readDashboardCookie('authToken') || '';
+}
 
-    fetch(BACKEND_URL + '/api/v1/builder/apis', { headers: headers })
-        .then(function(response) { return response.json(); })
+function normalizeDashboardRole(role) {
+    const value = String(role || '').toLowerCase().trim();
+    if (value === 'sysadmin' || value === 'system_admin' || value === 'system-admin') return 'system-manager';
+    if (value === 'api-manager' || value === 'api_manager') return 'manager';
+    if (value === 'superadmin' || value === 'super-admin') return 'admin';
+    return value || 'user';
+}
+
+function getDashboardRole() {
+    return normalizeDashboardRole(localStorage.getItem('userRole') || readDashboardCookie('userRole') || 'user');
+}
+
+function toRuntimePath(builderPath) {
+    var raw = String(builderPath || '').trim();
+    if (!raw) return '/api/custom';
+    if (raw === '/api/custom' || raw.indexOf('/api/custom/') === 0) return raw;
+    return '/api/custom/' + raw.replace(/^\/+/, '');
+}
+
+function loadAPIs() {
+    const apisContent = document.getElementById('apisContent');
+    if (!apisContent) return;
+
+    const token = getDashboardAuthToken();
+    const role = getDashboardRole();
+
+    if (!token) {
+        apisContent.innerHTML = '<div class="api-item" style="max-width:none;">' +
+            '<div class="api-description">Login required to view runtime APIs allowed by RBAC.</div>' +
+            '</div>';
+        return;
+    }
+
+    apisContent.innerHTML = '<div class="loading">Loading APIs...</div>';
+
+    fetch(BACKEND_URL + '/api/v1/builder/apis', {
+        headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+        }
+    })
+        .then(function(response) {
+            if (response.status === 401 || response.status === 403) {
+                throw new Error('RBAC access denied for API catalog');
+            }
+            if (!response.ok) {
+                throw new Error('Failed to load APIs: HTTP ' + response.status);
+            }
+            return response.json();
+        })
         .then(function(data) {
-            var apis = data.apis || [];
-            if (apis.length === 0) return;
+            const all = (data.apis || []);
+            const active = all.filter(function(api) {
+                return String(api.status || '').toLowerCase() === 'active';
+            });
 
-            var apisContent = document.getElementById('apisContent');
-            if (!apisContent) return;
+            if (active.length === 0) {
+                apisContent.innerHTML = '<div class="api-item" style="max-width:none;">' +
+                    '<div class="api-description">No active custom APIs found. Create one from Admin > API Builder.</div>' +
+                    '</div>';
+                return;
+            }
 
-            var html = '<div style="margin-bottom: 20px; margin-top: 20px;">' +
-                '<strong style="font-size: 1.1em;">🏗️ Custom APIs (API Builder)</strong>';
+            let html = '<div style="margin-bottom: 12px; color:#5f6b7a; font-size:0.9rem;">' +
+                'Showing ' + active.length + ' active API Builder endpoints for role: <strong>' + escapeHtmlDash(role) + '</strong></div>';
+
             html += '<div class="api-grid">';
-            
-            for (var i = 0; i < apis.length; i++) {
-                var api = apis[i];
-                if (api.status !== 'active') continue;
-                var methodClass = api.method.toLowerCase();
-                var cacheBadge = api.cache_enabled ? ' <span style="background:#d4edda;color:#155724;padding:2px 6px;border-radius:3px;font-size:0.7em;">CACHED</span>' : '';
+            for (let i = 0; i < active.length; i++) {
+                const api = active[i];
+                const apiType = String(api.api_type || 'rest').toLowerCase();
+                const displayMethod = (apiType === 'graphql' ? 'POST' : (api.method || 'GET')).toUpperCase();
+                const runtimePath = apiType === 'graphql'
+                    ? String(api.path || '/api/graphql')
+                    : toRuntimePath(api.path || '/');
+
+                const methodClass = displayMethod.toLowerCase();
+                const cacheBadge = api.cache_enabled
+                    ? '<span class="api-auth" style="background:#d4edda;color:#155724;margin-left:6px;">Cache ' + (api.cache_ttl || 300) + 's</span>'
+                    : '';
+                const rateText = (api.rate_limit && api.rate_limit > 0)
+                    ? (api.rate_limit + '/min')
+                    : 'unlimited';
+
                 html += '<div class="api-item">' +
-                    '<span class="api-method ' + methodClass + '">' + api.method + '</span>' + cacheBadge +
-                    '<div class="api-path">' + escapeHtmlDash(api.path) + '</div>' +
-                    '<div class="api-description">' + escapeHtmlDash(api.description || api.name) + '</div>' +
-                    '<span class="api-auth" style="background: rgba(239, 68, 68, 0.2); color: #e74c3c; padding: 3px 8px; border-radius: 3px; font-size: 0.75em;">Category: ' + escapeHtmlDash(api.category || 'custom') + '</span>' +
+                    '<span class="api-method ' + methodClass + '">' + displayMethod + '</span>' + cacheBadge +
+                    '<div class="api-path">' + escapeHtmlDash(runtimePath) + '</div>' +
+                    '<div class="api-description">' + escapeHtmlDash(api.description || api.name || 'Custom API') + '</div>' +
+                    '<span class="api-auth" style="margin-right:6px;">Type: ' + escapeHtmlDash(apiType) + '</span>' +
+                    '<span class="api-auth" style="margin-right:6px;">Category: ' + escapeHtmlDash(api.category || 'custom') + '</span>' +
+                    '<span class="api-auth" style="margin-right:6px;">Rate: ' + escapeHtmlDash(rateText) + '</span>' +
+                    '<span class="api-auth">Auth: ' + (api.auth_required ? 'required' : 'token-only') + '</span>' +
                     '</div>';
             }
-            html += '</div></div>';
-            apisContent.innerHTML += html;
+            html += '</div>';
+            apisContent.innerHTML = html;
         })
-        .catch(function() { /* silently fail if builder not available */ });
+        .catch(function(error) {
+            apisContent.innerHTML = '<div class="api-item" style="max-width:none;">' +
+                '<div class="api-description">Unable to load API catalog: ' + escapeHtmlDash(error.message) + '</div>' +
+                '</div>';
+        });
 }
 
 function escapeHtmlDash(str) {
