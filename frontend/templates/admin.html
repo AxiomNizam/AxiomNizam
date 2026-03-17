@@ -7,6 +7,26 @@
             <h1>🔧 Admin Dashboard</h1>
             <p class="subtitle">API Builder · File Analytics · Dashboard Converter · File Scanner</p>
         </div>
+        
+        <div class="header-stats" id="adminHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Rate Limit</span>
+                <span class="stat-value">24 / 100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Token Time</span>
+                <span class="stat-value" id="headerTokenExpiry">59m 12s</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Current IP</span>
+                <span class="stat-value" id="headerCurrentIP">...</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">System</span>
+                <span class="stat-value" style="color: var(--primary-color);">Secure</span>
+            </div>
+        </div>
+
         <div class="header-right">
             <div class="branding-logo" style="display: flex; align-items: center; justify-content: center;">
                 <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height: 180px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
@@ -742,4 +762,25 @@ search:string:false"></textarea>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
 <script src="/static/admin.js?v=20260317-5"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Fetch IP
+        fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(data => {
+                const el = document.getElementById('headerCurrentIP');
+                if (el) el.textContent = data.ip;
+            }).catch(e => console.log('IP fetch failed', e));
+
+        // Token Countdown
+        let tokenSeconds = 59 * 60 + 12; // 59m 12s
+        setInterval(() => {
+            if (tokenSeconds > 0) tokenSeconds--;
+            const wM = Math.floor(tokenSeconds / 60);
+            const wS = tokenSeconds % 60;
+            const el = document.getElementById('headerTokenExpiry');
+            if (el) el.textContent = `${wM}m ${wS}s`;
+        }, 1000);
+    });
+</script>
 {{ end }}

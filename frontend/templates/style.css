@@ -380,6 +380,55 @@ h1, h2, h3, h4, h5, h6 {
     gap: 20px;
 }
 
+.header-stats {
+    display: flex;
+    gap: 15px;
+    background: rgba(255, 255, 255, 0.4);
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(var(--primary-color-rgb, 0, 140, 99), 0.1);
+    backdrop-filter: blur(10px);
+    flex: 2;
+    justify-content: space-around;
+}
+
+.dark-theme .header-stats {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(var(--primary-color-rgb, 0, 140, 99), 0.2);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 15px;
+    border-right: 1px solid var(--border-color);
+    flex: 1;
+}
+
+.stat-box:last-child {
+    border-right: none;
+}
+
+.stat-box .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+    font-family: var(--font-body);
+}
+
+.stat-box .stat-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    font-family: var(--font-heading);
+}
+
 .admin-header .user-info,
 .manager-header .user-info {
     display: flex;

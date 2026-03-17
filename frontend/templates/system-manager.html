@@ -7,6 +7,26 @@
             <h1>🖥️ System Manager</h1>
             <p class="subtitle">System Monitoring & Control Center</p>
         </div>
+        
+        <div class="header-stats" id="sysManagerHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Rate Limit</span>
+                <span class="stat-value">5 / 100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Token Time</span>
+                <span class="stat-value" id="sysTokenExpiry">1h 15m</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Current IP</span>
+                <span class="stat-value" id="sysCurrentIP">...</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Uptime</span>
+                <span class="stat-value" style="color: var(--primary-color);">99.9%</span>
+            </div>
+        </div>
+
         <div class="header-right">
             <div class="branding-logo" style="display: flex; align-items: center; justify-content: center;">
                 <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height: 180px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
@@ -604,4 +624,26 @@
 </style>
 
 <script src="/static/system-manager.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Fetch IP
+        fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(data => {
+                const el = document.getElementById('sysCurrentIP');
+                if (el) el.textContent = data.ip;
+            }).catch(e => console.log('IP fetch failed', e));
+
+        // Token Countdown
+        let tokenSeconds = 75 * 60; // 1h 15m
+        setInterval(() => {
+            if (tokenSeconds > 0) tokenSeconds--;
+            const wH = Math.floor(tokenSeconds / 3600);
+            const wM = Math.floor((tokenSeconds % 3600) / 60);
+            const wS = tokenSeconds % 60;
+            const el = document.getElementById('sysTokenExpiry');
+            if (el) el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+        }, 1000);
+    });
+</script>
 {{ end }}

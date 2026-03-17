@@ -7,6 +7,26 @@
             <h1>📋 Manager Portal</h1>
             <p class="subtitle">APIs · GIS · Analytics · NetIntel · Dashboards — View &amp; Edit</p>
         </div>
+        
+        <div class="header-stats" id="managerHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Rate Limit</span>
+                <span class="stat-value">18 / 100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Token Time</span>
+                <span class="stat-value" id="managerTokenExpiry">45m 30s</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Current IP</span>
+                <span class="stat-value" id="managerCurrentIP">...</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Status</span>
+                <span class="stat-value" style="color: var(--primary-color);">Active</span>
+            </div>
+        </div>
+
         <div class="header-right">
             <div class="branding-logo" style="display: flex; align-items: center; justify-content: center;">
                 <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height: 180px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
@@ -186,4 +206,25 @@
 </div>
 
 <script src="/static/manager.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Fetch IP
+        fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(data => {
+                const el = document.getElementById('managerCurrentIP');
+                if (el) el.textContent = data.ip;
+            }).catch(e => console.log('IP fetch failed', e));
+
+        // Token Countdown
+        let tokenSeconds = 45 * 60 + 30; // 45m 30s
+        setInterval(() => {
+            if (tokenSeconds > 0) tokenSeconds--;
+            const wM = Math.floor(tokenSeconds / 60);
+            const wS = tokenSeconds % 60;
+            const el = document.getElementById('managerTokenExpiry');
+            if (el) el.textContent = `${wM}m ${wS}s`;
+        }, 1000);
+    });
+</script>
 {{ end }}
