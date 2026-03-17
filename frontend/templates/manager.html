@@ -209,22 +209,65 @@
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP
-        fetch('https://api.ipify.org?format=json')
-            .then(r => r.json())
-            .then(data => {
-                const el = document.getElementById('managerCurrentIP');
-                if (el) el.textContent = data.ip;
-            }).catch(e => console.log('IP fetch failed', e));
+        fetch('https://api.ipify.org?format=json').then(r => r.json()).then(data => {
+            document.querySelectorAll('[id$="CurrentIP"]').forEach(el => el.textContent = data.ip);
+        }).catch(e => console.log('IP fetch failed', e));
 
-        // Token Countdown
-        let tokenSeconds = 45 * 60 + 30; // 45m 30s
+        // Setup live token countdown
+        let tokenSeconds = 0;
+        const updateTokenTime = () => {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                     const payload = JSON.parse(atob(token.split('.')[1]));
+                     if (payload.exp) {
+                         tokenSeconds = payload.exp - Math.floor(Date.now() / 1000);
+                     }
+                } catch(e) {}
+            }
+        };
+        updateTokenTime();
+
         setInterval(() => {
-            if (tokenSeconds > 0) tokenSeconds--;
-            const wM = Math.floor(tokenSeconds / 60);
-            const wS = tokenSeconds % 60;
-            const el = document.getElementById('managerTokenExpiry');
-            if (el) el.textContent = `${wM}m ${wS}s`;
+            if (tokenSeconds > 0) {
+                tokenSeconds--;
+                const wH = Math.floor(tokenSeconds / 3600);
+                const wM = Math.floor((tokenSeconds % 3600) / 60);
+                const wS = tokenSeconds % 60;
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+                });
+            } else {
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => el.textContent = "Expired");
+            }
         }, 1000);
+
+        // Listen for all fetch responses to catch rate limit headers
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch.apply(this, args);
+            try {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const limit = response.headers.get('X-RateLimit-Limit');
+                if (remaining && limit) {
+                    document.querySelectorAll('.stat-box').forEach(box => {
+                        const label = box.querySelector('.stat-label');
+                        if (label && label.textContent.includes('Rate Limit')) {
+                            const val = box.querySelector('.stat-value');
+                            if (val) {
+                                val.textContent = `${remaining} / ${limit}`;
+                                if (parseInt(remaining) < 50) {
+                                    val.style.color = '#ef4444'; // Red warning if low
+                                } else {
+                                    val.style.color = 'var(--primary-color)';
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
+            return response;
+        };
     });
 </script>
 {{ end }}
