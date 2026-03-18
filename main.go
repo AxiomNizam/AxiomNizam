@@ -71,6 +71,7 @@ func main() {
 
 	// Load configuration
 	cfg := config.LoadConfig()
+	applySecurityGuardrails(cfg)
 
 	// Initialize Keycloak token validator
 	keycloakConfig := &auth.KeycloakConfig{
@@ -1488,6 +1489,119 @@ func createTables(conns *database.Connections) {
 		conns.Oracle.AutoMigrate(&models.User{})
 		log.Println("✅ Oracle table created/migrated")
 	}
+}
+
+func resolveSecurityEnvironment() string {
+	candidates := []string{
+		strings.TrimSpace(os.Getenv("AXIOMNIZAM_ENV")),
+		strings.TrimSpace(os.Getenv("APP_ENV")),
+		strings.TrimSpace(os.Getenv("ENVIRONMENT")),
+		strings.TrimSpace(os.Getenv("GO_ENV")),
+	}
+	for _, c := range candidates {
+		if c != "" {
+			return strings.ToLower(c)
+		}
+	}
+	return "development"
+}
+
+func isProductionEnvironment(env string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(env))
+	return normalized == "production" || normalized == "prod"
+}
+
+func resolveSecurityGuardrailMode(env string) string {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("SECURITY_GUARDRAILS_MODE")))
+	switch mode {
+	case "off", "audit", "enforce":
+		return mode
+	case "":
+		if isProductionEnvironment(env) {
+			return "audit"
+		}
+		return "off"
+	default:
+		log.Printf("⚠️  Unknown SECURITY_GUARDRAILS_MODE=%q, defaulting to audit", mode)
+		return "audit"
+	}
+}
+
+func applySecurityGuardrails(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+
+	env := resolveSecurityEnvironment()
+	mode := resolveSecurityGuardrailMode(env)
+	if mode == "off" {
+		return
+	}
+
+	blocking := make([]string, 0)
+	warnings := make([]string, 0)
+	addBlocking := func(msg string) {
+		if strings.TrimSpace(msg) != "" {
+			blocking = append(blocking, msg)
+		}
+	}
+	addWarning := func(msg string) {
+		if strings.TrimSpace(msg) != "" {
+			warnings = append(warnings, msg)
+		}
+	}
+
+	isDefault := func(value string, defaults ...string) bool {
+		trimmed := strings.ToLower(strings.TrimSpace(value))
+		for _, d := range defaults {
+			if trimmed == strings.ToLower(strings.TrimSpace(d)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	if isDefault(cfg.Keycloak.ClientSecret, "", "change-me", "changeme", "default", "keycloak-secret") {
+		addBlocking("KEYCLOAK_CLIENT_SECRET is empty or default-like")
+	}
+	if strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")) == "" {
+		addBlocking("DEMO_JWT_SECRET is not set")
+	}
+	if strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS")) == "" {
+		addBlocking("CORS_ALLOWED_ORIGINS is empty")
+	}
+
+	if isDefault(cfg.MySQL.Password, "root", "password") {
+		addWarning("MYSQL_PASSWORD appears to be a default credential")
+	}
+	if isDefault(cfg.PostgreSQL.Password, "postgres", "password") {
+		addWarning("POSTGRES_PASSWORD appears to be a default credential")
+	}
+	if isDefault(cfg.Oracle.Password, "oracle123", "password") {
+		addWarning("ORACLE_PASSWORD appears to be a default credential")
+	}
+
+	for _, w := range warnings {
+		log.Printf("⚠️  Security guardrail warning: %s", w)
+	}
+
+	if len(blocking) == 0 {
+		if mode == "audit" {
+			log.Printf("✅ Security guardrails check passed (env=%s, mode=%s)", env, mode)
+		}
+		return
+	}
+
+	for _, b := range blocking {
+		log.Printf("🚨 Security guardrail issue: %s", b)
+	}
+
+	if mode == "enforce" && isProductionEnvironment(env) {
+		log.Fatalf("❌ Security guardrails blocked startup in production (mode=%s)", mode)
+		return
+	}
+
+	log.Printf("⚠️  Security guardrails detected %d blocking issue(s) but startup continues (env=%s, mode=%s)", len(blocking), env, mode)
 }
 
 func ensureWorkflowRegistered(ctx context.Context, resourceHandler *handlers.ResourceHandler, workflowName string) error {

@@ -6,12 +6,36 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/rbac"
 	"github.com/gin-gonic/gin"
 )
+
+func TestMainRouteProtectionPhase2(t *testing.T) {
+	content, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("failed to read main.go: %v", err)
+	}
+
+	src := string(content)
+	required := []string{
+		`router.Any("/api/custom", authMiddleware, apiBuilderHandler.InvokeCustomAPI)`,
+		`router.Any("/api/custom/*path", authMiddleware, apiBuilderHandler.InvokeCustomAPI)`,
+		`builderAPI.DELETE("/csv/uploads/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteCSVUpload)`,
+		`builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)`,
+		`builderAPI.POST("/scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanFile)`,
+	}
+
+	for _, snippet := range required {
+		if !strings.Contains(src, snippet) {
+			t.Fatalf("missing expected protected route mapping: %s", snippet)
+		}
+	}
+}
 
 const (
 	testAdminToken = "admin-token"
