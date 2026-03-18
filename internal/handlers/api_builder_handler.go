@@ -149,25 +149,29 @@ type FieldMapping struct {
 // ---------- Handler ----------
 
 type APIBuilderHandler struct {
-	mu          sync.RWMutex
-	customAPIs  map[string]*CustomAPI
-	csvUploads  map[string]*CSVUpload
-	conversions map[string]*ConversionResult
-	scanRecords map[string]*FileScanRecord
-	apiData     map[string][]map[string]interface{} // stores mock data per API
-	csvData     map[string][][]string               // raw CSV data per upload
-	db          map[string]*gorm.DB
-	etcd        *clientv3.Client
-	stateKey    string
-	scanOrch    *scanner.Orchestrator
+	mu                  sync.RWMutex
+	customAPIs          map[string]*CustomAPI
+	csvUploads          map[string]*CSVUpload
+	conversions         map[string]*ConversionResult
+	generatedDashboards map[string]*AnalyticsDashboard
+	scanRecords         map[string]*FileScanRecord
+	apiData             map[string][]map[string]interface{} // stores mock data per API
+	csvData             map[string][][]string               // raw CSV data per upload
+	db                  map[string]*gorm.DB
+	etcd                *clientv3.Client
+	stateKey            string
+	scanOrch            *scanner.Orchestrator
 	// reference to analytics & GIS handlers for conversion
 	analyticsHandler *AnalyticsHandler
 	gisHandler       *GISHandler
 }
 
 type apiBuilderState struct {
-	CustomAPIs map[string]*CustomAPI               `json:"custom_apis"`
-	APIData    map[string][]map[string]interface{} `json:"api_data"`
+	CustomAPIs          map[string]*CustomAPI               `json:"custom_apis"`
+	APIData             map[string][]map[string]interface{} `json:"api_data"`
+	CSVUploads          map[string]*CSVUpload               `json:"csv_uploads,omitempty"`
+	Conversions         map[string]*ConversionResult        `json:"conversions,omitempty"`
+	GeneratedDashboards map[string]*AnalyticsDashboard      `json:"generated_dashboards,omitempty"`
 }
 
 func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client) *APIBuilderHandler {
@@ -191,18 +195,19 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 		scanner.NewClamAVScanner(getClamAVAddr()),
 	)
 	h := &APIBuilderHandler{
-		customAPIs:       make(map[string]*CustomAPI),
-		csvUploads:       make(map[string]*CSVUpload),
-		conversions:      make(map[string]*ConversionResult),
-		scanRecords:      make(map[string]*FileScanRecord),
-		apiData:          make(map[string][]map[string]interface{}),
-		csvData:          make(map[string][][]string),
-		db:               db,
-		etcd:             etcd,
-		stateKey:         "axiomnizam:builder:custom_apis",
-		scanOrch:         orchestrator,
-		analyticsHandler: ah,
-		gisHandler:       gh,
+		customAPIs:          make(map[string]*CustomAPI),
+		csvUploads:          make(map[string]*CSVUpload),
+		conversions:         make(map[string]*ConversionResult),
+		generatedDashboards: make(map[string]*AnalyticsDashboard),
+		scanRecords:         make(map[string]*FileScanRecord),
+		apiData:             make(map[string][]map[string]interface{}),
+		csvData:             make(map[string][][]string),
+		db:                  db,
+		etcd:                etcd,
+		stateKey:            "axiomnizam:builder:custom_apis",
+		scanOrch:            orchestrator,
+		analyticsHandler:    ah,
+		gisHandler:          gh,
 	}
 	if !h.loadState() {
 		h.seedData()
@@ -240,9 +245,29 @@ func (h *APIBuilderHandler) loadState() bool {
 	if state.APIData == nil {
 		state.APIData = make(map[string][]map[string]interface{})
 	}
+	if state.CSVUploads == nil {
+		state.CSVUploads = make(map[string]*CSVUpload)
+	}
+	if state.Conversions == nil {
+		state.Conversions = make(map[string]*ConversionResult)
+	}
+	if state.GeneratedDashboards == nil {
+		state.GeneratedDashboards = make(map[string]*AnalyticsDashboard)
+	}
 
 	h.customAPIs = state.CustomAPIs
 	h.apiData = state.APIData
+	h.csvUploads = state.CSVUploads
+	h.conversions = state.Conversions
+	h.generatedDashboards = state.GeneratedDashboards
+
+	if h.analyticsHandler != nil && len(h.generatedDashboards) > 0 {
+		h.analyticsHandler.mu.Lock()
+		for id, dash := range h.generatedDashboards {
+			h.analyticsHandler.dashboards[id] = dash
+		}
+		h.analyticsHandler.mu.Unlock()
+	}
 	return true
 }
 
@@ -252,8 +277,11 @@ func (h *APIBuilderHandler) persistStateLocked() {
 	}
 
 	state := apiBuilderState{
-		CustomAPIs: h.customAPIs,
-		APIData:    h.apiData,
+		CustomAPIs:          h.customAPIs,
+		APIData:             h.apiData,
+		CSVUploads:          h.csvUploads,
+		Conversions:         h.conversions,
+		GeneratedDashboards: h.generatedDashboards,
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
@@ -1448,6 +1476,7 @@ func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
 	h.mu.Lock()
 	h.csvUploads[id] = upload
 	h.csvData[id] = records
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1497,6 +1526,7 @@ func (h *APIBuilderHandler) DeleteCSVUpload(c *gin.Context) {
 	}
 	delete(h.csvUploads, id)
 	delete(h.csvData, id)
+	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "upload deleted"})
 }
@@ -1547,6 +1577,8 @@ func (h *APIBuilderHandler) GenerateDashboard(c *gin.Context) {
 	h.mu.Lock()
 	upload.DashboardID = dashID
 	upload.Status = "dashboard_created"
+	h.generatedDashboards[dashID] = dashboard
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -1753,6 +1785,7 @@ func (h *APIBuilderHandler) ConvertDashboardToGIS(c *gin.Context) {
 
 	h.mu.Lock()
 	h.conversions[convID] = conv
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -1822,6 +1855,8 @@ func (h *APIBuilderHandler) ConvertGISToDashboard(c *gin.Context) {
 
 	h.mu.Lock()
 	h.conversions[convID] = conv
+	h.generatedDashboards[dashID] = dashboard
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -1934,6 +1969,7 @@ func (h *APIBuilderHandler) GenerateGISFromCSV(c *gin.Context) {
 	h.mu.Lock()
 	upload.GISDashboardID = dsID
 	upload.Status = "gis_created"
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -2069,6 +2105,8 @@ func (h *APIBuilderHandler) DeleteDashboard(c *gin.Context) {
 			}
 		}
 	}
+	delete(h.generatedDashboards, dashID)
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "dashboard deleted", "id": dashID})

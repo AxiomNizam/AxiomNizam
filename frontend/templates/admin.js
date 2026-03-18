@@ -870,6 +870,30 @@ function generateCSVGIS() {
     });
 }
 
+function resolveUploadDashboardId(upload) {
+    if (!upload) return '';
+    return upload.dashboard_id || upload.dashboardId || upload.generated_dashboard_id || '';
+}
+
+function confirmDeleteCSVAndDashboard(filename, dashboardId) {
+    var fileLabel = String(filename || 'this CSV upload').trim();
+    var dashLabel = String(dashboardId || '').trim();
+    var message = 'Delete CSV "' + fileLabel + '" and its dashboard' + (dashLabel ? ' (' + dashLabel + ')' : '') + '? This action cannot be undone.';
+    if (!confirm(message)) {
+        return false;
+    }
+
+    var ack = prompt('Type DELETE BOTH to confirm combined deletion for "' + fileLabel + '"');
+    if (ack === null) {
+        return false;
+    }
+    if (String(ack).trim().toUpperCase() !== 'DELETE BOTH') {
+        alert('Delete cancelled: confirmation text did not match DELETE BOTH.');
+        return false;
+    }
+    return true;
+}
+
 function loadCSVHistory() {
     fetchJSON('/api/v1/builder/csv/uploads').then(function(d) {
         var list = d.uploads || [];
@@ -882,10 +906,16 @@ function loadCSVHistory() {
         var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Type</th><th>Rows</th><th>Cols</th><th>Geo</th><th>Status</th><th>Dashboard</th><th>Actions</th></tr></thead><tbody>';
         list.forEach(function(u) {
             var safeId = u.id.replace(/'/g, "\\'");
+            var safeFilename = String(u.filename || 'upload').replace(/'/g, "\\'");
+            var dashboardId = resolveUploadDashboardId(u);
             var dashActions = '';
-            if (u.dashboard_id) {
-                var safeDashId = u.dashboard_id.replace(/'/g, "\\'");
-                dashActions = '<span>' + escapeHtml(u.dashboard_id) + '</span> <button class="btn-sm btn-del" onclick="deleteDashboard(\'' + safeDashId + '\')">Del</button>';
+            var rowActions = '<button class="btn-sm btn-del" onclick="deleteCSVUpload(\'' + safeId + '\')">Delete CSV</button>';
+
+            if (dashboardId) {
+                var safeDashId = dashboardId.replace(/'/g, "\\'");
+                dashActions = '<span>' + escapeHtml(dashboardId) + '</span>';
+                rowActions = '<button class="btn-sm btn-del" onclick="deleteCSVAndDashboard(\'' + safeId + '\', \'' + safeDashId + '\', \'' + safeFilename + '\')">Delete CSV + Dashboard</button> ' +
+                    '<button class="btn-sm btn-del" onclick="deleteDashboard(\'' + safeDashId + '\')">Delete Dashboard</button> ' + rowActions;
             } else if (u.gis_dashboard_id) {
                 dashActions = escapeHtml(u.gis_dashboard_id);
             } else {
@@ -895,7 +925,7 @@ function loadCSVHistory() {
                 '<td>' + (u.has_geo_data ? 'Yes' : '-') + '</td>' +
                 '<td><span class="status-badge status-' + u.status + '">' + u.status + '</span></td>' +
                 '<td>' + dashActions + '</td>' +
-                '<td><button class="btn-sm btn-del" onclick="deleteCSVUpload(\'' + safeId + '\')">Del</button></td></tr>';
+                '<td>' + rowActions + '</td></tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
@@ -905,6 +935,31 @@ function loadCSVHistory() {
 function deleteCSVUpload(id) {
     if (!confirm('Delete this CSV upload?')) return;
     deleteJSON('/api/v1/builder/csv/uploads/' + id).then(function() { loadCSVHistory(); });
+}
+
+function deleteCSVAndDashboard(uploadId, dashboardId, filename) {
+    if (!canModify()) { alert('You do not have permission to delete dashboards. Contact an admin, manager, or system-manager.'); return; }
+    if (!dashboardId) {
+        alert('No dashboard is linked to this upload.');
+        return;
+    }
+    if (!confirmDeleteCSVAndDashboard(filename, dashboardId)) return;
+
+    deleteJSON('/api/v1/builder/dashboards/' + dashboardId).then(function(dashResp) {
+        if (!(dashResp && dashResp.status === 'success')) {
+            alert((dashResp && dashResp.error) || 'Failed to delete dashboard. CSV was not deleted.');
+            return;
+        }
+        deleteJSON('/api/v1/builder/csv/uploads/' + uploadId).then(function(csvResp) {
+            if (csvResp && csvResp.status === 'success') {
+                addLog('Deleted CSV and dashboard: ' + uploadId + ' / ' + dashboardId, 'warn');
+                loadCSVHistory();
+            } else {
+                alert((csvResp && csvResp.error) || 'Dashboard deleted, but CSV delete failed.');
+                loadCSVHistory();
+            }
+        });
+    });
 }
 
 // ===================================================================
@@ -1335,6 +1390,18 @@ function runAdminGraphQLQuery() {
     if (!query) {
         alert('GraphQL query is required.');
         return;
+    }
+
+    if (/^\s*mutation\b/i.test(query)) {
+        var mutationOk = confirm('This GraphQL request appears to be a mutation and may change data. Continue?');
+        if (!mutationOk) {
+            return;
+        }
+        var mutationAck = prompt('Type RUN MUTATION to confirm execution');
+        if (mutationAck === null || String(mutationAck).trim().toUpperCase() !== 'RUN MUTATION') {
+            alert('Execution cancelled: confirmation text did not match RUN MUTATION.');
+            return;
+        }
     }
 
     var variables;
