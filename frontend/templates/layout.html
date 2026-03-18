@@ -41,23 +41,23 @@
                 
                 <div class="nav-center">
                     <a href="/" class="nav-link {{ if eq .page "public-dashboard" }}active{{ end }}">
-                        <span class="nav-icon">📊</span>
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span>
                         <span>Dashboard</span>
                     </a>
                     <a href="/gis" class="nav-link {{ if eq .page "gis-dashboard" }}active{{ end }}">
-                        <span class="nav-icon">🌍</span>
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span>
                         <span>GIS</span>
                     </a>
                     <a href="/analytics" class="nav-link {{ if eq .page "analytics-dashboard" }}active{{ end }}">
-                        <span class="nav-icon">📈</span>
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span>
                         <span>Analytics</span>
                     </a>
                     <a href="/cdc-etl" class="nav-link {{ if eq .page "cdc-etl-dashboard" }}active{{ end }}">
-                        <span class="nav-icon">🔄</span>
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
                         <span>CDC/ETL</span>
                     </a>
                     <a href="/netintel" class="nav-link {{ if eq .page "netintel-dashboard" }}active{{ end }}">
-                        <span class="nav-icon">📡</span>
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
                         <span>NetIntel</span>
                     </a>
 
@@ -66,35 +66,35 @@
                             class="nav-more-btn {{ if or (eq .page "governance-dashboard") (eq .page "operations-center") (eq .page "version-lineage-dashboard") (eq .page "admin") (eq .page "system-manager") (eq .page "manager") }}active{{ end }}"
                             id="navMoreBtn"
                             onclick="toggleNavMoreMenu(event)">
-                            <span class="nav-icon">☰</span>
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
                             <span class="nav-more-label">More</span>
                             <span class="nav-more-caret">▾</span>
                         </button>
 
                         <div class="nav-dropdown-menu" id="navMoreMenu">
                             <a href="/governance" class="nav-dropdown-link {{ if eq .page "governance-dashboard" }}active{{ end }}" id="nav-governance" style="display:none">
-                                <span class="nav-icon">🏛️</span>
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
                                 <span>Governance</span>
                             </a>
                             <a href="/operations-center" class="nav-dropdown-link {{ if eq .page "operations-center" }}active{{ end }}" id="nav-ops" style="display:none">
-                                <span class="nav-icon">🛠️</span>
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span>
                                 <span>Operations</span>
                             </a>
                             <a href="/lineage-version" class="nav-dropdown-link {{ if eq .page "version-lineage-dashboard" }}active{{ end }}" id="nav-lineage" style="display:none">
-                                <span class="nav-icon">🧭</span>
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span>
                                 <span>Lineage</span>
                             </a>
                             {{ if .isAuth }}
                             <a href="/admin" class="nav-dropdown-link {{ if eq .page "admin" }}active{{ end }}" id="nav-admin" style="display:none">
-                                <span class="nav-icon">🔧</span>
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span>
                                 <span>Admin</span>
                             </a>
                             <a href="/system-manager" class="nav-dropdown-link {{ if eq .page "system-manager" }}active{{ end }}" id="nav-sysmanager" style="display:none">
-                                <span class="nav-icon">🖥️</span>
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span>
                                 <span>System Manager</span>
                             </a>
                             <a href="/manager" class="nav-dropdown-link {{ if eq .page "manager" }}active{{ end }}" id="nav-manager" style="display:none">
-                                <span class="nav-icon">📋</span>
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span>
                                 <span>Manager</span>
                             </a>
                             {{ end }}

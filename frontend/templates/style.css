@@ -204,7 +204,32 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .nav-icon {
-    font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.nav-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: all 0.3s ease;
+}
+.nav-link:hover .nav-icon svg,
+.nav-link.active .nav-icon svg,
+.nav-dropdown-link:hover .nav-icon svg,
+.nav-dropdown-link.active .nav-icon svg {
+    stroke: var(--primary-color);
+}
+.dark-theme .nav-link:hover .nav-icon svg,
+.dark-theme .nav-link.active .nav-icon svg,
+.dark-theme .nav-dropdown-link:hover .nav-icon svg,
+.dark-theme .nav-dropdown-link.active .nav-icon svg {
+    stroke: var(--primary-color);
+    filter: drop-shadow(0 0 3px rgba(0, 140, 99, 0.4));
 }
 
 .nav-right {
@@ -2831,4 +2856,19 @@ body {
     .builder-toolbar button {
         width: 100%;
     }
+}
+
+.tab-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: all 0.3s ease;
+}
+.tab-btn:hover .tab-icon svg,
+.tab-btn.active .tab-icon svg {
+    stroke: var(--primary-color);
 }
