@@ -1,266 +1,218 @@
-# AxiomNizam Security Assessment README
+# AxiomNizam Security README
 
-Date: 2026-03-16
+Date: 2026-03-18
 
-## Scope
+## Scope and Method
 
-This document captures the current security posture of the API platform based on code inspection of authentication, authorization, CORS, dynamic SQL, API Builder runtime execution, file scanning, and operational endpoints.
+This document is rewritten from a code-backed scan of the internal directory and current runtime wiring.
+
+Scan coverage:
+- internal Go files scanned: 330
+- Focus areas: authentication, authorization, SQL execution paths, file scanning, logging, encryption, rate limiting, and configuration defaults
 
 ## Executive Summary
 
-The platform has strong foundational controls (JWT auth, route-level RBAC, token rate limiting, and file scanning pipeline), but there are several high-risk exposures that should be remediated first:
+Current posture:
+- Strong baseline controls exist (JWT validation, role middleware, admin/system-manager gates on privileged routes, SQL read-only policy checks for API Builder templates, SafeGate file scanning pipeline).
+- Critical credential and token-hardening gaps remain (hardcoded CLI auth key/admin, insecure config defaults, secrets handling hygiene).
+- Startup guardrails are implemented and can enforce in production, but rollout is currently designed to begin in audit mode.
 
-1. Authenticated users can execute destructive SQL through dynamic query endpoints.
-2. Authenticated users can execute arbitrary SQL through runtime custom API invocation.
-3. Stored API security metadata (auth_required and rate_limit) is not enforced during runtime execution.
-4. Multiple secrets/default credentials are present in repository configuration and fallback code.
-5. CORS policy reflects arbitrary Origin while credentials are enabled.
+Top risks to address first:
+1. Hardcoded CLI auth secret and default admin credentials in internal handlers.
+2. Insecure default credentials in configuration fallbacks.
+3. Token validation helper endpoint that returns success for any presented bearer token.
+4. Runtime custom API auth_required flag is stored but not enforced at invocation.
+5. Query logging stores raw SQL and params, which may include sensitive data.
+
+## Security Controls Implemented
+
+### 1) Authentication and Authorization
+
+Implemented:
+- Keycloak-backed JWT validation with JWKS refresh and role extraction.
+  - internal/auth/auth.go
+- Role middleware helpers for single and multi-role checks.
+  - internal/auth/middleware.go
+- Main runtime route protection uses auth, admin, and admin-or-system-manager middleware.
+  - main.go
+
+Notes:
+- API route groups in many internal modules expose plain Register...Routes functions and rely on caller wiring to add auth middleware.
+
+### 2) SQL Execution Controls
+
+Implemented:
+- API Builder SQL templates are validated as read-only with policy modes compat and strict.
+  - internal/handlers/api_builder_handler.go
+- Runtime custom API execution uses stored templates and parameter extraction, then validates placeholder count.
+  - internal/handlers/api_builder_handler.go
+- Dynamic SQL GET path is read-only.
+  - internal/handlers/dynamic_query_handler.go
+- Dynamic SQL POST and batch routes are privileged at router layer.
+  - main.go
+
+### 3) File Upload and Malware Scanning
+
+Implemented:
+- SafeGate pipeline for uploads includes metadata, MIME, SVG, macro, archive, and ClamAV scanners.
+  - internal/handlers/api_builder_handler.go
+  - internal/scanner/scanner.go
+
+### 4) Rate Limiting
+
+Implemented:
+- Token usage tracking and expiry window enforcement.
+  - internal/auth/rate_limit.go
+- Combined token validation and rate-limit middleware exists for auth flows.
+  - internal/auth/rate_limit_middleware.go
+- Per-custom-API runtime rate limiting is enforced in API Builder invocation path.
+  - internal/handlers/api_builder_handler.go
+
+### 5) Audit and Security Framework Components
+
+Implemented as modules/framework:
+- Audit log handlers and report/query/delete support.
+  - internal/audit/handlers.go
+- RLS manager and policy model.
+  - internal/security/rls.go
+- Encryption key and encrypt/decrypt APIs.
+  - internal/encryption/handlers.go
+  - internal/encryption/models.go
+
+Note:
+- Some framework endpoints are model-complete but have partial implementation details (see findings).
 
 ## Priority Findings
 
-## 1) Critical: Authenticated users can run destructive SQL
+### Critical
 
-Severity: Critical
+1. Hardcoded CLI JWT key and default admin account
+- Evidence:
+  - internal/handlers/cli_auth_handler.go
+- Why this is critical:
+  - A static signing secret and default admin credentials allow token forgery and unauthorized access if exposed.
 
-Evidence:
-- Route protection is auth-only for write query endpoints:
-  - [main.go](main.go#L454)
-  - [main.go](main.go#L460)
-  - [main.go](main.go#L466)
-  - [main.go](main.go#L472)
-  - [main.go](main.go#L478)
-- SQL allowlist includes write/DDL operations:
-  - [internal/handlers/dynamic_query_handler.go](internal/handlers/dynamic_query_handler.go#L459)
+2. Insecure default credential fallbacks in runtime config
+- Evidence:
+  - internal/config/config.go
+- Why this is critical:
+  - Default root/postgres/oracle-style credentials increase risk of insecure deployment if env overrides are missing.
 
-Risk:
-- Any authenticated user can alter schema/data (CREATE, DROP, ALTER, TRUNCATE, REPLACE).
+### High
 
-Mitigation:
-- Split read and write endpoints.
-- Require adminOrSys middleware on all write/DDL endpoints.
-- Disable DDL by default with an explicit environment flag.
-- Validate SQL with parser-backed policy per dialect.
+3. Validate token endpoint is not doing cryptographic validation
+- Evidence:
+  - internal/handlers/auth_handler.go
+  - Function: ValidateToken
+- Why this is high:
+  - Endpoint currently responds success when token is present, creating false assurance for clients.
 
-## 2) Critical: Custom API runtime can execute arbitrary SQL
+4. Custom API auth_required flag is not enforced in runtime invocation path
+- Evidence:
+  - Model field present in internal/handlers/api_builder_handler.go
+  - Runtime InvokeCustomAPI enforces status and rate limit but does not evaluate auth_required per API policy.
+- Why this is high:
+  - Security metadata intent can diverge from effective behavior.
 
-Severity: Critical
+5. Query logs can capture sensitive SQL and parameter values without redaction
+- Evidence:
+  - internal/handlers/dynamic_query_handler.go
+  - internal/handlers/query_logger.go
+- Why this is high:
+  - Persisted logs may contain secrets or personal data.
 
-Evidence:
-- Runtime endpoint is auth-only:
-  - [main.go](main.go#L1012)
-  - [main.go](main.go#L1013)
-- Query accepted from caller body and executed:
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L851)
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L725)
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L780)
+### Medium
 
-Risk:
-- Arbitrary SQL execution by authenticated users against configured source DBs.
+6. Demo/platform local login branches exist when Keycloak-only mode is relaxed
+- Evidence:
+  - internal/handlers/auth_handler.go
+  - internal/auth/auth.go (demo secret behavior)
+- Why this is medium:
+  - Risk is configuration-dependent; if relaxed in production, local credentials/token modes can weaken identity controls.
 
-Mitigation:
-- Replace free-form SQL with pre-approved parameterized templates.
-- Restrict runtime invocation by role and per-API policy.
-- Block write SQL unless explicitly approved per custom API.
+7. Encryption policy endpoints include placeholder behavior
+- Evidence:
+  - internal/encryption/handlers.go
+  - Comments: policy storage/list retrieval marked as to be implemented
+- Why this is medium:
+  - Partial policy management can create mismatched expectations about enforcement depth.
 
-## 3) High: API security metadata is stored but not enforced
+## Already Addressed Improvements
 
-Severity: High
+These are present and should be retained:
+- CORS moved to explicit allowlist logic with origin checks.
+  - main.go
+- Dynamic SQL write endpoints restricted to admin/system-manager middleware.
+  - main.go
+- API Builder SQL policy supports compat and strict modes with statement classification and blocklists.
+  - internal/handlers/api_builder_handler.go
+- Security guardrails support off, audit, enforce with production-aware blocking in enforce mode.
+  - main.go
 
-Evidence:
-- Metadata exists and is persisted:
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L51)
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L52)
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L403)
-  - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L404)
-- Runtime invoke path does not enforce these controls.
+## Guardrail Rollout (Staging First)
 
-Risk:
-- Endpoint-level auth/rate intent can drift from runtime behavior.
+Recommended staged rollout:
+1. Set AXIOMNIZAM_ENV=production in staging.
+2. Set SECURITY_GUARDRAILS_MODE=audit in staging first.
+3. Observe logs and fix all guardrail issues.
+4. Switch SECURITY_GUARDRAILS_MODE=enforce only when clean.
 
-Mitigation:
-- Enforce auth_required and rate_limit in runtime invocation path.
-- Add negative/positive tests for both flags.
+Guardrails currently check for:
+- KEYCLOAK_CLIENT_SECRET quality
+- DEMO_JWT_SECRET presence
+- CORS_ALLOWED_ORIGINS presence
+- Default-like DB passwords as warnings
 
-## 4) High: Secrets and defaults are exposed
+Environment note:
+- .env now includes staged rollout comments and audit-first defaults for this flow.
 
-Severity: High
+## Security Test Coverage Snapshot
 
-Evidence:
-- Secrets/defaults in env file:
-  - [.env](.env#L84)
-  - [.env](.env#L91)
-  - [.env](.env#L115)
-  - [.env](.env#L33)
-  - [.env](.env#L54)
-  - [.env](.env#L101)
-- Hardcoded CLI auth key and default admin credentials:
-  - [internal/handlers/cli_auth_handler.go](internal/handlers/cli_auth_handler.go#L38)
-  - [internal/handlers/cli_auth_handler.go](internal/handlers/cli_auth_handler.go#L47)
-- Fallback secret in auth handler:
-  - [internal/handlers/auth_handler.go](internal/handlers/auth_handler.go#L42)
+Validated tests relevant to current security controls:
+- internal/handlers/api_builder_sql_policy_test.go
+- internal/rbac/handlers_access_requests_test.go
+- main_rbac_access_requests_integration_test.go
 
-Risk:
-- Credential leakage, unauthorized access, and weak production hygiene.
+Coverage gaps to add next:
+- auth_required enforcement behavior tests for InvokeCustomAPI
+- auth/validate endpoint cryptographic validation tests
+- log redaction tests for query logger
+- guardrail enforce-mode startup behavior tests
 
-Mitigation:
-- Rotate exposed secrets immediately.
-- Move secrets to secret manager and remove from repo.
-- Fail startup in production when defaults are detected.
+## Remediation Plan
 
-## 5) High: CORS origin reflection with credentials enabled
+### Phase 0 (Immediate)
 
-Severity: High
+1. Replace hardcoded CLI JWT key with environment/secret-manager sourced value.
+2. Remove default admin credential bootstrap in CLI auth or force explicit initialization.
+3. Implement real token validation in auth validate endpoint using existing validator.
+4. Add log redaction for SQL parameters and sensitive fields.
+5. Rotate any exposed secrets and verify they are not committed in tracked files.
 
-Evidence:
-- Reflected origin + credentials true:
-  - [main.go](main.go#L129)
-  - [main.go](main.go#L133)
-  - [main.go](main.go#L134)
+### Phase 1 (Short-term)
 
-Risk:
-- Increased CSRF/cross-origin abuse risk if trusted origin boundaries are weak.
+1. Enforce auth_required in custom API runtime invocation.
+2. Tighten production defaults in configuration loading.
+3. Complete encryption policy persistence and retrieval paths.
+4. Add integration tests for role boundary behavior on high-impact endpoints.
 
-Mitigation:
-- Use strict allowlist of origins from environment.
-- Disable credentials unless strictly required.
+### Phase 2 (Hardening)
 
-## 6) Medium: Token validate endpoint does not validate token
-
-Severity: Medium
-
-Evidence:
-- Endpoint route:
-  - [main.go](main.go#L325)
-- Handler currently accepts presence of token header:
-  - [internal/handlers/auth_handler.go](internal/handlers/auth_handler.go#L439)
-  - [internal/handlers/auth_handler.go](internal/handlers/auth_handler.go#L452)
-  - [internal/handlers/auth_handler.go](internal/handlers/auth_handler.go#L456)
-
-Risk:
-- False confidence for clients relying on this endpoint.
-
-Mitigation:
-- Reuse full validator logic and return verified claims/expiry only.
-
-## 7) Medium: CLI auth verification is in-memory token map based
-
-Severity: Medium
-
-Evidence:
-- In-memory token lookup behavior:
-  - [internal/handlers/cli_auth_handler.go](internal/handlers/cli_auth_handler.go#L94)
-  - [internal/handlers/cli_auth_handler.go](internal/handlers/cli_auth_handler.go#L108)
-  - [internal/handlers/cli_auth_handler.go](internal/handlers/cli_auth_handler.go#L139)
-
-Risk:
-- Tokens are not independently verified for signature/expiry at verification time.
-
-Mitigation:
-- Validate JWT signature and exp on each request.
-- Add jti-based revocation and remove default admin account.
-
-## 8) Medium: Sensitive log content retention
-
-Severity: Medium
-
-Evidence:
-- Keycloak response body log:
-  - [internal/handlers/auth_handler.go](internal/handlers/auth_handler.go#L288)
-- Query logs include raw query and params:
-  - [internal/handlers/query_logger.go](internal/handlers/query_logger.go#L18)
-  - [internal/handlers/query_logger.go](internal/handlers/query_logger.go#L19)
-  - [internal/handlers/query_logger.go](internal/handlers/query_logger.go#L147)
-
-Risk:
-- Potential leakage of secrets/PII in logs and persisted stores.
-
-Mitigation:
-- Redact tokens/passwords and sensitive fields.
-- Add PII-aware query logging policy.
-- Tighten file permissions and retention controls.
-
-## 9) Low-Medium: Some status/list endpoints may be overexposed
-
-Severity: Low-Medium
-
-Evidence:
-- Notification status publicly exposed:
-  - [main.go](main.go#L569)
-- Builder scanner/csv listing broadly available to authenticated users:
-  - [main.go](main.go#L990)
-  - [main.go](main.go#L1004)
-  - [main.go](main.go#L1005)
-
-Risk:
-- Operational metadata exposure.
-
-Mitigation:
-- Reclassify sensitivity and tighten with adminOrSys where needed.
-
-## Existing Security Controls (Positive Coverage)
-
-1. Central token validation and per-token rate checks:
-   - [main.go](main.go#L229)
-   - [main.go](main.go#L254)
-   - [main.go](main.go#L278)
-
-2. RBAC role enforcement for admin and system-manager classes:
-   - [main.go](main.go#L340)
-   - [main.go](main.go#L361)
-
-3. SafeGate scanner pipeline (metadata, MIME, SVG, macro, archive, ClamAV):
-   - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L168)
-   - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L184)
-   - [internal/handlers/api_builder_handler.go](internal/handlers/api_builder_handler.go#L975)
-   - [internal/scanner/scanner.go](internal/scanner/scanner.go#L100)
-
-## Recommended Remediation Plan
-
-## Phase 0 (Immediate: 24-48 hours)
-
-1. [x] Lock write/DDL query endpoints behind adminOrSys.
-2. [x] Disable arbitrary SQL execution in runtime custom API path.
-3. [~] Rotate exposed credentials and webhook/token secrets.
-4. [x] Replace permissive CORS reflection with fixed allowlist.
-
-### Phase 0 Implementation Notes
-
-- Dynamic SQL write/batch endpoints now require `admin` or `system-manager` roles.
-- API Builder runtime no longer accepts request-provided SQL text; it executes only stored `sql_template` values.
-- Runtime SQL templates are restricted to read-only statements and must use parameter placeholders (`?`).
-- Runtime calls now accept parameter values only (query/body params), with type validation from API Builder `query_params`.
-- CORS now uses a fixed allowlist from `CORS_ALLOWED_ORIGINS` (no dynamic reflection).
-- Hardcoded auth secret fallback was removed; demo JWT secret is now env-based or ephemeral.
-- Public Discord webhook token was removed from `.env`.
-
-### Remaining Operator Action
-
-- Rotate and synchronize `KEYCLOAK_CLIENT_SECRET` in both Keycloak client settings and runtime environment.
-
-## Phase 1 (Short-term: 1-2 weeks)
-
-1. Enforce auth_required and rate_limit at custom API runtime.
-2. Implement strict SQL policy parser and query class restrictions.
-3. Harden CLI auth verification with full JWT validation.
-4. Implement log redaction and sensitive-field filtering.
-
-## Phase 2 (Mid-term: 2-4 weeks)
-
-1. Introduce environment profile guardrails (production hard-fail on defaults).
-2. Add security-focused integration tests for route protections and SQL controls.
-3. Add endpoint exposure review and least-privilege policy matrix.
+1. Run staging with AXIOMNIZAM_ENV=production and SECURITY_GUARDRAILS_MODE=audit until clean.
+2. Move to SECURITY_GUARDRAILS_MODE=enforce in staging, then production.
+3. Add periodic security regression checks to CI.
 
 ## Verification Checklist
 
-- Write SQL routes return forbidden for non-admin users.
-- Runtime custom API rejects unapproved SQL.
-- CORS allows only configured origins.
-- Token validation endpoint cryptographically validates tokens.
-- No secrets/default credentials remain in tracked files.
-- Logs are redacted for tokens/passwords/PII.
+- Dynamic SQL write endpoints require privileged roles.
+- API Builder runtime rejects non-read-only SQL templates.
+- auth/validate performs actual token verification.
+- No hardcoded signing keys or default admin credentials remain.
+- Query logs are redacted for sensitive fields.
+- Guardrails are clean in audit mode before enforce rollout.
 
 ## Ownership Suggestion
 
-- Platform team: route/middleware hardening, CORS, endpoint exposure review.
-- Data team: dynamic SQL policy and query execution guardrails.
-- Security team: secret rotation, log policy, verification controls.
+- Platform team: route protections, guardrails, runtime policy enforcement.
+- Security team: secret lifecycle, log redaction policy, review cadence.
+- Data/API team: SQL policy maintenance and runtime API behavior tests.

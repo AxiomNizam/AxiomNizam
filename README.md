@@ -1,5 +1,9 @@
 # AxiomNizam
 
+<p align="center">
+	<img src="frontend/templates/axiomnizam-logo-minimal.svg" alt="AxiomNizam logo" width="180" />
+</p>
+
 Comprehensive platform for API control-plane workflows, multi-database REST services, GraphQL, data platform orchestration (ETL/CDC), GIS and analytics dashboards, and NetIntel observability.
 
 This README is intentionally detailed and aligned with the current code in this repository.
@@ -57,12 +61,12 @@ Runtime note:
 
 ## Project Size Snapshot
 
-Code inventory snapshot (workspace scan on 2026-03-16):
+Code inventory snapshot (workspace scan on 2026-03-18):
 
-- Total code files: 390
-- Total code lines: 131758
-- Go files: 360
-- Go lines: 121209
+- Total code files: 377
+- Total code lines: 129802
+- Go files: 364
+- Go lines: 122454
 
 Counting method used:
 

@@ -43,6 +43,7 @@ type CustomAPI struct {
 	Method         string            `json:"method"` // GET, POST, PUT, DELETE
 	Path           string            `json:"path"`
 	SQLTemplate    string            `json:"sql_template,omitempty"`
+	SQLPolicyMode  string            `json:"sql_policy_mode,omitempty"` // compat, strict
 	GraphQLQuery   string            `json:"graphql_query,omitempty"`
 	GraphQLOpName  string            `json:"graphql_operation_name,omitempty"`
 	Description    string            `json:"description"`
@@ -361,6 +362,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Method         string            `json:"method"`
 		Path           string            `json:"path"`
 		SQLTemplate    string            `json:"sql_template"`
+		SQLPolicyMode  string            `json:"sql_policy_mode"`
 		GraphQLQuery   string            `json:"graphql_query"`
 		GraphQLOpName  string            `json:"graphql_operation_name"`
 		Description    string            `json:"description"`
@@ -391,6 +393,15 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		return
 	}
 
+	policyMode, policyModeValid := normalizeSQLPolicyMode(req.SQLPolicyMode)
+	if !policyModeValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sql_policy_mode must be compat or strict"})
+		return
+	}
+	if policyMode == "" {
+		policyMode = "compat"
+	}
+
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	path := strings.TrimSpace(req.Path)
 
@@ -413,7 +424,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template is required when source_database is set"})
 			return
 		}
-		if sqlTemplate != "" && !isStrictReadOnlyQuery(sqlTemplate) {
+		if sqlTemplate != "" && !isStrictReadOnlyQuery(sqlTemplate, policyMode) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
 			return
 		}
@@ -446,6 +457,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 		Method:         method,
 		Path:           path,
 		SQLTemplate:    strings.TrimSpace(req.SQLTemplate),
+		SQLPolicyMode:  policyMode,
 		GraphQLQuery:   strings.TrimSpace(req.GraphQLQuery),
 		GraphQLOpName:  strings.TrimSpace(req.GraphQLOpName),
 		Description:    req.Description,
@@ -541,9 +553,20 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["graphql_operation_name"].(string); ok {
 		api.GraphQLOpName = strings.TrimSpace(v)
 	}
+	if v, ok := req["sql_policy_mode"].(string); ok {
+		mode, valid := normalizeSQLPolicyMode(v)
+		if !valid {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_policy_mode must be compat or strict"})
+			return
+		}
+		if mode == "" {
+			mode = "compat"
+		}
+		api.SQLPolicyMode = mode
+	}
 	if v, ok := req["sql_template"].(string); ok {
 		template := strings.TrimSpace(v)
-		if template != "" && !isStrictReadOnlyQuery(template) {
+		if template != "" && !isStrictReadOnlyQuery(template, resolveSQLPolicyMode(api.SQLPolicyMode)) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
 			return
 		}
@@ -581,7 +604,7 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template is required when source_database is set"})
 			return
 		}
-		if !isStrictReadOnlyQuery(template) {
+		if !isStrictReadOnlyQuery(template, resolveSQLPolicyMode(api.SQLPolicyMode)) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
 			return
 		}
@@ -764,7 +787,7 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 	query := resolveStoredSQLTemplate(api)
 	params := make([]interface{}, 0)
 	if query != "" {
-		if !isStrictReadOnlyQuery(query) {
+		if !isStrictReadOnlyQuery(query, resolveSQLPolicyMode(api.SQLPolicyMode)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "custom api sql_template must be read-only"})
 			return
 		}
@@ -1138,6 +1161,336 @@ func countSQLPlaceholders(query string) int {
 	return strings.Count(query, "?")
 }
 
+func normalizeSQLPolicyMode(raw string) (string, bool) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	if mode == "" {
+		return "", true
+	}
+	if mode == "compat" || mode == "strict" {
+		return mode, true
+	}
+	return "", false
+}
+
+func resolveSQLPolicyMode(apiMode string) string {
+	if normalized, ok := normalizeSQLPolicyMode(apiMode); ok && normalized != "" {
+		return normalized
+	}
+	if normalized, ok := normalizeSQLPolicyMode(os.Getenv("BUILDER_SQL_POLICY_MODE")); ok && normalized != "" {
+		return normalized
+	}
+	return "compat"
+}
+
+func isStrictReadOnlyQuery(query string, policyMode string) bool {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return false
+	}
+
+	if hasMultipleSQLStatements(trimmed) {
+		return false
+	}
+
+	mode := resolveSQLPolicyMode(policyMode)
+
+	firstKeyword := firstSQLKeyword(trimmed)
+	queryClass, classified := classifySQLQuery(firstKeyword)
+
+	if classified {
+		switch queryClass {
+		case "read":
+			// continue
+		case "write", "ddl", "control", "exec":
+			return false
+		default:
+			if mode == "strict" {
+				return false
+			}
+		}
+	} else if mode == "strict" {
+		return false
+	}
+
+	normalized := strings.ToUpper(strings.Join(strings.Fields(trimmed), " "))
+	padded := " " + normalized + " "
+
+	blockedKeywords := []string{
+		" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
+		" CREATE ", " REPLACE ", " MERGE ", " GRANT ", " REVOKE ", " CALL ",
+		" EXEC ", " EXECUTE ", " UPSERT ", " DO ", " SET ", " USE ",
+	}
+	for _, blocked := range blockedKeywords {
+		if strings.Contains(padded, blocked) {
+			return false
+		}
+	}
+
+	if mode == "strict" {
+		strictBlocked := []string{
+			" FOR UPDATE ",
+			" LOCK IN SHARE MODE ",
+			" INTO OUTFILE ",
+			" INTO DUMPFILE ",
+			" LOAD DATA ",
+			" COPY ",
+		}
+		for _, blocked := range strictBlocked {
+			if strings.Contains(padded, blocked) {
+				return false
+			}
+		}
+	}
+
+	if !classified {
+		// Compatibility fallback for legacy-but-safe read templates.
+		return legacyReadOnlyHeuristic(trimmed)
+	}
+
+	return queryClass == "read"
+}
+
+func classifySQLQuery(firstKeyword string) (string, bool) {
+	kw := strings.ToUpper(strings.TrimSpace(firstKeyword))
+	if kw == "" {
+		return "", false
+	}
+
+	readOnly := map[string]struct{}{
+		"SELECT":   {},
+		"WITH":     {},
+		"SHOW":     {},
+		"DESCRIBE": {},
+		"DESC":     {},
+		"EXPLAIN":  {},
+	}
+	if _, ok := readOnly[kw]; ok {
+		return "read", true
+	}
+
+	write := map[string]struct{}{
+		"INSERT": {}, "UPDATE": {}, "DELETE": {}, "REPLACE": {}, "UPSERT": {}, "MERGE": {},
+	}
+	if _, ok := write[kw]; ok {
+		return "write", true
+	}
+
+	ddl := map[string]struct{}{
+		"CREATE": {}, "ALTER": {}, "DROP": {}, "TRUNCATE": {}, "RENAME": {},
+	}
+	if _, ok := ddl[kw]; ok {
+		return "ddl", true
+	}
+
+	control := map[string]struct{}{
+		"BEGIN": {}, "START": {}, "COMMIT": {}, "ROLLBACK": {}, "SAVEPOINT": {}, "RELEASE": {},
+		"GRANT": {}, "REVOKE": {}, "SET": {}, "USE": {}, "LOCK": {}, "UNLOCK": {},
+	}
+	if _, ok := control[kw]; ok {
+		return "control", true
+	}
+
+	exec := map[string]struct{}{
+		"CALL": {}, "EXEC": {}, "EXECUTE": {}, "DO": {},
+	}
+	if _, ok := exec[kw]; ok {
+		return "exec", true
+	}
+
+	return "unknown", true
+}
+
+func firstSQLKeyword(query string) string {
+	remaining := stripLeadingSQLComments(strings.TrimSpace(query))
+	for strings.HasPrefix(remaining, "(") {
+		remaining = strings.TrimSpace(remaining[1:])
+		remaining = stripLeadingSQLComments(remaining)
+	}
+	if remaining == "" {
+		return ""
+	}
+
+	idx := 0
+	for idx < len(remaining) {
+		ch := remaining[idx]
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' {
+			idx++
+			continue
+		}
+		break
+	}
+	if idx == 0 {
+		return ""
+	}
+	return strings.ToUpper(remaining[:idx])
+}
+
+func stripLeadingSQLComments(query string) string {
+	s := strings.TrimSpace(query)
+	for {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return ""
+		}
+		if strings.HasPrefix(s, "--") {
+			if i := strings.IndexByte(s, '\n'); i >= 0 {
+				s = s[i+1:]
+				continue
+			}
+			return ""
+		}
+		if strings.HasPrefix(s, "#") {
+			if i := strings.IndexByte(s, '\n'); i >= 0 {
+				s = s[i+1:]
+				continue
+			}
+			return ""
+		}
+		if strings.HasPrefix(s, "/*") {
+			if i := strings.Index(s, "*/"); i >= 0 {
+				s = s[i+2:]
+				continue
+			}
+			return ""
+		}
+		return s
+	}
+}
+
+func hasMultipleSQLStatements(query string) bool {
+	if strings.TrimSpace(query) == "" {
+		return false
+	}
+
+	statementCount := 0
+	tokenSeen := false
+	inSingle := false
+	inDouble := false
+	inBacktick := false
+
+	for i := 0; i < len(query); i++ {
+		ch := query[i]
+
+		if inSingle {
+			if ch == '\\' && i+1 < len(query) {
+				i++
+				continue
+			}
+			if ch == '\'' {
+				if i+1 < len(query) && query[i+1] == '\'' {
+					i++
+					continue
+				}
+				inSingle = false
+			}
+			continue
+		}
+		if inDouble {
+			if ch == '\\' && i+1 < len(query) {
+				i++
+				continue
+			}
+			if ch == '"' {
+				inDouble = false
+			}
+			continue
+		}
+		if inBacktick {
+			if ch == '`' {
+				inBacktick = false
+			}
+			continue
+		}
+
+		if ch == '\'' {
+			inSingle = true
+			tokenSeen = true
+			continue
+		}
+		if ch == '"' {
+			inDouble = true
+			tokenSeen = true
+			continue
+		}
+		if ch == '`' {
+			inBacktick = true
+			tokenSeen = true
+			continue
+		}
+
+		if ch == '-' && i+1 < len(query) && query[i+1] == '-' {
+			for i < len(query) && query[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		if ch == '#' {
+			for i < len(query) && query[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		if ch == '/' && i+1 < len(query) && query[i+1] == '*' {
+			i += 2
+			for i+1 < len(query) {
+				if query[i] == '*' && query[i+1] == '/' {
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		}
+
+		if ch == ';' {
+			if tokenSeen {
+				statementCount++
+				tokenSeen = false
+			}
+			continue
+		}
+
+		if ch > ' ' {
+			tokenSeen = true
+		}
+	}
+
+	if tokenSeen {
+		statementCount++
+	}
+
+	return statementCount > 1
+}
+
+func legacyReadOnlyHeuristic(query string) bool {
+	normalized := strings.ToUpper(strings.Join(strings.Fields(strings.TrimSpace(query)), " "))
+	if normalized == "" {
+		return false
+	}
+
+	if !(strings.HasPrefix(normalized, "SELECT") ||
+		strings.HasPrefix(normalized, "WITH") ||
+		strings.HasPrefix(normalized, "SHOW") ||
+		strings.HasPrefix(normalized, "DESCRIBE") ||
+		strings.HasPrefix(normalized, "EXPLAIN")) {
+		return false
+	}
+
+	blockedKeywords := []string{
+		" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
+		" CREATE ", " REPLACE ", " MERGE ", " GRANT ", " REVOKE ", " CALL ",
+		" EXEC ", " EXECUTE ",
+	}
+	padded := " " + normalized + " "
+	for _, blocked := range blockedKeywords {
+		if strings.Contains(padded, blocked) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func enforceCustomAPIRateLimit(c *gin.Context, api *CustomAPI) (bool, int) {
 	limit := api.RateLimit
 	if limit <= 0 {
@@ -1192,35 +1545,6 @@ func enforceCustomAPIRateLimit(c *gin.Context, api *CustomAPI) (bool, int) {
 	c.Header("X-API-RateLimit-Limit", strconv.Itoa(limit))
 	c.Header("X-API-RateLimit-Remaining", strconv.Itoa(remaining))
 	return true, 0
-}
-
-func isStrictReadOnlyQuery(query string) bool {
-	normalized := strings.ToUpper(strings.Join(strings.Fields(strings.TrimSpace(query)), " "))
-	if normalized == "" {
-		return false
-	}
-
-	if !(strings.HasPrefix(normalized, "SELECT") ||
-		strings.HasPrefix(normalized, "WITH") ||
-		strings.HasPrefix(normalized, "SHOW") ||
-		strings.HasPrefix(normalized, "DESCRIBE") ||
-		strings.HasPrefix(normalized, "EXPLAIN")) {
-		return false
-	}
-
-	blockedKeywords := []string{
-		" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
-		" CREATE ", " REPLACE ", " MERGE ", " GRANT ", " REVOKE ", " CALL ",
-		" EXEC ", " EXECUTE ",
-	}
-	padded := " " + normalized + " "
-	for _, blocked := range blockedKeywords {
-		if strings.Contains(padded, blocked) {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (h *APIBuilderHandler) GetSummary(c *gin.Context) {
