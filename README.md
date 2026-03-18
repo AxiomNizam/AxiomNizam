@@ -63,15 +63,15 @@ Runtime note:
 
 Code inventory snapshot (workspace scan on 2026-03-18):
 
-- Total code files: 377
-- Total code lines: 129802
+- Total code files: 394
+- Total code lines: 136890
 - Go files: 364
-- Go lines: 122454
+- Go lines: 129860
 
 Counting method used:
 
-- Code file extensions included: .go, .js, .ts, .jsx, .tsx, .py, .java, .rb, .php, .cs, .cpp, .c, .h, .hpp.
-- Excluded: .git and vendor directories.
+- Code file extensions includes: .go .js and others 
+- Excluded: .git and other example directories 
 - Line counts are physical lines across matching files.
 
 ## Quick Start
