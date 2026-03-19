@@ -254,25 +254,35 @@
                 <button class="btn-secondary" onclick="loadAPIs()">Refresh Runtime Endpoints</button>
             </div>
 
-            <div class="cp-card" style="margin:0 0 16px 0;">
-                <h4>API Security Scanning & Report Generation</h4>
-                <p style="margin:8px 0 14px;color:#64748b;">Run runtime scans or discovery scans, review structured reports, and download JSON.</p>
+            <div class="cp-card" style="margin:0 0 24px 0; border-top: 4px solid var(--primary-color);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                    <div>
+                        <h4 style="margin-bottom:6px; font-size: 1.2rem;">
+                            <svg style="width:20px;height:20px;vertical-align:middle;margin-right:8px;color:var(--primary-color);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+                            API Security Scanner
+                        </h4>
+                        <p style="margin:0;color:var(--text-muted);font-size:0.9rem;">Run comprehensive runtime scans, API discovery, or domain enumeration. Review and download reports.</p>
+                    </div>
+                </div>
 
                 <div class="cp-grid-two">
-                    <div class="cp-card" style="margin:0;">
+                    <!-- Left: Configuration Form -->
+                    <div class="cp-card" style="margin:0; background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2);">
+                        <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Scan Configuration</h5>
+                        
                         <div class="form-group">
                             <label for="adminApiScanType">Scan Type</label>
-                            <select id="adminApiScanType" onchange="toggleAdminApiScanFields()">
-                                <option value="runtime">Runtime API Scan</option>
-                                <option value="discover-api">API Discovery</option>
-                                <option value="discover-domain">Domain Discovery</option>
+                            <select id="adminApiScanType" onchange="toggleAdminApiScanFields()" style="font-weight:600; color:var(--primary-light);">
+                                <option value="runtime">⚡ Runtime API Scan</option>
+                                <option value="discover-api">🔍 API Discovery</option>
+                                <option value="discover-domain">🌍 Domain Discovery</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <label for="adminApiScanTarget">Target URL / Domain</label>
-                            <input type="text" id="adminApiScanTarget" placeholder="https://api.example.com/users or example.com">
+                            <input type="text" id="adminApiScanTarget" placeholder="https://api.example.com/users or example.com" style="font-family:var(--font-mono);">
                         </div>
-                        <div class="form-row scan-runtime-only">
+                        <div class="form-row scan-runtime-only" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                             <div class="form-group">
                                 <label for="adminApiScanMethod">HTTP Method</label>
                                 <select id="adminApiScanMethod">
@@ -296,30 +306,30 @@
                             <label for="adminApiScanHeaders">Headers (Key: Value per line)</label>
                             <textarea id="adminApiScanHeaders" rows="3" spellcheck="false" placeholder="Authorization: Bearer token"></textarea>
                         </div>
-                        <div class="form-row scan-discovery-only" style="display:none;">
+                        <div class="form-row scan-discovery-only" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
                             <div class="form-group">
-                                <label for="adminApiScanIncludeIDs">Include Scan IDs (comma/new line)</label>
+                                <label for="adminApiScanIncludeIDs">Include Scan IDs</label>
                                 <textarea id="adminApiScanIncludeIDs" rows="2" spellcheck="false" placeholder="well-known.health"></textarea>
                             </div>
                             <div class="form-group">
-                                <label for="adminApiScanExcludeIDs">Exclude Scan IDs (comma/new line)</label>
+                                <label for="adminApiScanExcludeIDs">Exclude Scan IDs</label>
                                 <textarea id="adminApiScanExcludeIDs" rows="2" spellcheck="false" placeholder="fingerprint.headers"></textarea>
                             </div>
                         </div>
-                        <div class="form-row scan-discover-api-only" style="display:none;">
+                        <div class="form-row scan-discover-api-only" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
                             <div class="form-group">
                                 <label for="adminApiScanMaxPaths">Max Paths</label>
                                 <input type="number" id="adminApiScanMaxPaths" min="1" max="1000" value="64">
                             </div>
                             <div class="form-group">
                                 <label for="adminApiScanInsecure">TLS Insecure Skip Verify</label>
-                                <div class="toggle">
+                                <div class="toggle" style="margin-top:8px;">
                                     <input type="checkbox" id="adminApiScanInsecure" aria-label="Skip TLS verification">
                                     <span class="toggle-switch"></span>
                                 </div>
                             </div>
                         </div>
-                        <div class="form-row scan-discover-domain-only" style="display:none;">
+                        <div class="form-row scan-discover-domain-only" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
                             <div class="form-group">
                                 <label for="adminApiScanMaxSubdomains">Max Subdomains</label>
                                 <input type="number" id="adminApiScanMaxSubdomains" min="1" max="1000" value="32">
@@ -333,34 +343,60 @@
                             <label for="adminApiScanSchemes">Schemes (comma/new line)</label>
                             <textarea id="adminApiScanSchemes" rows="2" spellcheck="false" placeholder="https,http">https,http</textarea>
                         </div>
-                        <div class="cp-actions">
-                            <button id="adminRunApiScanBtn" class="btn-primary" onclick="runAdminApiScan()">Run Scan</button>
-                            <button id="adminDownloadApiScanBtn" class="btn-secondary" onclick="downloadLatestAdminApiScanReport()" disabled>Download Latest JSON</button>
-                            <button class="btn-secondary" onclick="loadAdminApiScanReports()">Refresh Reports</button>
-                            <button class="btn-secondary" onclick="copyLatestAdminApiScanReportId()">Copy Report ID</button>
-                            <button class="btn-warning" onclick="clearAdminApiScanView()">Clear Viewer</button>
+                        <div class="cp-actions" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                            <button id="adminRunApiScanBtn" class="btn-primary" onclick="runAdminApiScan()">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                Run Scan
+                            </button>
+                            <button id="adminDownloadApiScanBtn" class="btn-secondary" onclick="downloadLatestAdminApiScanReport()" disabled>
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Download JSON
+                            </button>
+                            <button class="btn-secondary" onclick="loadAdminApiScanReports()" title="Refresh">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                            </button>
+                            <button class="btn-secondary" onclick="copyLatestAdminApiScanReportId()" title="Copy ID">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                            <button class="btn-warning" onclick="clearAdminApiScanView()" title="Clear Form">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="cp-card" style="margin:0;">
-                        <h4>Latest Scan Report</h4>
-                        <div id="adminApiScanSummary" class="analysis-badges" style="margin-bottom:10px;"></div>
-                        <div id="adminApiScanStructured" class="csv-history" style="margin:0 0 10px 0;"></div>
-                        <details>
-                            <summary style="cursor:pointer;color:#0f766e;font-weight:600;">Raw JSON Report</summary>
-                            <pre id="adminApiScanReportOutput" class="cp-output" style="margin-top:10px;">Run a scan to generate a report.</pre>
+                    <!-- Right: Scan Results Viewer -->
+                    <div class="cp-card" style="margin:0; display: flex; flex-direction: column;">
+                        <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Latest Analysis Report</h5>
+                        <div id="adminApiScanSummary" class="analysis-badges" style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+                        <div id="adminApiScanStructured" class="csv-history api-scan-viewer" style="flex:1; margin-bottom:16px;"></div>
+                        <details style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                            <summary style="cursor:pointer;color:var(--primary-light);font-weight:600; outline:none; user-select:none; display:flex; align-items:center; gap:8px;">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                View Raw JSON Report
+                            </summary>
+                            <pre id="adminApiScanReportOutput" class="cp-output" style="margin-top:12px; background:#0B0F19; color:#A6ACCD;">Run a scan or select a report to view details.</pre>
                         </details>
                     </div>
                 </div>
 
-                <div style="margin-top:12px;">
-                    <h4 style="margin-bottom:10px;">Recent Reports</h4>
-                    <div class="cp-actions" style="margin-bottom:10px;">
-                        <button class="btn-del" onclick="deleteSelectedAdminApiScanReports()">Delete Selected</button>
-                        <button class="btn-del" onclick="deleteAllAdminApiScanReports()">Delete All</button>
-                        <span id="adminApiScanSelectedCount" class="badge badge-default">0 selected</span>
+                <div style="margin-top:32px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h4 style="margin:0;">Archive & Recent Reports</h4>
+                        <div class="cp-actions" style="margin:0;">
+                            <span id="adminApiScanSelectedCount" class="badge badge-default" style="margin-right:12px;">0 selected</span>
+                            <button class="btn-sm btn-del" onclick="deleteSelectedAdminApiScanReports()" style="display:inline-flex; align-items:center; gap:4px;">
+                                <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                Delete Selected
+                            </button>
+                            <button class="btn-sm btn-del" onclick="deleteAllAdminApiScanReports()" style="display:inline-flex; align-items:center; gap:4px; opacity:0.8;">
+                                <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                Delete All
+                            </button>
+                        </div>
                     </div>
-                    <div id="adminApiScanReportsList" class="empty-state">No API scan reports yet.</div>
+                    <div class="table-responsive">
+                        <div id="adminApiScanReportsList" class="empty-state">No API scan reports yet.</div>
+                    </div>
                 </div>
             </div>
 

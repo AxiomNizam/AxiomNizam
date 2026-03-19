@@ -2007,32 +2007,47 @@ code {
 }
 
 /* Admin tables */
+.table-responsive {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+}
 .admin-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
+    margin: 0;
 }
 .admin-table thead th {
     background: var(--darker-bg);
     color: var(--text-muted);
-    padding: 10px 12px;
+    padding: 12px 16px;
     text-align: left;
     font-weight: 600;
     text-transform: uppercase;
     font-size: 0.75rem;
     letter-spacing: 0.5px;
     border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
 }
 .admin-table tbody td {
-    padding: 10px 12px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-color);
     color: var(--text-primary);
+    vertical-align: middle;
+}
+.admin-table tbody tr:last-child td {
+    border-bottom: none;
 }
 .admin-table tbody tr:hover {
-    background: rgba(0, 140, 99, 0.05);
+    background: rgba(var(--primary-rgb), 0.05);
+}
+.admin-table tbody tr:nth-child(even) {
+    background: rgba(0,0,0,0.1);
 }
 .admin-table.compact td, .admin-table.compact th {
-    padding: 6px 10px;
+    padding: 8px 12px;
     font-size: 0.85rem;
 }
 .admin-table code {
@@ -2058,30 +2073,38 @@ code {
 .method-delete { background: #ef4444; }
 .method-patch { background: #8b5cf6; }
 
-/* Status badges */
-.status-badge {
+/* Status & Analysis badges */
+.status-badge, .badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
     font-size: 0.75rem;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
-.status-active, .status-completed, .status-success {
-    background: rgba(16, 185, 129, 0.15);
-    color: #10b981;
+.status-active, .status-completed, .status-success, .badge-success {
+    background: rgba(var(--primary-rgb), 0.15);
+    color: var(--success-color);
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
 }
-.status-draft, .status-pending {
+.status-draft, .status-pending, .badge-warning {
     background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
 }
-.status-archived, .status-failed, .status-inactive {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+.status-archived, .status-failed, .status-inactive, .badge-danger {
+    background: rgba(var(--secondary-rgb), 0.15);
+    color: #f87171;
+    border: 1px solid rgba(var(--secondary-rgb), 0.3);
 }
-.status-analyzed {
-    background: rgba(35, 159, 64, 0.15);
-    color: #8b5cf6;
+.status-analyzed, .badge-default {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
 }
+[data-theme="light"] .status-analyzed, [data-theme="light"] .badge-default { background: rgba(0,0,0,0.05); }
 
 /* Small buttons */
 .btn-sm {
@@ -2761,21 +2784,32 @@ body {
 }
 
 .cp-card {
-    background: var(--dark-bg);
+    background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+}
+
+.cp-card:hover {
+    box-shadow: var(--shadow-md);
 }
 
 .cp-card h4 {
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     color: var(--primary-light);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .cp-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
+    align-items: center;
+    margin-top: 16px;
 }
 
 .cp-output {

@@ -1442,25 +1442,23 @@ function adminScanRenderOverview(report, result) {
     var scanner = adminScanPickValue(result, ['scanner'], '-');
     var method = adminScanPickValue(report, ['method'], '');
     var scannedAt = adminScanPickValue(result, ['scannedAt', 'scanned_at'], report.created_at || report.createdAt || '');
-    var html = '<table class="admin-table compact"><tbody>';
-    html += '<tr><th style="width:180px;">Report ID</th><td><code>' + escapeHtml(report.id || '-') + '</code></td></tr>';
-    html += '<tr><th>Scan Type</th><td>' + escapeHtml(report.scan_type || report.scanType || '-') + '</td></tr>';
-    html += '<tr><th>Target</th><td><code>' + escapeHtml(report.target || '-') + '</code></td></tr>';
-    html += '<tr><th>Method</th><td>' + escapeHtml(method || '-') + '</td></tr>';
-    html += '<tr><th>Scanner</th><td>' + escapeHtml(scanner || '-') + '</td></tr>';
-    html += '<tr><th>Scanned At</th><td>' + escapeHtml(adminScanFormatWhen(scannedAt)) + '</td></tr>';
-    html += '</tbody></table>';
-    return '<h5 style="margin:0 0 8px 0;">Overview</h5>' + html;
+    var html = '<div class="table-responsive"><table class="admin-table compact" style="margin:0;"><tbody>';
+    html += '<tr><th style="width:160px; background:rgba(0,0,0,0.02);">Report ID</th><td><code style="background:transparent; padding:0; font-weight:600;">' + escapeHtml(report.id || '-') + '</code></td></tr>';
+    html += '<tr><th style="background:rgba(0,0,0,0.02);">Type & Target</th><td>' + escapeHtml(report.scan_type || report.scanType || '-') + ' <span style="color:var(--text-muted);">&rarr;</span> <code>' + escapeHtml(report.target || '-') + '</code></td></tr>';
+    html += '<tr><th style="background:rgba(0,0,0,0.02);">Scanner</th><td>' + escapeHtml(scanner || '-') + '</td></tr>';
+    html += '<tr><th style="background:rgba(0,0,0,0.02);">Scanned At</th><td>' + escapeHtml(adminScanFormatWhen(scannedAt)) + '</td></tr>';
+    html += '</tbody></table></div>';
+    return '<h5 style="margin:0 0 12px 0; color:var(--text-secondary);">Overview</h5>' + html;
 }
 
 function adminScanRenderRuntimeFindings(result) {
     var findings = adminScanPickValue(result, ['findings'], []);
     if (!Array.isArray(findings) || findings.length === 0) {
-        return '<h5 style="margin:0 0 8px 0;">Findings</h5><div class="empty-state">No findings were returned for this runtime scan.</div>';
+        return '<h5 style="margin:20px 0 12px 0; color:var(--text-secondary); border-top:1px dashed var(--border-color); padding-top:16px;">Vulnerability Findings</h5><div class="empty-state" style="background:rgba(var(--primary-rgb),0.05); color:var(--success-color); border:1px solid rgba(var(--primary-rgb),0.2);">No findings were returned for this runtime scan. Excellent!</div>';
     }
 
-    var html = '<h5 style="margin:0 0 8px 0;">Findings</h5>';
-    html += '<table class="admin-table compact"><thead><tr><th>Severity</th><th>Type</th><th>Title</th><th>Endpoint</th><th>Evidence</th></tr></thead><tbody>';
+    var html = '<h5 style="margin:20px 0 12px 0; color:var(--danger-color); border-top:1px dashed var(--border-color); padding-top:16px;">Vulnerability Findings (' + findings.length + ')</h5>';
+    html += '<div class="table-responsive"><table class="admin-table compact" style="margin:0;"><thead><tr><th>Severity</th><th>Type</th><th>Title</th><th>Endpoint</th><th>Evidence</th></tr></thead><tbody>';
     findings.forEach(function(finding) {
         var sev = String(adminScanPickValue(finding, ['severity'], 'info')).toUpperCase();
         var endpoint = adminScanPickValue(finding, ['endpoint'], '-');
@@ -1468,15 +1466,16 @@ function adminScanRenderRuntimeFindings(result) {
         if (typeof evidence === 'string' && evidence.length > 140) {
             evidence = evidence.slice(0, 140) + '...';
         }
-        html += '<tr>' +
-            '<td><span class="status-badge ' + adminScanSeverityClass(sev) + '">' + escapeHtml(sev) + '</span></td>' +
-            '<td>' + escapeHtml(String(adminScanPickValue(finding, ['type'], '-'))) + '</td>' +
+        var trStyle = (sev === 'CRITICAL' || sev === 'HIGH') ? 'style="background:rgba(244,42,65,0.05);"' : '';
+        html += '<tr ' + trStyle + '>' +
+            '<td><span class="badge ' + adminScanSeverityClass(sev) + '">' + escapeHtml(sev) + '</span></td>' +
+            '<td style="font-weight:600;">' + escapeHtml(String(adminScanPickValue(finding, ['type'], '-'))) + '</td>' +
             '<td>' + escapeHtml(String(adminScanPickValue(finding, ['title'], '-'))) + '</td>' +
             '<td><code>' + escapeHtml(String(endpoint)) + '</code></td>' +
-            '<td><small>' + escapeHtml(String(evidence || '-')) + '</small></td>' +
+            '<td><small style="color:var(--text-muted);">' + escapeHtml(String(evidence || '-')) + '</small></td>' +
             '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     return html;
 }
 
@@ -1486,19 +1485,21 @@ function adminScanRenderChecks(result) {
         return '';
     }
 
-    var html = '<h5 style="margin:0 0 8px 0;">Check Coverage</h5>';
-    html += '<table class="admin-table compact"><thead><tr><th>Check</th><th>Executed</th><th>Findings</th></tr></thead><tbody>';
+    var html = '<h5 style="margin:0 0 12px 0; color:var(--text-secondary);">Check Coverage</h5>';
+    html += '<div class="table-responsive"><table class="admin-table compact" style="margin:0;"><thead><tr><th style="width:50%;">Check</th><th>Executed</th><th>Findings</th></tr></thead><tbody>';
     checks.forEach(function(check) {
         var executed = !!adminScanPickValue(check, ['executed'], false);
         var findings = adminScanToInt(adminScanPickValue(check, ['findings'], 0));
-        var statusClass = executed ? (findings > 0 ? 'status-draft' : 'status-active') : 'status-inactive';
-        html += '<tr>' +
-            '<td>' + escapeHtml(String(adminScanPickValue(check, ['name', 'id'], '-'))) + '</td>' +
-            '<td><span class="status-badge ' + statusClass + '">' + (executed ? 'Yes' : 'Skipped') + '</span></td>' +
-            '<td>' + findings + '</td>' +
+        var statusClass = executed ? (findings > 0 ? 'badge-warning' : 'badge-success') : 'badge-danger';
+        var findingStyle = findings > 0 ? 'color:var(--danger-color); font-weight:bold;' : 'color:var(--text-secondary);';
+        
+        html += '<tr style="background:rgba(0,0,0,0.01);">' +
+            '<td style="font-weight:500;">' + escapeHtml(String(adminScanPickValue(check, ['name', 'id'], '-'))) + '</td>' +
+            '<td><span class="badge ' + statusClass + '">' + (executed ? 'Yes' : 'Skipped') + '</span></td>' +
+            '<td style="' + findingStyle + '">' + findings + '</td>' +
             '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     return html;
 }
 
@@ -1655,7 +1656,7 @@ function loadAdminApiScanReports() {
             return;
         }
 
-        var html = '<table class="admin-table compact"><thead><tr><th><input type="checkbox" id="adminApiScanSelectAll" onchange="toggleAllAdminApiScanReportsSelection(this.checked)" aria-label="Select all reports"></th><th>ID</th><th>Type</th><th>Target</th><th>Summary</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        var html = '<table class="admin-table compact" style="margin:0;"><thead><tr><th style="width:40px;"><input type="checkbox" id="adminApiScanSelectAll" onchange="toggleAllAdminApiScanReportsSelection(this.checked)" aria-label="Select all reports"></th><th>ID</th><th>Type</th><th>Target</th><th>Summary</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
         reports.forEach(function(report) {
             var summary = adminScanGetSummary(report);
             var scanType = String(report.scan_type || report.scanType || '').toLowerCase();
@@ -1671,15 +1672,17 @@ function loadAdminApiScanReports() {
 
             html += '<tr>' +
                 '<td><input type="checkbox" class="admin-api-scan-select" value="' + escapeHtml(report.id) + '" onchange="updateAdminApiScanSelectedCount()" aria-label="Select report ' + escapeHtml(report.id) + '"></td>' +
-                '<td>' + escapeHtml(report.id) + '</td>' +
-                '<td>' + escapeHtml(report.scan_type) + '</td>' +
-                '<td><code>' + escapeHtml(report.target || '-') + '</code></td>' +
-                '<td>' + escapeHtml(summaryLabel) + '</td>' +
-                '<td>' + new Date(report.created_at).toLocaleString() + '</td>' +
+                '<td><strong>' + escapeHtml(report.id.substring(0,14)) + '...</strong></td>' +
+                '<td><span class="status-badge" style="background:rgba(var(--primary-rgb),0.1); color:var(--primary-light);">' + escapeHtml(report.scan_type) + '</span></td>' +
+                '<td><code style="background:rgba(0,0,0,0.1); padding:2px 6px; border-radius:4px;">' + escapeHtml(report.target || '-') + '</code></td>' +
+                '<td><span style="font-weight:500; font-size:0.85rem;">' + escapeHtml(summaryLabel) + '</span></td>' +
+                '<td style="color:var(--text-muted); font-size:0.85rem;">' + new Date(report.created_at).toLocaleString() + '</td>' +
                 '<td>' +
-                '<button class="btn-sm btn-test" onclick="viewAdminApiScanReport(\'' + report.id + '\')">View</button> ' +
-                '<button class="btn-sm btn-secondary" onclick="downloadAdminApiScanReportById(\'' + report.id + '\')">JSON</button> ' +
-                '<button class="btn-sm btn-del" onclick="deleteAdminApiScanReport(\'' + report.id + '\')">Delete</button>' +
+                '<div style="display:flex; gap:6px;">' +
+                '<button class="btn-sm btn-test" onclick="viewAdminApiScanReport(\'' + report.id + '\')" title="View"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button> ' +
+                '<button class="btn-sm btn-secondary" onclick="downloadAdminApiScanReportById(\'' + report.id + '\')" title="Download"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button> ' +
+                '<button class="btn-sm btn-del" onclick="deleteAdminApiScanReport(\'' + report.id + '\')" title="Delete"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>' +
+                '</div>' +
                 '</td>' +
                 '</tr>';
         });
