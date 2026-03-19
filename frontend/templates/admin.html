@@ -271,6 +271,104 @@
             <div class="api-categories" id="apiCategories">
                 <div class="loading">Loading APIs...</div>
             </div>
+
+            <div class="cp-card" style="margin-top:16px;">
+                <h4>API Security Scanning & Report Generation</h4>
+                <p style="margin:8px 0 14px;color:#64748b;">Run runtime security scans or discovery scans, review structured reports, and download JSON outputs.</p>
+
+                <div class="cp-grid-two">
+                    <div class="cp-card" style="margin:0;">
+                        <div class="form-group">
+                            <label for="adminApiScanType">Scan Type</label>
+                            <select id="adminApiScanType" onchange="toggleAdminApiScanFields()">
+                                <option value="runtime">Runtime API Scan</option>
+                                <option value="discover-api">API Discovery</option>
+                                <option value="discover-domain">Domain Discovery</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="adminApiScanTarget">Target URL / Domain</label>
+                            <input type="text" id="adminApiScanTarget" placeholder="https://api.example.com/users or example.com">
+                        </div>
+                        <div class="form-row scan-runtime-only">
+                            <div class="form-group">
+                                <label for="adminApiScanMethod">HTTP Method</label>
+                                <select id="adminApiScanMethod">
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="PATCH">PATCH</option>
+                                    <option value="DELETE">DELETE</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanTimeout">Timeout (seconds)</label>
+                                <input type="number" id="adminApiScanTimeout" min="5" max="300" value="30">
+                            </div>
+                        </div>
+                        <div class="form-group scan-runtime-only">
+                            <label for="adminApiScanBody">Request Body (JSON or text, optional)</label>
+                            <textarea id="adminApiScanBody" rows="3" spellcheck="false" placeholder='{"query":"status"}'></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="adminApiScanHeaders">Headers (Key: Value per line)</label>
+                            <textarea id="adminApiScanHeaders" rows="3" spellcheck="false" placeholder="Authorization: Bearer token"></textarea>
+                        </div>
+                        <div class="form-row scan-discovery-only" style="display:none;">
+                            <div class="form-group">
+                                <label for="adminApiScanIncludeIDs">Include Scan IDs (comma/new line)</label>
+                                <textarea id="adminApiScanIncludeIDs" rows="2" spellcheck="false" placeholder="well-known.health"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanExcludeIDs">Exclude Scan IDs (comma/new line)</label>
+                                <textarea id="adminApiScanExcludeIDs" rows="2" spellcheck="false" placeholder="fingerprint.headers"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-row scan-discover-api-only" style="display:none;">
+                            <div class="form-group">
+                                <label for="adminApiScanMaxPaths">Max Paths</label>
+                                <input type="number" id="adminApiScanMaxPaths" min="1" max="1000" value="64">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanInsecure">TLS Insecure Skip Verify</label>
+                                <div class="toggle">
+                                    <input type="checkbox" id="adminApiScanInsecure" aria-label="Skip TLS verification">
+                                    <span class="toggle-switch"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-row scan-discover-domain-only" style="display:none;">
+                            <div class="form-group">
+                                <label for="adminApiScanMaxSubdomains">Max Subdomains</label>
+                                <input type="number" id="adminApiScanMaxSubdomains" min="1" max="1000" value="32">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanMaxHints">Max Hints</label>
+                                <input type="number" id="adminApiScanMaxHints" min="1" max="1000" value="48">
+                            </div>
+                        </div>
+                        <div class="form-group scan-discover-domain-only" style="display:none;">
+                            <label for="adminApiScanSchemes">Schemes (comma/new line)</label>
+                            <textarea id="adminApiScanSchemes" rows="2" spellcheck="false" placeholder="https,http">https,http</textarea>
+                        </div>
+                        <div class="cp-actions">
+                            <button id="adminRunApiScanBtn" class="btn-primary" onclick="runAdminApiScan()">Run Scan</button>
+                            <button id="adminDownloadApiScanBtn" class="btn-secondary" onclick="downloadLatestAdminApiScanReport()" disabled>Download Latest JSON</button>
+                            <button class="btn-secondary" onclick="loadAdminApiScanReports()">Refresh Reports</button>
+                        </div>
+                    </div>
+
+                    <div class="cp-card" style="margin:0;">
+                        <h4>Latest Scan Report</h4>
+                        <pre id="adminApiScanReportOutput" class="cp-output">Run a scan to generate a report.</pre>
+                    </div>
+                </div>
+
+                <div style="margin-top:12px;">
+                    <h4 style="margin-bottom:10px;">Recent Reports</h4>
+                    <div id="adminApiScanReportsList" class="empty-state">No API scan reports yet.</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -761,7 +859,7 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260317-5"></script>
+<script src="/static/admin.js?v=20260319-1"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP

@@ -973,6 +973,11 @@ func main() {
 		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
 		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
 
+		// API Scanner Reports
+		builderAPI.POST("/api-scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanAPI)
+		builderAPI.GET("/api-scanner/reports", apiBuilderHandler.ListAPIScanReports)
+		builderAPI.GET("/api-scanner/reports/:id", apiBuilderHandler.GetAPIScanReport)
+
 		// Dashboard Deletion
 		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)
 	}

@@ -19,6 +19,7 @@ let customAPIById = {};
 let graphQLAPIById = {};
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
+let latestAdminAPIScanReport = null;
 
 const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
@@ -63,6 +64,7 @@ window.addEventListener('DOMContentLoaded', function() {
     setupCSVDropZone();
     setupScanDropZone();
     loadScannerHealth();
+    toggleAdminApiScanFields();
     applyRoleRestrictions();
     initAdminCertificateActions();
 });
@@ -81,7 +83,7 @@ function switchTab(tabName) {
     if (tabName === 'csv-upload') { loadCSVHistory(); }
     if (tabName === 'converter') { loadConverterDropdowns(); loadConversionHistory(); }
     if (tabName === 'file-scanner') { loadScanHistory(); loadScannerHealth(); }
-    if (tabName === 'api-testing') { loadAPIs(); }
+    if (tabName === 'api-testing') { loadAPIs(); loadAdminApiScanReports(); toggleAdminApiScanFields(); }
     if (tabName === 'graphql-studio') { loadAdminGraphQLSchemaInfo(); }
     if (tabName === 'control-plane') { refreshAdminControlPlaneData(); }
     if (tabName === 'settings') { loadAdminCertificatePanel(); }
@@ -1262,6 +1264,203 @@ function testAPI(method, url, body, description) {
             showResponse(description, 'ERROR', {error: error.message}, method + ' ' + url);
             addLog('API Error: ' + error.message, 'error');
         });
+}
+
+// ===================================================================
+// API Scanner Reports (Admin UI)
+// ===================================================================
+function toggleAdminApiScanFields() {
+    var typeEl = document.getElementById('adminApiScanType');
+    if (!typeEl) return;
+
+    var scanType = typeEl.value;
+    var runtimeOnly = document.querySelectorAll('.scan-runtime-only');
+    var discoveryOnly = document.querySelectorAll('.scan-discovery-only');
+    var discoverAPIOnly = document.querySelectorAll('.scan-discover-api-only');
+    var discoverDomainOnly = document.querySelectorAll('.scan-discover-domain-only');
+
+    runtimeOnly.forEach(function(el) { el.style.display = (scanType === 'runtime') ? '' : 'none'; });
+    discoveryOnly.forEach(function(el) { el.style.display = (scanType === 'runtime') ? 'none' : ''; });
+    discoverAPIOnly.forEach(function(el) { el.style.display = (scanType === 'discover-api') ? '' : 'none'; });
+    discoverDomainOnly.forEach(function(el) { el.style.display = (scanType === 'discover-domain') ? '' : 'none'; });
+}
+
+function parseAdminTextList(raw) {
+    var parts = String(raw || '').split(/[\n,]+/);
+    return parts.map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
+}
+
+function parseAdminHeaderMap(raw) {
+    var map = {};
+    String(raw || '').split(/\n+/).forEach(function(line) {
+        var item = line.trim();
+        if (!item) return;
+        var idx = item.indexOf(':');
+        if (idx < 1) return;
+        var key = item.slice(0, idx).trim();
+        var value = item.slice(idx + 1).trim();
+        if (key) map[key] = value;
+    });
+    return map;
+}
+
+function buildAdminApiScanPayload() {
+    var scanType = (document.getElementById('adminApiScanType').value || 'runtime').trim();
+    var target = (document.getElementById('adminApiScanTarget').value || '').trim();
+    var timeoutSeconds = parseInt(document.getElementById('adminApiScanTimeout').value, 10) || 30;
+    var headers = parseAdminHeaderMap(document.getElementById('adminApiScanHeaders').value);
+
+    var payload = {
+        scan_type: scanType,
+        target: target,
+        headers: headers,
+        timeout_seconds: timeoutSeconds,
+        include_scan_ids: parseAdminTextList(document.getElementById('adminApiScanIncludeIDs').value),
+        exclude_scan_ids: parseAdminTextList(document.getElementById('adminApiScanExcludeIDs').value)
+    };
+
+    if (scanType === 'runtime') {
+        payload.method = (document.getElementById('adminApiScanMethod').value || 'GET').trim();
+        payload.body = document.getElementById('adminApiScanBody').value || '';
+        payload.retry_count = 1;
+        payload.retry_backoff_ms = 1000;
+    }
+
+    if (scanType === 'discover-api') {
+        payload.max_paths = parseInt(document.getElementById('adminApiScanMaxPaths').value, 10) || 64;
+        payload.insecure_skip_verify = !!document.getElementById('adminApiScanInsecure').checked;
+    }
+
+    if (scanType === 'discover-domain') {
+        payload.max_subdomains = parseInt(document.getElementById('adminApiScanMaxSubdomains').value, 10) || 32;
+        payload.max_hints = parseInt(document.getElementById('adminApiScanMaxHints').value, 10) || 48;
+        payload.schemes = parseAdminTextList(document.getElementById('adminApiScanSchemes').value);
+    }
+
+    return payload;
+}
+
+function runAdminApiScan() {
+    var target = (document.getElementById('adminApiScanTarget').value || '').trim();
+    if (!target) {
+        alert('Please enter a scan target URL/domain.');
+        return;
+    }
+
+    var runBtn = document.getElementById('adminRunApiScanBtn');
+    var output = document.getElementById('adminApiScanReportOutput');
+    if (runBtn) runBtn.disabled = true;
+    if (output) output.textContent = 'Running scan...';
+
+    fetch(BACKEND_URL + '/api/v1/builder/api-scanner/scan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(buildAdminApiScanPayload())
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.details)) || ('Scan request failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function(data) {
+        latestAdminAPIScanReport = data.report;
+        renderAdminApiScanReport(data.report);
+        loadAdminApiScanReports();
+        var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
+        if (downloadBtn) downloadBtn.disabled = false;
+        addLog('API scan report generated: ' + data.report.id, 'info');
+    }).catch(function(err) {
+        if (output) output.textContent = 'Scan failed\n\n' + err.message;
+        addLog('API scan failed: ' + err.message, 'error');
+    }).finally(function() {
+        if (runBtn) runBtn.disabled = false;
+    });
+}
+
+function renderAdminApiScanReport(report) {
+    var output = document.getElementById('adminApiScanReportOutput');
+    if (!output) return;
+    output.textContent = JSON.stringify(report, null, 2);
+}
+
+function loadAdminApiScanReports() {
+    var el = document.getElementById('adminApiScanReportsList');
+    if (!el) return;
+
+    fetchJSON('/api/v1/builder/api-scanner/reports').then(function(data) {
+        var reports = data.reports || [];
+        if (reports.length === 0) {
+            el.innerHTML = '<div class="empty-state">No API scan reports yet.</div>';
+            return;
+        }
+
+        var html = '<table class="admin-table compact"><thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        reports.forEach(function(report) {
+            html += '<tr>' +
+                '<td>' + escapeHtml(report.id) + '</td>' +
+                '<td>' + escapeHtml(report.scan_type) + '</td>' +
+                '<td><code>' + escapeHtml(report.target || '-') + '</code></td>' +
+                '<td>' + new Date(report.created_at).toLocaleString() + '</td>' +
+                '<td>' +
+                '<button class="btn-sm btn-test" onclick="viewAdminApiScanReport(\'' + report.id + '\')">View</button> ' +
+                '<button class="btn-sm btn-secondary" onclick="downloadAdminApiScanReportById(\'' + report.id + '\')">JSON</button>' +
+                '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    }).catch(function(err) {
+        el.innerHTML = '<div class="error-state">Failed to load API scan reports: ' + escapeHtml(err.message || '') + '</div>';
+    });
+}
+
+function viewAdminApiScanReport(id) {
+    fetchJSON('/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id)).then(function(data) {
+        latestAdminAPIScanReport = data.report;
+        renderAdminApiScanReport(data.report);
+        var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
+        if (downloadBtn) downloadBtn.disabled = false;
+    }).catch(function(err) {
+        var output = document.getElementById('adminApiScanReportOutput');
+        if (output) output.textContent = 'Failed to load report\n\n' + (err.message || 'Unknown error');
+    });
+}
+
+function downloadLatestAdminApiScanReport() {
+    if (!latestAdminAPIScanReport) {
+        alert('No report loaded. Run or view a report first.');
+        return;
+    }
+    downloadAdminApiScanReportObject(latestAdminAPIScanReport);
+}
+
+function downloadAdminApiScanReportById(id) {
+    if (latestAdminAPIScanReport && latestAdminAPIScanReport.id === id) {
+        downloadAdminApiScanReportObject(latestAdminAPIScanReport);
+        return;
+    }
+
+    fetchJSON('/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id)).then(function(data) {
+        downloadAdminApiScanReportObject(data.report);
+    }).catch(function(err) {
+        alert('Failed to download report JSON: ' + (err.message || 'Unknown error'));
+    });
+}
+
+function downloadAdminApiScanReportObject(report) {
+    var payload = JSON.stringify(report, null, 2);
+    var blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+    var fileName = 'api-scan-report-' + String(report.id || 'latest') + '.json';
+    var url = URL.createObjectURL(blob);
+    var anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
 }
 
 // ===================================================================
