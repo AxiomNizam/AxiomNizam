@@ -1283,6 +1283,18 @@ function toggleAdminApiScanFields() {
     discoveryOnly.forEach(function(el) { el.style.display = (scanType === 'runtime') ? 'none' : ''; });
     discoverAPIOnly.forEach(function(el) { el.style.display = (scanType === 'discover-api') ? '' : 'none'; });
     discoverDomainOnly.forEach(function(el) { el.style.display = (scanType === 'discover-domain') ? '' : 'none'; });
+
+    // Update the custom icon based on selection
+    var iconEl = document.getElementById('adminApiScanTypeIcon');
+    if (iconEl) {
+        if (scanType === 'runtime') {
+            iconEl.innerHTML = '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+        } else if (scanType === 'discover-api') {
+            iconEl.innerHTML = '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+        } else if (scanType === 'discover-domain') {
+            iconEl.innerHTML = '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
+        }
+    }
 }
 
 function parseAdminTextList(raw) {
@@ -1421,7 +1433,8 @@ function adminScanBadge(label, value, variant) {
     if (variant === 'success') cls += ' badge-success';
     if (variant === 'danger') cls += ' badge-danger';
     if (variant === 'default') cls += ' badge-default';
-    return '<span class="' + cls + '">' + escapeHtml(label) + ': ' + escapeHtml(String(value)) + '</span>';
+    var fullText = escapeHtml(label) + ': ' + escapeHtml(String(value));
+    return '<span class="' + cls + '" title="' + fullText + '">' + fullText + '</span>';
 }
 
 function adminScanSeverityClass(severity) {

@@ -2152,6 +2152,12 @@ code {
     background: var(--darker-bg);
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    box-sizing: border-box;
 }
 .badge-success {
     background: rgba(16, 185, 129, 0.15);
