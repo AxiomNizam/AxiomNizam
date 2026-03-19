@@ -9,7 +9,7 @@ import (
 )
 
 func initializeCLIContext(cmd *cobra.Command) error {
-	if skipConfigInit(cmd.Name()) {
+	if skipConfigInit(cmd) {
 		return nil
 	}
 

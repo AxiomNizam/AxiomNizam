@@ -19,6 +19,7 @@ let customAPIById = {};
 let graphQLAPIById = {};
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
+let latestAdminAPIScanReport = null;
 
 const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
@@ -63,6 +64,7 @@ window.addEventListener('DOMContentLoaded', function() {
     setupCSVDropZone();
     setupScanDropZone();
     loadScannerHealth();
+    toggleAdminApiScanFields();
     applyRoleRestrictions();
     initAdminCertificateActions();
 });
@@ -81,7 +83,7 @@ function switchTab(tabName) {
     if (tabName === 'csv-upload') { loadCSVHistory(); }
     if (tabName === 'converter') { loadConverterDropdowns(); loadConversionHistory(); }
     if (tabName === 'file-scanner') { loadScanHistory(); loadScannerHealth(); }
-    if (tabName === 'api-testing') { loadAPIs(); }
+    if (tabName === 'api-testing') { loadAPIs(); loadAdminApiScanReports(); toggleAdminApiScanFields(); }
     if (tabName === 'graphql-studio') { loadAdminGraphQLSchemaInfo(); }
     if (tabName === 'control-plane') { refreshAdminControlPlaneData(); }
     if (tabName === 'settings') { loadAdminCertificatePanel(); }
@@ -1262,6 +1264,647 @@ function testAPI(method, url, body, description) {
             showResponse(description, 'ERROR', {error: error.message}, method + ' ' + url);
             addLog('API Error: ' + error.message, 'error');
         });
+}
+
+// ===================================================================
+// API Scanner Reports (Admin UI)
+// ===================================================================
+function toggleAdminApiScanFields() {
+    var typeEl = document.getElementById('adminApiScanType');
+    if (!typeEl) return;
+
+    var scanType = typeEl.value;
+    var runtimeOnly = document.querySelectorAll('.scan-runtime-only');
+    var discoveryOnly = document.querySelectorAll('.scan-discovery-only');
+    var discoverAPIOnly = document.querySelectorAll('.scan-discover-api-only');
+    var discoverDomainOnly = document.querySelectorAll('.scan-discover-domain-only');
+
+    runtimeOnly.forEach(function(el) { el.style.display = (scanType === 'runtime') ? '' : 'none'; });
+    discoveryOnly.forEach(function(el) { el.style.display = (scanType === 'runtime') ? 'none' : ''; });
+    discoverAPIOnly.forEach(function(el) { el.style.display = (scanType === 'discover-api') ? '' : 'none'; });
+    discoverDomainOnly.forEach(function(el) { el.style.display = (scanType === 'discover-domain') ? '' : 'none'; });
+
+    // Update the custom icon based on selection
+    var iconEl = document.getElementById('adminApiScanTypeIcon');
+    if (iconEl) {
+        if (scanType === 'runtime') {
+            iconEl.innerHTML = '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+        } else if (scanType === 'discover-api') {
+            iconEl.innerHTML = '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+        } else if (scanType === 'discover-domain') {
+            iconEl.innerHTML = '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
+        }
+    }
+}
+
+function parseAdminTextList(raw) {
+    var parts = String(raw || '').split(/[\n,]+/);
+    return parts.map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
+}
+
+function parseAdminHeaderMap(raw) {
+    var map = {};
+    String(raw || '').split(/\n+/).forEach(function(line) {
+        var item = line.trim();
+        if (!item) return;
+        var idx = item.indexOf(':');
+        if (idx < 1) return;
+        var key = item.slice(0, idx).trim();
+        var value = item.slice(idx + 1).trim();
+        if (key) map[key] = value;
+    });
+    return map;
+}
+
+function buildAdminApiScanPayload() {
+    var scanType = (document.getElementById('adminApiScanType').value || 'runtime').trim();
+    var target = (document.getElementById('adminApiScanTarget').value || '').trim();
+    var timeoutSeconds = parseInt(document.getElementById('adminApiScanTimeout').value, 10) || 30;
+    var headers = parseAdminHeaderMap(document.getElementById('adminApiScanHeaders').value);
+
+    var payload = {
+        scan_type: scanType,
+        target: target,
+        headers: headers,
+        timeout_seconds: timeoutSeconds,
+        include_scan_ids: parseAdminTextList(document.getElementById('adminApiScanIncludeIDs').value),
+        exclude_scan_ids: parseAdminTextList(document.getElementById('adminApiScanExcludeIDs').value)
+    };
+
+    if (scanType === 'runtime') {
+        payload.method = (document.getElementById('adminApiScanMethod').value || 'GET').trim();
+        payload.body = document.getElementById('adminApiScanBody').value || '';
+        payload.retry_count = 1;
+        payload.retry_backoff_ms = 1000;
+    }
+
+    if (scanType === 'discover-api') {
+        payload.max_paths = parseInt(document.getElementById('adminApiScanMaxPaths').value, 10) || 64;
+        payload.insecure_skip_verify = !!document.getElementById('adminApiScanInsecure').checked;
+    }
+
+    if (scanType === 'discover-domain') {
+        payload.max_subdomains = parseInt(document.getElementById('adminApiScanMaxSubdomains').value, 10) || 32;
+        payload.max_hints = parseInt(document.getElementById('adminApiScanMaxHints').value, 10) || 48;
+        payload.schemes = parseAdminTextList(document.getElementById('adminApiScanSchemes').value);
+    }
+
+    return payload;
+}
+
+function runAdminApiScan() {
+    var target = (document.getElementById('adminApiScanTarget').value || '').trim();
+    if (!target) {
+        alert('Please enter a scan target URL/domain.');
+        return;
+    }
+
+    var runBtn = document.getElementById('adminRunApiScanBtn');
+    var output = document.getElementById('adminApiScanReportOutput');
+    var summaryEl = document.getElementById('adminApiScanSummary');
+    var structuredEl = document.getElementById('adminApiScanStructured');
+    if (runBtn) runBtn.disabled = true;
+    if (output) output.textContent = 'Running scan...';
+    if (summaryEl) summaryEl.innerHTML = '<span class="badge">Running scan...</span>';
+    if (structuredEl) structuredEl.innerHTML = '<div class="loading">Collecting report details...</div>';
+
+    fetch(BACKEND_URL + '/api/v1/builder/api-scanner/scan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(buildAdminApiScanPayload())
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.details)) || ('Scan request failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function(data) {
+        latestAdminAPIScanReport = data.report;
+        renderAdminApiScanReport(data.report);
+        loadAdminApiScanReports();
+        var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
+        if (downloadBtn) downloadBtn.disabled = false;
+        addLog('API scan report generated: ' + data.report.id, 'info');
+    }).catch(function(err) {
+        if (output) output.textContent = 'Scan failed\n\n' + err.message;
+        if (summaryEl) summaryEl.innerHTML = '<span class="badge badge-danger">Scan Failed</span>';
+        if (structuredEl) structuredEl.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Scan failed') + '</div>';
+        addLog('API scan failed: ' + err.message, 'error');
+    }).finally(function() {
+        if (runBtn) runBtn.disabled = false;
+    });
+}
+
+function adminScanPickValue(obj, keys, fallback) {
+    if (!obj || typeof obj !== 'object') return fallback;
+    for (var i = 0; i < keys.length; i++) {
+        if (Object.prototype.hasOwnProperty.call(obj, keys[i]) && obj[keys[i]] !== undefined && obj[keys[i]] !== null) {
+            return obj[keys[i]];
+        }
+    }
+    return fallback;
+}
+
+function adminScanToInt(value) {
+    var n = Number(value);
+    if (!isFinite(n)) return 0;
+    return Math.floor(n);
+}
+
+function adminScanGetResult(report) {
+    if (!report || typeof report !== 'object') return {};
+    if (!report.result || typeof report.result !== 'object') return {};
+    return report.result;
+}
+
+function adminScanGetSummary(report) {
+    var fromReport = adminScanPickValue(report, ['summary'], null);
+    if (fromReport && typeof fromReport === 'object') return fromReport;
+    var result = adminScanGetResult(report);
+    var fromResult = adminScanPickValue(result, ['summary'], null);
+    if (fromResult && typeof fromResult === 'object') return fromResult;
+    return {};
+}
+
+function adminScanBadge(label, value, variant) {
+    var cls = 'badge';
+    if (variant === 'success') cls += ' badge-success';
+    if (variant === 'danger') cls += ' badge-danger';
+    if (variant === 'default') cls += ' badge-default';
+    var fullText = escapeHtml(label) + ': ' + escapeHtml(String(value));
+    return '<span class="' + cls + '" title="' + fullText + '">' + fullText + '</span>';
+}
+
+function adminScanSeverityClass(severity) {
+    var s = String(severity || '').toLowerCase();
+    if (s === 'critical' || s === 'high') return 'status-inactive';
+    if (s === 'medium') return 'status-draft';
+    return 'status-active';
+}
+
+function adminScanFormatWhen(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleString();
+}
+
+function adminScanRenderOverview(report, result) {
+    var scanner = adminScanPickValue(result, ['scanner'], '-');
+    var method = adminScanPickValue(report, ['method'], '');
+    var scannedAt = adminScanPickValue(result, ['scannedAt', 'scanned_at'], report.created_at || report.createdAt || '');
+    var html = '<div class="table-responsive"><table class="admin-table compact" style="margin:0;"><tbody>';
+    html += '<tr><th style="width:160px; background:rgba(0,0,0,0.02);">Report ID</th><td><code style="background:transparent; padding:0; font-weight:600;">' + escapeHtml(report.id || '-') + '</code></td></tr>';
+    html += '<tr><th style="background:rgba(0,0,0,0.02);">Type & Target</th><td>' + escapeHtml(report.scan_type || report.scanType || '-') + ' <span style="color:var(--text-muted);">&rarr;</span> <code>' + escapeHtml(report.target || '-') + '</code></td></tr>';
+    html += '<tr><th style="background:rgba(0,0,0,0.02);">Scanner</th><td>' + escapeHtml(scanner || '-') + '</td></tr>';
+    html += '<tr><th style="background:rgba(0,0,0,0.02);">Scanned At</th><td>' + escapeHtml(adminScanFormatWhen(scannedAt)) + '</td></tr>';
+    html += '</tbody></table></div>';
+    return '<h5 style="margin:0 0 12px 0; color:var(--text-secondary);">Overview</h5>' + html;
+}
+
+function adminScanRenderRuntimeFindings(result) {
+    var findings = adminScanPickValue(result, ['findings'], []);
+    if (!Array.isArray(findings) || findings.length === 0) {
+        return '<h5 style="margin:20px 0 12px 0; color:var(--text-secondary); border-top:1px dashed var(--border-color); padding-top:16px;">Vulnerability Findings</h5><div class="empty-state" style="background:rgba(var(--primary-rgb),0.05); color:var(--success-color); border:1px solid rgba(var(--primary-rgb),0.2);">No findings were returned for this runtime scan. Excellent!</div>';
+    }
+
+    var html = '<h5 style="margin:20px 0 12px 0; color:var(--danger-color); border-top:1px dashed var(--border-color); padding-top:16px;">Vulnerability Findings (' + findings.length + ')</h5>';
+    html += '<div class="table-responsive"><table class="admin-table compact" style="margin:0;"><thead><tr><th>Severity</th><th>Type</th><th>Title</th><th>Endpoint</th><th>Evidence</th></tr></thead><tbody>';
+    findings.forEach(function(finding) {
+        var sev = String(adminScanPickValue(finding, ['severity'], 'info')).toUpperCase();
+        var endpoint = adminScanPickValue(finding, ['endpoint'], '-');
+        var evidence = adminScanPickValue(finding, ['evidence', 'description'], '');
+        if (typeof evidence === 'string' && evidence.length > 140) {
+            evidence = evidence.slice(0, 140) + '...';
+        }
+        var trStyle = (sev === 'CRITICAL' || sev === 'HIGH') ? 'style="background:rgba(244,42,65,0.05);"' : '';
+        html += '<tr ' + trStyle + '>' +
+            '<td><span class="badge ' + adminScanSeverityClass(sev) + '">' + escapeHtml(sev) + '</span></td>' +
+            '<td style="font-weight:600;">' + escapeHtml(String(adminScanPickValue(finding, ['type'], '-'))) + '</td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(finding, ['title'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(endpoint)) + '</code></td>' +
+            '<td><small style="color:var(--text-muted);">' + escapeHtml(String(evidence || '-')) + '</small></td>' +
+            '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function adminScanRenderChecks(result) {
+    var checks = adminScanPickValue(result, ['checks'], []);
+    if (!Array.isArray(checks) || checks.length === 0) {
+        return '';
+    }
+
+    var html = '<h5 style="margin:0 0 12px 0; color:var(--text-secondary);">Check Coverage</h5>';
+    html += '<div class="table-responsive"><table class="admin-table compact" style="margin:0;"><thead><tr><th style="width:50%;">Check</th><th>Executed</th><th>Findings</th></tr></thead><tbody>';
+    checks.forEach(function(check) {
+        var executed = !!adminScanPickValue(check, ['executed'], false);
+        var findings = adminScanToInt(adminScanPickValue(check, ['findings'], 0));
+        var statusClass = executed ? (findings > 0 ? 'badge-warning' : 'badge-success') : 'badge-danger';
+        var findingStyle = findings > 0 ? 'color:var(--danger-color); font-weight:bold;' : 'color:var(--text-secondary);';
+        
+        html += '<tr style="background:rgba(0,0,0,0.01);">' +
+            '<td style="font-weight:500;">' + escapeHtml(String(adminScanPickValue(check, ['name', 'id'], '-'))) + '</td>' +
+            '<td><span class="badge ' + statusClass + '">' + (executed ? 'Yes' : 'Skipped') + '</span></td>' +
+            '<td style="' + findingStyle + '">' + findings + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function adminScanRenderDiscoveryRows(discovered, title) {
+    if (!Array.isArray(discovered) || discovered.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">' + escapeHtml(title) + '</h5><div class="empty-state">No records found.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">' + escapeHtml(title) + '</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Check ID</th><th>Name</th><th>Category</th><th>URL</th><th>Status</th></tr></thead><tbody>';
+    discovered.forEach(function(item) {
+        var statusCode = adminScanPickValue(item, ['statusCode', 'status_code'], '-');
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['checkId', 'check_id'], '-'))) + '</td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['name'], '-'))) + '</td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['category'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(adminScanPickValue(item, ['url'], '-'))) + '</code></td>' +
+            '<td>' + escapeHtml(String(statusCode)) + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderFingerprints(result) {
+    var fps = adminScanPickValue(result, ['fingerprints'], []);
+    if (!Array.isArray(fps) || fps.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">Fingerprints</h5><div class="empty-state">No fingerprint data found.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">Fingerprints</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Type</th><th>Value</th><th>Source Header</th></tr></thead><tbody>';
+    fps.forEach(function(fp) {
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(fp, ['type'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(adminScanPickValue(fp, ['value'], '-'))) + '</code></td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(fp, ['sourceHeader', 'source_header'], '-'))) + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderResolvedSubdomains(result) {
+    var resolved = adminScanPickValue(result, ['resolved'], []);
+    if (!Array.isArray(resolved) || resolved.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">Resolved Subdomains</h5><div class="empty-state">No subdomains resolved.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">Resolved Subdomains</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Name</th><th>Host</th><th>Addresses</th></tr></thead><tbody>';
+    resolved.forEach(function(item) {
+        var addresses = adminScanPickValue(item, ['addresses'], []);
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['name'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(adminScanPickValue(item, ['host'], '-'))) + '</code></td>' +
+            '<td>' + escapeHtml(Array.isArray(addresses) ? addresses.join(', ') : '-') + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderSummaryBadges(report) {
+    var summary = adminScanGetSummary(report);
+    var scanType = String(report.scan_type || report.scanType || 'runtime').toLowerCase();
+    var badges = [];
+
+    badges.push(adminScanBadge('Type', report.scan_type || report.scanType || '-', 'default'));
+    badges.push(adminScanBadge('Target', report.target || '-', 'default'));
+    badges.push(adminScanBadge('Created', adminScanFormatWhen(report.created_at || report.createdAt), 'default'));
+
+    if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
+        var total = adminScanToInt(adminScanPickValue(summary, ['total', 'Total'], 0));
+        var critical = adminScanToInt(adminScanPickValue(summary, ['critical', 'Critical'], 0));
+        var high = adminScanToInt(adminScanPickValue(summary, ['high', 'High'], 0));
+        var medium = adminScanToInt(adminScanPickValue(summary, ['medium', 'Medium'], 0));
+        badges.push(adminScanBadge('Findings', total, total > 0 ? 'danger' : 'success'));
+        badges.push(adminScanBadge('Critical', critical, critical > 0 ? 'danger' : 'default'));
+        badges.push(adminScanBadge('High', high, high > 0 ? 'danger' : 'default'));
+        badges.push(adminScanBadge('Medium', medium, medium > 0 ? 'default' : 'success'));
+    } else if (scanType === 'discover-api' || scanType === 'api-discovery') {
+        var totalPaths = adminScanToInt(adminScanPickValue(summary, ['totalPaths', 'total_paths'], 0));
+        var wellKnown = adminScanToInt(adminScanPickValue(summary, ['wellKnown', 'well_known'], 0));
+        var exposed = adminScanToInt(adminScanPickValue(summary, ['exposedFiles', 'exposed_files'], 0));
+        var fingerprints = adminScanToInt(adminScanPickValue(summary, ['fingerprints'], 0));
+        badges.push(adminScanBadge('Discovered Paths', totalPaths, totalPaths > 0 ? 'success' : 'default'));
+        badges.push(adminScanBadge('Well-Known', wellKnown, 'default'));
+        badges.push(adminScanBadge('Exposed Files', exposed, exposed > 0 ? 'danger' : 'success'));
+        badges.push(adminScanBadge('Fingerprints', fingerprints, 'default'));
+    } else {
+        var candidates = adminScanToInt(adminScanPickValue(summary, ['candidates'], 0));
+        var resolved = adminScanToInt(adminScanPickValue(summary, ['resolved'], 0));
+        var hints = adminScanToInt(adminScanPickValue(summary, ['apiHints', 'api_hints'], 0));
+        var fps = adminScanToInt(adminScanPickValue(summary, ['fingerprints'], 0));
+        badges.push(adminScanBadge('Candidates', candidates, 'default'));
+        badges.push(adminScanBadge('Resolved', resolved, resolved > 0 ? 'success' : 'default'));
+        badges.push(adminScanBadge('API Hints', hints, hints > 0 ? 'success' : 'default'));
+        badges.push(adminScanBadge('Fingerprints', fps, 'default'));
+    }
+
+    return badges.join(' ');
+}
+
+function adminScanRenderStructured(report) {
+    var result = adminScanGetResult(report);
+    var scanType = String(report.scan_type || report.scanType || 'runtime').toLowerCase();
+    var blocks = [];
+
+    blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderOverview(report, result) + '</div>');
+    blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderChecks(result) + '</div>');
+
+    if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderRuntimeFindings(result) + '</div>');
+    } else if (scanType === 'discover-api' || scanType === 'api-discovery') {
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderDiscoveryRows(adminScanPickValue(result, ['discovered'], []), 'Discovered Endpoints') + '</div>');
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderFingerprints(result) + '</div>');
+    } else {
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderResolvedSubdomains(result) + '</div>');
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderDiscoveryRows(adminScanPickValue(result, ['apiHints', 'api_hints'], []), 'API Hints') + '</div>');
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderFingerprints(result) + '</div>');
+    }
+
+    return blocks.join('');
+}
+
+function renderAdminApiScanReport(report) {
+    var output = document.getElementById('adminApiScanReportOutput');
+    var summaryEl = document.getElementById('adminApiScanSummary');
+    var structuredEl = document.getElementById('adminApiScanStructured');
+
+    if (!report || typeof report !== 'object') {
+        if (summaryEl) summaryEl.innerHTML = '<span class="badge">No report selected</span>';
+        if (structuredEl) structuredEl.innerHTML = '<div class="empty-state">Run a scan or open a report to view details.</div>';
+        if (output) output.textContent = 'Run a scan to generate a report.';
+        return;
+    }
+
+    if (summaryEl) summaryEl.innerHTML = adminScanRenderSummaryBadges(report);
+    if (structuredEl) structuredEl.innerHTML = adminScanRenderStructured(report);
+    if (output) output.textContent = JSON.stringify(report, null, 2);
+}
+
+function loadAdminApiScanReports() {
+    var el = document.getElementById('adminApiScanReportsList');
+    if (!el) return;
+
+    fetchJSON('/api/v1/builder/api-scanner/reports').then(function(data) {
+        if (data && data.error) throw new Error(data.error);
+        var reports = data.reports || [];
+        if (reports.length === 0) {
+            el.innerHTML = '<div class="empty-state">No API scan reports yet.</div>';
+            updateAdminApiScanSelectedCount();
+            return;
+        }
+
+        var html = '<table class="admin-table compact" style="margin:0;"><thead><tr><th style="width:40px;"><input type="checkbox" id="adminApiScanSelectAll" onchange="toggleAllAdminApiScanReportsSelection(this.checked)" aria-label="Select all reports"></th><th>ID</th><th>Type</th><th>Target</th><th>Summary</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        reports.forEach(function(report) {
+            var summary = adminScanGetSummary(report);
+            var scanType = String(report.scan_type || report.scanType || '').toLowerCase();
+            var summaryLabel = '-';
+
+            if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
+                summaryLabel = 'Findings: ' + adminScanToInt(adminScanPickValue(summary, ['total', 'Total'], 0));
+            } else if (scanType === 'discover-api' || scanType === 'api-discovery') {
+                summaryLabel = 'Paths: ' + adminScanToInt(adminScanPickValue(summary, ['totalPaths', 'total_paths'], 0));
+            } else {
+                summaryLabel = 'Hints: ' + adminScanToInt(adminScanPickValue(summary, ['apiHints', 'api_hints'], 0));
+            }
+
+            html += '<tr>' +
+                '<td><input type="checkbox" class="admin-api-scan-select" value="' + escapeHtml(report.id) + '" onchange="updateAdminApiScanSelectedCount()" aria-label="Select report ' + escapeHtml(report.id) + '"></td>' +
+                '<td><strong>' + escapeHtml(report.id.substring(0,14)) + '...</strong></td>' +
+                '<td><span class="status-badge" style="background:rgba(var(--primary-rgb),0.1); color:var(--primary-light);">' + escapeHtml(report.scan_type) + '</span></td>' +
+                '<td><code style="background:rgba(0,0,0,0.1); padding:2px 6px; border-radius:4px;">' + escapeHtml(report.target || '-') + '</code></td>' +
+                '<td><span style="font-weight:500; font-size:0.85rem;">' + escapeHtml(summaryLabel) + '</span></td>' +
+                '<td style="color:var(--text-muted); font-size:0.85rem;">' + new Date(report.created_at).toLocaleString() + '</td>' +
+                '<td>' +
+                '<div style="display:flex; gap:6px;">' +
+                '<button class="btn-sm btn-test" onclick="viewAdminApiScanReport(\'' + report.id + '\')" title="View"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button> ' +
+                '<button class="btn-sm btn-secondary" onclick="downloadAdminApiScanReportById(\'' + report.id + '\')" title="Download"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button> ' +
+                '<button class="btn-sm btn-del" onclick="deleteAdminApiScanReport(\'' + report.id + '\')" title="Delete"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>' +
+                '</div>' +
+                '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+        updateAdminApiScanSelectedCount();
+    }).catch(function(err) {
+        el.innerHTML = '<div class="error-state">Failed to load API scan reports: ' + escapeHtml(err.message || '') + '</div>';
+        updateAdminApiScanSelectedCount();
+    });
+}
+
+function getSelectedAdminApiScanReportIds() {
+    var selected = document.querySelectorAll('.admin-api-scan-select:checked');
+    var ids = [];
+    selected.forEach(function(checkbox) {
+        var value = String(checkbox.value || '').trim();
+        if (value) ids.push(value);
+    });
+    return ids;
+}
+
+function updateAdminApiScanSelectedCount() {
+    var selectedCount = getSelectedAdminApiScanReportIds().length;
+    var totalCount = document.querySelectorAll('.admin-api-scan-select').length;
+    var countEl = document.getElementById('adminApiScanSelectedCount');
+    if (countEl) countEl.textContent = selectedCount + ' selected';
+
+    var selectAll = document.getElementById('adminApiScanSelectAll');
+    if (selectAll) {
+        selectAll.checked = totalCount > 0 && selectedCount === totalCount;
+        selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+    }
+}
+
+function toggleAllAdminApiScanReportsSelection(checked) {
+    var checkboxes = document.querySelectorAll('.admin-api-scan-select');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = !!checked;
+    });
+    updateAdminApiScanSelectedCount();
+}
+
+function performAdminApiScanBulkDelete(payload, doneMessage) {
+    fetch(BACKEND_URL + '/api/v1/builder/api-scanner/reports/bulk-delete', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.message)) || ('Bulk delete failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function(data) {
+        var deletedCount = Number((data && data.deleted_count) || 0);
+        if (deletedCount > 0 && latestAdminAPIScanReport) {
+            var deletedIDs = (data && data.deleted_ids) || [];
+            if (Array.isArray(deletedIDs) && deletedIDs.indexOf(latestAdminAPIScanReport.id) >= 0) {
+                clearAdminApiScanView();
+            }
+        }
+        loadAdminApiScanReports();
+        addLog(doneMessage + ' (' + deletedCount + ' report(s))', 'info');
+    }).catch(function(err) {
+        alert('Bulk delete failed: ' + (err.message || 'Unknown error'));
+    });
+}
+
+function deleteSelectedAdminApiScanReports() {
+    var ids = getSelectedAdminApiScanReportIds();
+    if (ids.length === 0) {
+        alert('Select one or more reports first.');
+        return;
+    }
+    if (!confirm('Delete ' + ids.length + ' selected API scan report(s)?')) return;
+    performAdminApiScanBulkDelete({ ids: ids, all: false }, 'Deleted selected API scan reports');
+}
+
+function deleteAllAdminApiScanReports() {
+    var totalCount = document.querySelectorAll('.admin-api-scan-select').length;
+    if (totalCount === 0) {
+        alert('No reports to delete.');
+        return;
+    }
+    if (!confirm('Delete ALL API scan reports (' + totalCount + ')? This cannot be undone.')) return;
+    performAdminApiScanBulkDelete({ all: true }, 'Deleted all API scan reports');
+}
+
+function viewAdminApiScanReport(id) {
+    fetchJSON('/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id)).then(function(data) {
+        if (data && data.error) throw new Error(data.error);
+        latestAdminAPIScanReport = data.report;
+        renderAdminApiScanReport(data.report);
+        var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
+        if (downloadBtn) downloadBtn.disabled = false;
+    }).catch(function(err) {
+        var output = document.getElementById('adminApiScanReportOutput');
+        var summaryEl = document.getElementById('adminApiScanSummary');
+        var structuredEl = document.getElementById('adminApiScanStructured');
+        if (output) output.textContent = 'Failed to load report\n\n' + (err.message || 'Unknown error');
+        if (summaryEl) summaryEl.innerHTML = '<span class="badge badge-danger">Load Failed</span>';
+        if (structuredEl) structuredEl.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Unknown error') + '</div>';
+    });
+}
+
+function downloadLatestAdminApiScanReport() {
+    if (!latestAdminAPIScanReport) {
+        alert('No report loaded. Run or view a report first.');
+        return;
+    }
+    downloadAdminApiScanReportObject(latestAdminAPIScanReport);
+}
+
+function downloadAdminApiScanReportById(id) {
+    if (latestAdminAPIScanReport && latestAdminAPIScanReport.id === id) {
+        downloadAdminApiScanReportObject(latestAdminAPIScanReport);
+        return;
+    }
+
+    fetchJSON('/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id)).then(function(data) {
+        downloadAdminApiScanReportObject(data.report);
+    }).catch(function(err) {
+        alert('Failed to download report JSON: ' + (err.message || 'Unknown error'));
+    });
+}
+
+function deleteAdminApiScanReport(id) {
+    if (!id) return;
+    if (!confirm('Delete API scan report ' + id + '?')) return;
+
+    fetch(BACKEND_URL + '/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.message)) || ('Delete failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function() {
+        if (latestAdminAPIScanReport && latestAdminAPIScanReport.id === id) {
+            clearAdminApiScanView();
+        }
+        loadAdminApiScanReports();
+        addLog('Deleted API scan report: ' + id, 'info');
+    }).catch(function(err) {
+        alert('Failed to delete report: ' + (err.message || 'Unknown error'));
+    });
+}
+
+function copyLatestAdminApiScanReportId() {
+    if (!latestAdminAPIScanReport || !latestAdminAPIScanReport.id) {
+        alert('No report loaded. Run or view a report first.');
+        return;
+    }
+
+    var id = String(latestAdminAPIScanReport.id);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(id).then(function() {
+            addLog('Copied API scan report ID: ' + id, 'info');
+        }).catch(function() {
+            alert('Failed to copy report ID to clipboard.');
+        });
+        return;
+    }
+
+    var input = document.createElement('input');
+    input.value = id;
+    document.body.appendChild(input);
+    input.select();
+    try {
+        document.execCommand('copy');
+        addLog('Copied API scan report ID: ' + id, 'info');
+    } catch (e) {
+        alert('Failed to copy report ID to clipboard.');
+    }
+    document.body.removeChild(input);
+}
+
+function clearAdminApiScanView() {
+    latestAdminAPIScanReport = null;
+    var summaryEl = document.getElementById('adminApiScanSummary');
+    var structuredEl = document.getElementById('adminApiScanStructured');
+    var output = document.getElementById('adminApiScanReportOutput');
+    var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
+
+    if (summaryEl) summaryEl.innerHTML = '<span class="badge">No report selected</span>';
+    if (structuredEl) structuredEl.innerHTML = '<div class="empty-state">Run a scan or open a report to view details.</div>';
+    if (output) output.textContent = 'Run a scan to generate a report.';
+    if (downloadBtn) downloadBtn.disabled = true;
+}
+
+function downloadAdminApiScanReportObject(report) {
+    var payload = JSON.stringify(report, null, 2);
+    var blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+    var fileName = 'api-scan-report-' + String(report.id || 'latest') + '.json';
+    var url = URL.createObjectURL(blob);
+    var anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
 }
 
 // ===================================================================

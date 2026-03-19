@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"example.com/axiomnizam/internal/client"
 	"github.com/spf13/cobra"
@@ -36,40 +37,46 @@ Docs: https://docs.axiom-nizam.io`,
 	},
 }
 
-// skipConfigInit returns true for commands that don't need config initialization
-func skipConfigInit(cmdName string) bool {
-	noConfigCmds := map[string]bool{
-		"login":       true,
-		"logout":      true,
-		"version":     true,
-		"completion":  true,
-		"config":      true,
-		"wait":        true,
-		"scan":        true,
-		"tcp":         true,
-		"dns":         true,
-		"http":        true,
-		"grpc-health": true,
-		"k8s-pod":     true,
-		"image":       true,
-		"fs":          true,
-		"k8s":         true,
-		"repo":        true,
-		"mysql":       true,
-		"postgresql":  true,
-		"mongodb":     true,
-		"redis":       true,
-		"rabbitmq":    true,
-		"kafka":       true,
-		"influxdb":    true,
-		"temporal":    true,
-		"custom":      true,
-		"external":    true,
-		"help":        true,
-		"--help":      true,
-		"-h":          true,
+// skipConfigInit returns true for commands that don't need config initialization.
+func skipConfigInit(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
 	}
-	return noConfigCmds[cmdName]
+
+	leaf := strings.TrimSpace(strings.ToLower(cmd.Name()))
+	if leaf == "help" || leaf == "--help" || leaf == "-h" {
+		return true
+	}
+
+	topLevelNoConfig := map[string]bool{
+		"login":      true,
+		"logout":     true,
+		"version":    true,
+		"completion": true,
+		"config":     true,
+	}
+	if topLevelNoConfig[leaf] {
+		return true
+	}
+
+	return commandPathContains(cmd, "wait") ||
+		commandPathContains(cmd, "scan") ||
+		commandPathContains(cmd, "discover")
+}
+
+func commandPathContains(cmd *cobra.Command, name string) bool {
+	needle := strings.TrimSpace(strings.ToLower(name))
+	if needle == "" {
+		return false
+	}
+
+	for current := cmd; current != nil; current = current.Parent() {
+		if strings.EqualFold(current.Name(), needle) {
+			return true
+		}
+	}
+
+	return false
 }
 
 var versionCmd = &cobra.Command{

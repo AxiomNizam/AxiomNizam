@@ -53,5 +53,5 @@ func adminCommands() []*cobra.Command {
 }
 
 func utilityCommands() []*cobra.Command {
-	return []*cobra.Command{versionCmd, completionCmd, waitCmd, scanCmd}
+	return []*cobra.Command{versionCmd, completionCmd, waitCmd, scanCmd, discoverCmd}
 }
