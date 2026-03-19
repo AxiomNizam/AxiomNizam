@@ -20,6 +20,7 @@ let graphQLAPIById = {};
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
 let latestAdminAPIScanReport = null;
+let latestSQLAISuggestions = [];
 
 const DEFAULT_BUILDER_DATABASES = ['mysql', 'postgres', 'mariadb', 'percona', 'oracle'];
 
@@ -65,6 +66,7 @@ window.addEventListener('DOMContentLoaded', function() {
     setupScanDropZone();
     loadScannerHealth();
     toggleAdminApiScanFields();
+    initSQLAssistantPanel();
     applyRoleRestrictions();
     initAdminCertificateActions();
 });
@@ -78,7 +80,7 @@ function switchTab(tabName) {
     if (sel) sel.classList.add('active');
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
 
-    if (tabName === 'api-builder') { loadBuilderSummary(); loadCustomAPIs(); }
+    if (tabName === 'api-builder') { loadBuilderSummary(); loadCustomAPIs(); initSQLAssistantPanel(); }
     if (tabName === 'graphql-api-builder') { loadGraphQLBuilderSummary(); loadGraphQLCustomAPIs(); }
     if (tabName === 'csv-upload') { loadCSVHistory(); }
     if (tabName === 'converter') { loadConverterDropdowns(); loadConversionHistory(); }
@@ -104,6 +106,202 @@ function loadBuilderSummary() {
             '<div class="summary-card"><div class="sc-value">' + (d.total_csv_uploads || 0) + '</div><div class="sc-label">CSV Uploads</div></div>' +
             '<div class="summary-card"><div class="sc-value">' + (d.total_conversions || 0) + '</div><div class="sc-label">Conversions</div></div>';
     }).catch(function() {});
+}
+
+function initSQLAssistantPanel() {
+    var chatEl = document.getElementById('sqlAssistantChat');
+    if (!chatEl) return;
+    if (chatEl.dataset.initialized === '1') return;
+    chatEl.dataset.initialized = '1';
+    clearSQLAssistantPanel();
+}
+
+function appendSQLAssistantChat(role, text, meta) {
+    var chatEl = document.getElementById('sqlAssistantChat');
+    if (!chatEl) return;
+
+    if (chatEl.querySelector('.empty-state')) {
+        chatEl.innerHTML = '';
+    }
+
+    var roleBadgeClass = role === 'assistant' ? 'status-active' : 'status-draft';
+    var roleTitle = role === 'assistant' ? 'Assistant' : 'You';
+    var metaLine = meta ? '<div style="margin-top:4px;color:#64748b;font-size:12px;">' + escapeHtml(meta) + '</div>' : '';
+    var block = '<div class="cp-card" style="margin:0 0 8px 0;padding:10px;">' +
+        '<div><span class="status-badge ' + roleBadgeClass + '">' + roleTitle + '</span></div>' +
+        '<div style="margin-top:6px;white-space:pre-wrap;">' + escapeHtml(text || '') + '</div>' +
+        metaLine +
+        '</div>';
+
+    chatEl.insertAdjacentHTML('beforeend', block);
+    chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function renderSQLAssistantSuggestions() {
+    var el = document.getElementById('sqlAssistantSuggestions');
+    if (!el) return;
+
+    if (!Array.isArray(latestSQLAISuggestions) || latestSQLAISuggestions.length === 0) {
+        el.innerHTML = '<div class="empty-state">No suggestions yet.</div>';
+        return;
+    }
+
+    var html = '<table class="admin-table compact"><thead><tr><th>Title</th><th>SQL</th><th>Notes</th><th>Actions</th></tr></thead><tbody>';
+    latestSQLAISuggestions.forEach(function(item, idx) {
+        html += '<tr>' +
+            '<td>' + escapeHtml(item.title || 'SQL suggestion') + '</td>' +
+            '<td><pre style="margin:0;white-space:pre-wrap;">' + escapeHtml(item.sql || '') + '</pre></td>' +
+            '<td>' + escapeHtml(item.notes || '-') + '</td>' +
+            '<td>' +
+            '<button class="btn-sm btn-secondary" onclick="copySQLAISuggestion(' + idx + ')">Copy</button> ' +
+            '<button class="btn-sm btn-test" onclick="applySQLAISuggestion(' + idx + ')">Use</button>' +
+            '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+function normalizeSQLAISuggestion(item) {
+    if (!item || typeof item !== 'object') return null;
+    var title = String(item.title || item.Title || 'SQL suggestion').trim();
+    var sql = String(item.sql || item.SQL || '').trim();
+    var notes = String(item.notes || item.Notes || '').trim();
+    if (!sql) return null;
+    return { title: title, sql: sql, notes: notes };
+}
+
+function askSQLAssistant() {
+    var promptEl = document.getElementById('sqlAssistantPrompt');
+    if (!promptEl) return;
+    var message = String(promptEl.value || '').trim();
+    if (!message) {
+        alert('Please write what SQL you want to build.');
+        return;
+    }
+
+    var askBtn = document.getElementById('sqlAssistantAskBtn');
+    if (askBtn) askBtn.disabled = true;
+
+    var payload = {
+        message: message,
+        dialect: (document.getElementById('sqlAssistantDialect') || {}).value || 'postgres',
+        schema_hint: (document.getElementById('sqlAssistantSchemaHint') || {}).value || '',
+        context: 'AxiomNizam API Builder SQL template generation'
+    };
+
+    appendSQLAssistantChat('user', message);
+
+    fetch(BACKEND_URL + '/api/v1/builder/sql-assistant/chat', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.message)) || ('SQL assistant failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function(data) {
+        var assistant = (data && data.assistant) || {};
+        var provider = String(assistant.provider || 'fallback');
+        var reply = String(assistant.reply || 'Generated SQL suggestions.');
+        var warning = String(assistant.warning || '').trim();
+
+        latestSQLAISuggestions = ((assistant.suggestions || []).map(normalizeSQLAISuggestion).filter(function(item) { return !!item; }));
+        renderSQLAssistantSuggestions();
+
+        var meta = 'provider: ' + provider + (warning ? ' | ' + warning : '');
+        appendSQLAssistantChat('assistant', reply, meta);
+        if (warning) addLog('SQL assistant warning: ' + warning, 'warn');
+    }).catch(function(err) {
+        appendSQLAssistantChat('assistant', 'Failed to generate SQL suggestions.', err.message || 'Unknown error');
+        addLog('SQL assistant error: ' + (err.message || 'unknown'), 'error');
+    }).finally(function() {
+        if (askBtn) askBtn.disabled = false;
+    });
+}
+
+function copySQLAISuggestion(index) {
+    if (!Array.isArray(latestSQLAISuggestions) || !latestSQLAISuggestions[index]) return;
+    var sql = String(latestSQLAISuggestions[index].sql || '');
+    if (!sql) return;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(sql).then(function() {
+            addLog('Copied SQL suggestion to clipboard', 'info');
+        }).catch(function() {
+            alert('Failed to copy SQL suggestion.');
+        });
+        return;
+    }
+
+    var input = document.createElement('textarea');
+    input.value = sql;
+    document.body.appendChild(input);
+    input.select();
+    try {
+        document.execCommand('copy');
+        addLog('Copied SQL suggestion to clipboard', 'info');
+    } catch (e) {
+        alert('Failed to copy SQL suggestion.');
+    }
+    document.body.removeChild(input);
+}
+
+function applySQLAISuggestion(index) {
+    if (!Array.isArray(latestSQLAISuggestions) || !latestSQLAISuggestions[index]) return;
+    var sql = String(latestSQLAISuggestions[index].sql || '').trim();
+    if (!sql) return;
+
+    var editModal = document.getElementById('editAPIModal');
+    var createModal = document.getElementById('createAPIModal');
+    var applied = false;
+
+    if (editModal && editModal.style.display === 'flex') {
+        var editInput = document.getElementById('editApiSQLTemplateInput');
+        if (editInput) {
+            editInput.value = sql;
+            applied = true;
+        }
+    }
+
+    if (!applied) {
+        var createInput = document.getElementById('apiSQLTemplateInput');
+        if (createInput) {
+            createInput.value = sql;
+            applied = true;
+        }
+        if (createModal && createModal.style.display !== 'flex' && canModify()) {
+            openCreateAPIModal();
+        }
+    }
+
+    if (applied) {
+        addLog('Applied SQL suggestion to API form', 'info');
+    } else {
+        copySQLAISuggestion(index);
+    }
+}
+
+function applyTopSQLAISuggestion() {
+    if (!Array.isArray(latestSQLAISuggestions) || latestSQLAISuggestions.length === 0) {
+        alert('No SQL suggestions available yet. Ask SQL AI first.');
+        return;
+    }
+    applySQLAISuggestion(0);
+}
+
+function clearSQLAssistantPanel() {
+    latestSQLAISuggestions = [];
+    var promptEl = document.getElementById('sqlAssistantPrompt');
+    var chatEl = document.getElementById('sqlAssistantChat');
+
+    if (promptEl) promptEl.value = '';
+    if (chatEl) chatEl.innerHTML = '<div class="empty-state" style="margin:0;">Ask a SQL question to start the conversation.</div>';
+    renderSQLAssistantSuggestions();
 }
 
 function loadCustomAPIs() {

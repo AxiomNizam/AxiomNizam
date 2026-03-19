@@ -73,6 +73,54 @@
         <!-- Summary Cards -->
         <div class="builder-summary" id="builderSummary"></div>
 
+        <div class="cp-card" style="margin:0 0 14px 0;">
+            <h4>SQL AI Chat & Suggestions</h4>
+            <p style="margin:8px 0 12px;color:#64748b;">Generate SQL query ideas for API Builder. Uses OpenClaw when configured, otherwise local fallback suggestions.</p>
+
+            <div class="cp-grid-two">
+                <div class="cp-card" style="margin:0;">
+                    <div class="form-group">
+                        <label for="sqlAssistantPrompt">What SQL do you want to build?</label>
+                        <textarea id="sqlAssistantPrompt" rows="4" placeholder="Example: Create a paginated query for active users with optional name search"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sqlAssistantDialect">Dialect</label>
+                            <select id="sqlAssistantDialect">
+                                <option value="postgres">PostgreSQL</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="mariadb">MariaDB</option>
+                                <option value="percona">Percona</option>
+                                <option value="oracle">Oracle</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="sqlAssistantSchemaHint">Schema / Table Hint (optional)</label>
+                        <textarea id="sqlAssistantSchemaHint" rows="3" placeholder="users(id, name, email, status, created_at)
+orders(id, user_id, total_amount, created_at)"></textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button id="sqlAssistantAskBtn" class="btn-primary" onclick="askSQLAssistant()">Ask SQL AI</button>
+                        <button class="btn-secondary" onclick="applyTopSQLAISuggestion()">Use Top SQL</button>
+                        <button class="btn-secondary" onclick="clearSQLAssistantPanel()">Clear</button>
+                    </div>
+                </div>
+
+                <div class="cp-card" style="margin:0;">
+                    <h5 style="margin:0 0 8px 0;">Assistant Chat</h5>
+                    <div id="sqlAssistantChat" class="csv-history" style="min-height:220px;max-height:320px;overflow:auto;padding:10px;">
+                        <div class="empty-state" style="margin:0;">Ask a SQL question to start the conversation.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:12px;">
+                <h5 style="margin:0 0 8px 0;">SQL Suggestions</h5>
+                <div id="sqlAssistantSuggestions" class="empty-state">No suggestions yet.</div>
+            </div>
+        </div>
+
         <!-- Toolbar -->
         <div class="builder-toolbar">
             <div class="toolbar-left">
@@ -913,7 +961,7 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260319-4"></script>
+<script src="/static/admin.js?v=20260319-5"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP
