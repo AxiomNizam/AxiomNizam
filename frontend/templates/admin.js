@@ -142,19 +142,21 @@ function renderSQLAssistantSuggestions() {
     if (!el) return;
 
     if (!Array.isArray(latestSQLAISuggestions) || latestSQLAISuggestions.length === 0) {
-        el.innerHTML = '<div class="empty-state">No suggestions yet.</div>';
+        el.innerHTML = '<div class="empty-state" style="margin:0; padding:20px;">No suggestions yet.</div>';
         return;
     }
 
-    var html = '<table class="admin-table compact"><thead><tr><th>Title</th><th>SQL</th><th>Notes</th><th>Actions</th></tr></thead><tbody>';
+    var html = '<table class="admin-table compact" style="margin:0; border:none;"><thead><tr style="background:rgba(0,0,0,0.2);"><th>Title</th><th>SQL</th><th>Notes</th><th>Actions</th></tr></thead><tbody>';
     latestSQLAISuggestions.forEach(function(item, idx) {
         html += '<tr>' +
-            '<td>' + escapeHtml(item.title || 'SQL suggestion') + '</td>' +
-            '<td><pre style="margin:0;white-space:pre-wrap;">' + escapeHtml(item.sql || '') + '</pre></td>' +
-            '<td>' + escapeHtml(item.notes || '-') + '</td>' +
-            '<td>' +
-            '<button class="btn-sm btn-secondary" onclick="copySQLAISuggestion(' + idx + ')">Copy</button> ' +
-            '<button class="btn-sm btn-test" onclick="applySQLAISuggestion(' + idx + ')">Use</button>' +
+            '<td style="font-weight:600; color:var(--primary-light);">' + escapeHtml(item.title || 'SQL suggestion') + '</td>' +
+            '<td><pre style="margin:0; white-space:pre-wrap; background:rgba(0,0,0,0.1); padding:8px; border-radius:4px; border:1px solid rgba(255,255,255,0.05); font-family:var(--font-mono);">' + escapeHtml(item.sql || '') + '</pre></td>' +
+            '<td><small style="color:var(--text-muted);">' + escapeHtml(item.notes || '-') + '</small></td>' +
+            '<td style="white-space:nowrap;">' +
+            '<div style="display:flex; gap:6px;">' +
+            '<button class="btn-sm btn-secondary" onclick="copySQLAISuggestion(' + idx + ')" title="Copy SQL"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button> ' +
+            '<button class="btn-sm btn-test" onclick="applySQLAISuggestion(' + idx + ')" title="Use SQL"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Use</button>' +
+            '</div>' +
             '</td>' +
             '</tr>';
     });

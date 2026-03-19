@@ -13,22 +13,23 @@ This README is intentionally detailed and aligned with the current code in this 
 1. Overview
 2. Architecture and Services
 3. Project Size Snapshot
-4. Quick Start
-5. Authentication, Authorization, and Security
-6. Feature Coverage
-7. REST API Coverage
-8. GraphQL Coverage
-9. Dashboard and UI Coverage
-10. GIS Coverage
-11. Network Intelligence (NetIntel) Coverage
-12. CLI Full Command Reference
-13. Internal Module Coverage
-14. Frontend Template Coverage
-15. Configuration and Environment Variables
-16. Project Structure
-17. Appendix: Feature-to-File Evidence Matrix
-18. Troubleshooting
-19. License
+4. What We Did So Far
+5. Quick Start
+6. Authentication, Authorization, and Security
+7. Feature Coverage
+8. REST API Coverage
+9. GraphQL Coverage
+10. Dashboard and UI Coverage
+11. GIS Coverage
+12. Network Intelligence (NetIntel) Coverage
+13. CLI Full Command Reference
+14. Internal Module Coverage
+15. Frontend Template Coverage
+16. Configuration and Environment Variables
+17. Project Structure
+18. Appendix: Feature-to-File Evidence Matrix
+19. Troubleshooting
+20. License
 
 ## Overview
 
@@ -44,15 +45,21 @@ AxiomNizam contains:
 
 ## Architecture and Services
 
-Active services in docker-compose:
+Default services in docker-compose:
 
 - axiomnizam: backend API, http://localhost:8000
 - axiomnizam-frontend: frontend UI, http://localhost:7000
 - keycloak: identity provider, http://localhost:8080
 - postgres: relational storage
-- valkey: cache/state support
 - etcd: distributed state for platform managers
 - clamav: SafeGate scanner
+
+Optional profile services (openclaw):
+
+- openclaw-gateway: OpenClaw OpenAI-compatible gateway, http://localhost:18789
+- ollama: local model runtime, http://localhost:11434
+- ollama-init: one-shot TinyLlama bootstrap (model pull)
+- valkey: cache/state support
 
 Runtime note:
 
@@ -61,18 +68,36 @@ Runtime note:
 
 ## Project Size Snapshot
 
-Code inventory snapshot (workspace scan on 2026-03-18):
+Code inventory snapshot (workspace scan on 2026-03-19):
 
-- Total code files: 394
-- Total code lines: 136890
-- Go files: 364
-- Go lines: 129860
+- Total code files: 414
+- Total code lines: 137537
+- Go files: 401
+- Go lines: 129441
 
 Counting method used:
 
-- Code file extensions includes: .go .js and others 
-- Excluded: .git and other example directories 
+- Code file extensions included: .go, .js and others.
+- Excluded: .git and vendor directories.
 - Line counts are physical lines across matching files.
+
+## What We Did So Far
+
+Recent updates completed in this repository:
+
+- Added SQL Assistant panel integration path for API Builder backend and frontend.
+- Added OpenClaw gateway integration for SQL assistant chat-completions.
+- Added Ollama runtime and model bootstrap flow in docker-compose for TinyLlama.
+- Added OpenClaw startup config seeding for Ollama provider and default model ref.
+- Added OpenClaw model compatibility tuning for TinyLlama (context window metadata and tools compatibility).
+- Improved SQL assistant fallback warnings to distinguish unreachable endpoint, provider credential errors, internal model errors, and timeout/cancel conditions.
+- Increased SQL assistant timeout via environment variable to better support local model latency.
+
+Runtime status notes:
+
+- OpenClaw and Ollama services are configured under the compose profile openclaw.
+- TinyLlama model ref is configured as ollama/tinyllama for SQL assistant calls.
+- If the model response exceeds timeout, backend returns rule-based SQL suggestions with an explicit timeout warning.
 
 ## Quick Start
 
@@ -87,6 +112,12 @@ Endpoints:
 - Backend: http://localhost:8000
 - Frontend: http://localhost:7000
 - Keycloak: http://localhost:8080
+
+Enable SQL assistant provider stack (OpenClaw + Ollama TinyLlama):
+
+```bash
+docker compose --profile openclaw up -d openclaw-gateway ollama ollama-init
+```
 
 Stop:
 

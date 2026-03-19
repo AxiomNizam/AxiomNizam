@@ -2788,11 +2788,38 @@ func (h *APIBuilderHandler) ChatSQLAssistant(c *gin.Context) {
 	if remoteResp, err := queryOpenClawSQLAssistant(c.Request.Context(), req); err == nil {
 		assistant = remoteResp
 	} else if strings.TrimSpace(os.Getenv("OPENCLAW_SQL_ASSISTANT_URL")) != "" {
-		assistant.Warning = "OpenClaw unavailable; returned local SQL suggestions."
+		assistant.Warning = buildSQLAssistantFallbackWarning(err)
 		log.Printf("sql-assistant: OpenClaw request failed, using fallback: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "assistant": assistant})
+}
+
+func buildSQLAssistantFallbackWarning(err error) string {
+	if err == nil {
+		return "OpenClaw request failed; returned local SQL suggestions."
+	}
+
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(message, "no api key found for provider"),
+		strings.Contains(message, "auth store"),
+		strings.Contains(message, "provider auth"):
+		return "OpenClaw is reachable, but model credentials are not configured; returned local SQL suggestions."
+	case strings.Contains(message, "openclaw status=500"),
+		strings.Contains(message, "\"type\":\"api_error\""):
+		return "OpenClaw is reachable but returned an internal model error (usually missing provider/API-key setup); returned local SQL suggestions."
+	case strings.Contains(message, "context deadline exceeded"),
+		strings.Contains(message, "context canceled"):
+		return "OpenClaw is reachable, but response timed out before completion; returned local SQL suggestions."
+	case strings.Contains(message, "connection refused"),
+		strings.Contains(message, "dial tcp"),
+		strings.Contains(message, "no such host"),
+		strings.Contains(message, "i/o timeout"):
+		return "OpenClaw endpoint is unreachable; returned local SQL suggestions."
+	default:
+		return "OpenClaw request failed; returned local SQL suggestions."
+	}
 }
 
 func queryOpenClawSQLAssistant(ctx context.Context, req sqlAssistantChatRequest) (sqlAssistantChatResponse, error) {
