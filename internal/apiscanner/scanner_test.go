@@ -132,6 +132,42 @@ func TestEngineDetectsAuthBypass(t *testing.T) {
 	}
 }
 
+func TestEngineDetectsAuthBypassFromAuthorizationHeader(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		hasBypassHeader := r.Header.Get("X-Original-URL") != ""
+
+		if auth == "Bearer good-token" || hasBypassHeader {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("sensitive data"))
+			return
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	}))
+	defer server.Close()
+
+	engine := NewEngine()
+	result, err := engine.Scan(context.Background(), ScanRequest{
+		Endpoint: Endpoint{
+			URL:    server.URL,
+			Method: http.MethodGet,
+			Headers: map[string]string{
+				"Authorization": "Bearer good-token",
+			},
+		},
+		Timeout: 3 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	if !hasFinding(result.Findings, VulnAuthBypass) {
+		t.Fatalf("expected auth bypass finding from Authorization header, got %+v", result.Findings)
+	}
+}
+
 func TestEngineDetectsParameterTampering(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("id") == "999999999" {
@@ -163,6 +199,9 @@ func TestRenderOutputJSON(t *testing.T) {
 		Scanner: "api-scanner",
 		Target:  "https://api.example.com/users",
 		Method:  http.MethodGet,
+		Checks: []ScanCheckStatus{
+			{ID: CheckSQLInjection, Name: "SQL Injection Vulnerabilities", Executed: true, Findings: 1},
+		},
 		Findings: []Finding{
 			{Type: VulnXSS, Severity: SeverityHigh, Title: "Potential reflected XSS", Endpoint: "https://api.example.com/users", Method: http.MethodGet},
 		},
@@ -177,11 +216,54 @@ func TestRenderOutputJSON(t *testing.T) {
 	if !strings.Contains(output, fmt.Sprintf("\"scanner\": %q", result.Scanner)) {
 		t.Fatalf("expected JSON output with scanner field, got: %s", output)
 	}
+	if !strings.Contains(output, fmt.Sprintf("\"id\": %q", CheckSQLInjection)) {
+		t.Fatalf("expected JSON output with check coverage, got: %s", output)
+	}
+}
+
+func TestEngineReportsCheckCoverage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	engine := NewEngine()
+	result, err := engine.Scan(context.Background(), ScanRequest{
+		Endpoint: Endpoint{URL: server.URL, Method: http.MethodGet},
+		Timeout:  3 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	if len(result.Checks) != 8 {
+		t.Fatalf("expected 8 checks, got %d", len(result.Checks))
+	}
+	if !hasCheck(result.Checks, CheckSecurityHeaders) {
+		t.Fatalf("expected security headers check coverage, got %+v", result.Checks)
+	}
+	if !hasCheck(result.Checks, CheckAuthBypassDetection) {
+		t.Fatalf("expected auth bypass detection coverage, got %+v", result.Checks)
+	}
+	if !hasCheck(result.Checks, CheckAuthBypassTesting) {
+		t.Fatalf("expected auth bypass testing coverage, got %+v", result.Checks)
+	}
 }
 
 func hasFinding(findings []Finding, vulnType VulnerabilityType) bool {
 	for _, finding := range findings {
 		if finding.Type == vulnType {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCheck(checks []ScanCheckStatus, id string) bool {
+	for _, check := range checks {
+		if check.ID == id {
 			return true
 		}
 	}

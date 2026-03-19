@@ -976,7 +976,9 @@ func main() {
 		// API Scanner Reports
 		builderAPI.POST("/api-scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanAPI)
 		builderAPI.GET("/api-scanner/reports", apiBuilderHandler.ListAPIScanReports)
+		builderAPI.POST("/api-scanner/reports/bulk-delete", adminOrSysMiddleware, apiBuilderHandler.BulkDeleteAPIScanReports)
 		builderAPI.GET("/api-scanner/reports/:id", apiBuilderHandler.GetAPIScanReport)
+		builderAPI.DELETE("/api-scanner/reports/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteAPIScanReport)
 
 		// Dashboard Deletion
 		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)

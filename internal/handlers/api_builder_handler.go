@@ -185,6 +185,8 @@ type apiBuilderState struct {
 	CSVUploads          map[string]*CSVUpload               `json:"csv_uploads,omitempty"`
 	Conversions         map[string]*ConversionResult        `json:"conversions,omitempty"`
 	GeneratedDashboards map[string]*AnalyticsDashboard      `json:"generated_dashboards,omitempty"`
+	ScanRecords         map[string]*FileScanRecord          `json:"scan_records,omitempty"`
+	APIScanReports      map[string]*APIScanReport           `json:"api_scan_reports,omitempty"`
 }
 
 func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client) *APIBuilderHandler {
@@ -268,12 +270,20 @@ func (h *APIBuilderHandler) loadState() bool {
 	if state.GeneratedDashboards == nil {
 		state.GeneratedDashboards = make(map[string]*AnalyticsDashboard)
 	}
+	if state.ScanRecords == nil {
+		state.ScanRecords = make(map[string]*FileScanRecord)
+	}
+	if state.APIScanReports == nil {
+		state.APIScanReports = make(map[string]*APIScanReport)
+	}
 
 	h.customAPIs = state.CustomAPIs
 	h.apiData = state.APIData
 	h.csvUploads = state.CSVUploads
 	h.conversions = state.Conversions
 	h.generatedDashboards = state.GeneratedDashboards
+	h.scanRecords = state.ScanRecords
+	h.apiScanReports = state.APIScanReports
 
 	if h.analyticsHandler != nil && len(h.generatedDashboards) > 0 {
 		h.analyticsHandler.mu.Lock()
@@ -296,6 +306,8 @@ func (h *APIBuilderHandler) persistStateLocked() {
 		CSVUploads:          h.csvUploads,
 		Conversions:         h.conversions,
 		GeneratedDashboards: h.generatedDashboards,
+		ScanRecords:         h.scanRecords,
+		APIScanReports:      h.apiScanReports,
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
@@ -2379,6 +2391,7 @@ func (h *APIBuilderHandler) ScanFile(c *gin.Context) {
 
 	h.mu.Lock()
 	h.scanRecords[record.ID] = record
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
@@ -2438,6 +2451,11 @@ type apiScanRunRequest struct {
 	ExcludeScanIDs     []string          `json:"exclude_scan_ids"`
 }
 
+type apiScanBulkDeleteRequest struct {
+	IDs []string `json:"ids"`
+	All bool     `json:"all"`
+}
+
 func (r *apiScanRunRequest) normalize() (string, string, map[string]string, time.Duration, time.Duration, error) {
 	target := strings.TrimSpace(r.Target)
 	if target == "" {
@@ -2481,6 +2499,17 @@ func buildRuntimeAPIScanReport(ctx context.Context, req apiScanRunRequest, targe
 		method = http.MethodGet
 	}
 	report.Method = method
+	authHeader := strings.TrimSpace(req.AuthHeader)
+	authValue := strings.TrimSpace(req.AuthValue)
+	if authHeader == "" && authValue == "" {
+		for key, value := range headers {
+			if strings.EqualFold(strings.TrimSpace(key), "Authorization") {
+				authHeader = "Authorization"
+				authValue = strings.TrimSpace(value)
+				break
+			}
+		}
+	}
 
 	engine := apiscanner.NewEngine()
 	result, err := engine.Scan(ctx, apiscanner.ScanRequest{
@@ -2494,8 +2523,8 @@ func buildRuntimeAPIScanReport(ctx context.Context, req apiScanRunRequest, targe
 		RetryCount:         req.RetryCount,
 		RetryBackoff:       retryBackoff,
 		InsecureSkipVerify: req.InsecureSkipVerify,
-		AuthHeader:         strings.TrimSpace(req.AuthHeader),
-		AuthValue:          strings.TrimSpace(req.AuthValue),
+		AuthHeader:         authHeader,
+		AuthValue:          authValue,
 		Format:             apiscanner.FormatJSON,
 	})
 	if err != nil {
@@ -2588,6 +2617,7 @@ func (h *APIBuilderHandler) ScanAPI(c *gin.Context) {
 
 	h.mu.Lock()
 	h.apiScanReports[report.ID] = report
+	h.persistStateLocked()
 	h.mu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "report": report})
@@ -2619,6 +2649,102 @@ func (h *APIBuilderHandler) GetAPIScanReport(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "report": report})
+}
+
+func (h *APIBuilderHandler) DeleteAPIScanReport(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "report id is required"})
+		return
+	}
+
+	h.mu.Lock()
+	if _, ok := h.apiScanReports[id]; !ok {
+		h.mu.Unlock()
+		c.JSON(http.StatusNotFound, gin.H{"error": "API scan report not found"})
+		return
+	}
+	delete(h.apiScanReports, id)
+	h.persistStateLocked()
+	h.mu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "API scan report deleted", "id": id})
+}
+
+func (h *APIBuilderHandler) BulkDeleteAPIScanReports(c *gin.Context) {
+	var req apiScanBulkDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload", "details": err.Error()})
+		return
+	}
+
+	normalizedIDs := make([]string, 0)
+	if !req.All {
+		normalizedIDs = normalizeAPIScanReportIDs(req.IDs)
+		if len(normalizedIDs) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ids are required when all=false"})
+			return
+		}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var deletedIDs []string
+	if req.All {
+		deletedIDs = h.deleteAllAPIScanReportsLocked()
+	} else {
+		deletedIDs = h.deleteAPIScanReportsByIDsLocked(normalizedIDs)
+	}
+
+	if len(deletedIDs) > 0 {
+		h.persistStateLocked()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":          "success",
+		"deleted_count":   len(deletedIDs),
+		"deleted_ids":     deletedIDs,
+		"total_remaining": len(h.apiScanReports),
+	})
+}
+
+func normalizeAPIScanReportIDs(rawIDs []string) []string {
+	normalized := make([]string, 0, len(rawIDs))
+	seen := make(map[string]struct{}, len(rawIDs))
+	for _, rawID := range rawIDs {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		normalized = append(normalized, id)
+	}
+	return normalized
+}
+
+func (h *APIBuilderHandler) deleteAllAPIScanReportsLocked() []string {
+	deletedIDs := make([]string, 0, len(h.apiScanReports))
+	for id := range h.apiScanReports {
+		deletedIDs = append(deletedIDs, id)
+	}
+	h.apiScanReports = make(map[string]*APIScanReport)
+	return deletedIDs
+}
+
+func (h *APIBuilderHandler) deleteAPIScanReportsByIDsLocked(ids []string) []string {
+	deletedIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := h.apiScanReports[id]; !ok {
+			continue
+		}
+		delete(h.apiScanReports, id)
+		deletedIDs = append(deletedIDs, id)
+	}
+	return deletedIDs
 }
 
 // ===================================================================

@@ -48,12 +48,31 @@ type ScanRequest struct {
 }
 
 type ScanResult struct {
-	Scanner   string    `json:"scanner"`
-	Target    string    `json:"target"`
-	Method    string    `json:"method"`
-	ScannedAt time.Time `json:"scannedAt"`
-	Findings  []Finding `json:"findings"`
-	Summary   Summary   `json:"summary"`
+	Scanner   string            `json:"scanner"`
+	Target    string            `json:"target"`
+	Method    string            `json:"method"`
+	ScannedAt time.Time         `json:"scannedAt"`
+	Findings  []Finding         `json:"findings"`
+	Checks    []ScanCheckStatus `json:"checks,omitempty"`
+	Summary   Summary           `json:"summary"`
+}
+
+const (
+	CheckAuthBypassDetection = "auth_bypass_detection"
+	CheckAuthBypassTesting   = "auth_bypass_testing"
+	CheckSQLInjection        = "sql_injection"
+	CheckNoSQLInjection      = "nosql_injection"
+	CheckHTTPMethod          = "http_method_validation"
+	CheckSecurityHeaders     = "security_header_analysis"
+	CheckParameterTampering  = "parameter_tampering"
+	CheckXSS                 = "xss"
+)
+
+type ScanCheckStatus struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Executed bool   `json:"executed"`
+	Findings int    `json:"findings"`
 }
 
 type Finding struct {

@@ -355,6 +355,11 @@
 
                 <div style="margin-top:12px;">
                     <h4 style="margin-bottom:10px;">Recent Reports</h4>
+                    <div class="cp-actions" style="margin-bottom:10px;">
+                        <button class="btn-del" onclick="deleteSelectedAdminApiScanReports()">Delete Selected</button>
+                        <button class="btn-del" onclick="deleteAllAdminApiScanReports()">Delete All</button>
+                        <span id="adminApiScanSelectedCount" class="badge badge-default">0 selected</span>
+                    </div>
                     <div id="adminApiScanReportsList" class="empty-state">No API scan reports yet.</div>
                 </div>
             </div>
@@ -867,7 +872,7 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260319-2"></script>
+<script src="/static/admin.js?v=20260319-4"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP

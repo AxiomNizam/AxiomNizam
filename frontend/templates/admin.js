@@ -1480,6 +1480,28 @@ function adminScanRenderRuntimeFindings(result) {
     return html;
 }
 
+function adminScanRenderChecks(result) {
+    var checks = adminScanPickValue(result, ['checks'], []);
+    if (!Array.isArray(checks) || checks.length === 0) {
+        return '';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">Check Coverage</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Check</th><th>Executed</th><th>Findings</th></tr></thead><tbody>';
+    checks.forEach(function(check) {
+        var executed = !!adminScanPickValue(check, ['executed'], false);
+        var findings = adminScanToInt(adminScanPickValue(check, ['findings'], 0));
+        var statusClass = executed ? (findings > 0 ? 'status-draft' : 'status-active') : 'status-inactive';
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(check, ['name', 'id'], '-'))) + '</td>' +
+            '<td><span class="status-badge ' + statusClass + '">' + (executed ? 'Yes' : 'Skipped') + '</span></td>' +
+            '<td>' + findings + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
 function adminScanRenderDiscoveryRows(discovered, title) {
     if (!Array.isArray(discovered) || discovered.length === 0) {
         return '<h5 style="margin:0 0 8px 0;">' + escapeHtml(title) + '</h5><div class="empty-state">No records found.</div>';
@@ -1587,6 +1609,7 @@ function adminScanRenderStructured(report) {
     var blocks = [];
 
     blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderOverview(report, result) + '</div>');
+    blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderChecks(result) + '</div>');
 
     if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
         blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderRuntimeFindings(result) + '</div>');
@@ -1628,10 +1651,11 @@ function loadAdminApiScanReports() {
         var reports = data.reports || [];
         if (reports.length === 0) {
             el.innerHTML = '<div class="empty-state">No API scan reports yet.</div>';
+            updateAdminApiScanSelectedCount();
             return;
         }
 
-        var html = '<table class="admin-table compact"><thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Summary</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        var html = '<table class="admin-table compact"><thead><tr><th><input type="checkbox" id="adminApiScanSelectAll" onchange="toggleAllAdminApiScanReportsSelection(this.checked)" aria-label="Select all reports"></th><th>ID</th><th>Type</th><th>Target</th><th>Summary</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
         reports.forEach(function(report) {
             var summary = adminScanGetSummary(report);
             var scanType = String(report.scan_type || report.scanType || '').toLowerCase();
@@ -1646,6 +1670,7 @@ function loadAdminApiScanReports() {
             }
 
             html += '<tr>' +
+                '<td><input type="checkbox" class="admin-api-scan-select" value="' + escapeHtml(report.id) + '" onchange="updateAdminApiScanSelectedCount()" aria-label="Select report ' + escapeHtml(report.id) + '"></td>' +
                 '<td>' + escapeHtml(report.id) + '</td>' +
                 '<td>' + escapeHtml(report.scan_type) + '</td>' +
                 '<td><code>' + escapeHtml(report.target || '-') + '</code></td>' +
@@ -1653,15 +1678,97 @@ function loadAdminApiScanReports() {
                 '<td>' + new Date(report.created_at).toLocaleString() + '</td>' +
                 '<td>' +
                 '<button class="btn-sm btn-test" onclick="viewAdminApiScanReport(\'' + report.id + '\')">View</button> ' +
-                '<button class="btn-sm btn-secondary" onclick="downloadAdminApiScanReportById(\'' + report.id + '\')">JSON</button>' +
+                '<button class="btn-sm btn-secondary" onclick="downloadAdminApiScanReportById(\'' + report.id + '\')">JSON</button> ' +
+                '<button class="btn-sm btn-del" onclick="deleteAdminApiScanReport(\'' + report.id + '\')">Delete</button>' +
                 '</td>' +
                 '</tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
+        updateAdminApiScanSelectedCount();
     }).catch(function(err) {
         el.innerHTML = '<div class="error-state">Failed to load API scan reports: ' + escapeHtml(err.message || '') + '</div>';
+        updateAdminApiScanSelectedCount();
     });
+}
+
+function getSelectedAdminApiScanReportIds() {
+    var selected = document.querySelectorAll('.admin-api-scan-select:checked');
+    var ids = [];
+    selected.forEach(function(checkbox) {
+        var value = String(checkbox.value || '').trim();
+        if (value) ids.push(value);
+    });
+    return ids;
+}
+
+function updateAdminApiScanSelectedCount() {
+    var selectedCount = getSelectedAdminApiScanReportIds().length;
+    var totalCount = document.querySelectorAll('.admin-api-scan-select').length;
+    var countEl = document.getElementById('adminApiScanSelectedCount');
+    if (countEl) countEl.textContent = selectedCount + ' selected';
+
+    var selectAll = document.getElementById('adminApiScanSelectAll');
+    if (selectAll) {
+        selectAll.checked = totalCount > 0 && selectedCount === totalCount;
+        selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+    }
+}
+
+function toggleAllAdminApiScanReportsSelection(checked) {
+    var checkboxes = document.querySelectorAll('.admin-api-scan-select');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = !!checked;
+    });
+    updateAdminApiScanSelectedCount();
+}
+
+function performAdminApiScanBulkDelete(payload, doneMessage) {
+    fetch(BACKEND_URL + '/api/v1/builder/api-scanner/reports/bulk-delete', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.message)) || ('Bulk delete failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function(data) {
+        var deletedCount = Number((data && data.deleted_count) || 0);
+        if (deletedCount > 0 && latestAdminAPIScanReport) {
+            var deletedIDs = (data && data.deleted_ids) || [];
+            if (Array.isArray(deletedIDs) && deletedIDs.indexOf(latestAdminAPIScanReport.id) >= 0) {
+                clearAdminApiScanView();
+            }
+        }
+        loadAdminApiScanReports();
+        addLog(doneMessage + ' (' + deletedCount + ' report(s))', 'info');
+    }).catch(function(err) {
+        alert('Bulk delete failed: ' + (err.message || 'Unknown error'));
+    });
+}
+
+function deleteSelectedAdminApiScanReports() {
+    var ids = getSelectedAdminApiScanReportIds();
+    if (ids.length === 0) {
+        alert('Select one or more reports first.');
+        return;
+    }
+    if (!confirm('Delete ' + ids.length + ' selected API scan report(s)?')) return;
+    performAdminApiScanBulkDelete({ ids: ids, all: false }, 'Deleted selected API scan reports');
+}
+
+function deleteAllAdminApiScanReports() {
+    var totalCount = document.querySelectorAll('.admin-api-scan-select').length;
+    if (totalCount === 0) {
+        alert('No reports to delete.');
+        return;
+    }
+    if (!confirm('Delete ALL API scan reports (' + totalCount + ')? This cannot be undone.')) return;
+    performAdminApiScanBulkDelete({ all: true }, 'Deleted all API scan reports');
 }
 
 function viewAdminApiScanReport(id) {
@@ -1699,6 +1806,32 @@ function downloadAdminApiScanReportById(id) {
         downloadAdminApiScanReportObject(data.report);
     }).catch(function(err) {
         alert('Failed to download report JSON: ' + (err.message || 'Unknown error'));
+    });
+}
+
+function deleteAdminApiScanReport(id) {
+    if (!id) return;
+    if (!confirm('Delete API scan report ' + id + '?')) return;
+
+    fetch(BACKEND_URL + '/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+    }).then(function(response) {
+        return response.json().then(function(data) {
+            if (!response.ok) {
+                var errMessage = (data && (data.error || data.message)) || ('Delete failed with status ' + response.status);
+                throw new Error(errMessage);
+            }
+            return data;
+        });
+    }).then(function() {
+        if (latestAdminAPIScanReport && latestAdminAPIScanReport.id === id) {
+            clearAdminApiScanView();
+        }
+        loadAdminApiScanReports();
+        addLog('Deleted API scan report: ' + id, 'info');
+    }).catch(function(err) {
+        alert('Failed to delete report: ' + (err.message || 'Unknown error'));
     });
 }
 

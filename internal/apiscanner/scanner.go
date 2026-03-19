@@ -50,13 +50,43 @@ func (e *Engine) Scan(ctx context.Context, req ScanRequest) (ScanResult, error) 
 	baseline := e.probe(ctx, client, normalized, normalized.Endpoint.URL, normalized.Endpoint.Method, normalized.Endpoint.Body, baselineHeaders)
 
 	findings := make([]Finding, 0)
-	findings = append(findings, e.checkSecurityHeaders(ctx, client, normalized, baseline)...)
-	findings = append(findings, e.checkHTTPMethodValidation(ctx, client, normalized, baseline)...)
-	findings = append(findings, e.checkAuthBypass(ctx, client, normalized, baseline)...)
-	findings = append(findings, e.checkSQLInjection(ctx, client, normalized, baseline)...)
-	findings = append(findings, e.checkNoSQLInjection(ctx, client, normalized, baseline)...)
-	findings = append(findings, e.checkXSS(ctx, client, normalized, baseline)...)
-	findings = append(findings, e.checkParameterTampering(ctx, client, normalized, baseline)...)
+	checks := make([]ScanCheckStatus, 0, 8)
+
+	runCheck := func(id string, name string, fn func() ([]Finding, bool)) {
+		checkFindings, executed := fn()
+		findings = append(findings, checkFindings...)
+		checks = append(checks, ScanCheckStatus{
+			ID:       id,
+			Name:     name,
+			Executed: executed,
+			Findings: len(checkFindings),
+		})
+	}
+
+	runCheck(CheckSecurityHeaders, "Security Header Analysis", func() ([]Finding, bool) {
+		return e.checkSecurityHeaders(ctx, client, normalized, baseline), true
+	})
+	runCheck(CheckHTTPMethod, "HTTP Method Validation", func() ([]Finding, bool) {
+		return e.checkHTTPMethodValidation(ctx, client, normalized, baseline), true
+	})
+	runCheck(CheckAuthBypassDetection, "Authentication Bypass Detection", func() ([]Finding, bool) {
+		return e.checkAuthBypassDetection(ctx, client, normalized, baseline)
+	})
+	runCheck(CheckAuthBypassTesting, "Authentication Bypass Testing", func() ([]Finding, bool) {
+		return e.checkAuthBypassTesting(ctx, client, normalized, baseline)
+	})
+	runCheck(CheckSQLInjection, "SQL Injection Vulnerabilities", func() ([]Finding, bool) {
+		return e.checkSQLInjection(ctx, client, normalized, baseline), true
+	})
+	runCheck(CheckNoSQLInjection, "NoSQL Injection Vulnerabilities", func() ([]Finding, bool) {
+		return e.checkNoSQLInjection(ctx, client, normalized, baseline), true
+	})
+	runCheck(CheckXSS, "Cross-Site Scripting (XSS) Vulnerabilities", func() ([]Finding, bool) {
+		return e.checkXSS(ctx, client, normalized, baseline), true
+	})
+	runCheck(CheckParameterTampering, "Parameter Tampering Detection", func() ([]Finding, bool) {
+		return e.checkParameterTampering(ctx, client, normalized, baseline), true
+	})
 
 	result := ScanResult{
 		Scanner:   "api-scanner",
@@ -64,6 +94,7 @@ func (e *Engine) Scan(ctx context.Context, req ScanRequest) (ScanResult, error) 
 		Method:    normalized.Endpoint.Method,
 		ScannedAt: time.Now().UTC(),
 		Findings:  findings,
+		Checks:    checks,
 		Summary:   buildSummary(findings),
 	}
 
@@ -96,6 +127,12 @@ func normalizeRequest(req ScanRequest) (ScanRequest, error) {
 	}
 	if clone.AuthHeader == "" && clone.AuthValue != "" {
 		clone.AuthHeader = "Authorization"
+	}
+	if clone.AuthValue == "" {
+		if value, ok := lookupHeaderIgnoreCase(clone.Endpoint.Headers, "Authorization"); ok {
+			clone.AuthHeader = "Authorization"
+			clone.AuthValue = strings.TrimSpace(value)
+		}
 	}
 	if clone.Format == "" {
 		clone.Format = FormatTable
@@ -309,17 +346,18 @@ func (e *Engine) checkHTTPMethodValidation(ctx context.Context, client *http.Cli
 	return findings
 }
 
-func (e *Engine) checkAuthBypass(ctx context.Context, client *http.Client, req ScanRequest, baseline probeResult) []Finding {
-	if strings.TrimSpace(req.AuthHeader) == "" || strings.TrimSpace(req.AuthValue) == "" {
-		return nil
+func (e *Engine) checkAuthBypassDetection(ctx context.Context, client *http.Client, req ScanRequest, baseline probeResult) ([]Finding, bool) {
+	if !hasAuthContext(req) {
+		return nil, false
 	}
 	if baseline.err != nil || baseline.statusCode >= 400 {
-		return nil
+		return nil, false
 	}
 
 	findings := make([]Finding, 0)
 
 	noAuthHeaders := cloneHeaderMap(req.Endpoint.Headers)
+	removeHeaderIgnoreCase(noAuthHeaders, req.AuthHeader)
 	probeNoAuth := e.probe(ctx, client, req, req.Endpoint.URL, req.Endpoint.Method, req.Endpoint.Body, noAuthHeaders)
 	if probeNoAuth.err == nil && probeNoAuth.statusCode < 400 && responseLooksEquivalent(baseline, probeNoAuth) {
 		findings = append(findings, Finding{
@@ -350,14 +388,30 @@ func (e *Engine) checkAuthBypass(ctx context.Context, client *http.Client, req S
 		})
 	}
 
+	return findings, true
+}
+
+func (e *Engine) checkAuthBypassTesting(ctx context.Context, client *http.Client, req ScanRequest, baseline probeResult) ([]Finding, bool) {
+	if !hasAuthContext(req) {
+		return nil, false
+	}
+	if baseline.err != nil || baseline.statusCode >= 400 {
+		return nil, false
+	}
+
+	const loopback = "127.0.0.1"
+
 	bypassHeaders := cloneHeaderMap(req.Endpoint.Headers)
-	bypassHeaders["X-Forwarded-For"] = "127.0.0.1"
+	bypassHeaders["X-Forwarded-For"] = loopback
 	bypassHeaders["X-Original-URL"] = req.Endpoint.URL
 	bypassHeaders["X-Rewrite-URL"] = req.Endpoint.URL
-	bypassHeaders["X-Originating-IP"] = "127.0.0.1"
+	bypassHeaders["X-Originating-IP"] = loopback
+	bypassHeaders["X-Remote-IP"] = loopback
+	bypassHeaders["X-Forwarded-Host"] = "localhost"
+
 	probeBypass := e.probe(ctx, client, req, req.Endpoint.URL, req.Endpoint.Method, req.Endpoint.Body, bypassHeaders)
 	if probeBypass.err == nil && probeBypass.statusCode < 400 && responseLooksEquivalent(baseline, probeBypass) {
-		findings = append(findings, Finding{
+		return []Finding{{
 			Type:           VulnAuthBypass,
 			Severity:       SeverityHigh,
 			Title:          "Endpoint appears vulnerable to header-based auth bypass",
@@ -366,10 +420,10 @@ func (e *Engine) checkAuthBypass(ctx context.Context, client *http.Client, req S
 			Method:         req.Endpoint.Method,
 			Evidence:       fmt.Sprintf("authenticated_status=%d bypass_status=%d", baseline.statusCode, probeBypass.statusCode),
 			Recommendation: "Ignore spoofable forwarding headers for trust decisions unless set by a trusted proxy chain.",
-		})
+		}}, true
 	}
 
-	return findings
+	return nil, true
 }
 
 func (e *Engine) checkSQLInjection(ctx context.Context, client *http.Client, req ScanRequest, baseline probeResult) []Finding {
@@ -463,8 +517,12 @@ func (e *Engine) checkParameterTampering(ctx context.Context, client *http.Clien
 	}{
 		{key: "id", value: "999999999"},
 		{key: "id", value: "-1"},
+		{key: "user_id", value: "1"},
+		{key: "account_id", value: "1"},
 		{key: "role", value: "admin"},
+		{key: "permission", value: "admin"},
 		{key: "isAdmin", value: "true"},
+		{key: "tenant", value: "root"},
 	}
 
 	for _, mutation := range tampered {
@@ -498,6 +556,27 @@ func cloneHeaderMap(values map[string]string) map[string]string {
 		cloned[k] = v
 	}
 	return cloned
+}
+
+func lookupHeaderIgnoreCase(headers map[string]string, key string) (string, bool) {
+	for existingKey, value := range headers {
+		if strings.EqualFold(strings.TrimSpace(existingKey), strings.TrimSpace(key)) {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func removeHeaderIgnoreCase(headers map[string]string, key string) {
+	for existingKey := range headers {
+		if strings.EqualFold(strings.TrimSpace(existingKey), strings.TrimSpace(key)) {
+			delete(headers, existingKey)
+		}
+	}
+}
+
+func hasAuthContext(req ScanRequest) bool {
+	return strings.TrimSpace(req.AuthHeader) != "" && strings.TrimSpace(req.AuthValue) != ""
 }
 
 func applyMutation(rawURL, body string, headers map[string]string, payload string) (string, string, map[string]string) {
