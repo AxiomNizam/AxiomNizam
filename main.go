@@ -980,6 +980,9 @@ func main() {
 		builderAPI.GET("/api-scanner/reports/:id", apiBuilderHandler.GetAPIScanReport)
 		builderAPI.DELETE("/api-scanner/reports/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteAPIScanReport)
 
+		// SQL Assistant for API Builder
+		builderAPI.POST("/sql-assistant/chat", adminOrSysMiddleware, apiBuilderHandler.ChatSQLAssistant)
+
 		// Dashboard Deletion
 		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)
 	}

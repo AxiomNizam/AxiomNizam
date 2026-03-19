@@ -7,6 +7,11 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      OPENCLAW_SQL_ASSISTANT_URL: ${OPENCLAW_SQL_ASSISTANT_URL:-}
+      OPENCLAW_SQL_ASSISTANT_TOKEN: ${OPENCLAW_SQL_ASSISTANT_TOKEN:-}
+      OPENCLAW_SQL_ASSISTANT_MODEL: ${OPENCLAW_SQL_ASSISTANT_MODEL:-openclaw}
+      OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS: ${OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS:-20}
     depends_on:
       # - valkey
       - keycloak
@@ -42,6 +47,28 @@ services:
       - axiomnizam
     networks:
       - app-network
+
+  # OpenClaw Gateway (optional) for SQL assistant chat provider
+  # Start with: docker compose --profile openclaw up -d openclaw-gateway
+  openclaw-gateway:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw-gateway
+    # profiles:
+    #   - openclaw
+    restart: unless-stopped
+    environment:
+      HOME: /home/node
+      NODE_ENV: production
+      OPENCLAW_GATEWAY_BIND: loopback
+      OPENCLAW_GATEWAY_PORT: 18789
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-dev-openclaw-token}
+    command: ["node", "dist/index.js", "gateway", "--bind", "loopback", "--port", "18789", "--allow-unconfigured"]
+    ports:
+      - "18789:18789"
+    networks:
+      - app-network
+    volumes:
+      - openclaw-config:/home/node/.openclaw
 
   # Valkey (Redis alternative)
   # valkey:
@@ -313,3 +340,4 @@ volumes:
   etcd-data:
   clamav-data:
   query_logs:
+  openclaw-config:
