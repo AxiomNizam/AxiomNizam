@@ -1349,8 +1349,12 @@ function runAdminApiScan() {
 
     var runBtn = document.getElementById('adminRunApiScanBtn');
     var output = document.getElementById('adminApiScanReportOutput');
+    var summaryEl = document.getElementById('adminApiScanSummary');
+    var structuredEl = document.getElementById('adminApiScanStructured');
     if (runBtn) runBtn.disabled = true;
     if (output) output.textContent = 'Running scan...';
+    if (summaryEl) summaryEl.innerHTML = '<span class="badge">Running scan...</span>';
+    if (structuredEl) structuredEl.innerHTML = '<div class="loading">Collecting report details...</div>';
 
     fetch(BACKEND_URL + '/api/v1/builder/api-scanner/scan', {
         method: 'POST',
@@ -1373,16 +1377,246 @@ function runAdminApiScan() {
         addLog('API scan report generated: ' + data.report.id, 'info');
     }).catch(function(err) {
         if (output) output.textContent = 'Scan failed\n\n' + err.message;
+        if (summaryEl) summaryEl.innerHTML = '<span class="badge badge-danger">Scan Failed</span>';
+        if (structuredEl) structuredEl.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Scan failed') + '</div>';
         addLog('API scan failed: ' + err.message, 'error');
     }).finally(function() {
         if (runBtn) runBtn.disabled = false;
     });
 }
 
+function adminScanPickValue(obj, keys, fallback) {
+    if (!obj || typeof obj !== 'object') return fallback;
+    for (var i = 0; i < keys.length; i++) {
+        if (Object.prototype.hasOwnProperty.call(obj, keys[i]) && obj[keys[i]] !== undefined && obj[keys[i]] !== null) {
+            return obj[keys[i]];
+        }
+    }
+    return fallback;
+}
+
+function adminScanToInt(value) {
+    var n = Number(value);
+    if (!isFinite(n)) return 0;
+    return Math.floor(n);
+}
+
+function adminScanGetResult(report) {
+    if (!report || typeof report !== 'object') return {};
+    if (!report.result || typeof report.result !== 'object') return {};
+    return report.result;
+}
+
+function adminScanGetSummary(report) {
+    var fromReport = adminScanPickValue(report, ['summary'], null);
+    if (fromReport && typeof fromReport === 'object') return fromReport;
+    var result = adminScanGetResult(report);
+    var fromResult = adminScanPickValue(result, ['summary'], null);
+    if (fromResult && typeof fromResult === 'object') return fromResult;
+    return {};
+}
+
+function adminScanBadge(label, value, variant) {
+    var cls = 'badge';
+    if (variant === 'success') cls += ' badge-success';
+    if (variant === 'danger') cls += ' badge-danger';
+    if (variant === 'default') cls += ' badge-default';
+    return '<span class="' + cls + '">' + escapeHtml(label) + ': ' + escapeHtml(String(value)) + '</span>';
+}
+
+function adminScanSeverityClass(severity) {
+    var s = String(severity || '').toLowerCase();
+    if (s === 'critical' || s === 'high') return 'status-inactive';
+    if (s === 'medium') return 'status-draft';
+    return 'status-active';
+}
+
+function adminScanFormatWhen(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleString();
+}
+
+function adminScanRenderOverview(report, result) {
+    var scanner = adminScanPickValue(result, ['scanner'], '-');
+    var method = adminScanPickValue(report, ['method'], '');
+    var scannedAt = adminScanPickValue(result, ['scannedAt', 'scanned_at'], report.created_at || report.createdAt || '');
+    var html = '<table class="admin-table compact"><tbody>';
+    html += '<tr><th style="width:180px;">Report ID</th><td><code>' + escapeHtml(report.id || '-') + '</code></td></tr>';
+    html += '<tr><th>Scan Type</th><td>' + escapeHtml(report.scan_type || report.scanType || '-') + '</td></tr>';
+    html += '<tr><th>Target</th><td><code>' + escapeHtml(report.target || '-') + '</code></td></tr>';
+    html += '<tr><th>Method</th><td>' + escapeHtml(method || '-') + '</td></tr>';
+    html += '<tr><th>Scanner</th><td>' + escapeHtml(scanner || '-') + '</td></tr>';
+    html += '<tr><th>Scanned At</th><td>' + escapeHtml(adminScanFormatWhen(scannedAt)) + '</td></tr>';
+    html += '</tbody></table>';
+    return '<h5 style="margin:0 0 8px 0;">Overview</h5>' + html;
+}
+
+function adminScanRenderRuntimeFindings(result) {
+    var findings = adminScanPickValue(result, ['findings'], []);
+    if (!Array.isArray(findings) || findings.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">Findings</h5><div class="empty-state">No findings were returned for this runtime scan.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">Findings</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Severity</th><th>Type</th><th>Title</th><th>Endpoint</th><th>Evidence</th></tr></thead><tbody>';
+    findings.forEach(function(finding) {
+        var sev = String(adminScanPickValue(finding, ['severity'], 'info')).toUpperCase();
+        var endpoint = adminScanPickValue(finding, ['endpoint'], '-');
+        var evidence = adminScanPickValue(finding, ['evidence', 'description'], '');
+        if (typeof evidence === 'string' && evidence.length > 140) {
+            evidence = evidence.slice(0, 140) + '...';
+        }
+        html += '<tr>' +
+            '<td><span class="status-badge ' + adminScanSeverityClass(sev) + '">' + escapeHtml(sev) + '</span></td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(finding, ['type'], '-'))) + '</td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(finding, ['title'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(endpoint)) + '</code></td>' +
+            '<td><small>' + escapeHtml(String(evidence || '-')) + '</small></td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderDiscoveryRows(discovered, title) {
+    if (!Array.isArray(discovered) || discovered.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">' + escapeHtml(title) + '</h5><div class="empty-state">No records found.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">' + escapeHtml(title) + '</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Check ID</th><th>Name</th><th>Category</th><th>URL</th><th>Status</th></tr></thead><tbody>';
+    discovered.forEach(function(item) {
+        var statusCode = adminScanPickValue(item, ['statusCode', 'status_code'], '-');
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['checkId', 'check_id'], '-'))) + '</td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['name'], '-'))) + '</td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['category'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(adminScanPickValue(item, ['url'], '-'))) + '</code></td>' +
+            '<td>' + escapeHtml(String(statusCode)) + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderFingerprints(result) {
+    var fps = adminScanPickValue(result, ['fingerprints'], []);
+    if (!Array.isArray(fps) || fps.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">Fingerprints</h5><div class="empty-state">No fingerprint data found.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">Fingerprints</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Type</th><th>Value</th><th>Source Header</th></tr></thead><tbody>';
+    fps.forEach(function(fp) {
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(fp, ['type'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(adminScanPickValue(fp, ['value'], '-'))) + '</code></td>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(fp, ['sourceHeader', 'source_header'], '-'))) + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderResolvedSubdomains(result) {
+    var resolved = adminScanPickValue(result, ['resolved'], []);
+    if (!Array.isArray(resolved) || resolved.length === 0) {
+        return '<h5 style="margin:0 0 8px 0;">Resolved Subdomains</h5><div class="empty-state">No subdomains resolved.</div>';
+    }
+
+    var html = '<h5 style="margin:0 0 8px 0;">Resolved Subdomains</h5>';
+    html += '<table class="admin-table compact"><thead><tr><th>Name</th><th>Host</th><th>Addresses</th></tr></thead><tbody>';
+    resolved.forEach(function(item) {
+        var addresses = adminScanPickValue(item, ['addresses'], []);
+        html += '<tr>' +
+            '<td>' + escapeHtml(String(adminScanPickValue(item, ['name'], '-'))) + '</td>' +
+            '<td><code>' + escapeHtml(String(adminScanPickValue(item, ['host'], '-'))) + '</code></td>' +
+            '<td>' + escapeHtml(Array.isArray(addresses) ? addresses.join(', ') : '-') + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function adminScanRenderSummaryBadges(report) {
+    var summary = adminScanGetSummary(report);
+    var scanType = String(report.scan_type || report.scanType || 'runtime').toLowerCase();
+    var badges = [];
+
+    badges.push(adminScanBadge('Type', report.scan_type || report.scanType || '-', 'default'));
+    badges.push(adminScanBadge('Target', report.target || '-', 'default'));
+    badges.push(adminScanBadge('Created', adminScanFormatWhen(report.created_at || report.createdAt), 'default'));
+
+    if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
+        var total = adminScanToInt(adminScanPickValue(summary, ['total', 'Total'], 0));
+        var critical = adminScanToInt(adminScanPickValue(summary, ['critical', 'Critical'], 0));
+        var high = adminScanToInt(adminScanPickValue(summary, ['high', 'High'], 0));
+        var medium = adminScanToInt(adminScanPickValue(summary, ['medium', 'Medium'], 0));
+        badges.push(adminScanBadge('Findings', total, total > 0 ? 'danger' : 'success'));
+        badges.push(adminScanBadge('Critical', critical, critical > 0 ? 'danger' : 'default'));
+        badges.push(adminScanBadge('High', high, high > 0 ? 'danger' : 'default'));
+        badges.push(adminScanBadge('Medium', medium, medium > 0 ? 'default' : 'success'));
+    } else if (scanType === 'discover-api' || scanType === 'api-discovery') {
+        var totalPaths = adminScanToInt(adminScanPickValue(summary, ['totalPaths', 'total_paths'], 0));
+        var wellKnown = adminScanToInt(adminScanPickValue(summary, ['wellKnown', 'well_known'], 0));
+        var exposed = adminScanToInt(adminScanPickValue(summary, ['exposedFiles', 'exposed_files'], 0));
+        var fingerprints = adminScanToInt(adminScanPickValue(summary, ['fingerprints'], 0));
+        badges.push(adminScanBadge('Discovered Paths', totalPaths, totalPaths > 0 ? 'success' : 'default'));
+        badges.push(adminScanBadge('Well-Known', wellKnown, 'default'));
+        badges.push(adminScanBadge('Exposed Files', exposed, exposed > 0 ? 'danger' : 'success'));
+        badges.push(adminScanBadge('Fingerprints', fingerprints, 'default'));
+    } else {
+        var candidates = adminScanToInt(adminScanPickValue(summary, ['candidates'], 0));
+        var resolved = adminScanToInt(adminScanPickValue(summary, ['resolved'], 0));
+        var hints = adminScanToInt(adminScanPickValue(summary, ['apiHints', 'api_hints'], 0));
+        var fps = adminScanToInt(adminScanPickValue(summary, ['fingerprints'], 0));
+        badges.push(adminScanBadge('Candidates', candidates, 'default'));
+        badges.push(adminScanBadge('Resolved', resolved, resolved > 0 ? 'success' : 'default'));
+        badges.push(adminScanBadge('API Hints', hints, hints > 0 ? 'success' : 'default'));
+        badges.push(adminScanBadge('Fingerprints', fps, 'default'));
+    }
+
+    return badges.join(' ');
+}
+
+function adminScanRenderStructured(report) {
+    var result = adminScanGetResult(report);
+    var scanType = String(report.scan_type || report.scanType || 'runtime').toLowerCase();
+    var blocks = [];
+
+    blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderOverview(report, result) + '</div>');
+
+    if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderRuntimeFindings(result) + '</div>');
+    } else if (scanType === 'discover-api' || scanType === 'api-discovery') {
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderDiscoveryRows(adminScanPickValue(result, ['discovered'], []), 'Discovered Endpoints') + '</div>');
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderFingerprints(result) + '</div>');
+    } else {
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderResolvedSubdomains(result) + '</div>');
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderDiscoveryRows(adminScanPickValue(result, ['apiHints', 'api_hints'], []), 'API Hints') + '</div>');
+        blocks.push('<div style="margin-bottom:10px;">' + adminScanRenderFingerprints(result) + '</div>');
+    }
+
+    return blocks.join('');
+}
+
 function renderAdminApiScanReport(report) {
     var output = document.getElementById('adminApiScanReportOutput');
-    if (!output) return;
-    output.textContent = JSON.stringify(report, null, 2);
+    var summaryEl = document.getElementById('adminApiScanSummary');
+    var structuredEl = document.getElementById('adminApiScanStructured');
+
+    if (!report || typeof report !== 'object') {
+        if (summaryEl) summaryEl.innerHTML = '<span class="badge">No report selected</span>';
+        if (structuredEl) structuredEl.innerHTML = '<div class="empty-state">Run a scan or open a report to view details.</div>';
+        if (output) output.textContent = 'Run a scan to generate a report.';
+        return;
+    }
+
+    if (summaryEl) summaryEl.innerHTML = adminScanRenderSummaryBadges(report);
+    if (structuredEl) structuredEl.innerHTML = adminScanRenderStructured(report);
+    if (output) output.textContent = JSON.stringify(report, null, 2);
 }
 
 function loadAdminApiScanReports() {
@@ -1390,18 +1624,32 @@ function loadAdminApiScanReports() {
     if (!el) return;
 
     fetchJSON('/api/v1/builder/api-scanner/reports').then(function(data) {
+        if (data && data.error) throw new Error(data.error);
         var reports = data.reports || [];
         if (reports.length === 0) {
             el.innerHTML = '<div class="empty-state">No API scan reports yet.</div>';
             return;
         }
 
-        var html = '<table class="admin-table compact"><thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        var html = '<table class="admin-table compact"><thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Summary</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
         reports.forEach(function(report) {
+            var summary = adminScanGetSummary(report);
+            var scanType = String(report.scan_type || report.scanType || '').toLowerCase();
+            var summaryLabel = '-';
+
+            if (scanType === 'runtime' || scanType === 'scan-api' || scanType === 'api') {
+                summaryLabel = 'Findings: ' + adminScanToInt(adminScanPickValue(summary, ['total', 'Total'], 0));
+            } else if (scanType === 'discover-api' || scanType === 'api-discovery') {
+                summaryLabel = 'Paths: ' + adminScanToInt(adminScanPickValue(summary, ['totalPaths', 'total_paths'], 0));
+            } else {
+                summaryLabel = 'Hints: ' + adminScanToInt(adminScanPickValue(summary, ['apiHints', 'api_hints'], 0));
+            }
+
             html += '<tr>' +
                 '<td>' + escapeHtml(report.id) + '</td>' +
                 '<td>' + escapeHtml(report.scan_type) + '</td>' +
                 '<td><code>' + escapeHtml(report.target || '-') + '</code></td>' +
+                '<td>' + escapeHtml(summaryLabel) + '</td>' +
                 '<td>' + new Date(report.created_at).toLocaleString() + '</td>' +
                 '<td>' +
                 '<button class="btn-sm btn-test" onclick="viewAdminApiScanReport(\'' + report.id + '\')">View</button> ' +
@@ -1418,13 +1666,18 @@ function loadAdminApiScanReports() {
 
 function viewAdminApiScanReport(id) {
     fetchJSON('/api/v1/builder/api-scanner/reports/' + encodeURIComponent(id)).then(function(data) {
+        if (data && data.error) throw new Error(data.error);
         latestAdminAPIScanReport = data.report;
         renderAdminApiScanReport(data.report);
         var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
         if (downloadBtn) downloadBtn.disabled = false;
     }).catch(function(err) {
         var output = document.getElementById('adminApiScanReportOutput');
+        var summaryEl = document.getElementById('adminApiScanSummary');
+        var structuredEl = document.getElementById('adminApiScanStructured');
         if (output) output.textContent = 'Failed to load report\n\n' + (err.message || 'Unknown error');
+        if (summaryEl) summaryEl.innerHTML = '<span class="badge badge-danger">Load Failed</span>';
+        if (structuredEl) structuredEl.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Unknown error') + '</div>';
     });
 }
 
@@ -1447,6 +1700,48 @@ function downloadAdminApiScanReportById(id) {
     }).catch(function(err) {
         alert('Failed to download report JSON: ' + (err.message || 'Unknown error'));
     });
+}
+
+function copyLatestAdminApiScanReportId() {
+    if (!latestAdminAPIScanReport || !latestAdminAPIScanReport.id) {
+        alert('No report loaded. Run or view a report first.');
+        return;
+    }
+
+    var id = String(latestAdminAPIScanReport.id);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(id).then(function() {
+            addLog('Copied API scan report ID: ' + id, 'info');
+        }).catch(function() {
+            alert('Failed to copy report ID to clipboard.');
+        });
+        return;
+    }
+
+    var input = document.createElement('input');
+    input.value = id;
+    document.body.appendChild(input);
+    input.select();
+    try {
+        document.execCommand('copy');
+        addLog('Copied API scan report ID: ' + id, 'info');
+    } catch (e) {
+        alert('Failed to copy report ID to clipboard.');
+    }
+    document.body.removeChild(input);
+}
+
+function clearAdminApiScanView() {
+    latestAdminAPIScanReport = null;
+    var summaryEl = document.getElementById('adminApiScanSummary');
+    var structuredEl = document.getElementById('adminApiScanStructured');
+    var output = document.getElementById('adminApiScanReportOutput');
+    var downloadBtn = document.getElementById('adminDownloadApiScanBtn');
+
+    if (summaryEl) summaryEl.innerHTML = '<span class="badge">No report selected</span>';
+    if (structuredEl) structuredEl.innerHTML = '<div class="empty-state">Run a scan or open a report to view details.</div>';
+    if (output) output.textContent = 'Run a scan to generate a report.';
+    if (downloadBtn) downloadBtn.disabled = true;
 }
 
 function downloadAdminApiScanReportObject(report) {

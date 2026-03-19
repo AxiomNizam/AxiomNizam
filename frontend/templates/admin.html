@@ -253,28 +253,10 @@
                 <h3>Custom API Runtime Testing</h3>
                 <button class="btn-secondary" onclick="loadAPIs()">Refresh Runtime Endpoints</button>
             </div>
-            <!-- API Search & Filter -->
-            <div class="api-controls">
-                <div class="search-box">
-                    <input type="text" id="apiSearch" placeholder="🔍 Search custom runtime endpoints..." onkeyup="filterAPIs()">
-                </div>
-                <div class="filter-buttons">
-                    <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
-                    <button class="filter-btn" onclick="filterByMethod('GET')">GET</button>
-                    <button class="filter-btn" onclick="filterByMethod('POST')">POST</button>
-                    <button class="filter-btn" onclick="filterByMethod('PUT')">PUT</button>
-                    <button class="filter-btn" onclick="filterByMethod('DELETE')">DELETE</button>
-                </div>
-            </div>
 
-            <!-- API Categories with Test Buttons -->
-            <div class="api-categories" id="apiCategories">
-                <div class="loading">Loading APIs...</div>
-            </div>
-
-            <div class="cp-card" style="margin-top:16px;">
+            <div class="cp-card" style="margin:0 0 16px 0;">
                 <h4>API Security Scanning & Report Generation</h4>
-                <p style="margin:8px 0 14px;color:#64748b;">Run runtime security scans or discovery scans, review structured reports, and download JSON outputs.</p>
+                <p style="margin:8px 0 14px;color:#64748b;">Run runtime scans or discovery scans, review structured reports, and download JSON.</p>
 
                 <div class="cp-grid-two">
                     <div class="cp-card" style="margin:0;">
@@ -355,12 +337,19 @@
                             <button id="adminRunApiScanBtn" class="btn-primary" onclick="runAdminApiScan()">Run Scan</button>
                             <button id="adminDownloadApiScanBtn" class="btn-secondary" onclick="downloadLatestAdminApiScanReport()" disabled>Download Latest JSON</button>
                             <button class="btn-secondary" onclick="loadAdminApiScanReports()">Refresh Reports</button>
+                            <button class="btn-secondary" onclick="copyLatestAdminApiScanReportId()">Copy Report ID</button>
+                            <button class="btn-warning" onclick="clearAdminApiScanView()">Clear Viewer</button>
                         </div>
                     </div>
 
                     <div class="cp-card" style="margin:0;">
                         <h4>Latest Scan Report</h4>
-                        <pre id="adminApiScanReportOutput" class="cp-output">Run a scan to generate a report.</pre>
+                        <div id="adminApiScanSummary" class="analysis-badges" style="margin-bottom:10px;"></div>
+                        <div id="adminApiScanStructured" class="csv-history" style="margin:0 0 10px 0;"></div>
+                        <details>
+                            <summary style="cursor:pointer;color:#0f766e;font-weight:600;">Raw JSON Report</summary>
+                            <pre id="adminApiScanReportOutput" class="cp-output" style="margin-top:10px;">Run a scan to generate a report.</pre>
+                        </details>
                     </div>
                 </div>
 
@@ -368,6 +357,25 @@
                     <h4 style="margin-bottom:10px;">Recent Reports</h4>
                     <div id="adminApiScanReportsList" class="empty-state">No API scan reports yet.</div>
                 </div>
+            </div>
+
+            <!-- API Search & Filter -->
+            <div class="api-controls">
+                <div class="search-box">
+                    <input type="text" id="apiSearch" placeholder="🔍 Search custom runtime endpoints..." onkeyup="filterAPIs()">
+                </div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
+                    <button class="filter-btn" onclick="filterByMethod('GET')">GET</button>
+                    <button class="filter-btn" onclick="filterByMethod('POST')">POST</button>
+                    <button class="filter-btn" onclick="filterByMethod('PUT')">PUT</button>
+                    <button class="filter-btn" onclick="filterByMethod('DELETE')">DELETE</button>
+                </div>
+            </div>
+
+            <!-- API Categories with Test Buttons -->
+            <div class="api-categories" id="apiCategories">
+                <div class="loading">Loading APIs...</div>
             </div>
         </div>
     </div>
@@ -859,7 +867,7 @@ search:string:false"></textarea>
 </div>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260319-1"></script>
+<script src="/static/admin.js?v=20260319-2"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP
