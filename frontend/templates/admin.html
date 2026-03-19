@@ -73,20 +73,29 @@
         <!-- Summary Cards -->
         <div class="builder-summary" id="builderSummary"></div>
 
-        <div class="cp-card" style="margin:0 0 14px 0;">
-            <h4>SQL AI Chat & Suggestions</h4>
-            <p style="margin:8px 0 12px;color:#64748b;">Generate SQL query ideas for API Builder. Uses OpenClaw when configured, otherwise local fallback suggestions.</p>
+        <div class="cp-card" style="margin:0 0 24px 0; border-top: 4px solid var(--primary-color);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                <div>
+                    <h4 style="margin-bottom:6px; font-size: 1.2rem;">
+                        <svg style="width:20px;height:20px;vertical-align:middle;margin-right:8px;color:var(--primary-color);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="15" y2="10"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+                        SQL AI Chat & Suggestions
+                    </h4>
+                    <p style="margin:0;color:var(--text-muted);font-size:0.9rem;">Generate SQL query ideas for API Builder. Uses OpenClaw when configured, otherwise local fallback suggestions.</p>
+                </div>
+            </div>
 
             <div class="cp-grid-two">
-                <div class="cp-card" style="margin:0;">
+                <!-- Left: Input Form -->
+                <div class="cp-card" style="margin:0; background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2);">
+                    <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Query Prompt</h5>
                     <div class="form-group">
                         <label for="sqlAssistantPrompt">What SQL do you want to build?</label>
-                        <textarea id="sqlAssistantPrompt" rows="4" placeholder="Example: Create a paginated query for active users with optional name search"></textarea>
+                        <textarea id="sqlAssistantPrompt" rows="4" placeholder="Example: Create a paginated query for active users with optional name search" style="font-family:var(--font-mono);"></textarea>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="sqlAssistantDialect">Dialect</label>
-                            <select id="sqlAssistantDialect">
+                            <select id="sqlAssistantDialect" style="font-weight:600; color:var(--primary-light);">
                                 <option value="postgres">PostgreSQL</option>
                                 <option value="mysql">MySQL</option>
                                 <option value="mariadb">MariaDB</option>
@@ -97,27 +106,35 @@
                     </div>
                     <div class="form-group">
                         <label for="sqlAssistantSchemaHint">Schema / Table Hint (optional)</label>
-                        <textarea id="sqlAssistantSchemaHint" rows="3" placeholder="users(id, name, email, status, created_at)
-orders(id, user_id, total_amount, created_at)"></textarea>
+                        <textarea id="sqlAssistantSchemaHint" rows="3" placeholder="users(id, name, email, status, created_at)&#10;orders(id, user_id, total_amount, created_at)" style="font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted);"></textarea>
                     </div>
-                    <div class="cp-actions">
-                        <button id="sqlAssistantAskBtn" class="btn-primary" onclick="askSQLAssistant()">Ask SQL AI</button>
+                    <div class="cp-actions" style="margin-top: 16px;">
+                        <button id="sqlAssistantAskBtn" class="btn-primary" onclick="askSQLAssistant()">
+                            <svg style="width:16px;height:16px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                            Ask SQL AI
+                        </button>
                         <button class="btn-secondary" onclick="applyTopSQLAISuggestion()">Use Top SQL</button>
-                        <button class="btn-secondary" onclick="clearSQLAssistantPanel()">Clear</button>
+                        <button class="btn-secondary" onclick="clearSQLAssistantPanel()">
+                            <svg style="width:16px;height:16px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
+                            Clear
+                        </button>
                     </div>
                 </div>
 
-                <div class="cp-card" style="margin:0;">
-                    <h5 style="margin:0 0 8px 0;">Assistant Chat</h5>
-                    <div id="sqlAssistantChat" class="csv-history" style="min-height:220px;max-height:320px;overflow:auto;padding:10px;">
+                <!-- Right: Chat Interface -->
+                <div class="cp-card" style="margin:0; background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2);">
+                    <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Assistant Chat</h5>
+                    <div id="sqlAssistantChat" class="csv-history" style="min-height:300px;max-height:400px;overflow:auto;padding:12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid var(--border-color);">
                         <div class="empty-state" style="margin:0;">Ask a SQL question to start the conversation.</div>
                     </div>
                 </div>
             </div>
 
-            <div style="margin-top:12px;">
-                <h5 style="margin:0 0 8px 0;">SQL Suggestions</h5>
-                <div id="sqlAssistantSuggestions" class="empty-state">No suggestions yet.</div>
+            <div style="margin-top:24px;">
+                <h5 style="margin-top:0; margin-bottom: 12px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">SQL Suggestions</h5>
+                <div class="table-responsive" style="background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2); border-radius: 8px; overflow: hidden;">
+                    <div id="sqlAssistantSuggestions" class="empty-state" style="margin:0; padding:20px;">No suggestions yet.</div>
+                </div>
             </div>
         </div>
 
