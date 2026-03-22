@@ -98,6 +98,13 @@ type ParamDef struct {
 	Default     string `json:"default,omitempty"`
 }
 
+type customAPISuccessEnvelope struct {
+	Message      string      `json:"message"`
+	ResponseCode int         `json:"responseCode"`
+	Success      bool        `json:"success"`
+	Data         interface{} `json:"data"`
+}
+
 // ---------- CSV Dashboard Models ----------
 
 // CSVUpload tracks a file upload that was converted to a dashboard
@@ -795,17 +802,7 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 			ttl = 300 * time.Second
 		}
 		if time.Since(api.cachedAt) < ttl {
-			c.JSON(http.StatusOK, gin.H{
-				"status":    "success",
-				"api_id":    api.ID,
-				"api_type":  api.APIType,
-				"method":    api.Method,
-				"path":      api.Path,
-				"cached":    true,
-				"cache_ttl": api.CacheTTL,
-				"params":    c.Request.URL.Query(),
-				"response":  api.cachedResult,
-			})
+			writeCustomAPISuccess(c, normalizeCustomAPISuccessData(api.cachedResult))
 			return
 		}
 	}
@@ -909,38 +906,45 @@ func (h *APIBuilderHandler) InvokeCustomAPI(c *gin.Context) {
 			result = append(result, entry)
 		}
 
-		response = gin.H{
-			"source_database": dbType,
-			"query":           query,
-			"params":          params,
-			"count":           len(result),
-			"data":            result,
-		}
+		response = result
 	} else if api.MockResponse != nil {
 		response = api.MockResponse
 	} else {
-		response = gin.H{
-			"message": "API endpoint active, no mock response configured",
-			"data":    h.apiData[api.ID],
-		}
+		response = h.apiData[api.ID]
 	}
+
+	response = normalizeCustomAPISuccessData(response)
 
 	if api.CacheEnabled {
 		api.cachedResult = response
 		api.cachedAt = time.Now()
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "success",
-		"api_id":    api.ID,
-		"api_type":  api.APIType,
-		"method":    api.Method,
-		"path":      api.Path,
-		"cached":    false,
-		"cache_ttl": api.CacheTTL,
-		"params":    c.Request.URL.Query(),
-		"response":  response,
+	writeCustomAPISuccess(c, response)
+}
+
+func writeCustomAPISuccess(c *gin.Context, data interface{}) {
+	c.JSON(http.StatusOK, customAPISuccessEnvelope{
+		Message:      "success",
+		ResponseCode: http.StatusOK,
+		Success:      true,
+		Data:         data,
 	})
+}
+
+func normalizeCustomAPISuccessData(raw interface{}) interface{} {
+	switch typed := raw.(type) {
+	case gin.H:
+		if data, ok := typed["data"]; ok {
+			return data
+		}
+	case map[string]interface{}:
+		if data, ok := typed["data"]; ok {
+			return data
+		}
+	}
+
+	return raw
 }
 
 func matchBuilderPath(pattern, actual string) bool {

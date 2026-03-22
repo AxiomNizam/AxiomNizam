@@ -53,8 +53,8 @@ services:
   openclaw-gateway:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-gateway
-    profiles:
-      - openclaw
+    # profiles:
+    #   - openclaw
     restart: unless-stopped
     user: "0:0"
     depends_on:
@@ -93,8 +93,8 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    profiles:
-      - openclaw
+    # profiles:
+    #   - openclaw
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -108,8 +108,8 @@ services:
   ollama-init:
     image: ollama/ollama:latest
     container_name: ollama-init
-    profiles:
-      - openclaw
+    # profiles:
+    #   - openclaw
     depends_on:
       - ollama
     environment:
