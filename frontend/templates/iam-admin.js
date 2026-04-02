@@ -301,7 +301,16 @@ async function loadIAMDashboard() {
             if (whoami) whoami.textContent = 'Error: ' + resp.status;
             if (resp.status === 401) {
                 setIAMSystemStatus('Auth Required', 'var(--warning-color)');
+                updateIAMLoginBanner();
+                return;
             }
+            if (resp.status === 403) {
+                setIAMSystemStatus('Access Denied', 'var(--danger-color)');
+                updateIAMPermissionBanner(true, 'Your IAM token is valid but not authorized for this operation.');
+                return;
+            }
+            setIAMSystemStatus('WhoAmI Error', 'var(--danger-color)');
+            return;
         }
     } catch (err) {
         const whoami = document.getElementById('iamWhoAmI');
@@ -321,6 +330,33 @@ async function loadIAMDashboard() {
             iamFetch('/iam/admin/clients'),
             iamFetch('/iam/admin/roles')
         ]);
+
+        if (uResp.status === 401 || cResp.status === 401 || rResp.status === 401) {
+            setIAMSystemStatus('Auth Required', 'var(--warning-color)');
+            updateIAMLoginBanner();
+            updateIAMPermissionBanner(false, '');
+            return;
+        }
+
+        if (uResp.status === 403 || cResp.status === 403 || rResp.status === 403) {
+            setIAMSystemStatus('Access Denied', 'var(--danger-color)');
+            updateIAMPermissionBanner(true, 'Your IAM token is valid but not sysadmin. Login with IAM sysadmin to view admin data.');
+            if (!iamPermissionHintShown) {
+                showIAMToast('IAM session is not sysadmin. Admin data is restricted.', true);
+                iamPermissionHintShown = true;
+            }
+            return;
+        }
+
+        if (!uResp.ok || !cResp.ok || !rResp.ok) {
+            setIAMSystemStatus('API Error', 'var(--danger-color)');
+            if (!iamPermissionHintShown) {
+                showIAMToast('IAM admin endpoints returned an error. Check backend logs.', true);
+                iamPermissionHintShown = true;
+            }
+            return;
+        }
+
         if (uResp.ok) {
             const users = await uResp.json();
             const count = Array.isArray(users) ? users.length : (users.users ? users.users.length : 0);
@@ -338,16 +374,6 @@ async function loadIAMDashboard() {
             const count = Array.isArray(roles) ? roles.length : (roles.roles ? roles.roles.length : 0);
             setTextById('dashRoleCount', count);
             setTextById('iamStatRoles', count);
-        }
-
-        if (uResp.status === 403 || cResp.status === 403 || rResp.status === 403) {
-            setIAMSystemStatus('Access Denied', 'var(--danger-color)');
-            updateIAMPermissionBanner(true, 'Your IAM token is valid but not sysadmin. Login with IAM sysadmin to view admin data.');
-            if (!iamPermissionHintShown) {
-                showIAMToast('IAM session is not sysadmin. Admin data is restricted.', true);
-                iamPermissionHintShown = true;
-            }
-            return;
         }
 
         setIAMSystemStatus('Active', 'var(--primary-color)');
@@ -405,7 +431,6 @@ function renderIAMUsers(users) {
             '<td>' + escapeHtml(u.display_name || '–') + '</td>' +
             '<td><span class="status-badge ' + (active ? 'status-active' : 'status-inactive') + '">' + (active ? 'Active' : 'Inactive') + '</span></td>' +
             '<td><span class="status-badge ' + (verified ? 'status-active' : 'status-inactive') + '">' + (verified ? 'Yes' : 'No') + '</span></td>' +
-        const canRegenerateSecret = !c.public;
             '<td>' + formatDate(u.created_at) + '</td>' +
             '<td style="white-space:nowrap;">' +
                 '<button class="btn-sm btn-primary" onclick="viewUser(\'' + escapeHtml(u.id) + '\')">View</button> ' +
@@ -415,8 +440,6 @@ function renderIAMUsers(users) {
     }).join('');
 }
 
-                (canRegenerateSecret ? '<button class="btn-sm btn-secondary" onclick="regenerateClientSecret(\'' + escapeHtml(c.id) + '\')">Regen Secret</button> ' : '') +
-                '<button class="btn-sm btn-secondary" onclick="showClientIDChangeModal(\'' + escapeHtml(c.id) + '\')">Change ID</button> ' +
 function filterIAMUsers() {
     const q = (document.getElementById('iamUserSearch').value || '').toLowerCase();
     if (!q) { renderIAMUsers(iamUsersCache); return; }
@@ -553,6 +576,7 @@ function renderIAMClients(clients) {
         const mode = c.public ? 'Public' : 'Confidential';
         const hasClientCredentials = Array.isArray(c.grant_types) && c.grant_types.includes('client_credentials');
         const canGenerateToken = hasClientCredentials && !c.public;
+        const canRegenerateSecret = !c.public;
         return '<tr>' +
             '<td style="font-family:var(--font-mono);font-size:.85rem;">' + escapeHtml(c.id) + '</td>' +
             '<td>' + escapeHtml(c.name) + '<div style="font-size:.75rem;color:var(--text-muted);margin-top:4px;">' + escapeHtml(mode) + '</div></td>' +
@@ -562,6 +586,8 @@ function renderIAMClients(clients) {
             '<td>' + escapeHtml(serviceRoles) + '</td>' +
             '<td style="white-space:nowrap;">' +
                 (canGenerateToken ? '<button class="btn-sm btn-primary" onclick="showGenerateTokenModal(\'' + escapeHtml(c.id) + '\')">Generate Token</button> ' : '') +
+                (canRegenerateSecret ? '<button class="btn-sm btn-secondary" onclick="regenerateClientSecret(\'' + escapeHtml(c.id) + '\')">Regen Secret</button> ' : '') +
+                '<button class="btn-sm btn-secondary" onclick="showClientIDChangeModal(\'' + escapeHtml(c.id) + '\')">Change ID</button> ' +
                 '<button class="btn-sm btn-secondary" onclick="editClient(\'' + escapeHtml(c.id) + '\')">Edit</button> ' +
                 '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteClient(\'' + escapeHtml(c.id) + '\')">Delete</button>' +
             '</td></tr>';
@@ -1197,14 +1223,17 @@ async function loadOIDCInfo() {
 
 // ── Initialisation ───────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', function() {
+function initIAMAdminPage() {
     // Only run if we're on the IAM admin page
     if (!document.getElementById('iam-dashboard')) return;
 
     updateIAMLoginBanner();
+    loadIAMDashboard();
+    loadServiceAccessInfo();
+}
 
-    if (iamToken) {
-        loadIAMDashboard();
-        loadServiceAccessInfo();
-    }
-});
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initIAMAdminPage);
+} else {
+    initIAMAdminPage();
+}
