@@ -153,6 +153,13 @@
                 <button class="btn-secondary" onclick="loadServiceAccessInfo()">↻ Refresh Access Info</button>
             </div>
             <p style="color:var(--text-muted);margin:10px 0 16px 0;">Share these endpoints with external services. They can use <code>client_credentials</code> to obtain API tokens without manual user token exchange.</p>
+            <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px;">
+                <div style="min-width:220px;flex:1;">
+                    <label for="iamServiceRealmInput">Realm Option</label>
+                    <input type="text" id="iamServiceRealmInput" class="form-control" placeholder="axiomnizam">
+                </div>
+                <button class="btn-secondary" onclick="applyServiceRealm()">Apply Realm</button>
+            </div>
             <div class="cp-grid-two" style="gap:12px;margin-bottom:12px;">
                 <div class="cp-card" style="margin:0;background:var(--darker-bg);">
                     <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Realm</div>
@@ -397,7 +404,7 @@
 <div id="iamClientSecretModal" class="modal">
     <div class="modal-content" style="max-width:560px;">
         <div class="modal-header">
-            <h2>🔑 Client Registered</h2>
+            <h2 id="iamClientSecretModalTitle">🔑 Client Registered</h2>
             <button class="modal-close" onclick="closeIAMModal('iamClientSecretModal')">&times;</button>
         </div>
         <div class="modal-body">
@@ -427,6 +434,31 @@
             </div>
             <div style="text-align:right;margin-top:16px;">
                 <button class="btn-primary" onclick="closeIAMModal('iamClientSecretModal')">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Change Client ID Modal -->
+<div id="iamClientIDChangeModal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+            <h2>Change Client ID</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamClientIDChangeModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--text-muted);margin-top:0;">This updates the client identifier in a Keycloak-like way. Existing integrations using the old ID must be updated.</p>
+            <div class="form-group">
+                <label for="iamCurrentClientID">Current Client ID</label>
+                <input type="text" id="iamCurrentClientID" class="form-control" readonly>
+            </div>
+            <div class="form-group">
+                <label for="iamNewClientIDInput">New Client ID *</label>
+                <input type="text" id="iamNewClientIDInput" class="form-control" placeholder="my-service-client-v2">
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamClientIDChangeModal')">Cancel</button>
+                <button class="btn-primary" onclick="submitClientIDChange()">Update Client ID</button>
             </div>
         </div>
     </div>
@@ -539,5 +571,5 @@
     </div>
 </div>
 
-<script src="/static/iam-admin.js?v=20260404"></script>
+<script src="/static/iam-admin.js?v=20260405"></script>
 {{ end }}

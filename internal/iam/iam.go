@@ -191,6 +191,8 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 		adminAPI.GET("/clients/:id", h.GetClient)
 		adminAPI.POST("/clients", h.RegisterClient)
 		adminAPI.PUT("/clients/:id", h.UpdateClient)
+		adminAPI.PUT("/clients/:id/client-id", h.ChangeClientID)
+		adminAPI.POST("/clients/:id/regenerate-secret", h.RegenerateClientSecret)
 		adminAPI.DELETE("/clients/:id", h.DeleteClient)
 		adminAPI.GET("/service-access-info", h.ServiceAccessInfo)
 

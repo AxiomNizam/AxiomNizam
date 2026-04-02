@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,11 @@ import (
 	"example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
 	"github.com/gin-gonic/gin"
+)
+
+var (
+	realmNamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
+	clientIDPattern  = regexp.MustCompile(`^[A-Za-z0-9._:-]{3,128}$`)
 )
 
 // Handler bundles all sysadmin (master-realm) API endpoints.
@@ -163,15 +169,30 @@ func containsGrantType(grantTypes []string, target string) bool {
 }
 
 func configuredRealm() string {
-	realm := strings.TrimSpace(os.Getenv("IAM_REALM"))
+	realm := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_REALM")))
 	if realm == "" {
 		realm = "axiomnizam"
 	}
 	return strings.ToLower(realm)
 }
 
-func realmMatches(requested string) bool {
-	return strings.ToLower(strings.TrimSpace(requested)) == configuredRealm()
+func resolveRealmName(raw string) (string, error) {
+	realm := strings.ToLower(strings.TrimSpace(raw))
+	if realm == "" {
+		realm = configuredRealm()
+	}
+	if !realmNamePattern.MatchString(realm) {
+		return "", fmt.Errorf("invalid realm name")
+	}
+	return realm, nil
+}
+
+func validateClientID(id string) error {
+	clientID := strings.TrimSpace(id)
+	if !clientIDPattern.MatchString(clientID) {
+		return fmt.Errorf("new_client_id must match %s", clientIDPattern.String())
+	}
+	return nil
 }
 
 func (h *Handler) realmBaseURL(realm string) string {
@@ -746,6 +767,115 @@ func (h *Handler) DeleteClient(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "client deleted"})
 }
 
+// RegenerateClientSecret creates a new secret for a confidential client.
+func (h *Handler) RegenerateClientSecret(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	client, err := h.clients.GetClient(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load client"})
+		return
+	}
+	if client == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+		return
+	}
+	if client.Public {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "public clients do not have secrets"})
+		return
+	}
+
+	newSecret := oauth.GenerateClientSecret()
+	hash, err := identity.HashPassword(newSecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "secret generation failed"})
+		return
+	}
+
+	client.Secret = hash
+	if err := h.clients.UpdateClient(client); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update client secret"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":            client.ID,
+		"client_id":     client.ID,
+		"client_secret": newSecret,
+		"scopes":        client.Scopes,
+		"grant_types":   client.GrantTypes,
+		"warning":       "Store the client_secret securely. It will not be shown again.",
+	})
+}
+
+// ChangeClientID changes a client identifier in a Keycloak-like way.
+func (h *Handler) ChangeClientID(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	client, err := h.clients.GetClient(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load client"})
+		return
+	}
+	if client == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+		return
+	}
+
+	var req struct {
+		NewClientID string `json:"new_client_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newClientID := strings.TrimSpace(req.NewClientID)
+	if newClientID == id {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new_client_id must be different"})
+		return
+	}
+	if err := validateClientID(newClientID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	existing, err := h.clients.GetClient(newClientID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate new client id"})
+		return
+	}
+	if existing != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "new_client_id already exists"})
+		return
+	}
+
+	replacement := *client
+	replacement.ID = newClientID
+
+	if err := h.clients.CreateClient(&replacement); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create client with new id"})
+		return
+	}
+
+	if err := h.clients.DeleteClient(id); err != nil {
+		_ = h.clients.DeleteClient(newClientID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to finalize client id change"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "client id updated",
+		"old_client_id": id,
+		"new_client_id": newClientID,
+		"redirect_uris": replacement.RedirectURIs,
+		"scopes":        replacement.Scopes,
+		"grant_types":   replacement.GrantTypes,
+		"service_roles": replacement.ServiceRoles,
+		"public":        replacement.Public,
+		"active":        replacement.Active,
+		"created_at":    replacement.CreatedAt,
+	})
+}
+
 // ═══════════════════════════════════════════════
 // ROLE MANAGEMENT (sysadmin only)
 // ═══════════════════════════════════════════════
@@ -1250,9 +1380,9 @@ func (h *Handler) OpenIDConfiguration(c *gin.Context) {
 
 // OpenIDConfigurationRealm returns OIDC discovery in Keycloak-compatible realm path format.
 func (h *Handler) OpenIDConfigurationRealm(c *gin.Context) {
-	realm := strings.TrimSpace(c.Param("realm"))
-	if !realmMatches(realm) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+	realm, err := resolveRealmName(c.Param("realm"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -1267,9 +1397,8 @@ func (h *Handler) OpenIDConfigurationRealm(c *gin.Context) {
 
 // RealmToken provides a Keycloak-compatible token endpoint path.
 func (h *Handler) RealmToken(c *gin.Context) {
-	realm := strings.TrimSpace(c.Param("realm"))
-	if !realmMatches(realm) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+	if _, err := resolveRealmName(c.Param("realm")); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	h.Token(c)
@@ -1277,9 +1406,8 @@ func (h *Handler) RealmToken(c *gin.Context) {
 
 // RealmAuthorize provides a Keycloak-compatible authorize endpoint path.
 func (h *Handler) RealmAuthorize(c *gin.Context) {
-	realm := strings.TrimSpace(c.Param("realm"))
-	if !realmMatches(realm) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+	if _, err := resolveRealmName(c.Param("realm")); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	h.Authorize(c)
@@ -1287,9 +1415,8 @@ func (h *Handler) RealmAuthorize(c *gin.Context) {
 
 // RealmJWKS returns Keycloak-compatible realm certs endpoint.
 func (h *Handler) RealmJWKS(c *gin.Context) {
-	realm := strings.TrimSpace(c.Param("realm"))
-	if !realmMatches(realm) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+	if _, err := resolveRealmName(c.Param("realm")); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.Header("Cache-Control", "public, max-age=3600")
@@ -1298,13 +1425,20 @@ func (h *Handler) RealmJWKS(c *gin.Context) {
 
 // ServiceAccessInfo returns shareable auth endpoints for external service integrations.
 func (h *Handler) ServiceAccessInfo(c *gin.Context) {
-	realm := configuredRealm()
+	realm, err := resolveRealmName(c.Query("realm"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	configured := configuredRealm()
 	base := strings.TrimRight(h.issuer.IssuerURL(), "/")
 	realmBase := h.realmBaseURL(realm)
 
 	c.JSON(http.StatusOK, gin.H{
-		"realm":  realm,
-		"issuer": realmBase,
+		"realm":            realm,
+		"configured_realm": configured,
+		"issuer":           realmBase,
 		"endpoints": gin.H{
 			"iam_openid_configuration":      base + "/.well-known/openid-configuration",
 			"iam_token":                     base + "/oauth/token",

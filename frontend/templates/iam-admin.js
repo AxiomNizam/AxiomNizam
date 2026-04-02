@@ -13,6 +13,7 @@ let iamToken = localStorage.getItem('iamToken') || '';
 let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
 let iamServiceAccessInfo = null;
 let iamLastGeneratedTokenResponse = null;
+let iamSelectedRealm = '';
 
 function clearIAMSession() {
     iamToken = '';
@@ -143,6 +144,12 @@ function buildClientCredentialsSnippet(clientID, clientSecret, scope) {
         cmd += " --data-urlencode 'scope=" + scope + "'";
     }
     return cmd;
+}
+
+function applyServiceRealm() {
+    const input = document.getElementById('iamServiceRealmInput');
+    const requestedRealm = input ? (input.value || '').trim() : '';
+    loadServiceAccessInfo(requestedRealm);
 }
 
 function escapeHtml(str) {
@@ -332,6 +339,7 @@ function renderIAMUsers(users) {
             '<td>' + escapeHtml(u.display_name || '–') + '</td>' +
             '<td><span class="status-badge ' + (active ? 'status-active' : 'status-inactive') + '">' + (active ? 'Active' : 'Inactive') + '</span></td>' +
             '<td><span class="status-badge ' + (verified ? 'status-active' : 'status-inactive') + '">' + (verified ? 'Yes' : 'No') + '</span></td>' +
+        const canRegenerateSecret = !c.public;
             '<td>' + formatDate(u.created_at) + '</td>' +
             '<td style="white-space:nowrap;">' +
                 '<button class="btn-sm btn-primary" onclick="viewUser(\'' + escapeHtml(u.id) + '\')">View</button> ' +
@@ -341,6 +349,8 @@ function renderIAMUsers(users) {
     }).join('');
 }
 
+                (canRegenerateSecret ? '<button class="btn-sm btn-secondary" onclick="regenerateClientSecret(\'' + escapeHtml(c.id) + '\')">Regen Secret</button> ' : '') +
+                '<button class="btn-sm btn-secondary" onclick="showClientIDChangeModal(\'' + escapeHtml(c.id) + '\')">Change ID</button> ' +
 function filterIAMUsers() {
     const q = (document.getElementById('iamUserSearch').value || '').toLowerCase();
     if (!q) { renderIAMUsers(iamUsersCache); return; }
@@ -562,12 +572,7 @@ async function submitClient() {
             const clientID = data.id || data.client_id || '';
             const clientSecret = data.client_secret || '';
             const defaultScope = (data.scopes || []).join(' ');
-
-            setFieldText('iamNewClientID', clientID);
-            setFieldText('iamNewClientSecret', clientSecret);
-            setFieldText('iamClientTokenEndpoint', getServiceTokenEndpoint());
-            setFieldText('iamClientCredentialsSnippet', buildClientCredentialsSnippet(clientID, clientSecret, defaultScope));
-            openIAMModal('iamClientSecretModal');
+            showClientSecretModal(clientID, clientSecret, defaultScope, '🔑 Client Registered');
         } else {
             showIAMToast(editID ? 'Client updated' : 'Client registered');
         }
@@ -576,6 +581,15 @@ async function submitClient() {
     } catch (err) {
         showIAMToast('Error: ' + err.message, true);
     }
+}
+
+function showClientSecretModal(clientID, clientSecret, scope, title) {
+    setFieldText('iamClientSecretModalTitle', title || '🔑 Client Secret');
+    setFieldText('iamNewClientID', clientID || '');
+    setFieldText('iamNewClientSecret', clientSecret || '');
+    setFieldText('iamClientTokenEndpoint', getServiceTokenEndpoint());
+    setFieldText('iamClientCredentialsSnippet', buildClientCredentialsSnippet(clientID || '', clientSecret || '', scope || ''));
+    openIAMModal('iamClientSecretModal');
 }
 
 async function copyClientSecret() {
@@ -592,6 +606,72 @@ async function copyClientCredentialsSnippet() {
 
 function getClientByID(clientID) {
     return iamClientsCache.find(c => c.id === clientID) || null;
+}
+
+function showClientIDChangeModal(clientID) {
+    setFieldText('iamCurrentClientID', clientID || '');
+    setFieldText('iamNewClientIDInput', clientID || '');
+    openIAMModal('iamClientIDChangeModal');
+}
+
+async function submitClientIDChange() {
+    const currentID = (document.getElementById('iamCurrentClientID').value || '').trim();
+    const newClientID = (document.getElementById('iamNewClientIDInput').value || '').trim();
+
+    if (!currentID || !newClientID) {
+        showIAMToast('Both current and new client IDs are required.', true);
+        return;
+    }
+
+    try {
+        const resp = await iamFetch('/iam/admin/clients/' + encodeURIComponent(currentID) + '/client-id', {
+            method: 'PUT',
+            body: JSON.stringify({ new_client_id: newClientID })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            showIAMToast(data.error || 'Client ID update failed', true);
+            return;
+        }
+
+        showIAMToast('Client ID updated');
+        closeIAMModal('iamClientIDChangeModal');
+        loadIAMClients();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function regenerateClientSecret(clientID) {
+    if (!confirm('Regenerate secret for this client? Existing secret integrations will stop working.')) return;
+
+    const client = getClientByID(clientID);
+    if (!client) {
+        showIAMToast('Client not found. Refresh and try again.', true);
+        return;
+    }
+    if (client.public) {
+        showIAMToast('Public clients do not have secrets.', true);
+        return;
+    }
+
+    try {
+        const resp = await iamFetch('/iam/admin/clients/' + encodeURIComponent(clientID) + '/regenerate-secret', {
+            method: 'POST'
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            showIAMToast(data.error || 'Secret regeneration failed', true);
+            return;
+        }
+
+        const scope = (data.scopes || client.scopes || []).join(' ');
+        showClientSecretModal(data.client_id || clientID, data.client_secret || '', scope, '🔁 Client Secret Regenerated');
+        showIAMToast('Client secret regenerated');
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
 }
 
 function showGenerateTokenModal(clientID) {
@@ -958,8 +1038,13 @@ async function revokeUserTokens() {
 
 // ── OIDC / JWKS ──────────────────────────────────────────────────────────────
 
-async function loadServiceAccessInfo() {
+async function loadServiceAccessInfo(realmOverride) {
     const rawEl = document.getElementById('iamServiceAccessJSON');
+    const realmInput = document.getElementById('iamServiceRealmInput');
+    const requestedRealm = (realmOverride !== undefined && realmOverride !== null)
+        ? String(realmOverride).trim().toLowerCase()
+        : (iamSelectedRealm || (realmInput ? (realmInput.value || '').trim().toLowerCase() : ''));
+
     if (!iamToken) {
         setFieldText('iamServiceRealm', 'IAM login required');
         setFieldText('iamServiceIssuer', 'IAM login required');
@@ -967,24 +1052,31 @@ async function loadServiceAccessInfo() {
         setFieldText('iamServiceDiscoveryEndpoint', 'IAM login required');
         setFieldText('iamServiceCertsEndpoint', 'IAM login required');
         setFieldText('iamServiceGrantTypes', 'IAM login required');
+        if (realmInput) realmInput.value = '';
         if (rawEl) rawEl.textContent = 'IAM login required';
         return;
     }
 
     try {
-        const resp = await iamFetch('/iam/admin/service-access-info');
+        const path = requestedRealm
+            ? '/iam/admin/service-access-info?realm=' + encodeURIComponent(requestedRealm)
+            : '/iam/admin/service-access-info';
+        const resp = await iamFetch(path);
         if (!resp.ok) {
             const text = 'Failed to load service access info: ' + resp.status;
             if (rawEl) rawEl.textContent = text;
             setFieldText('iamServiceTokenEndpoint', text);
+            showIAMToast('Unable to load realm details', true);
             return;
         }
 
         const info = await resp.json();
         iamServiceAccessInfo = info;
+        iamSelectedRealm = info.realm || requestedRealm || '';
         const endpoints = info.endpoints || {};
 
         setFieldText('iamServiceRealm', info.realm || 'master');
+        if (realmInput) realmInput.value = iamSelectedRealm;
         setFieldText('iamServiceIssuer', info.issuer || '–');
         setFieldText('iamServiceTokenEndpoint', endpoints.keycloak_token || endpoints.iam_token || '–');
         setFieldText('iamServiceDiscoveryEndpoint', endpoints.keycloak_openid_configuration || endpoints.iam_openid_configuration || '–');
