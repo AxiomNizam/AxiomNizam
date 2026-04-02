@@ -140,6 +140,7 @@ func main() {
 	router.GET("/governance", requireFrontendRoles("admin", "system-manager"), governanceHandler)
 	router.GET("/operations-center", requireFrontendRoles("admin", "system-manager", "manager"), operationsCenterHandler)
 	router.GET("/lineage-version", requireFrontendRoles("admin", "system-manager"), versionLineageHandler)
+	router.GET("/iam-admin", requireFrontendRoles("system-manager"), iamAdminHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -161,7 +162,8 @@ func main() {
 	fmt.Printf("🏛️ Governance Console: http://localhost:%s/governance\n", port)
 	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
 	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
-	fmt.Printf("📡 Backend: %s\n\n", backendURL)
+	fmt.Printf("� IAM Admin Console: http://localhost:%s/iam-admin\n", port)
+	fmt.Printf("�📡 Backend: %s\n\n", backendURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
 }
@@ -424,6 +426,26 @@ func gisHandler(c *gin.Context) {
 		"page":       "gis-dashboard",
 		"isAuth":     isAuth,
 		"embedded":   embedded,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// iamAdminHandler serves the IAM admin console
+func iamAdminHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "IAM Admin"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - IAM Admin Console",
+		"pageName":   "iam-admin",
+		"page":       "iam-admin",
+		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,
 	})

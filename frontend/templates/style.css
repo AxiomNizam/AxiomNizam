@@ -2789,6 +2789,12 @@ body {
     gap: 16px;
 }
 
+.cp-grid-three {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
 .cp-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);

@@ -1,0 +1,442 @@
+{{ define "iam-admin" }}
+<!-- IAM Admin Console — Keycloak-equivalent Identity & Access Management -->
+<div class="admin-container">
+    <!-- Header -->
+    <div class="admin-header">
+        <div class="header-left">
+            <h1>🔐 Identity &amp; Access Management</h1>
+            <p class="subtitle">Users · OAuth Clients · Roles · Sessions · Tokens</p>
+        </div>
+        <div class="header-stats" id="iamHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Total Users</span>
+                <span class="stat-value" id="iamStatUsers">–</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">OAuth Clients</span>
+                <span class="stat-value" id="iamStatClients">–</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Roles</span>
+                <span class="stat-value" id="iamStatRoles">–</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">System</span>
+                <span class="stat-value" style="color: var(--primary-color);" id="iamStatSystem">Active</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="branding-logo" style="display:flex;align-items:center;justify-content:center;">
+                <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height:180px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.2));transition:transform .3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            </div>
+        </div>
+    </div>
+
+    <!-- IAM Login Banner (shown when not authed with IAM) -->
+    <div id="iamLoginBanner" class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--warning-color);display:none;">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+                <h4 style="margin:0 0 6px 0;color:var(--warning-color);">⚠️ IAM Authentication Required</h4>
+                <p style="margin:0;color:var(--text-muted);font-size:.9rem;">Log in with your IAM sysadmin credentials to manage users, clients, and roles.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <input type="email" id="iamLoginEmail" placeholder="sysadmin@example.com" class="form-control" style="width:220px;">
+                <input type="password" id="iamLoginPassword" placeholder="Password" class="form-control" style="width:180px;">
+                <button class="btn-primary" onclick="iamLogin()">Login to IAM</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-navigation">
+        <button class="tab-btn active" onclick="switchIAMTab('iam-dashboard')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span> Dashboard
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-users')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Users
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-clients')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span> OAuth Clients
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-roles')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Roles
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-bindings')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span> Role Bindings
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-tokens')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Token Management
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-oidc')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span> OIDC / JWKS
+        </button>
+    </div>
+
+    <!-- ===================== DASHBOARD TAB ===================== -->
+    <div id="iam-dashboard" class="tab-content active">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <h3 style="margin-top:0;">IAM System Overview</h3>
+            <p style="color:var(--text-muted);">Your self-hosted Identity Provider — equivalent to Keycloak admin console.</p>
+            <div class="cp-grid-three" style="margin-top:16px;" id="iamDashboardCards">
+                <div class="cp-card" style="text-align:center;margin:0;background:var(--darker-bg);">
+                    <div style="font-size:2rem;margin-bottom:8px;">👥</div>
+                    <div style="font-size:1.8rem;font-weight:700;color:var(--primary-color);" id="dashUserCount">0</div>
+                    <div style="color:var(--text-muted);font-size:.85rem;">Registered Users</div>
+                </div>
+                <div class="cp-card" style="text-align:center;margin:0;background:var(--darker-bg);">
+                    <div style="font-size:2rem;margin-bottom:8px;">🖥️</div>
+                    <div style="font-size:1.8rem;font-weight:700;color:var(--primary-color);" id="dashClientCount">0</div>
+                    <div style="color:var(--text-muted);font-size:.85rem;">OAuth Clients</div>
+                </div>
+                <div class="cp-card" style="text-align:center;margin:0;background:var(--darker-bg);">
+                    <div style="font-size:2rem;margin-bottom:8px;">🛡️</div>
+                    <div style="font-size:1.8rem;font-weight:700;color:var(--primary-color);" id="dashRoleCount">0</div>
+                    <div style="color:var(--text-muted);font-size:.85rem;">Defined Roles</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="cp-card" style="margin:0 0 20px 0;">
+            <h4 style="margin-top:0;margin-bottom:12px;">Quick Actions</h4>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="btn-primary" onclick="switchIAMTab('iam-users');showCreateUserModal();">+ Create User</button>
+                <button class="btn-primary" onclick="switchIAMTab('iam-clients');showCreateClientModal();">+ Register Client</button>
+                <button class="btn-primary" onclick="switchIAMTab('iam-roles');showCreateRoleModal();">+ Create Role</button>
+                <button class="btn-primary" onclick="switchIAMTab('iam-bindings');showAssignRoleModal();">+ Assign Role</button>
+            </div>
+        </div>
+
+        <!-- WhoAmI -->
+        <div class="cp-card" style="margin:0;">
+            <h4 style="margin-top:0;margin-bottom:12px;">Current Session</h4>
+            <pre id="iamWhoAmI" style="background:var(--darker-bg);padding:16px;border-radius:8px;overflow-x:auto;font-size:.85rem;color:var(--text-secondary);">Loading...</pre>
+        </div>
+    </div>
+
+    <!-- ===================== USERS TAB ===================== -->
+    <div id="iam-users" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <h3 style="margin:0;">User Management</h3>
+                <div style="display:flex;gap:10px;">
+                    <input type="text" id="iamUserSearch" placeholder="Search users..." class="form-control" style="width:220px;" oninput="filterIAMUsers()">
+                    <button class="btn-primary" onclick="showCreateUserModal()">+ Create User</button>
+                    <button class="btn-secondary" onclick="loadIAMUsers()">↻ Refresh</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="admin-table" id="iamUsersTable">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Display Name</th>
+                            <th>Active</th>
+                            <th>Email Verified</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="iamUsersBody">
+                        <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== OAUTH CLIENTS TAB ===================== -->
+    <div id="iam-clients" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <h3 style="margin:0;">OAuth 2.0 Clients</h3>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-primary" onclick="showCreateClientModal()">+ Register Client</button>
+                    <button class="btn-secondary" onclick="loadIAMClients()">↻ Refresh</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="admin-table" id="iamClientsTable">
+                    <thead>
+                        <tr>
+                            <th>Client ID</th>
+                            <th>Name</th>
+                            <th>Grant Types</th>
+                            <th>Redirect URIs</th>
+                            <th>Scopes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="iamClientsBody">
+                        <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== ROLES TAB ===================== -->
+    <div id="iam-roles" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <h3 style="margin:0;">Role Management</h3>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-primary" onclick="showCreateRoleModal()">+ Create Role</button>
+                    <button class="btn-secondary" onclick="loadIAMRoles()">↻ Refresh</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="admin-table" id="iamRolesTable">
+                    <thead>
+                        <tr>
+                            <th>Role Name</th>
+                            <th>Description</th>
+                            <th>System</th>
+                            <th>Permissions</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="iamRolesBody">
+                        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== ROLE BINDINGS TAB ===================== -->
+    <div id="iam-bindings" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <h3 style="margin:0;">Role Assignments</h3>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-primary" onclick="showAssignRoleModal()">+ Assign Role</button>
+                    <button class="btn-secondary" onclick="loadIAMBindings()">↻ Refresh</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="admin-table" id="iamBindingsTable">
+                    <thead>
+                        <tr>
+                            <th>Binding ID</th>
+                            <th>User ID</th>
+                            <th>Role ID</th>
+                            <th>Assigned At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="iamBindingsBody">
+                        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== TOKEN MANAGEMENT TAB ===================== -->
+    <div id="iam-tokens" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <h3 style="margin-top:0;margin-bottom:16px;">Token Revocation</h3>
+            <div class="cp-grid-two" style="gap:20px;">
+                <!-- Revoke single token -->
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <h4 style="margin-top:0;margin-bottom:12px;">Revoke Token by JTI</h4>
+                    <div class="form-group">
+                        <label for="revokeTokenJTI">JWT Token ID (jti)</label>
+                        <input type="text" id="revokeTokenJTI" placeholder="Enter token JTI..." class="form-control">
+                    </div>
+                    <button class="btn-primary" onclick="revokeToken()" style="background:var(--danger-color);">Revoke Token</button>
+                </div>
+                <!-- Revoke all user tokens -->
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <h4 style="margin-top:0;margin-bottom:12px;">Revoke All Tokens for User</h4>
+                    <div class="form-group">
+                        <label for="revokeUserID">User ID</label>
+                        <input type="text" id="revokeUserID" placeholder="Enter user UUID..." class="form-control">
+                    </div>
+                    <button class="btn-primary" onclick="revokeUserTokens()" style="background:var(--danger-color);">Revoke All User Tokens</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== OIDC / JWKS TAB ===================== -->
+    <div id="iam-oidc" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <h3 style="margin-top:0;margin-bottom:16px;">OpenID Connect Discovery</h3>
+            <p style="color:var(--text-muted);margin-bottom:12px;">Live OIDC configuration from <code>/.well-known/openid-configuration</code></p>
+            <pre id="iamOIDCConfig" style="background:var(--darker-bg);padding:16px;border-radius:8px;overflow-x:auto;font-size:.85rem;color:var(--text-secondary);">Loading...</pre>
+        </div>
+        <div class="cp-card" style="margin:0;">
+            <h3 style="margin-top:0;margin-bottom:16px;">JSON Web Key Set (JWKS)</h3>
+            <p style="color:var(--text-muted);margin-bottom:12px;">Public keys from <code>/.well-known/jwks.json</code></p>
+            <pre id="iamJWKS" style="background:var(--darker-bg);padding:16px;border-radius:8px;overflow-x:auto;font-size:.85rem;color:var(--text-secondary);">Loading...</pre>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== MODALS ===================== -->
+
+<!-- Create/Edit User Modal -->
+<div id="iamUserModal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+            <h2 id="iamUserModalTitle">Create User</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamUserModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamUserEditID">
+            <div class="form-group">
+                <label for="iamUserEmail">Email *</label>
+                <input type="email" id="iamUserEmail" placeholder="user@example.com" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="iamUserDisplayName">Display Name</label>
+                <input type="text" id="iamUserDisplayName" placeholder="John Doe" class="form-control">
+            </div>
+            <div class="form-group" id="iamUserPasswordGroup">
+                <label for="iamUserPassword">Password *</label>
+                <input type="password" id="iamUserPassword" placeholder="Minimum 8 characters" class="form-control">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="iamUserActive" checked> Active</label>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="iamUserEmailVerified"> Email Verified</label>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamUserModal')">Cancel</button>
+                <button class="btn-primary" id="iamUserSubmitBtn" onclick="submitUser()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Client Modal -->
+<div id="iamClientModal" class="modal">
+    <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+            <h2 id="iamClientModalTitle">Register OAuth Client</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamClientModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamClientEditID">
+            <div class="form-group">
+                <label for="iamClientName">Client Name *</label>
+                <input type="text" id="iamClientName" placeholder="My Application" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="iamClientRedirectURIs">Redirect URIs (one per line)</label>
+                <textarea id="iamClientRedirectURIs" rows="3" placeholder="https://app.example.com/callback" class="form-control"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="iamClientGrantTypes">Grant Types (comma separated)</label>
+                <input type="text" id="iamClientGrantTypes" value="authorization_code,refresh_token" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="iamClientScopes">Allowed Scopes (comma separated)</label>
+                <input type="text" id="iamClientScopes" value="openid,profile,email" class="form-control">
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamClientModal')">Cancel</button>
+                <button class="btn-primary" id="iamClientSubmitBtn" onclick="submitClient()">Register</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Client Secret Display Modal -->
+<div id="iamClientSecretModal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+            <h2>🔑 Client Registered</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamClientSecretModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--warning-color);font-weight:600;">⚠️ Copy the client secret now. It will not be shown again.</p>
+            <div class="form-group">
+                <label>Client ID</label>
+                <input type="text" id="iamNewClientID" class="form-control" readonly>
+            </div>
+            <div class="form-group">
+                <label>Client Secret</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="iamNewClientSecret" class="form-control" readonly style="flex:1;font-family:var(--font-mono);">
+                    <button class="btn-primary" onclick="copyClientSecret()">Copy</button>
+                </div>
+            </div>
+            <div style="text-align:right;margin-top:16px;">
+                <button class="btn-primary" onclick="closeIAMModal('iamClientSecretModal')">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Role Modal -->
+<div id="iamRoleModal" class="modal">
+    <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+            <h2 id="iamRoleModalTitle">Create Role</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamRoleModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamRoleEditID">
+            <div class="form-group">
+                <label for="iamRoleName">Role Name *</label>
+                <input type="text" id="iamRoleName" placeholder="editor" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="iamRoleDescription">Description</label>
+                <input type="text" id="iamRoleDescription" placeholder="Can edit resources" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Permissions (resource:action per line)</label>
+                <textarea id="iamRolePermissions" rows="5" placeholder="users:read&#10;resources:write&#10;*:*" class="form-control" style="font-family:var(--font-mono);"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamRoleModal')">Cancel</button>
+                <button class="btn-primary" id="iamRoleSubmitBtn" onclick="submitRole()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Role Modal -->
+<div id="iamBindingModal" class="modal">
+    <div class="modal-content" style="max-width:500px;">
+        <div class="modal-header">
+            <h2>Assign Role to User</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamBindingModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="iamBindingUserID">User ID *</label>
+                <select id="iamBindingUserID" class="form-control"></select>
+            </div>
+            <div class="form-group">
+                <label for="iamBindingRoleID">Role *</label>
+                <select id="iamBindingRoleID" class="form-control"></select>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamBindingModal')">Cancel</button>
+                <button class="btn-primary" onclick="submitBinding()">Assign</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View User Detail Modal -->
+<div id="iamUserDetailModal" class="modal">
+    <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+            <h2>User Details</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamUserDetailModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <pre id="iamUserDetailContent" style="background:var(--darker-bg);padding:16px;border-radius:8px;overflow-x:auto;font-size:.85rem;color:var(--text-secondary);">Loading...</pre>
+        </div>
+    </div>
+</div>
+
+<script src="/static/iam-admin.js?v=20260318"></script>
+{{ end }}

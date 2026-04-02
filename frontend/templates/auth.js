@@ -77,6 +77,7 @@ function canAccessPath(path, role) {
     if (path === '/lineage-version') return normalized === 'admin' || normalized === 'system-manager';
     if (path === '/admin') return normalized === 'admin' || normalized === 'system-manager';
     if (path === '/system-manager') return normalized === 'system-manager';
+    if (path === '/iam-admin') return normalized === 'system-manager';
     if (path === '/manager') return normalized === 'manager';
     return true;
 }
@@ -88,7 +89,8 @@ function isProtectedPath(path) {
         path === '/manager' ||
         path === '/governance' ||
         path === '/operations-center' ||
-        path === '/lineage-version';
+        path === '/lineage-version' ||
+        path === '/iam-admin';
 }
 
 // Initialize authentication on page load

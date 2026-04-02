@@ -1,0 +1,789 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// IAM Admin Console — JavaScript (Keycloak-equivalent admin UI)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const IAM_API = (() => {
+    let base = window.BACKEND_URL || 'http://localhost:8000';
+    if (base.endsWith('/')) base = base.slice(0, -1);
+    return base;
+})();
+
+// IAM-specific auth token (separate from platform auth)
+let iamToken = localStorage.getItem('iamToken') || '';
+let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function iamHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    if (iamToken) h['Authorization'] = 'Bearer ' + iamToken;
+    return h;
+}
+
+async function iamFetch(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign(iamHeaders(), opts.headers || {});
+    const resp = await fetch(IAM_API + path, opts);
+    if (resp.status === 401 && iamRefreshToken) {
+        const refreshed = await tryIAMRefresh();
+        if (refreshed) {
+            opts.headers['Authorization'] = 'Bearer ' + iamToken;
+            return fetch(IAM_API + path, opts);
+        }
+    }
+    return resp;
+}
+
+async function tryIAMRefresh() {
+    try {
+        const resp = await fetch(IAM_API + '/iam/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: iamRefreshToken })
+        });
+        if (!resp.ok) return false;
+        const data = await resp.json();
+        iamToken = data.access_token || '';
+        iamRefreshToken = data.refresh_token || iamRefreshToken;
+        localStorage.setItem('iamToken', iamToken);
+        localStorage.setItem('iamRefreshToken', iamRefreshToken);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function showIAMToast(message, isError) {
+    const el = document.createElement('div');
+    el.textContent = message;
+    el.style.cssText = 'position:fixed;top:20px;right:20px;z-index:100000;padding:12px 24px;border-radius:8px;color:#fff;font-weight:600;font-size:.9rem;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:opacity .3s;' +
+        (isError ? 'background:#e74c3c;' : 'background:#27ae60;');
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+}
+
+function formatDate(iso) {
+    if (!iso) return '–';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+}
+
+// ── Tab Switching ────────────────────────────────────────────────────────────
+
+function switchIAMTab(tabId) {
+    document.querySelectorAll('.admin-container .tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.admin-container .tab-btn').forEach(b => b.classList.remove('active'));
+
+    const target = document.getElementById(tabId);
+    if (target) target.classList.add('active');
+
+    const tabs = document.querySelectorAll('.admin-container .tab-btn');
+    tabs.forEach(b => {
+        if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(tabId)) {
+            b.classList.add('active');
+        }
+    });
+
+    // Lazy-load data on tab switch
+    if (tabId === 'iam-users') loadIAMUsers();
+    if (tabId === 'iam-clients') loadIAMClients();
+    if (tabId === 'iam-roles') loadIAMRoles();
+    if (tabId === 'iam-bindings') loadIAMBindings();
+    if (tabId === 'iam-oidc') loadOIDCInfo();
+    if (tabId === 'iam-dashboard') loadIAMDashboard();
+}
+
+// ── Modal helpers ────────────────────────────────────────────────────────────
+
+function openIAMModal(id) {
+    const m = document.getElementById(id);
+    if (m) m.style.display = 'flex';
+}
+
+function closeIAMModal(id) {
+    const m = document.getElementById(id);
+    if (m) m.style.display = 'none';
+}
+
+// Close modals on background click
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal') && e.target.id && e.target.id.startsWith('iam')) {
+        e.target.style.display = 'none';
+    }
+});
+
+// ── IAM Login ────────────────────────────────────────────────────────────────
+
+async function iamLogin() {
+    const email = document.getElementById('iamLoginEmail').value.trim();
+    const password = document.getElementById('iamLoginPassword').value;
+    if (!email || !password) { showIAMToast('Email and password required', true); return; }
+
+    try {
+        const resp = await fetch(IAM_API + '/iam/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, password: password })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            showIAMToast(data.error || 'Login failed', true);
+            return;
+        }
+        iamToken = data.access_token || '';
+        iamRefreshToken = data.refresh_token || '';
+        localStorage.setItem('iamToken', iamToken);
+        localStorage.setItem('iamRefreshToken', iamRefreshToken);
+        showIAMToast('IAM login successful');
+        updateIAMLoginBanner();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Login error: ' + err.message, true);
+    }
+}
+
+function iamLogout() {
+    iamToken = '';
+    iamRefreshToken = '';
+    localStorage.removeItem('iamToken');
+    localStorage.removeItem('iamRefreshToken');
+    updateIAMLoginBanner();
+    showIAMToast('IAM session ended');
+}
+
+function updateIAMLoginBanner() {
+    const banner = document.getElementById('iamLoginBanner');
+    if (banner) banner.style.display = iamToken ? 'none' : 'block';
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+async function loadIAMDashboard() {
+    if (!iamToken) { updateIAMLoginBanner(); return; }
+
+    // WhoAmI
+    try {
+        const resp = await iamFetch('/iam/auth/whoami');
+        const whoami = document.getElementById('iamWhoAmI');
+        if (resp.ok) {
+            const data = await resp.json();
+            if (whoami) whoami.textContent = JSON.stringify(data, null, 2);
+        } else {
+            if (whoami) whoami.textContent = 'Error: ' + resp.status;
+        }
+    } catch (_) {}
+
+    // Counts
+    try {
+        const [uResp, cResp, rResp] = await Promise.all([
+            iamFetch('/iam/admin/users'),
+            iamFetch('/iam/admin/clients'),
+            iamFetch('/iam/admin/roles')
+        ]);
+        if (uResp.ok) {
+            const users = await uResp.json();
+            const count = Array.isArray(users) ? users.length : (users.users ? users.users.length : 0);
+            setTextById('dashUserCount', count);
+            setTextById('iamStatUsers', count);
+        }
+        if (cResp.ok) {
+            const clients = await cResp.json();
+            const count = Array.isArray(clients) ? clients.length : (clients.clients ? clients.clients.length : 0);
+            setTextById('dashClientCount', count);
+            setTextById('iamStatClients', count);
+        }
+        if (rResp.ok) {
+            const roles = await rResp.json();
+            const count = Array.isArray(roles) ? roles.length : (roles.roles ? roles.roles.length : 0);
+            setTextById('dashRoleCount', count);
+            setTextById('iamStatRoles', count);
+        }
+    } catch (_) {}
+}
+
+function setTextById(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+}
+
+// ── Users CRUD ───────────────────────────────────────────────────────────────
+
+let iamUsersCache = [];
+
+async function loadIAMUsers() {
+    if (!iamToken) return;
+    try {
+        const resp = await iamFetch('/iam/admin/users');
+        if (!resp.ok) { showIAMToast('Failed to load users: ' + resp.status, true); return; }
+        const data = await resp.json();
+        iamUsersCache = Array.isArray(data) ? data : (data.users || []);
+        renderIAMUsers(iamUsersCache);
+    } catch (err) {
+        showIAMToast('Error loading users: ' + err.message, true);
+    }
+}
+
+function renderIAMUsers(users) {
+    const tbody = document.getElementById('iamUsersBody');
+    if (!tbody) return;
+    if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No users found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = users.map(u => {
+        const active = u.active !== false;
+        const verified = u.email_verified === true;
+        return '<tr>' +
+            '<td>' + escapeHtml(u.email) + '</td>' +
+            '<td>' + escapeHtml(u.display_name || '–') + '</td>' +
+            '<td><span class="status-badge ' + (active ? 'status-active' : 'status-inactive') + '">' + (active ? 'Active' : 'Inactive') + '</span></td>' +
+            '<td><span class="status-badge ' + (verified ? 'status-active' : 'status-inactive') + '">' + (verified ? 'Yes' : 'No') + '</span></td>' +
+            '<td>' + formatDate(u.created_at) + '</td>' +
+            '<td style="white-space:nowrap;">' +
+                '<button class="btn-sm btn-primary" onclick="viewUser(\'' + escapeHtml(u.id) + '\')">View</button> ' +
+                '<button class="btn-sm btn-secondary" onclick="editUser(\'' + escapeHtml(u.id) + '\')">Edit</button> ' +
+                '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteUser(\'' + escapeHtml(u.id) + '\')">Delete</button>' +
+            '</td></tr>';
+    }).join('');
+}
+
+function filterIAMUsers() {
+    const q = (document.getElementById('iamUserSearch').value || '').toLowerCase();
+    if (!q) { renderIAMUsers(iamUsersCache); return; }
+    renderIAMUsers(iamUsersCache.filter(u =>
+        (u.email || '').toLowerCase().includes(q) ||
+        (u.display_name || '').toLowerCase().includes(q)
+    ));
+}
+
+function showCreateUserModal() {
+    document.getElementById('iamUserEditID').value = '';
+    document.getElementById('iamUserEmail').value = '';
+    document.getElementById('iamUserDisplayName').value = '';
+    document.getElementById('iamUserPassword').value = '';
+    document.getElementById('iamUserActive').checked = true;
+    document.getElementById('iamUserEmailVerified').checked = false;
+    document.getElementById('iamUserPasswordGroup').style.display = '';
+    document.getElementById('iamUserModalTitle').textContent = 'Create User';
+    document.getElementById('iamUserSubmitBtn').textContent = 'Create';
+    openIAMModal('iamUserModal');
+}
+
+async function viewUser(id) {
+    try {
+        const resp = await iamFetch('/iam/admin/users/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load user', true); return; }
+        const data = await resp.json();
+        document.getElementById('iamUserDetailContent').textContent = JSON.stringify(data, null, 2);
+        openIAMModal('iamUserDetailModal');
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function editUser(id) {
+    try {
+        const resp = await iamFetch('/iam/admin/users/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load user', true); return; }
+        const u = await resp.json();
+        document.getElementById('iamUserEditID').value = u.id;
+        document.getElementById('iamUserEmail').value = u.email || '';
+        document.getElementById('iamUserDisplayName').value = u.display_name || '';
+        document.getElementById('iamUserPassword').value = '';
+        document.getElementById('iamUserActive').checked = u.active !== false;
+        document.getElementById('iamUserEmailVerified').checked = u.email_verified === true;
+        document.getElementById('iamUserPasswordGroup').style.display = 'none';
+        document.getElementById('iamUserModalTitle').textContent = 'Edit User';
+        document.getElementById('iamUserSubmitBtn').textContent = 'Update';
+        openIAMModal('iamUserModal');
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function submitUser() {
+    const editID = document.getElementById('iamUserEditID').value;
+    const body = {
+        email: document.getElementById('iamUserEmail').value.trim(),
+        display_name: document.getElementById('iamUserDisplayName').value.trim(),
+        active: document.getElementById('iamUserActive').checked,
+        email_verified: document.getElementById('iamUserEmailVerified').checked
+    };
+    if (!editID) {
+        body.password = document.getElementById('iamUserPassword').value;
+        if (!body.email || !body.password) { showIAMToast('Email and password are required', true); return; }
+    }
+
+    try {
+        const url = editID ? '/iam/admin/users/' + encodeURIComponent(editID) : '/iam/admin/users';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method: method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+        showIAMToast(editID ? 'User updated' : 'User created');
+        closeIAMModal('iamUserModal');
+        loadIAMUsers();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function deleteUser(id) {
+    if (!confirm('Delete this user permanently?')) return;
+    try {
+        const resp = await iamFetch('/iam/admin/users/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            showIAMToast(data.error || 'Delete failed', true);
+            return;
+        }
+        showIAMToast('User deleted');
+        loadIAMUsers();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+// ── Clients CRUD ─────────────────────────────────────────────────────────────
+
+async function loadIAMClients() {
+    if (!iamToken) return;
+    try {
+        const resp = await iamFetch('/iam/admin/clients');
+        if (!resp.ok) { showIAMToast('Failed to load clients: ' + resp.status, true); return; }
+        const data = await resp.json();
+        const clients = Array.isArray(data) ? data : (data.clients || []);
+        renderIAMClients(clients);
+    } catch (err) {
+        showIAMToast('Error loading clients: ' + err.message, true);
+    }
+}
+
+function renderIAMClients(clients) {
+    const tbody = document.getElementById('iamClientsBody');
+    if (!tbody) return;
+    if (!clients.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No clients registered</td></tr>';
+        return;
+    }
+    tbody.innerHTML = clients.map(c => {
+        const grants = (c.grant_types || []).join(', ') || '–';
+        const uris = (c.redirect_uris || []).map(u => escapeHtml(u)).join('<br>') || '–';
+        const scopes = (c.allowed_scopes || []).join(', ') || '–';
+        return '<tr>' +
+            '<td style="font-family:var(--font-mono);font-size:.85rem;">' + escapeHtml(c.id) + '</td>' +
+            '<td>' + escapeHtml(c.name) + '</td>' +
+            '<td>' + escapeHtml(grants) + '</td>' +
+            '<td style="font-size:.8rem;">' + uris + '</td>' +
+            '<td>' + escapeHtml(scopes) + '</td>' +
+            '<td style="white-space:nowrap;">' +
+                '<button class="btn-sm btn-secondary" onclick="editClient(\'' + escapeHtml(c.id) + '\')">Edit</button> ' +
+                '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteClient(\'' + escapeHtml(c.id) + '\')">Delete</button>' +
+            '</td></tr>';
+    }).join('');
+}
+
+function showCreateClientModal() {
+    document.getElementById('iamClientEditID').value = '';
+    document.getElementById('iamClientName').value = '';
+    document.getElementById('iamClientRedirectURIs').value = '';
+    document.getElementById('iamClientGrantTypes').value = 'authorization_code,refresh_token';
+    document.getElementById('iamClientScopes').value = 'openid,profile,email';
+    document.getElementById('iamClientModalTitle').textContent = 'Register OAuth Client';
+    document.getElementById('iamClientSubmitBtn').textContent = 'Register';
+    openIAMModal('iamClientModal');
+}
+
+async function editClient(id) {
+    try {
+        const resp = await iamFetch('/iam/admin/clients/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load client', true); return; }
+        const c = await resp.json();
+        document.getElementById('iamClientEditID').value = c.id;
+        document.getElementById('iamClientName').value = c.name || '';
+        document.getElementById('iamClientRedirectURIs').value = (c.redirect_uris || []).join('\n');
+        document.getElementById('iamClientGrantTypes').value = (c.grant_types || []).join(',');
+        document.getElementById('iamClientScopes').value = (c.allowed_scopes || []).join(',');
+        document.getElementById('iamClientModalTitle').textContent = 'Edit Client';
+        document.getElementById('iamClientSubmitBtn').textContent = 'Update';
+        openIAMModal('iamClientModal');
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function submitClient() {
+    const editID = document.getElementById('iamClientEditID').value;
+    const name = document.getElementById('iamClientName').value.trim();
+    if (!name) { showIAMToast('Client name is required', true); return; }
+
+    const redirectURIs = document.getElementById('iamClientRedirectURIs').value
+        .split('\n').map(s => s.trim()).filter(Boolean);
+    const grantTypes = document.getElementById('iamClientGrantTypes').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+    const scopes = document.getElementById('iamClientScopes').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+
+    const body = { name: name, redirect_uris: redirectURIs, grant_types: grantTypes, allowed_scopes: scopes };
+
+    try {
+        const url = editID ? '/iam/admin/clients/' + encodeURIComponent(editID) : '/iam/admin/clients';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method: method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+
+        closeIAMModal('iamClientModal');
+
+        // Show secret for new clients
+        if (!editID && data.client_secret) {
+            document.getElementById('iamNewClientID').value = data.id || data.client_id || '';
+            document.getElementById('iamNewClientSecret').value = data.client_secret;
+            openIAMModal('iamClientSecretModal');
+        } else {
+            showIAMToast(editID ? 'Client updated' : 'Client registered');
+        }
+        loadIAMClients();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+function copyClientSecret() {
+    const secret = document.getElementById('iamNewClientSecret').value;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(secret).then(() => showIAMToast('Secret copied'));
+    } else {
+        document.getElementById('iamNewClientSecret').select();
+        document.execCommand('copy');
+        showIAMToast('Secret copied');
+    }
+}
+
+async function deleteClient(id) {
+    if (!confirm('Delete this OAuth client?')) return;
+    try {
+        const resp = await iamFetch('/iam/admin/clients/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            showIAMToast(data.error || 'Delete failed', true);
+            return;
+        }
+        showIAMToast('Client deleted');
+        loadIAMClients();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+// ── Roles CRUD ───────────────────────────────────────────────────────────────
+
+async function loadIAMRoles() {
+    if (!iamToken) return;
+    try {
+        const resp = await iamFetch('/iam/admin/roles');
+        if (!resp.ok) { showIAMToast('Failed to load roles: ' + resp.status, true); return; }
+        const data = await resp.json();
+        const roles = Array.isArray(data) ? data : (data.roles || []);
+        renderIAMRoles(roles);
+    } catch (err) {
+        showIAMToast('Error loading roles: ' + err.message, true);
+    }
+}
+
+function renderIAMRoles(roles) {
+    const tbody = document.getElementById('iamRolesBody');
+    if (!tbody) return;
+    if (!roles.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No roles defined</td></tr>';
+        return;
+    }
+    tbody.innerHTML = roles.map(r => {
+        const isSystem = r.system === true;
+        const perms = (r.permissions || []).map(p =>
+            '<span class="status-badge" style="font-size:.75rem;margin:2px;">' + escapeHtml(p.resource + ':' + p.action) + '</span>'
+        ).join(' ') || '–';
+        return '<tr>' +
+            '<td style="font-weight:600;">' + escapeHtml(r.name) + '</td>' +
+            '<td>' + escapeHtml(r.description || '–') + '</td>' +
+            '<td><span class="status-badge ' + (isSystem ? 'status-active' : '') + '">' + (isSystem ? 'System' : 'Custom') + '</span></td>' +
+            '<td>' + perms + '</td>' +
+            '<td style="white-space:nowrap;">' +
+                (isSystem ? '<span style="color:var(--text-muted);font-size:.8rem;">Protected</span>' :
+                    '<button class="btn-sm btn-secondary" onclick="editRole(\'' + escapeHtml(r.id) + '\')">Edit</button> ' +
+                    '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteRole(\'' + escapeHtml(r.id) + '\')">Delete</button>'
+                ) +
+            '</td></tr>';
+    }).join('');
+}
+
+function showCreateRoleModal() {
+    document.getElementById('iamRoleEditID').value = '';
+    document.getElementById('iamRoleName').value = '';
+    document.getElementById('iamRoleDescription').value = '';
+    document.getElementById('iamRolePermissions').value = '';
+    document.getElementById('iamRoleModalTitle').textContent = 'Create Role';
+    document.getElementById('iamRoleSubmitBtn').textContent = 'Create';
+    openIAMModal('iamRoleModal');
+}
+
+async function editRole(id) {
+    try {
+        const resp = await iamFetch('/iam/admin/roles/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load role', true); return; }
+        const r = await resp.json();
+        document.getElementById('iamRoleEditID').value = r.id;
+        document.getElementById('iamRoleName').value = r.name || '';
+        document.getElementById('iamRoleDescription').value = r.description || '';
+        document.getElementById('iamRolePermissions').value = (r.permissions || [])
+            .map(p => p.resource + ':' + p.action).join('\n');
+        document.getElementById('iamRoleModalTitle').textContent = 'Edit Role';
+        document.getElementById('iamRoleSubmitBtn').textContent = 'Update';
+        openIAMModal('iamRoleModal');
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function submitRole() {
+    const editID = document.getElementById('iamRoleEditID').value;
+    const name = document.getElementById('iamRoleName').value.trim();
+    if (!name) { showIAMToast('Role name is required', true); return; }
+
+    const permissions = document.getElementById('iamRolePermissions').value
+        .split('\n').map(s => s.trim()).filter(Boolean)
+        .map(line => {
+            const parts = line.split(':');
+            return { resource: parts[0] || '*', action: parts[1] || '*' };
+        });
+
+    const body = {
+        name: name,
+        description: document.getElementById('iamRoleDescription').value.trim(),
+        permissions: permissions
+    };
+
+    try {
+        const url = editID ? '/iam/admin/roles/' + encodeURIComponent(editID) : '/iam/admin/roles';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method: method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+        showIAMToast(editID ? 'Role updated' : 'Role created');
+        closeIAMModal('iamRoleModal');
+        loadIAMRoles();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function deleteRole(id) {
+    if (!confirm('Delete this role?')) return;
+    try {
+        const resp = await iamFetch('/iam/admin/roles/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            showIAMToast(data.error || 'Delete failed', true);
+            return;
+        }
+        showIAMToast('Role deleted');
+        loadIAMRoles();
+        loadIAMDashboard();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+// ── Role Bindings ────────────────────────────────────────────────────────────
+
+async function loadIAMBindings() {
+    if (!iamToken) return;
+    try {
+        const resp = await iamFetch('/iam/admin/role-bindings');
+        if (!resp.ok) { showIAMToast('Failed to load bindings: ' + resp.status, true); return; }
+        const data = await resp.json();
+        const bindings = Array.isArray(data) ? data : (data.bindings || []);
+        renderIAMBindings(bindings);
+    } catch (err) {
+        showIAMToast('Error loading bindings: ' + err.message, true);
+    }
+}
+
+function renderIAMBindings(bindings) {
+    const tbody = document.getElementById('iamBindingsBody');
+    if (!tbody) return;
+    if (!bindings.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No role bindings</td></tr>';
+        return;
+    }
+    tbody.innerHTML = bindings.map(b => {
+        return '<tr>' +
+            '<td style="font-family:var(--font-mono);font-size:.8rem;">' + escapeHtml(b.id) + '</td>' +
+            '<td style="font-family:var(--font-mono);font-size:.8rem;">' + escapeHtml(b.user_id) + '</td>' +
+            '<td style="font-family:var(--font-mono);font-size:.8rem;">' + escapeHtml(b.role_id) + '</td>' +
+            '<td>' + formatDate(b.assigned_at) + '</td>' +
+            '<td><button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="revokeBinding(\'' + escapeHtml(b.id) + '\')">Revoke</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function showAssignRoleModal() {
+    // Populate user / role dropdowns
+    const userSel = document.getElementById('iamBindingUserID');
+    const roleSel = document.getElementById('iamBindingRoleID');
+    userSel.innerHTML = '<option value="">Loading...</option>';
+    roleSel.innerHTML = '<option value="">Loading...</option>';
+    openIAMModal('iamBindingModal');
+
+    try {
+        const [uResp, rResp] = await Promise.all([
+            iamFetch('/iam/admin/users'),
+            iamFetch('/iam/admin/roles')
+        ]);
+        if (uResp.ok) {
+            const data = await uResp.json();
+            const users = Array.isArray(data) ? data : (data.users || []);
+            userSel.innerHTML = '<option value="">— Select user —</option>' +
+                users.map(u => '<option value="' + escapeHtml(u.id) + '">' + escapeHtml(u.email) + '</option>').join('');
+        }
+        if (rResp.ok) {
+            const data = await rResp.json();
+            const roles = Array.isArray(data) ? data : (data.roles || []);
+            roleSel.innerHTML = '<option value="">— Select role —</option>' +
+                roles.map(r => '<option value="' + escapeHtml(r.id) + '">' + escapeHtml(r.name) + '</option>').join('');
+        }
+    } catch (_) {
+        showIAMToast('Failed to populate dropdowns', true);
+    }
+}
+
+async function submitBinding() {
+    const userID = document.getElementById('iamBindingUserID').value;
+    const roleID = document.getElementById('iamBindingRoleID').value;
+    if (!userID || !roleID) { showIAMToast('Select both user and role', true); return; }
+
+    try {
+        const resp = await iamFetch('/iam/admin/role-bindings', {
+            method: 'POST',
+            body: JSON.stringify({ user_id: userID, role_id: roleID })
+        });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Assignment failed', true); return; }
+        showIAMToast('Role assigned');
+        closeIAMModal('iamBindingModal');
+        loadIAMBindings();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function revokeBinding(id) {
+    if (!confirm('Revoke this role assignment?')) return;
+    try {
+        const resp = await iamFetch('/iam/admin/role-bindings/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            showIAMToast(data.error || 'Revoke failed', true);
+            return;
+        }
+        showIAMToast('Role binding revoked');
+        loadIAMBindings();
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+// ── Token Management ─────────────────────────────────────────────────────────
+
+async function revokeToken() {
+    const jti = document.getElementById('revokeTokenJTI').value.trim();
+    if (!jti) { showIAMToast('Enter a token JTI', true); return; }
+    try {
+        const resp = await iamFetch('/iam/admin/tokens/revoke', {
+            method: 'POST',
+            body: JSON.stringify({ jti: jti })
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            showIAMToast(data.error || 'Revoke failed', true);
+            return;
+        }
+        showIAMToast('Token revoked');
+        document.getElementById('revokeTokenJTI').value = '';
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+async function revokeUserTokens() {
+    const uid = document.getElementById('revokeUserID').value.trim();
+    if (!uid) { showIAMToast('Enter a user ID', true); return; }
+    if (!confirm('Revoke ALL tokens for this user?')) return;
+    try {
+        const resp = await iamFetch('/iam/admin/users/' + encodeURIComponent(uid) + '/revoke-tokens', {
+            method: 'POST'
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            showIAMToast(data.error || 'Revoke failed', true);
+            return;
+        }
+        showIAMToast('All user tokens revoked');
+        document.getElementById('revokeUserID').value = '';
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+    }
+}
+
+// ── OIDC / JWKS ──────────────────────────────────────────────────────────────
+
+async function loadOIDCInfo() {
+    try {
+        const [oidcResp, jwksResp] = await Promise.all([
+            fetch(IAM_API + '/.well-known/openid-configuration'),
+            fetch(IAM_API + '/.well-known/jwks.json')
+        ]);
+        const oidcEl = document.getElementById('iamOIDCConfig');
+        const jwksEl = document.getElementById('iamJWKS');
+        if (oidcResp.ok) {
+            const data = await oidcResp.json();
+            if (oidcEl) oidcEl.textContent = JSON.stringify(data, null, 2);
+        } else {
+            if (oidcEl) oidcEl.textContent = 'Error: ' + oidcResp.status;
+        }
+        if (jwksResp.ok) {
+            const data = await jwksResp.json();
+            if (jwksEl) jwksEl.textContent = JSON.stringify(data, null, 2);
+        } else {
+            if (jwksEl) jwksEl.textContent = 'Error: ' + jwksResp.status;
+        }
+    } catch (err) {
+        const oidcEl = document.getElementById('iamOIDCConfig');
+        if (oidcEl) oidcEl.textContent = 'Connection error: ' + err.message;
+    }
+}
+
+// ── Initialisation ───────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Only run if we're on the IAM admin page
+    if (!document.getElementById('iam-dashboard')) return;
+
+    updateIAMLoginBanner();
+
+    if (iamToken) {
+        loadIAMDashboard();
+    }
+});

@@ -21,6 +21,7 @@ import (
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
+	iampkg "example.com/axiomnizam/internal/iam"
 	"example.com/axiomnizam/internal/integration"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
@@ -122,6 +123,19 @@ func main() {
 
 	// Create tables
 	createTables(conns)
+
+	// ====================================
+	// IAM SYSTEM INITIALIZATION
+	// ====================================
+	iamSystem, iamErr := iampkg.NewSystem(conns.PostgreSQL, conns.Etcd, iampkg.Config{
+		IssuerURL: strings.TrimSpace(os.Getenv("IAM_ISSUER_URL")),
+	})
+	if iamErr != nil {
+		log.Printf("⚠️  IAM system initialization failed: %v", iamErr)
+		log.Println("⚠️  IAM endpoints will not be available. Ensure PostgreSQL and etcd are connected.")
+	} else {
+		log.Println("✅ IAM system initialized")
+	}
 
 	// Create Gin router
 	router := gin.Default()
@@ -1367,6 +1381,14 @@ func main() {
 			}
 			c.JSON(http.StatusOK, gin.H{"check": body.Check, "score": score})
 		})
+	}
+
+	// ====================================
+	// IAM ROUTES
+	// ====================================
+	if iamSystem != nil {
+		iamSystem.RegisterRoutes(router)
+		log.Println("✅ IAM routes registered")
 	}
 
 	apiPort := cfg.API.Port
