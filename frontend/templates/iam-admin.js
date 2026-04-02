@@ -12,6 +12,7 @@ const IAM_API = (() => {
 let iamToken = localStorage.getItem('iamToken') || '';
 let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
 let iamServiceAccessInfo = null;
+let iamLastGeneratedTokenResponse = null;
 
 function clearIAMSession() {
     iamToken = '';
@@ -301,6 +302,7 @@ function setTextById(id, val) {
 // ── Users CRUD ───────────────────────────────────────────────────────────────
 
 let iamUsersCache = [];
+let iamClientsCache = [];
 
 async function loadIAMUsers() {
     if (!iamToken) return;
@@ -447,6 +449,7 @@ async function loadIAMClients() {
         if (!resp.ok) { showIAMToast('Failed to load clients: ' + resp.status, true); return; }
         const data = await resp.json();
         const clients = Array.isArray(data) ? data : (data.clients || []);
+        iamClientsCache = clients;
         renderIAMClients(clients);
     } catch (err) {
         showIAMToast('Error loading clients: ' + err.message, true);
@@ -466,6 +469,8 @@ function renderIAMClients(clients) {
         const scopes = (c.scopes || []).join(', ') || '–';
         const serviceRoles = (c.service_roles || []).join(', ') || '–';
         const mode = c.public ? 'Public' : 'Confidential';
+        const hasClientCredentials = Array.isArray(c.grant_types) && c.grant_types.includes('client_credentials');
+        const canGenerateToken = hasClientCredentials && !c.public;
         return '<tr>' +
             '<td style="font-family:var(--font-mono);font-size:.85rem;">' + escapeHtml(c.id) + '</td>' +
             '<td>' + escapeHtml(c.name) + '<div style="font-size:.75rem;color:var(--text-muted);margin-top:4px;">' + escapeHtml(mode) + '</div></td>' +
@@ -474,6 +479,7 @@ function renderIAMClients(clients) {
             '<td>' + escapeHtml(scopes) + '</td>' +
             '<td>' + escapeHtml(serviceRoles) + '</td>' +
             '<td style="white-space:nowrap;">' +
+                (canGenerateToken ? '<button class="btn-sm btn-primary" onclick="showGenerateTokenModal(\'' + escapeHtml(c.id) + '\')">Generate Token</button> ' : '') +
                 '<button class="btn-sm btn-secondary" onclick="editClient(\'' + escapeHtml(c.id) + '\')">Edit</button> ' +
                 '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteClient(\'' + escapeHtml(c.id) + '\')">Delete</button>' +
             '</td></tr>';
@@ -582,6 +588,95 @@ async function copyClientCredentialsSnippet() {
     const snippet = document.getElementById('iamClientCredentialsSnippet').textContent;
     const ok = await copyToClipboard(snippet || '');
     showIAMToast(ok ? 'Request copied' : 'Copy failed', !ok);
+}
+
+function getClientByID(clientID) {
+    return iamClientsCache.find(c => c.id === clientID) || null;
+}
+
+function showGenerateTokenModal(clientID) {
+    const client = getClientByID(clientID);
+    if (!client) {
+        showIAMToast('Client not found. Refresh and try again.', true);
+        return;
+    }
+
+    if (client.public) {
+        showIAMToast('Public clients do not support client_credentials token generation.', true);
+        return;
+    }
+
+    if (!Array.isArray(client.grant_types) || !client.grant_types.includes('client_credentials')) {
+        showIAMToast('This client does not allow client_credentials grant.', true);
+        return;
+    }
+
+    setFieldText('iamGenerateTokenClientID', client.id || '');
+    setFieldText('iamGenerateTokenClientSecret', '');
+    setFieldText('iamGenerateTokenScope', (client.scopes || []).join(' '));
+    setFieldText('iamGenerateTokenEndpoint', getServiceTokenEndpoint());
+    setFieldText('iamGenerateTokenResponse', 'No token generated yet.');
+    iamLastGeneratedTokenResponse = null;
+
+    openIAMModal('iamGenerateTokenModal');
+}
+
+async function generateClientTestToken() {
+    const clientID = (document.getElementById('iamGenerateTokenClientID').value || '').trim();
+    const clientSecret = (document.getElementById('iamGenerateTokenClientSecret').value || '').trim();
+    const scope = (document.getElementById('iamGenerateTokenScope').value || '').trim();
+    const endpoint = (document.getElementById('iamGenerateTokenEndpoint').value || '').trim();
+
+    if (!clientID || !clientSecret || !endpoint) {
+        showIAMToast('Client ID, secret, and endpoint are required.', true);
+        return;
+    }
+
+    const form = new URLSearchParams();
+    form.set('grant_type', 'client_credentials');
+    form.set('client_id', clientID);
+    form.set('client_secret', clientSecret);
+    if (scope) form.set('scope', scope);
+
+    try {
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form.toString()
+        });
+
+        const raw = await resp.text();
+        let parsed = null;
+        try {
+            parsed = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+            parsed = { raw_response: raw };
+        }
+
+        iamLastGeneratedTokenResponse = parsed;
+        setFieldText('iamGenerateTokenResponse', JSON.stringify(parsed, null, 2));
+
+        if (!resp.ok) {
+            const message = parsed && parsed.error ? parsed.error : ('Token generation failed: ' + resp.status);
+            showIAMToast(message, true);
+            return;
+        }
+
+        showIAMToast('Test token generated');
+    } catch (err) {
+        setFieldText('iamGenerateTokenResponse', 'Connection error: ' + err.message);
+        showIAMToast('Token request failed: ' + err.message, true);
+    }
+}
+
+async function copyGeneratedAccessToken() {
+    const token = iamLastGeneratedTokenResponse && iamLastGeneratedTokenResponse.access_token ? iamLastGeneratedTokenResponse.access_token : '';
+    if (!token) {
+        showIAMToast('No generated access token to copy.', true);
+        return;
+    }
+    const ok = await copyToClipboard(token);
+    showIAMToast(ok ? 'Access token copied' : 'Copy failed', !ok);
 }
 
 async function deleteClient(id) {

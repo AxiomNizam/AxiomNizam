@@ -432,6 +432,47 @@
     </div>
 </div>
 
+<!-- Generate Test Token Modal -->
+<div id="iamGenerateTokenModal" class="modal">
+    <div class="modal-content" style="max-width:760px;">
+        <div class="modal-header">
+            <h2>Generate Test Token</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamGenerateTokenModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--text-muted);margin-top:0;">Use this helper to generate a <code>client_credentials</code> access token for Postman onboarding.</p>
+            <div class="form-group">
+                <label for="iamGenerateTokenClientID">Client ID</label>
+                <input type="text" id="iamGenerateTokenClientID" class="form-control" readonly>
+            </div>
+            <div class="form-group">
+                <label for="iamGenerateTokenClientSecret">Client Secret *</label>
+                <input type="password" id="iamGenerateTokenClientSecret" class="form-control" placeholder="Paste client secret">
+            </div>
+            <div class="form-group">
+                <label for="iamGenerateTokenScope">Scope (optional, space separated)</label>
+                <input type="text" id="iamGenerateTokenScope" class="form-control" placeholder="openid profile email">
+            </div>
+            <div class="form-group">
+                <label for="iamGenerateTokenEndpoint">Token Endpoint</label>
+                <input type="text" id="iamGenerateTokenEndpoint" class="form-control" readonly>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamGenerateTokenModal')">Close</button>
+                <button class="btn-primary" onclick="generateClientTestToken()">Generate Token</button>
+            </div>
+            <div class="form-group" style="margin-top:16px;">
+                <div style="font-weight:600;margin-bottom:6px;">Token Response</div>
+                <pre id="iamGenerateTokenResponse" style="background:var(--darker-bg);padding:14px;border-radius:8px;overflow-x:auto;font-size:.82rem;color:var(--text-secondary);margin:0;">No token generated yet.</pre>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn-secondary" onclick="copyGeneratedAccessToken()">Copy Access Token</button>
+                <button class="btn-secondary" onclick="copyTextFromElement('iamGenerateTokenResponse')">Copy Full Response</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Create/Edit Role Modal -->
 <div id="iamRoleModal" class="modal">
     <div class="modal-content" style="max-width:600px;">
@@ -498,5 +539,5 @@
     </div>
 </div>
 
-<script src="/static/iam-admin.js?v=20260403"></script>
+<script src="/static/iam-admin.js?v=20260404"></script>
 {{ end }}
