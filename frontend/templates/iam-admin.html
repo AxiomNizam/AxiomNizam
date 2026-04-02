@@ -47,6 +47,19 @@
         </div>
     </div>
 
+    <!-- IAM Permission Banner (shown when authenticated but missing sysadmin rights) -->
+    <div id="iamPermissionBanner" class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--danger-color);display:none;">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:220px;">
+                <h4 style="margin:0 0 6px 0;color:var(--danger-color);">⛔ IAM Sysadmin Access Required</h4>
+                <p id="iamPermissionBannerMessage" style="margin:0;color:var(--text-muted);font-size:.9rem;">Current IAM session cannot access admin data. Log in with a sysadmin IAM account.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <button class="btn-secondary" onclick="iamLogout()">Sign out IAM session</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Tabs -->
     <div class="tab-navigation">
         <button class="tab-btn active" onclick="switchIAMTab('iam-dashboard')">

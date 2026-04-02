@@ -14,12 +14,15 @@ let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
 let iamServiceAccessInfo = null;
 let iamLastGeneratedTokenResponse = null;
 let iamSelectedRealm = '';
+let iamPermissionHintShown = false;
 
 function clearIAMSession() {
     iamToken = '';
     iamRefreshToken = '';
     localStorage.removeItem('iamToken');
     localStorage.removeItem('iamRefreshToken');
+    iamPermissionHintShown = false;
+    updateIAMPermissionBanner(false, '');
     updateIAMLoginBanner();
 }
 
@@ -256,10 +259,36 @@ function updateIAMLoginBanner() {
     if (banner) banner.style.display = iamToken ? 'none' : 'block';
 }
 
+function updateIAMPermissionBanner(show, message) {
+    const banner = document.getElementById('iamPermissionBanner');
+    const text = document.getElementById('iamPermissionBannerMessage');
+    if (text && message) {
+        text.textContent = message;
+    }
+    if (banner) {
+        banner.style.display = show ? 'block' : 'none';
+    }
+}
+
+function setIAMSystemStatus(text, color) {
+    const el = document.getElementById('iamStatSystem');
+    if (!el) return;
+    el.textContent = text;
+    if (color) el.style.color = color;
+}
+
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
 async function loadIAMDashboard() {
-    if (!iamToken) { updateIAMLoginBanner(); return; }
+    if (!iamToken) {
+        updateIAMPermissionBanner(false, '');
+        updateIAMLoginBanner();
+        setIAMSystemStatus('Auth Required', 'var(--warning-color)');
+        return;
+    }
+
+    updateIAMPermissionBanner(false, '');
+    setIAMSystemStatus('Checking', 'var(--text-muted)');
 
     // WhoAmI
     try {
@@ -270,8 +299,20 @@ async function loadIAMDashboard() {
             if (whoami) whoami.textContent = JSON.stringify(data, null, 2);
         } else {
             if (whoami) whoami.textContent = 'Error: ' + resp.status;
+            if (resp.status === 401) {
+                setIAMSystemStatus('Auth Required', 'var(--warning-color)');
+            }
         }
-    } catch (_) {}
+    } catch (err) {
+        const whoami = document.getElementById('iamWhoAmI');
+        if (whoami) whoami.textContent = 'Connection error: ' + err.message;
+        setIAMSystemStatus('Connection Error', 'var(--danger-color)');
+        if (!iamPermissionHintShown) {
+            showIAMToast('Cannot reach IAM backend. Check backend URL/network.', true);
+            iamPermissionHintShown = true;
+        }
+        return;
+    }
 
     // Counts
     try {
@@ -298,7 +339,26 @@ async function loadIAMDashboard() {
             setTextById('dashRoleCount', count);
             setTextById('iamStatRoles', count);
         }
-    } catch (_) {}
+
+        if (uResp.status === 403 || cResp.status === 403 || rResp.status === 403) {
+            setIAMSystemStatus('Access Denied', 'var(--danger-color)');
+            updateIAMPermissionBanner(true, 'Your IAM token is valid but not sysadmin. Login with IAM sysadmin to view admin data.');
+            if (!iamPermissionHintShown) {
+                showIAMToast('IAM session is not sysadmin. Admin data is restricted.', true);
+                iamPermissionHintShown = true;
+            }
+            return;
+        }
+
+        setIAMSystemStatus('Active', 'var(--primary-color)');
+        iamPermissionHintShown = false;
+    } catch (err) {
+        setIAMSystemStatus('Connection Error', 'var(--danger-color)');
+        if (!iamPermissionHintShown) {
+            showIAMToast('Failed to load IAM dashboard data: ' + err.message, true);
+            iamPermissionHintShown = true;
+        }
+    }
 }
 
 function setTextById(id, val) {
@@ -315,7 +375,13 @@ async function loadIAMUsers() {
     if (!iamToken) return;
     try {
         const resp = await iamFetch('/iam/admin/users');
-        if (!resp.ok) { showIAMToast('Failed to load users: ' + resp.status, true); return; }
+        if (!resp.ok) {
+            if (resp.status === 403) {
+                updateIAMPermissionBanner(true, 'Your IAM session does not have sysadmin privileges to list users.');
+            }
+            showIAMToast('Failed to load users: ' + resp.status, true);
+            return;
+        }
         const data = await resp.json();
         iamUsersCache = Array.isArray(data) ? data : (data.users || []);
         renderIAMUsers(iamUsersCache);
@@ -456,7 +522,13 @@ async function loadIAMClients() {
     if (!iamToken) return;
     try {
         const resp = await iamFetch('/iam/admin/clients');
-        if (!resp.ok) { showIAMToast('Failed to load clients: ' + resp.status, true); return; }
+        if (!resp.ok) {
+            if (resp.status === 403) {
+                updateIAMPermissionBanner(true, 'Your IAM session does not have sysadmin privileges to list OAuth clients.');
+            }
+            showIAMToast('Failed to load clients: ' + resp.status, true);
+            return;
+        }
         const data = await resp.json();
         const clients = Array.isArray(data) ? data : (data.clients || []);
         iamClientsCache = clients;
@@ -1054,6 +1126,7 @@ async function loadServiceAccessInfo(realmOverride) {
         setFieldText('iamServiceGrantTypes', 'IAM login required');
         if (realmInput) realmInput.value = '';
         if (rawEl) rawEl.textContent = 'IAM login required';
+        updateIAMPermissionBanner(false, '');
         return;
     }
 
@@ -1063,6 +1136,9 @@ async function loadServiceAccessInfo(realmOverride) {
             : '/iam/admin/service-access-info';
         const resp = await iamFetch(path);
         if (!resp.ok) {
+            if (resp.status === 403) {
+                updateIAMPermissionBanner(true, 'Your IAM session does not have sysadmin privileges to view service access metadata.');
+            }
             const text = 'Failed to load service access info: ' + resp.status;
             if (rawEl) rawEl.textContent = text;
             setFieldText('iamServiceTokenEndpoint', text);
