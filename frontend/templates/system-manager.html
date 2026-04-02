@@ -7,6 +7,19 @@
             <h1>System Manager</h1>
             <p class="subtitle">System Monitoring & Control Center</p>
         </div>
+
+        <div id="tokenCopyShortcut" style="display:none;align-self:center;min-width:120px;">
+            <button
+                id="copyApiTokenBtn"
+                class="btn-secondary"
+                type="button"
+                onclick="copyAuthTokenForPostman()"
+                style="padding:8px 12px;white-space:nowrap;"
+            >
+                Copy Token
+            </button>
+            <div id="copyTokenStatus" style="margin-top:6px;font-size:0.75em;color:var(--text-secondary,#94a3b8);text-align:center;">Ready</div>
+        </div>
         
         <div class="header-stats" id="sysManagerHeaderStats">
             <div class="stat-box">
@@ -615,7 +628,7 @@
 }
 </style>
 
-<script src="/static/system-manager.js?v=20260403"></script>
+<script src="/static/system-manager.js?v=20260404"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP

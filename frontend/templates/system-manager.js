@@ -22,6 +22,113 @@ console.log('System Manager - Backend URL:', BACKEND_URL);
 
 var availableDbServers = [];
 
+function normalizeSystemManagerRole(role) {
+    var value = String(role || '').toLowerCase().trim();
+    if (!value) return '';
+    if (value === 'sysadmin' || value === 'system-admin' || value === 'system_admin') return 'system-manager';
+    if (value === 'superadmin' || value === 'super-admin') return 'admin';
+    if (value === 'api-manager' || value === 'api_manager') return 'manager';
+    return value;
+}
+
+function readSystemManagerCookie(name) {
+    var prefix = name + '=';
+    var parts = document.cookie.split(';');
+    for (var i = 0; i < parts.length; i++) {
+        var item = parts[i].trim();
+        if (item.indexOf(prefix) === 0) {
+            return decodeURIComponent(item.substring(prefix.length));
+        }
+    }
+    return '';
+}
+
+function getLatestAuthTokenForCopy() {
+    return localStorage.getItem('authToken') || readSystemManagerCookie('authToken') || '';
+}
+
+function canShowTokenCopyShortcut() {
+    var role = normalizeSystemManagerRole(localStorage.getItem('userRole') || readSystemManagerCookie('userRole') || '');
+    return role === 'admin' || role === 'system-manager';
+}
+
+function setTokenCopyStatus(message, color) {
+    var el = document.getElementById('copyTokenStatus');
+    if (!el) return;
+    el.textContent = message;
+    if (color) {
+        el.style.color = color;
+    }
+}
+
+function setupTokenCopyShortcut() {
+    var container = document.getElementById('tokenCopyShortcut');
+    if (!container) return;
+
+    if (!canShowTokenCopyShortcut()) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    setTokenCopyStatus('Ready', 'var(--text-secondary,#94a3b8)');
+}
+
+function fallbackCopyToken(token, onSuccess, onError) {
+    try {
+        var textArea = document.createElement('textarea');
+        textArea.value = token;
+        textArea.setAttribute('readonly', 'readonly');
+        textArea.style.position = 'fixed';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        var copied = document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        if (copied) {
+            onSuccess();
+            return;
+        }
+        onError();
+    } catch (_) {
+        onError();
+    }
+}
+
+function copyAuthTokenForPostman() {
+    var token = getLatestAuthTokenForCopy();
+    if (!token) {
+        setTokenCopyStatus('No token found', '#ef4444');
+        return;
+    }
+
+    var success = function() {
+        setTokenCopyStatus('Copied', '#10b981');
+        addOperationLog('API token copied for Postman', 'info');
+        setTimeout(function() {
+            setTokenCopyStatus('Ready', 'var(--text-secondary,#94a3b8)');
+        }, 2500);
+    };
+
+    var failure = function() {
+        setTokenCopyStatus('Copy failed', '#ef4444');
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(token)
+            .then(success)
+            .catch(function() {
+                fallbackCopyToken(token, success, failure);
+            });
+        return;
+    }
+
+    fallbackCopyToken(token, success, failure);
+}
+
 window.addEventListener('DOMContentLoaded', function() {
     // Set user name from localStorage
     const userName = localStorage.getItem('userName');
@@ -31,6 +138,7 @@ window.addEventListener('DOMContentLoaded', function() {
             userNameElem.textContent = userName;
         }
     }
+    setupTokenCopyShortcut();
     loadStatusData();
     loadDatabases();
     loadDatabaseServers();
