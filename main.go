@@ -299,7 +299,31 @@ func main() {
 			return false
 		}
 
+		claims, err := activeTokenValidator.ValidateToken(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
+			c.Abort()
+			return false
+		}
+
+		principal := strings.TrimSpace(claims.PreferredUsername)
+		if principal == "" {
+			principal = strings.TrimSpace(claims.Email)
+		}
+		if principal == "" {
+			principal = strings.TrimSpace(claims.Sub)
+		}
+		if principal == "" {
+			principal = "token-user"
+		}
+
 		allowed, callsRemaining, expiresAt, limitErr := rateLimiter.CheckRateLimit(token)
+		if !allowed && limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
+			// Accept valid IAM/JWT tokens even if they were not issued through /auth/login.
+			rateLimiter.RegisterToken(token, principal)
+			allowed, callsRemaining, expiresAt, limitErr = rateLimiter.CheckRateLimit(token)
+		}
+
 		if !allowed {
 			if limitErr != nil && limitErr.Error() == "token expired" {
 				c.JSON(http.StatusUnauthorized, gin.H{
@@ -307,8 +331,6 @@ func main() {
 					"message":    "your token is no longer valid. please login again to get a new token",
 					"expired_at": expiresAt.Format("2006-01-02 15:04:05"),
 				})
-			} else if limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or unregistered token"})
 			} else {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error":           "api call limit exceeded",
@@ -323,19 +345,12 @@ func main() {
 			return false
 		}
 
-		claims, err := activeTokenValidator.ValidateToken(token)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
-			c.Abort()
-			return false
-		}
-
 		if err := rateLimiter.IncrementCallCount(token); err != nil {
 			log.Printf("⚠️  Failed to increment call count: %v", err)
 		}
 
 		c.Set("user", claims)
-		c.Set("username", claims.PreferredUsername)
+		c.Set("username", principal)
 		c.Set("email", claims.Email)
 		c.Set("roles", claims.RolesList())
 		c.Set("calls_remaining", callsRemaining)
@@ -346,7 +361,7 @@ func main() {
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
-		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", claims.PreferredUsername, callsRemaining)
+		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", principal, callsRemaining)
 		return true
 	}
 
