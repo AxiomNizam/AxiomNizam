@@ -1227,6 +1227,22 @@ function initIAMAdminPage() {
     // Only run if we're on the IAM admin page
     if (!document.getElementById('iam-dashboard')) return;
 
+    // Reuse platform session token if IAM-specific token is not set yet.
+    if (!iamToken) {
+        const sharedToken = localStorage.getItem('authToken') || '';
+        if (sharedToken) {
+            iamToken = sharedToken;
+            localStorage.setItem('iamToken', iamToken);
+        }
+    }
+    if (!iamRefreshToken) {
+        const sharedRefresh = localStorage.getItem('refreshToken') || '';
+        if (sharedRefresh) {
+            iamRefreshToken = sharedRefresh;
+            localStorage.setItem('iamRefreshToken', iamRefreshToken);
+        }
+    }
+
     updateIAMLoginBanner();
     loadIAMDashboard();
     loadServiceAccessInfo();
