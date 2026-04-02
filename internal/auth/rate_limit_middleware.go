@@ -149,7 +149,7 @@ func CombinedAuthMiddleware(validator *TokenValidator, limiter *RateLimiter) gin
 		c.Set("user", claims)
 		c.Set("username", claims.PreferredUsername)
 		c.Set("email", claims.Email)
-		c.Set("roles", claims.RealmAccess.Roles)
+		c.Set("roles", claims.collectRoles())
 		c.Set("calls_remaining", callsRemaining)
 		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
 		c.Set("token", token)

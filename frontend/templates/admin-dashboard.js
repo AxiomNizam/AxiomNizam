@@ -1,8 +1,9 @@
 let authToken = null;
 let userName = null;
-const keycloakURL = 'http://localhost:8080';
-const keycloakRealm = 'master';
-const keycloakClient = 'axiomnizam';
+const IAM_API_BASE = (() => {
+    const fromWindow = window.BACKEND_URL || 'http://localhost:8000';
+    return fromWindow.endsWith('/') ? fromWindow.slice(0, -1) : fromWindow;
+})();
 
 // Check if user is already logged in
 window.addEventListener('DOMContentLoaded', function() {
@@ -32,32 +33,30 @@ function showDashboard() {
     document.getElementById('userName').textContent = userName || 'Admin';
 }
 
-function initiateKeycloakLogin() {
+function initiateIAMLogin() {
     // For demo, show a simple username/password prompt
-    // In production, you would redirect to Keycloak login page
+    // In production, you would use a dedicated IAM login form
     const username = prompt('Enter username (admin):');
     if (username) {
         const password = prompt('Enter password (admin):');
         if (password) {
-            loginWithKeycloak(username, password);
+            loginWithIAM(username, password);
         }
     }
 }
 
-function loginWithKeycloak(username, password) {
-    const body = new URLSearchParams();
-    body.append('client_id', keycloakClient);
-    body.append('client_secret', 'uzqxRJUEI44gpURiytWtCujKwQ1ESZrv');
-    body.append('grant_type', 'password');
-    body.append('username', username);
-    body.append('password', password);
+function loginWithIAM(username, password) {
+    const body = {
+        email: username,
+        password: password
+    };
 
-    fetch(keycloakURL + '/realms/' + keycloakRealm + '/protocol/openid-connect/token', {
+    fetch(IAM_API_BASE + '/iam/auth/login', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
         },
-        body: body
+        body: JSON.stringify(body)
     })
     .then(function(response) {
         if (!response.ok) throw new Error('Login failed');
@@ -65,7 +64,7 @@ function loginWithKeycloak(username, password) {
     })
     .then(function(data) {
         authToken = data.access_token;
-        userName = username;
+        userName = (data.user && data.user.display_name) || (data.user && data.user.email) || username;
         localStorage.setItem('authToken', authToken);
         localStorage.setItem('userName', userName);
         showDashboard();

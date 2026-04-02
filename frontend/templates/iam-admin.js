@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// IAM Admin Console — JavaScript (Keycloak-equivalent admin UI)
+// IAM Admin Console — JavaScript
 // ─────────────────────────────────────────────────────────────────────────────
 
 const IAM_API = (() => {

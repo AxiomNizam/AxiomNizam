@@ -140,7 +140,7 @@ function handleLogin(event) {
     const loginURL = AUTH_CONFIG.apiURL + AUTH_CONFIG.loginEndpoint;
     console.log('🔐 Attempting login to:', loginURL);
 
-    // Send credentials to backend API (which handles Keycloak auth securely)
+    // Send credentials to backend API (which proxies IAM auth securely)
     fetch(loginURL, {
         method: 'POST',
         headers: {
@@ -176,8 +176,7 @@ function handleLogin(event) {
         let userRole = normalizeRole(serverRole || extractUserRole(authToken));
 
         // Safety net: map known demo usernames to their expected roles when the
-        // server role is missing or fell back to generic 'user' (e.g. Keycloak
-        // intercepted a demo-username login without the matching realm role).
+        // server role is missing or fell back to generic 'user'.
         const knownRoles = { 'sysadmin': 'system-manager', 'admin': 'admin', 'manager': 'manager' };
         if ((!serverRole || userRole === 'user') && knownRoles[data.username]) {
             userRole = knownRoles[data.username];
@@ -206,7 +205,7 @@ function handleLogin(event) {
         console.error('❌ Login error:', error);
         loginBtn.disabled = false;
         loginBtn.textContent = originalText;
-        alert('Login failed: ' + error.message + '\n\nDemo: Use admin/admin');
+        alert('Login failed: ' + error.message);
     });
 }
 
@@ -239,7 +238,25 @@ function extractUserRole(token) {
         
         console.log('🔐 Full token payload:', JSON.stringify(decoded, null, 2));
         
-        // Check for realm roles (most common in Keycloak)
+        // Check for IAM top-level roles first.
+        if (Array.isArray(decoded.roles)) {
+            const directRoles = decoded.roles;
+            console.log('📋 IAM roles found:', directRoles);
+            for (let i = 0; i < directRoles.length; i++) {
+                const role = String(directRoles[i] || '').toLowerCase();
+                if (role === 'system-manager' || role === 'system_manager' || role === 'system-admin' || role === 'sysadmin') {
+                    return 'system-manager';
+                }
+                if (role.includes('admin') && !role.includes('account')) {
+                    return 'admin';
+                }
+                if (role === 'manager' || role === 'api-manager' || role === 'api_manager') {
+                    return 'manager';
+                }
+            }
+        }
+
+        // Check realm roles for legacy compatibility.
         if (decoded.realm_access && decoded.realm_access.roles) {
             const roles = decoded.realm_access.roles;
             console.log('📋 Realm roles found:', roles);

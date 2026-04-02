@@ -17,7 +17,6 @@ services:
       IAM_ISSUER_URL: ${IAM_ISSUER_URL:-http://localhost:8000}
     depends_on:
       # - valkey
-      - keycloak
       - etcd
       # - mysql
       # - mariadb
@@ -42,10 +41,7 @@ services:
     environment:
       BACKEND_URL: ${PUBLIC_PLATFORM_URL:-http://localhost:8000}
       FRONTEND_PORT: ${FRONTEND_PORT:-7000}
-      KEYCLOAK_URL: ${PUBLIC_IDP_URL:-http://localhost:8080}
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-axiomnizam}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-axiomnizam-frontend}
-      KEYCLOAK_REDIRECT_URI: ${KEYCLOAK_FRONTEND_REDIRECT_URI:-http://localhost:7000/callback}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-http://localhost:8000}
     depends_on:
       - axiomnizam
     networks:
@@ -142,41 +138,6 @@ services:
     volumes:
       - valkey-data:/data
     command: valkey-server --appendonly yes --dir /data
-
-  # Keycloak with PostgreSQL backend
-  keycloak:
-    image: quay.io/keycloak/keycloak:latest
-    container_name: keycloak
-    ports:
-      - "8080:8080"
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-change-this-password}
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: postgres
-      KC_HTTP_ENABLED: ${KC_HTTP_ENABLED:-true}
-      KC_HTTP_RELATIVE_PATH: ${KC_HTTP_RELATIVE_PATH:-/}
-      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN:-http://localhost:8080}
-      KC_HOSTNAME: ${KC_HOSTNAME:-http://localhost:8080}
-      KC_PROXY_HEADERS: xforwarded
-      KC_HOSTNAME_STRICT: "false"
-      KC_HEALTH_ENABLED: "true"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-network
-    command: start-dev
-    volumes:
-      - keycloak-data:/opt/keycloak/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
 
   # etcd
   etcd:
@@ -408,7 +369,6 @@ volumes:
   elasticsearch-data:
   firebase-data:
   oracle-data:
-  keycloak-data:
   valkey-data:
   etcd-data:
   clamav-data:

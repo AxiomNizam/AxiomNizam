@@ -648,7 +648,7 @@ func (pe *ParserEngine) seedEntries() {
 
 		// DNS
 		if i%2 == 0 {
-			domains := []string{"api.axiomnizam.io", "cdn.example.com", "db.internal", "auth.keycloak.local", "grafana.monitoring", "suspicious-domain.xyz"}
+			domains := []string{"api.axiomnizam.io", "cdn.example.com", "db.internal", "auth.iam.local", "grafana.monitoring", "suspicious-domain.xyz"}
 			pe.entries = append(pe.entries, ParsedEntry{
 				ID: fmt.Sprintf("e-dns-%d", i), Timestamp: ts, LogType: LogDNS,
 				Source: "dns-resolver-1", Severity: "info",

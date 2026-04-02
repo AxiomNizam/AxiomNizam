@@ -74,17 +74,20 @@ func main() {
 	cfg := config.LoadConfig()
 	applySecurityGuardrails(cfg)
 
-	// Initialize Keycloak token validator
-	keycloakConfig := &auth.KeycloakConfig{
-		ServerURL: cfg.GetKeycloakURL(),
-		Realm:     cfg.Keycloak.Realm,
-		ClientID:  cfg.Keycloak.ClientID,
+	// Initialize IAM token validator
+	iamIssuerURL := strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
+	if iamIssuerURL == "" {
+		iamIssuerURL = cfg.GetIAMURL()
+	}
+	iamAuthConfig := &auth.TokenValidatorConfig{
+		IssuerURL: iamIssuerURL,
+		JWKSURL:   strings.TrimRight(iamIssuerURL, "/") + "/.well-known/jwks.json",
 	}
 	var tokenValidatorMu sync.RWMutex
-	tokenValidator, err := auth.NewTokenValidator(keycloakConfig)
+	tokenValidator, err := auth.NewTokenValidator(iamAuthConfig)
 	if err != nil {
-		log.Printf("⚠️  Keycloak initialization failed at startup: %v", err)
-		log.Printf("⚠️  Auth-protected APIs will return 503 until Keycloak becomes reachable")
+		log.Printf("⚠️  IAM token validator initialization failed at startup: %v", err)
+		log.Printf("⚠️  Auth-protected APIs will return 503 until IAM JWKS becomes reachable")
 		tokenValidator = nil
 	}
 
@@ -102,14 +105,14 @@ func main() {
 			return tokenValidator
 		}
 
-		initializedValidator, initErr := auth.NewTokenValidator(keycloakConfig)
+		initializedValidator, initErr := auth.NewTokenValidator(iamAuthConfig)
 		if initErr != nil {
-			log.Printf("⚠️  Keycloak still unavailable: %v", initErr)
+			log.Printf("⚠️  IAM token validator still unavailable: %v", initErr)
 			return nil
 		}
 
 		tokenValidator = initializedValidator
-		log.Printf("✅ Keycloak token validator initialized after startup")
+		log.Printf("✅ IAM token validator initialized after startup")
 		return tokenValidator
 	}
 
@@ -271,7 +274,7 @@ func main() {
 		if activeTokenValidator == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "authentication unavailable",
-				"message": "token validation is not available because keycloak initialization failed",
+				"message": "token validation is not available because IAM token validator initialization failed",
 			})
 			c.Abort()
 			return false
@@ -329,7 +332,7 @@ func main() {
 		c.Set("user", claims)
 		c.Set("username", claims.PreferredUsername)
 		c.Set("email", claims.Email)
-		c.Set("roles", claims.RealmAccess.Roles)
+		c.Set("roles", claims.RolesList())
 		c.Set("calls_remaining", callsRemaining)
 		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
 		c.Set("token", token)
@@ -1593,8 +1596,8 @@ func applySecurityGuardrails(cfg *config.Config) {
 		return false
 	}
 
-	if isDefault(cfg.Keycloak.ClientSecret, "", "change-me", "changeme", "default", "keycloak-secret") {
-		addBlocking("KEYCLOAK_CLIENT_SECRET is empty or default-like")
+	if isDefault(cfg.IAM.SysadminPassword, "", "change-me", "changeme", "default", "password", "admin") {
+		addBlocking("IAM_SYSADMIN_PASSWORD is empty or default-like")
 	}
 	if strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")) == "" {
 		addBlocking("DEMO_JWT_SECRET is not set")

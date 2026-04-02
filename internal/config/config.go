@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -22,7 +23,7 @@ type Config struct {
 	Valkey        ValKeyConfig
 	Elasticsearch ElasticsearchConfig
 	Etcd          EtcdConfig
-	Keycloak      KeycloakConfig
+	IAM           IAMConfig
 	Discord       DiscordConfig
 	RateLimiting  RateLimitingConfig
 }
@@ -59,12 +60,12 @@ type EtcdConfig struct {
 	Port string
 }
 
-type KeycloakConfig struct {
-	Host         string
-	Port         string
-	Realm        string
-	ClientID     string
-	ClientSecret string
+type IAMConfig struct {
+	IssuerURL        string
+	Host             string
+	Port             string
+	SysadminEmail    string
+	SysadminPassword string
 }
 
 type DiscordConfig struct {
@@ -167,12 +168,12 @@ func LoadConfig() *Config {
 			Host: getEnv("ETCD_HOST", "localhost"),
 			Port: getEnv("ETCD_PORT", "2379"),
 		},
-		Keycloak: KeycloakConfig{
-			Host:         getEnv("KEYCLOAK_HOST", "keycloak"),
-			Port:         getEnv("KEYCLOAK_PORT", "8080"),
-			Realm:        getEnv("KEYCLOAK_REALM", "master"),
-			ClientID:     getEnv("KEYCLOAK_CLIENT_ID", "axiomnizam"),
-			ClientSecret: getEnv("KEYCLOAK_CLIENT_SECRET", ""),
+		IAM: IAMConfig{
+			IssuerURL:        getEnv("IAM_ISSUER_URL", "http://localhost:8000"),
+			Host:             getEnv("IAM_HOST", getEnv("API_HOST", "localhost")),
+			Port:             getEnv("IAM_PORT", getEnv("API_PORT", "8000")),
+			SysadminEmail:    getEnv("IAM_SYSADMIN_EMAIL", ""),
+			SysadminPassword: getEnv("IAM_SYSADMIN_PASSWORD", ""),
 		},
 		Discord: DiscordConfig{
 			WebhookURL: getEnv("DISCORD_WEBHOOK_URL", ""),
@@ -260,9 +261,15 @@ func (c *Config) GetEtcdEndpoint() string {
 	return fmt.Sprintf("%s:%s", c.Etcd.Host, c.Etcd.Port)
 }
 
-// GetKeycloakURL returns Keycloak URL
-func (c *Config) GetKeycloakURL() string {
-	return fmt.Sprintf("http://%s:%s", c.Keycloak.Host, c.Keycloak.Port)
+// GetIAMURL returns IAM issuer/public URL.
+func (c *Config) GetIAMURL() string {
+	if c == nil {
+		return "http://localhost:8000"
+	}
+	if strings.TrimSpace(c.IAM.IssuerURL) != "" {
+		return strings.TrimSpace(c.IAM.IssuerURL)
+	}
+	return fmt.Sprintf("http://%s:%s", c.IAM.Host, c.IAM.Port)
 }
 
 // GetValkeyAddr returns Valkey address
