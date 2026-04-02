@@ -257,6 +257,8 @@ func managerHandler(c *gin.Context) {
 
 // systemManagerHandler serves the system manager dashboard
 func systemManagerHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
 	// Check authentication
 	authToken := c.GetHeader("Authorization")
 	if authToken == "" {
@@ -433,6 +435,8 @@ func gisHandler(c *gin.Context) {
 
 // iamAdminHandler serves the IAM admin console
 func iamAdminHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
 	authToken := c.GetHeader("Authorization")
 	if authToken == "" {
 		authToken, _ = c.Cookie("authToken")

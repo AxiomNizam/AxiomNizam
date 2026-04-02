@@ -40,7 +40,7 @@
                 <p style="margin:0;color:var(--text-muted);font-size:.9rem;">Log in with your IAM sysadmin credentials to manage users, clients, and roles.</p>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                <input type="email" id="iamLoginEmail" placeholder="sysadmin@example.com" class="form-control" style="width:220px;">
+                <input type="text" id="iamLoginEmail" placeholder="sysadmin or user@example.com" class="form-control" style="width:220px;">
                 <input type="password" id="iamLoginPassword" placeholder="Password" class="form-control" style="width:180px;">
                 <button class="btn-primary" onclick="iamLogin()">Login to IAM</button>
             </div>
@@ -438,5 +438,5 @@
     </div>
 </div>
 
-<script src="/static/iam-admin.js?v=20260318"></script>
+<script src="/static/iam-admin.js?v=20260402"></script>
 {{ end }}

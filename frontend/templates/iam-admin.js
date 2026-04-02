@@ -12,6 +12,14 @@ const IAM_API = (() => {
 let iamToken = localStorage.getItem('iamToken') || '';
 let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
 
+function clearIAMSession() {
+    iamToken = '';
+    iamRefreshToken = '';
+    localStorage.removeItem('iamToken');
+    localStorage.removeItem('iamRefreshToken');
+    updateIAMLoginBanner();
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function iamHeaders() {
@@ -23,14 +31,19 @@ function iamHeaders() {
 async function iamFetch(path, opts) {
     opts = opts || {};
     opts.headers = Object.assign(iamHeaders(), opts.headers || {});
-    const resp = await fetch(IAM_API + path, opts);
+    let resp = await fetch(IAM_API + path, opts);
     if (resp.status === 401 && iamRefreshToken) {
         const refreshed = await tryIAMRefresh();
         if (refreshed) {
             opts.headers['Authorization'] = 'Bearer ' + iamToken;
-            return fetch(IAM_API + path, opts);
+            resp = await fetch(IAM_API + path, opts);
         }
     }
+
+    if (resp.status === 401) {
+        clearIAMSession();
+    }
+
     return resp;
 }
 
@@ -41,14 +54,22 @@ async function tryIAMRefresh() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: iamRefreshToken })
         });
-        if (!resp.ok) return false;
+        if (!resp.ok) {
+            clearIAMSession();
+            return false;
+        }
         const data = await resp.json();
         iamToken = data.access_token || '';
+        if (!iamToken) {
+            clearIAMSession();
+            return false;
+        }
         iamRefreshToken = data.refresh_token || iamRefreshToken;
         localStorage.setItem('iamToken', iamToken);
         localStorage.setItem('iamRefreshToken', iamRefreshToken);
         return true;
     } catch (_) {
+        clearIAMSession();
         return false;
     }
 }
@@ -122,15 +143,15 @@ document.addEventListener('click', function(e) {
 // ── IAM Login ────────────────────────────────────────────────────────────────
 
 async function iamLogin() {
-    const email = document.getElementById('iamLoginEmail').value.trim();
+    const identifier = document.getElementById('iamLoginEmail').value.trim();
     const password = document.getElementById('iamLoginPassword').value;
-    if (!email || !password) { showIAMToast('Email and password required', true); return; }
+    if (!identifier || !password) { showIAMToast('Username/email and password required', true); return; }
 
     try {
         const resp = await fetch(IAM_API + '/iam/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, password: password })
+            body: JSON.stringify({ email: identifier, password: password })
         });
         const data = await resp.json();
         if (!resp.ok) {
