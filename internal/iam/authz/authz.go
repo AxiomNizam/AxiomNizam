@@ -211,6 +211,21 @@ func DefaultSystemRoles() []*Role {
 			},
 		},
 		{
+			ID:          "role-manager",
+			Name:        "manager",
+			Description: "Operations manager with limited access",
+			System:      true,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			Permissions: []Permission{
+				{Resource: "profile", Action: "read"},
+				{Resource: "profile", Action: "update"},
+				{Resource: "jobs", Action: "read"},
+				{Resource: "jobs", Action: "execute"},
+				{Resource: "datasources", Action: "read"},
+			},
+		},
+		{
 			ID:          "role-user",
 			Name:        "user",
 			Description: "Standard authenticated user",
