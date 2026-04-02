@@ -1,9 +1,11 @@
 package admin
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -145,6 +147,83 @@ func (h *Handler) setUserRoles(userID string, roleNames []string) error {
 	}
 
 	return nil
+}
+
+func containsGrantType(grantTypes []string, target string) bool {
+	t := strings.ToLower(strings.TrimSpace(target))
+	if t == "" {
+		return false
+	}
+	for _, grantType := range grantTypes {
+		if strings.ToLower(strings.TrimSpace(grantType)) == t {
+			return true
+		}
+	}
+	return false
+}
+
+func configuredRealm() string {
+	realm := strings.TrimSpace(os.Getenv("IAM_REALM"))
+	if realm == "" {
+		realm = "axiomnizam"
+	}
+	return strings.ToLower(realm)
+}
+
+func realmMatches(requested string) bool {
+	return strings.ToLower(strings.TrimSpace(requested)) == configuredRealm()
+}
+
+func (h *Handler) realmBaseURL(realm string) string {
+	base := strings.TrimRight(h.issuer.IssuerURL(), "/")
+	return base + "/realms/" + strings.ToLower(strings.TrimSpace(realm))
+}
+
+func extractClientCredentials(c *gin.Context, req *oauth.TokenRequest) (string, string, error) {
+	clientID := strings.TrimSpace(req.ClientID)
+	clientSecret := strings.TrimSpace(req.ClientSecret)
+
+	if clientID != "" && clientSecret != "" {
+		return clientID, clientSecret, nil
+	}
+
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+	if authHeader == "" || !strings.HasPrefix(strings.ToLower(authHeader), "basic ") {
+		if clientID == "" {
+			return "", "", fmt.Errorf("client_id is required")
+		}
+		if clientSecret == "" {
+			return "", "", fmt.Errorf("client_secret is required")
+		}
+		return clientID, clientSecret, nil
+	}
+
+	encoded := strings.TrimSpace(authHeader[6:])
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid basic authorization header")
+	}
+
+	parts := strings.SplitN(string(raw), ":", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid basic authorization header")
+	}
+
+	if clientID == "" {
+		clientID = strings.TrimSpace(parts[0])
+	}
+	if clientSecret == "" {
+		clientSecret = strings.TrimSpace(parts[1])
+	}
+
+	if clientID == "" {
+		return "", "", fmt.Errorf("client_id is required")
+	}
+	if clientSecret == "" {
+		return "", "", fmt.Errorf("client_secret is required")
+	}
+
+	return clientID, clientSecret, nil
 }
 
 // ═══════════════════════════════════════════════
@@ -477,9 +556,10 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 func (h *Handler) RegisterClient(c *gin.Context) {
 	var req struct {
 		Name         string   `json:"name" binding:"required"`
-		RedirectURIs []string `json:"redirect_uris" binding:"required"`
+		RedirectURIs []string `json:"redirect_uris"`
 		Scopes       []string `json:"scopes"`
 		GrantTypes   []string `json:"grant_types"`
+		ServiceRoles []string `json:"service_roles"`
 		Public       bool     `json:"public"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -488,10 +568,20 @@ func (h *Handler) RegisterClient(c *gin.Context) {
 	}
 
 	if len(req.GrantTypes) == 0 {
-		req.GrantTypes = []string{"authorization_code", "refresh_token"}
+		req.GrantTypes = []string{"authorization_code", "refresh_token", "client_credentials"}
+	}
+	if containsGrantType(req.GrantTypes, "authorization_code") && len(req.RedirectURIs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "redirect_uris are required when authorization_code grant is enabled"})
+		return
 	}
 	if len(req.Scopes) == 0 {
 		req.Scopes = []string{"openid", "profile", "email"}
+	}
+
+	serviceRoles := normalizeRoleNames(req.ServiceRoles)
+	if _, err := h.resolveRoleIDsByName(serviceRoles); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	secret := ""
@@ -513,6 +603,7 @@ func (h *Handler) RegisterClient(c *gin.Context) {
 		RedirectURIs: req.RedirectURIs,
 		Scopes:       req.Scopes,
 		GrantTypes:   req.GrantTypes,
+		ServiceRoles: serviceRoles,
 		Public:       req.Public,
 		CreatedAt:    time.Now().UTC(),
 		Active:       true,
@@ -530,6 +621,7 @@ func (h *Handler) RegisterClient(c *gin.Context) {
 		"redirect_uris": client.RedirectURIs,
 		"scopes":        client.Scopes,
 		"grant_types":   client.GrantTypes,
+		"service_roles": client.ServiceRoles,
 		"public":        client.Public,
 		"created_at":    client.CreatedAt,
 	}
@@ -557,6 +649,7 @@ func (h *Handler) ListClients(c *gin.Context) {
 			"redirect_uris": cl.RedirectURIs,
 			"scopes":        cl.Scopes,
 			"grant_types":   cl.GrantTypes,
+			"service_roles": cl.ServiceRoles,
 			"public":        cl.Public,
 			"active":        cl.Active,
 			"created_at":    cl.CreatedAt,
@@ -579,6 +672,7 @@ func (h *Handler) GetClient(c *gin.Context) {
 		"redirect_uris": client.RedirectURIs,
 		"scopes":        client.Scopes,
 		"grant_types":   client.GrantTypes,
+		"service_roles": client.ServiceRoles,
 		"public":        client.Public,
 		"active":        client.Active,
 		"created_at":    client.CreatedAt,
@@ -597,6 +691,8 @@ func (h *Handler) UpdateClient(c *gin.Context) {
 	var req struct {
 		RedirectURIs *[]string `json:"redirect_uris"`
 		Scopes       *[]string `json:"scopes"`
+		GrantTypes   *[]string `json:"grant_types"`
+		ServiceRoles *[]string `json:"service_roles"`
 		Active       *bool     `json:"active"`
 		Name         *string   `json:"name"`
 	}
@@ -610,6 +706,21 @@ func (h *Handler) UpdateClient(c *gin.Context) {
 	}
 	if req.Scopes != nil {
 		client.Scopes = *req.Scopes
+	}
+	if req.GrantTypes != nil {
+		client.GrantTypes = *req.GrantTypes
+	}
+	if containsGrantType(client.GrantTypes, "authorization_code") && len(client.RedirectURIs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "redirect_uris are required when authorization_code grant is enabled"})
+		return
+	}
+	if req.ServiceRoles != nil {
+		normalized := normalizeRoleNames(*req.ServiceRoles)
+		if _, err := h.resolveRoleIDsByName(normalized); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		client.ServiceRoles = normalized
 	}
 	if req.Active != nil {
 		client.Active = *req.Active
@@ -937,6 +1048,8 @@ func (h *Handler) Token(c *gin.Context) {
 		h.handleAuthorizationCodeGrant(c, &req)
 	case "refresh_token":
 		h.handleRefreshTokenGrant(c, &req)
+	case "client_credentials":
+		h.handleClientCredentialsGrant(c, &req)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported grant_type"})
 	}
@@ -945,6 +1058,11 @@ func (h *Handler) Token(c *gin.Context) {
 func (h *Handler) handleAuthorizationCodeGrant(c *gin.Context, req *oauth.TokenRequest) {
 	if h.codeRepo == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "code storage not initialised"})
+		return
+	}
+
+	if strings.TrimSpace(req.ClientID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
 		return
 	}
 
@@ -1020,6 +1138,11 @@ func (h *Handler) handleAuthorizationCodeGrant(c *gin.Context, req *oauth.TokenR
 }
 
 func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenRequest) {
+	if strings.TrimSpace(req.ClientID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
+		return
+	}
+
 	if req.RefreshToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token is required"})
 		return
@@ -1053,6 +1176,69 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 	c.JSON(http.StatusOK, pair)
 }
 
+func (h *Handler) handleClientCredentialsGrant(c *gin.Context, req *oauth.TokenRequest) {
+	clientID, clientSecret, err := extractClientCredentials(c, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	client, err := h.clients.GetClient(clientID)
+	if err != nil || client == nil || !client.Active {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unknown or inactive client"})
+		return
+	}
+
+	if !containsGrantType(client.GrantTypes, "client_credentials") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "client is not allowed to use client_credentials grant"})
+		return
+	}
+
+	if client.Public || strings.TrimSpace(client.Secret) == "" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "public clients cannot use client_credentials grant"})
+		return
+	}
+
+	if !identity.CheckPassword(clientSecret, client.Secret) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid client_secret"})
+		return
+	}
+
+	requestedScopes := oauth.ParseScopes(req.Scope)
+	if len(requestedScopes) > 0 {
+		if err := oauth.ValidateScopes(client.Scopes, requestedScopes); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		requestedScopes = client.Scopes
+	}
+
+	grantedScope := strings.Join(requestedScopes, " ")
+	serviceRoles := normalizeRoleNames(client.ServiceRoles)
+
+	accessToken, err := h.issuer.IssueAccessToken(
+		"service:"+client.ID,
+		"",
+		client.Name,
+		grantedScope,
+		client.ID,
+		"",
+		serviceRoles,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": accessToken.AccessToken,
+		"token_type":   accessToken.TokenType,
+		"expires_in":   accessToken.ExpiresIn,
+		"scope":        accessToken.Scope,
+	})
+}
+
 // ═══════════════════════════════════════════════
 // OIDC DISCOVERY
 // ═══════════════════════════════════════════════
@@ -1060,6 +1246,78 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 // OpenIDConfiguration returns the OIDC discovery document.
 func (h *Handler) OpenIDConfiguration(c *gin.Context) {
 	c.JSON(http.StatusOK, h.issuer.OpenIDConfiguration())
+}
+
+// OpenIDConfigurationRealm returns OIDC discovery in Keycloak-compatible realm path format.
+func (h *Handler) OpenIDConfigurationRealm(c *gin.Context) {
+	realm := strings.TrimSpace(c.Param("realm"))
+	if !realmMatches(realm) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+		return
+	}
+
+	realmBase := h.realmBaseURL(realm)
+	c.JSON(http.StatusOK, h.issuer.OpenIDConfigurationWithEndpoints(
+		realmBase,
+		realmBase+"/protocol/openid-connect/auth",
+		realmBase+"/protocol/openid-connect/token",
+		realmBase+"/protocol/openid-connect/certs",
+	))
+}
+
+// RealmToken provides a Keycloak-compatible token endpoint path.
+func (h *Handler) RealmToken(c *gin.Context) {
+	realm := strings.TrimSpace(c.Param("realm"))
+	if !realmMatches(realm) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+		return
+	}
+	h.Token(c)
+}
+
+// RealmAuthorize provides a Keycloak-compatible authorize endpoint path.
+func (h *Handler) RealmAuthorize(c *gin.Context) {
+	realm := strings.TrimSpace(c.Param("realm"))
+	if !realmMatches(realm) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+		return
+	}
+	h.Authorize(c)
+}
+
+// RealmJWKS returns Keycloak-compatible realm certs endpoint.
+func (h *Handler) RealmJWKS(c *gin.Context) {
+	realm := strings.TrimSpace(c.Param("realm"))
+	if !realmMatches(realm) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "realm not found"})
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.JSON(http.StatusOK, h.issuer.JWKS())
+}
+
+// ServiceAccessInfo returns shareable auth endpoints for external service integrations.
+func (h *Handler) ServiceAccessInfo(c *gin.Context) {
+	realm := configuredRealm()
+	base := strings.TrimRight(h.issuer.IssuerURL(), "/")
+	realmBase := h.realmBaseURL(realm)
+
+	c.JSON(http.StatusOK, gin.H{
+		"realm":  realm,
+		"issuer": realmBase,
+		"endpoints": gin.H{
+			"iam_openid_configuration":      base + "/.well-known/openid-configuration",
+			"iam_token":                     base + "/oauth/token",
+			"iam_authorize":                 base + "/oauth/authorize",
+			"iam_jwks":                      base + "/.well-known/jwks.json",
+			"keycloak_openid_configuration": realmBase + "/.well-known/openid-configuration",
+			"keycloak_token":                realmBase + "/protocol/openid-connect/token",
+			"keycloak_authorize":            realmBase + "/protocol/openid-connect/auth",
+			"keycloak_certs":                realmBase + "/protocol/openid-connect/certs",
+		},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
+		"token_endpoint_auth_methods_supported": []string{"client_secret_post", "client_secret_basic"},
+	})
 }
 
 // JWKS returns the JSON Web Key Set.

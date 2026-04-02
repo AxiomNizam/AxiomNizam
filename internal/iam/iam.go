@@ -155,6 +155,9 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 	// ── OIDC Discovery (public) ──
 	router.GET("/.well-known/openid-configuration", h.OpenIDConfiguration)
 	router.GET("/.well-known/jwks.json", h.JWKS)
+	router.GET("/realms/:realm/.well-known/openid-configuration", h.OpenIDConfigurationRealm)
+	router.POST("/realms/:realm/protocol/openid-connect/token", h.RealmToken)
+	router.GET("/realms/:realm/protocol/openid-connect/certs", h.RealmJWKS)
 
 	// ── Authentication (public) ──
 	router.POST("/iam/auth/login", h.Login)
@@ -169,6 +172,7 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 
 	// ── OAuth2 Endpoints (authenticated user initiates, public token endpoint) ──
 	router.GET("/oauth/authorize", iamAuth, h.Authorize)
+	router.GET("/realms/:realm/protocol/openid-connect/auth", iamAuth, h.RealmAuthorize)
 	router.POST("/oauth/token", h.Token)
 
 	// ── Sysadmin API (master-realm admin only) ──
@@ -188,6 +192,7 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 		adminAPI.POST("/clients", h.RegisterClient)
 		adminAPI.PUT("/clients/:id", h.UpdateClient)
 		adminAPI.DELETE("/clients/:id", h.DeleteClient)
+		adminAPI.GET("/service-access-info", h.ServiceAccessInfo)
 
 		// Roles
 		adminAPI.GET("/roles", h.ListRoles)

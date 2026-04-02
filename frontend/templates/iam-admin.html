@@ -27,7 +27,7 @@
         </div>
         <div class="header-right">
             <div class="branding-logo" style="display:flex;align-items:center;justify-content:center;">
-                <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height:180px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.2));transition:transform .3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height:180px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.2));transition:transform .3s ease;">
             </div>
         </div>
     </div>
@@ -147,6 +147,46 @@
 
     <!-- ===================== OAUTH CLIENTS TAB ===================== -->
     <div id="iam-clients" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--success-color);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                <h3 style="margin:0;">Service-to-Service Access (Keycloak Compatible)</h3>
+                <button class="btn-secondary" onclick="loadServiceAccessInfo()">↻ Refresh Access Info</button>
+            </div>
+            <p style="color:var(--text-muted);margin:10px 0 16px 0;">Share these endpoints with external services. They can use <code>client_credentials</code> to obtain API tokens without manual user token exchange.</p>
+            <div class="cp-grid-two" style="gap:12px;margin-bottom:12px;">
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Realm</div>
+                    <div id="iamServiceRealm" style="font-family:var(--font-mono);word-break:break-all;">Loading...</div>
+                </div>
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Realm Issuer</div>
+                    <div id="iamServiceIssuer" style="font-family:var(--font-mono);word-break:break-all;">Loading...</div>
+                </div>
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Token Endpoint</div>
+                    <div id="iamServiceTokenEndpoint" style="font-family:var(--font-mono);word-break:break-all;margin-bottom:8px;">Loading...</div>
+                    <button class="btn-secondary" onclick="copyTextFromElement('iamServiceTokenEndpoint')">Copy Token Endpoint</button>
+                </div>
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Discovery Endpoint</div>
+                    <div id="iamServiceDiscoveryEndpoint" style="font-family:var(--font-mono);word-break:break-all;margin-bottom:8px;">Loading...</div>
+                    <button class="btn-secondary" onclick="copyTextFromElement('iamServiceDiscoveryEndpoint')">Copy Discovery Endpoint</button>
+                </div>
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Certs / JWKS Endpoint</div>
+                    <div id="iamServiceCertsEndpoint" style="font-family:var(--font-mono);word-break:break-all;">Loading...</div>
+                </div>
+                <div class="cp-card" style="margin:0;background:var(--darker-bg);">
+                    <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px;">Supported Grant Types</div>
+                    <div id="iamServiceGrantTypes" style="font-family:var(--font-mono);word-break:break-all;">Loading...</div>
+                </div>
+            </div>
+            <details>
+                <summary style="cursor:pointer;color:var(--primary-color);font-weight:600;">View Raw Service Access Metadata</summary>
+                <pre id="iamServiceAccessJSON" style="margin-top:10px;background:var(--darker-bg);padding:16px;border-radius:8px;overflow-x:auto;font-size:.82rem;color:var(--text-secondary);">Loading...</pre>
+            </details>
+        </div>
+
         <div class="cp-card" style="margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
                 <h3 style="margin:0;">OAuth 2.0 Clients</h3>
@@ -164,11 +204,12 @@
                             <th>Grant Types</th>
                             <th>Redirect URIs</th>
                             <th>Scopes</th>
+                            <th>Service Roles</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="iamClientsBody">
-                        <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+                        <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -331,11 +372,18 @@
             </div>
             <div class="form-group">
                 <label for="iamClientGrantTypes">Grant Types (comma separated)</label>
-                <input type="text" id="iamClientGrantTypes" value="authorization_code,refresh_token" class="form-control">
+                <input type="text" id="iamClientGrantTypes" value="authorization_code,refresh_token,client_credentials" class="form-control">
             </div>
             <div class="form-group">
-                <label for="iamClientScopes">Allowed Scopes (comma separated)</label>
+                <label for="iamClientScopes">Scopes (comma separated)</label>
                 <input type="text" id="iamClientScopes" value="openid,profile,email" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="iamClientServiceRoles">Service Roles (comma separated, for client_credentials)</label>
+                <input type="text" id="iamClientServiceRoles" placeholder="user,admin" class="form-control">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="iamClientPublic"> Public client (no secret)</label>
             </div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
                 <button class="btn-secondary" onclick="closeIAMModal('iamClientModal')">Cancel</button>
@@ -355,15 +403,27 @@
         <div class="modal-body">
             <p style="color:var(--warning-color);font-weight:600;">⚠️ Copy the client secret now. It will not be shown again.</p>
             <div class="form-group">
-                <label>Client ID</label>
+                <label for="iamNewClientID">Client ID</label>
                 <input type="text" id="iamNewClientID" class="form-control" readonly>
             </div>
             <div class="form-group">
-                <label>Client Secret</label>
+                <label for="iamNewClientSecret">Client Secret</label>
                 <div style="display:flex;gap:8px;">
                     <input type="text" id="iamNewClientSecret" class="form-control" readonly style="flex:1;font-family:var(--font-mono);">
                     <button class="btn-primary" onclick="copyClientSecret()">Copy</button>
                 </div>
+            </div>
+            <div class="form-group">
+                <label for="iamClientTokenEndpoint">Client Credentials Token Endpoint</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="iamClientTokenEndpoint" class="form-control" readonly style="flex:1;font-family:var(--font-mono);">
+                    <button class="btn-secondary" onclick="copyTextFromElement('iamClientTokenEndpoint')">Copy</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <div style="font-weight:600;margin-bottom:6px;">Sample Client Credentials Request</div>
+                <pre id="iamClientCredentialsSnippet" style="background:var(--darker-bg);padding:14px;border-radius:8px;overflow-x:auto;font-size:.82rem;color:var(--text-secondary);margin:0 0 8px 0;">Loading...</pre>
+                <button class="btn-secondary" onclick="copyClientCredentialsSnippet()">Copy Request</button>
             </div>
             <div style="text-align:right;margin-top:16px;">
                 <button class="btn-primary" onclick="closeIAMModal('iamClientSecretModal')">Done</button>
@@ -390,7 +450,7 @@
                 <input type="text" id="iamRoleDescription" placeholder="Can edit resources" class="form-control">
             </div>
             <div class="form-group">
-                <label>Permissions (resource:action per line)</label>
+                <label for="iamRolePermissions">Permissions (resource:action per line)</label>
                 <textarea id="iamRolePermissions" rows="5" placeholder="users:read&#10;resources:write&#10;*:*" class="form-control" style="font-family:var(--font-mono);"></textarea>
             </div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
@@ -438,5 +498,5 @@
     </div>
 </div>
 
-<script src="/static/iam-admin.js?v=20260402"></script>
+<script src="/static/iam-admin.js?v=20260403"></script>
 {{ end }}

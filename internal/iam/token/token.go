@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,15 @@ type TokenPair struct {
 	ExpiresIn    int       `json:"expires_in"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	Scope        string    `json:"scope,omitempty"`
+}
+
+// AccessTokenResponse is used for client_credentials and other access-token-only flows.
+type AccessTokenResponse struct {
+	AccessToken string    `json:"access_token"`
+	TokenType   string    `json:"token_type"`
+	ExpiresIn   int       `json:"expires_in"`
+	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	Scope       string    `json:"scope,omitempty"`
 }
 
 // JWKSResponse is the /.well-known/jwks.json payload.
@@ -183,6 +193,47 @@ func (iss *Issuer) IssueTokenPair(sub, email, displayName, scope, clientID, sess
 	}, nil
 }
 
+// IssueAccessToken creates a signed access token without issuing a refresh token.
+func (iss *Issuer) IssueAccessToken(sub, email, displayName, scope, clientID, sessionID string, roles []string) (*AccessTokenResponse, error) {
+	now := time.Now().UTC()
+	accessExp := now.Add(iss.AccessTokenTTL)
+
+	accessClaims := IAMClaims{
+		Sub:         sub,
+		Email:       email,
+		DisplayName: displayName,
+		Roles:       roles,
+		Scope:       scope,
+		ClientID:    clientID,
+		SessionID:   sessionID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    iss.issuerURL,
+			Subject:   sub,
+			Audience:  jwt.ClaimStrings{clientID},
+			ExpiresAt: jwt.NewNumericDate(accessExp),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims)
+	accessToken.Header["kid"] = iss.kid
+
+	signedAccess, err := accessToken.SignedString(iss.privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("signing access token: %w", err)
+	}
+
+	return &AccessTokenResponse{
+		AccessToken: signedAccess,
+		TokenType:   "Bearer",
+		ExpiresIn:   int(iss.AccessTokenTTL.Seconds()),
+		ExpiresAt:   accessExp,
+		Scope:       scope,
+	}, nil
+}
+
 // ValidateAccessToken parses and validates an access token.
 func (iss *Issuer) ValidateAccessToken(raw string) (*IAMClaims, error) {
 	claims := &IAMClaims{}
@@ -245,19 +296,35 @@ func (iss *Issuer) ServeJWKS(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(iss.JWKS())
 }
 
-// OpenIDConfiguration returns the OIDC discovery document.
-func (iss *Issuer) OpenIDConfiguration() map[string]interface{} {
+// IssuerURL returns the configured issuer base URL.
+func (iss *Issuer) IssuerURL() string {
+	return iss.issuerURL
+}
+
+// OpenIDConfigurationWithEndpoints builds an OIDC discovery document for custom endpoint paths.
+func (iss *Issuer) OpenIDConfigurationWithEndpoints(issuerURL, authorizationEndpoint, tokenEndpoint, jwksURI string) map[string]interface{} {
 	return map[string]interface{}{
-		"issuer":                                iss.issuerURL,
-		"authorization_endpoint":                iss.issuerURL + "/oauth/authorize",
-		"token_endpoint":                        iss.issuerURL + "/oauth/token",
-		"jwks_uri":                              iss.issuerURL + "/.well-known/jwks.json",
+		"issuer":                                issuerURL,
+		"authorization_endpoint":                authorizationEndpoint,
+		"token_endpoint":                        tokenEndpoint,
+		"jwks_uri":                              jwksURI,
 		"response_types_supported":              []string{"code"},
 		"subject_types_supported":               []string{"public"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
 		"scopes_supported":                      []string{"openid", "profile", "email", "roles"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_post", "client_secret_basic"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
 		"code_challenge_methods_supported":      []string{"S256"},
 	}
+}
+
+// OpenIDConfiguration returns the OIDC discovery document.
+func (iss *Issuer) OpenIDConfiguration() map[string]interface{} {
+	base := strings.TrimRight(iss.issuerURL, "/")
+	return iss.OpenIDConfigurationWithEndpoints(
+		base,
+		base+"/oauth/authorize",
+		base+"/oauth/token",
+		base+"/.well-known/jwks.json",
+	)
 }

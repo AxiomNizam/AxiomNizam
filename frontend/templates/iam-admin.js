@@ -11,6 +11,7 @@ const IAM_API = (() => {
 // IAM-specific auth token (separate from platform auth)
 let iamToken = localStorage.getItem('iamToken') || '';
 let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
+let iamServiceAccessInfo = null;
 
 function clearIAMSession() {
     iamToken = '';
@@ -83,6 +84,66 @@ function showIAMToast(message, isError) {
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
 }
 
+async function copyToClipboard(text) {
+    const value = (text || '').trim();
+    if (!value) return false;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(value);
+            return true;
+        }
+    } catch (_) {}
+
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+}
+
+async function copyTextFromElement(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        showIAMToast('Copy source not found', true);
+        return;
+    }
+    const value = typeof el.value === 'string' ? el.value : el.textContent;
+    const ok = await copyToClipboard(value || '');
+    showIAMToast(ok ? 'Copied' : 'Copy failed', !ok);
+}
+
+function setFieldText(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (typeof el.value === 'string') {
+        el.value = value || '';
+    } else {
+        el.textContent = value || '–';
+    }
+}
+
+function getServiceTokenEndpoint() {
+    const endpoints = iamServiceAccessInfo && iamServiceAccessInfo.endpoints ? iamServiceAccessInfo.endpoints : {};
+    return endpoints.keycloak_token || endpoints.iam_token || (IAM_API + '/oauth/token');
+}
+
+function buildClientCredentialsSnippet(clientID, clientSecret, scope) {
+    let cmd = "curl --request POST '" + getServiceTokenEndpoint() + "'" +
+        " --header 'Content-Type: application/x-www-form-urlencoded'" +
+        " --data-urlencode 'grant_type=client_credentials'" +
+        " --data-urlencode 'client_id=" + (clientID || '') + "'" +
+        " --data-urlencode 'client_secret=" + (clientSecret || '') + "'";
+    if (scope) {
+        cmd += " --data-urlencode 'scope=" + scope + "'";
+    }
+    return cmd;
+}
+
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
@@ -114,7 +175,10 @@ function switchIAMTab(tabId) {
 
     // Lazy-load data on tab switch
     if (tabId === 'iam-users') loadIAMUsers();
-    if (tabId === 'iam-clients') loadIAMClients();
+    if (tabId === 'iam-clients') {
+        loadIAMClients();
+        loadServiceAccessInfo();
+    }
     if (tabId === 'iam-roles') loadIAMRoles();
     if (tabId === 'iam-bindings') loadIAMBindings();
     if (tabId === 'iam-oidc') loadOIDCInfo();
@@ -393,19 +457,22 @@ function renderIAMClients(clients) {
     const tbody = document.getElementById('iamClientsBody');
     if (!tbody) return;
     if (!clients.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No clients registered</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No clients registered</td></tr>';
         return;
     }
     tbody.innerHTML = clients.map(c => {
         const grants = (c.grant_types || []).join(', ') || '–';
         const uris = (c.redirect_uris || []).map(u => escapeHtml(u)).join('<br>') || '–';
-        const scopes = (c.allowed_scopes || []).join(', ') || '–';
+        const scopes = (c.scopes || []).join(', ') || '–';
+        const serviceRoles = (c.service_roles || []).join(', ') || '–';
+        const mode = c.public ? 'Public' : 'Confidential';
         return '<tr>' +
             '<td style="font-family:var(--font-mono);font-size:.85rem;">' + escapeHtml(c.id) + '</td>' +
-            '<td>' + escapeHtml(c.name) + '</td>' +
+            '<td>' + escapeHtml(c.name) + '<div style="font-size:.75rem;color:var(--text-muted);margin-top:4px;">' + escapeHtml(mode) + '</div></td>' +
             '<td>' + escapeHtml(grants) + '</td>' +
             '<td style="font-size:.8rem;">' + uris + '</td>' +
             '<td>' + escapeHtml(scopes) + '</td>' +
+            '<td>' + escapeHtml(serviceRoles) + '</td>' +
             '<td style="white-space:nowrap;">' +
                 '<button class="btn-sm btn-secondary" onclick="editClient(\'' + escapeHtml(c.id) + '\')">Edit</button> ' +
                 '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteClient(\'' + escapeHtml(c.id) + '\')">Delete</button>' +
@@ -417,8 +484,10 @@ function showCreateClientModal() {
     document.getElementById('iamClientEditID').value = '';
     document.getElementById('iamClientName').value = '';
     document.getElementById('iamClientRedirectURIs').value = '';
-    document.getElementById('iamClientGrantTypes').value = 'authorization_code,refresh_token';
+    document.getElementById('iamClientGrantTypes').value = 'authorization_code,refresh_token,client_credentials';
     document.getElementById('iamClientScopes').value = 'openid,profile,email';
+    document.getElementById('iamClientServiceRoles').value = '';
+    document.getElementById('iamClientPublic').checked = false;
     document.getElementById('iamClientModalTitle').textContent = 'Register OAuth Client';
     document.getElementById('iamClientSubmitBtn').textContent = 'Register';
     openIAMModal('iamClientModal');
@@ -433,7 +502,9 @@ async function editClient(id) {
         document.getElementById('iamClientName').value = c.name || '';
         document.getElementById('iamClientRedirectURIs').value = (c.redirect_uris || []).join('\n');
         document.getElementById('iamClientGrantTypes').value = (c.grant_types || []).join(',');
-        document.getElementById('iamClientScopes').value = (c.allowed_scopes || []).join(',');
+        document.getElementById('iamClientScopes').value = (c.scopes || []).join(',');
+        document.getElementById('iamClientServiceRoles').value = (c.service_roles || []).join(',');
+        document.getElementById('iamClientPublic').checked = c.public === true;
         document.getElementById('iamClientModalTitle').textContent = 'Edit Client';
         document.getElementById('iamClientSubmitBtn').textContent = 'Update';
         openIAMModal('iamClientModal');
@@ -453,8 +524,23 @@ async function submitClient() {
         .split(',').map(s => s.trim()).filter(Boolean);
     const scopes = document.getElementById('iamClientScopes').value
         .split(',').map(s => s.trim()).filter(Boolean);
+    const serviceRoles = document.getElementById('iamClientServiceRoles').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+    const publicClient = document.getElementById('iamClientPublic').checked;
 
-    const body = { name: name, redirect_uris: redirectURIs, grant_types: grantTypes, allowed_scopes: scopes };
+    if (publicClient && grantTypes.includes('client_credentials')) {
+        showIAMToast('Public clients cannot use client_credentials grant', true);
+        return;
+    }
+
+    const body = {
+        name: name,
+        redirect_uris: redirectURIs,
+        grant_types: grantTypes,
+        scopes: scopes,
+        service_roles: serviceRoles,
+        public: publicClient
+    };
 
     try {
         const url = editID ? '/iam/admin/clients/' + encodeURIComponent(editID) : '/iam/admin/clients';
@@ -467,8 +553,14 @@ async function submitClient() {
 
         // Show secret for new clients
         if (!editID && data.client_secret) {
-            document.getElementById('iamNewClientID').value = data.id || data.client_id || '';
-            document.getElementById('iamNewClientSecret').value = data.client_secret;
+            const clientID = data.id || data.client_id || '';
+            const clientSecret = data.client_secret || '';
+            const defaultScope = (data.scopes || []).join(' ');
+
+            setFieldText('iamNewClientID', clientID);
+            setFieldText('iamNewClientSecret', clientSecret);
+            setFieldText('iamClientTokenEndpoint', getServiceTokenEndpoint());
+            setFieldText('iamClientCredentialsSnippet', buildClientCredentialsSnippet(clientID, clientSecret, defaultScope));
             openIAMModal('iamClientSecretModal');
         } else {
             showIAMToast(editID ? 'Client updated' : 'Client registered');
@@ -480,15 +572,16 @@ async function submitClient() {
     }
 }
 
-function copyClientSecret() {
+async function copyClientSecret() {
     const secret = document.getElementById('iamNewClientSecret').value;
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(secret).then(() => showIAMToast('Secret copied'));
-    } else {
-        document.getElementById('iamNewClientSecret').select();
-        document.execCommand('copy');
-        showIAMToast('Secret copied');
-    }
+    const ok = await copyToClipboard(secret);
+    showIAMToast(ok ? 'Secret copied' : 'Copy failed', !ok);
+}
+
+async function copyClientCredentialsSnippet() {
+    const snippet = document.getElementById('iamClientCredentialsSnippet').textContent;
+    const ok = await copyToClipboard(snippet || '');
+    showIAMToast(ok ? 'Request copied' : 'Copy failed', !ok);
 }
 
 async function deleteClient(id) {
@@ -770,6 +863,47 @@ async function revokeUserTokens() {
 
 // ── OIDC / JWKS ──────────────────────────────────────────────────────────────
 
+async function loadServiceAccessInfo() {
+    const rawEl = document.getElementById('iamServiceAccessJSON');
+    if (!iamToken) {
+        setFieldText('iamServiceRealm', 'IAM login required');
+        setFieldText('iamServiceIssuer', 'IAM login required');
+        setFieldText('iamServiceTokenEndpoint', 'IAM login required');
+        setFieldText('iamServiceDiscoveryEndpoint', 'IAM login required');
+        setFieldText('iamServiceCertsEndpoint', 'IAM login required');
+        setFieldText('iamServiceGrantTypes', 'IAM login required');
+        if (rawEl) rawEl.textContent = 'IAM login required';
+        return;
+    }
+
+    try {
+        const resp = await iamFetch('/iam/admin/service-access-info');
+        if (!resp.ok) {
+            const text = 'Failed to load service access info: ' + resp.status;
+            if (rawEl) rawEl.textContent = text;
+            setFieldText('iamServiceTokenEndpoint', text);
+            return;
+        }
+
+        const info = await resp.json();
+        iamServiceAccessInfo = info;
+        const endpoints = info.endpoints || {};
+
+        setFieldText('iamServiceRealm', info.realm || 'master');
+        setFieldText('iamServiceIssuer', info.issuer || '–');
+        setFieldText('iamServiceTokenEndpoint', endpoints.keycloak_token || endpoints.iam_token || '–');
+        setFieldText('iamServiceDiscoveryEndpoint', endpoints.keycloak_openid_configuration || endpoints.iam_openid_configuration || '–');
+        setFieldText('iamServiceCertsEndpoint', endpoints.keycloak_certs || endpoints.iam_jwks || '–');
+        setFieldText('iamServiceGrantTypes', (info.grant_types_supported || []).join(', ') || '–');
+
+        if (rawEl) rawEl.textContent = JSON.stringify(info, null, 2);
+    } catch (err) {
+        const text = 'Connection error: ' + err.message;
+        if (rawEl) rawEl.textContent = text;
+        setFieldText('iamServiceTokenEndpoint', text);
+    }
+}
+
 async function loadOIDCInfo() {
     try {
         const [oidcResp, jwksResp] = await Promise.all([
@@ -794,6 +928,8 @@ async function loadOIDCInfo() {
         const oidcEl = document.getElementById('iamOIDCConfig');
         if (oidcEl) oidcEl.textContent = 'Connection error: ' + err.message;
     }
+
+    loadServiceAccessInfo();
 }
 
 // ── Initialisation ───────────────────────────────────────────────────────────
@@ -806,5 +942,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (iamToken) {
         loadIAMDashboard();
+        loadServiceAccessInfo();
     }
 });

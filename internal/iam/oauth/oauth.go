@@ -20,8 +20,9 @@ type OAuthClient struct {
 	Name         string    `json:"name"`
 	RedirectURIs []string  `json:"redirect_uris"`
 	Scopes       []string  `json:"scopes"`
-	GrantTypes   []string  `json:"grant_types"` // authorization_code, refresh_token
-	Public       bool      `json:"public"`      // public clients (SPA, mobile)
+	GrantTypes   []string  `json:"grant_types"` // authorization_code, refresh_token, client_credentials
+	ServiceRoles []string  `json:"service_roles,omitempty"`
+	Public       bool      `json:"public"` // public clients (SPA, mobile)
 	CreatedAt    time.Time `json:"created_at"`
 	Active       bool      `json:"active"`
 }
@@ -65,7 +66,7 @@ type TokenRequest struct {
 	GrantType    string `json:"grant_type" form:"grant_type" binding:"required"`
 	Code         string `json:"code" form:"code"`
 	RedirectURI  string `json:"redirect_uri" form:"redirect_uri"`
-	ClientID     string `json:"client_id" form:"client_id" binding:"required"`
+	ClientID     string `json:"client_id" form:"client_id"`
 	ClientSecret string `json:"client_secret" form:"client_secret"`
 	CodeVerifier string `json:"code_verifier" form:"code_verifier"`
 	RefreshToken string `json:"refresh_token" form:"refresh_token"`
