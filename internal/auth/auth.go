@@ -211,14 +211,10 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 		}
 	}
 
-	// Legacy fallback for older realm-based OIDC settings.
+	// Fallback for explicit server URL without issuer metadata.
 	if jwksURL == "" {
 		serverURL := strings.TrimRight(strings.TrimSpace(tv.config.ServerURL), "/")
-		realm := strings.TrimSpace(tv.config.Realm)
-		switch {
-		case serverURL != "" && realm != "":
-			jwksURL = fmt.Sprintf("%s/realms/%s/protocol/openid-connect/certs", serverURL, realm)
-		case serverURL != "":
+		if serverURL != "" {
 			jwksURL = serverURL + "/.well-known/jwks.json"
 		}
 	}
