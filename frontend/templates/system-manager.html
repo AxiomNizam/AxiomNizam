@@ -262,10 +262,16 @@
     <!-- Users Tab -->
     <div id="users" class="tab-content">
         <div class="databases-section">
-            <div class="section-header">
-                <h3>IAM User Management</h3>
-                <div style="display:flex;gap:10px;">
+            <div class="section-header" style="align-items:flex-start;gap:10px;">
+                <div>
+                    <h3 style="margin:0;">IAM User Management</h3>
+                    <p style="margin:6px 0 0 0;color:var(--text-secondary,#94a3b8);font-size:0.9em;">
+                        Role source: IAM role bindings (<code>/iam/admin/role-bindings</code>). Keycloak realm/client roles are interpreted from token claims at login.
+                    </p>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
                     <button class="btn-primary" onclick="loadUsers()">Refresh</button>
+                    <button class="btn-secondary" onclick="openCreateIAMUserModal()">+ Create IAM User</button>
                     <button class="btn-secondary" onclick="openIAMAdminConsole()">Open IAM Console</button>
                 </div>
             </div>
@@ -431,7 +437,7 @@
         <h3 style="margin-top:0;margin-bottom:20px;">🗄️ Create New Database</h3>
         <form onsubmit="submitCreateDatabase(event)">
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
+                <label for="newDbType" style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
                 <select id="newDbType" onchange="populateCreateDbServers()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
                     <option value="">Select Type</option>
                     <option value="mysql">MySQL</option>
@@ -441,7 +447,7 @@
                 </select>
             </div>
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Database Server</label>
+                <label for="newDbServer" style="display:block;margin-bottom:6px;font-weight:600;">Database Server</label>
                 <select id="newDbServer" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;">
                     <option value="">Default server for selected database type</option>
                 </select>
@@ -450,7 +456,7 @@
                 </div>
             </div>
             <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Database Name</label>
+                <label for="newDbName" style="display:block;margin-bottom:6px;font-weight:600;">Database Name</label>
                 <input type="text" id="newDbName" placeholder="my_database" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required pattern="^[a-zA-Z_][a-zA-Z0-9_]*$" title="Only letters, numbers and underscores allowed">
             </div>
             <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -469,12 +475,12 @@
         <h3 style="margin-top:0;margin-bottom:20px;">🔌 Connect Database Server</h3>
         <form onsubmit="submitConnectDbServer(event)">
             <div style="margin-bottom:14px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Server Name</label>
+                <label for="serverName" style="display:block;margin-bottom:6px;font-weight:600;">Server Name</label>
                 <input type="text" id="serverName" placeholder="e.g. reporting-east" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
+                    <label for="serverDbType" style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
                     <select id="serverDbType" onchange="updateConnectServerPortDefault()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
                         <option value="mysql">MySQL</option>
                         <option value="postgres">PostgreSQL</option>
@@ -483,31 +489,31 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Port</label>
+                    <label for="serverPort" style="display:block;margin-bottom:6px;font-weight:600;">Port</label>
                     <input type="number" id="serverPort" placeholder="3306" min="1" max="65535" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
                 </div>
             </div>
             <div style="margin-bottom:14px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Host</label>
+                <label for="serverHost" style="display:block;margin-bottom:6px;font-weight:600;">Host</label>
                 <input type="text" id="serverHost" placeholder="127.0.0.1" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Username</label>
+                    <label for="serverUsername" style="display:block;margin-bottom:6px;font-weight:600;">Username</label>
                     <input type="text" id="serverUsername" placeholder="root" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Password</label>
+                    <label for="serverPassword" style="display:block;margin-bottom:6px;font-weight:600;">Password</label>
                     <input type="password" id="serverPassword" placeholder="Password" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;">
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Default DB</label>
+                    <label for="serverDefaultDatabase" style="display:block;margin-bottom:6px;font-weight:600;">Default DB</label>
                     <input type="text" id="serverDefaultDatabase" placeholder="mysql or postgres" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;">
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">SSL Mode (Postgres)</label>
+                    <label for="serverSSLMode" style="display:block;margin-bottom:6px;font-weight:600;">SSL Mode (Postgres)</label>
                     <select id="serverSSLMode" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;">
                         <option value="disable">disable</option>
                         <option value="require">require</option>
@@ -525,6 +531,49 @@
     </div>
 </div>
 
+<!-- Create IAM User Modal -->
+<div id="createIAMUserModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 30px; width: 520px; max-width: 92vw; position: relative;">
+        <button class="modal-close-btn" onclick="closeCreateIAMUserModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-primary, #f8fafc);font-size:1.5em;cursor:pointer;">&times;</button>
+        <h3 style="margin-top:0;margin-bottom:20px;">👤 Create IAM User</h3>
+        <form onsubmit="submitCreateIAMUser(event)">
+            <div style="margin-bottom:14px;">
+                <label for="createIAMUserEmail" style="display:block;margin-bottom:6px;font-weight:600;">Email</label>
+                <input type="email" id="createIAMUserEmail" placeholder="user@example.com" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label for="createIAMUserDisplayName" style="display:block;margin-bottom:6px;font-weight:600;">Display Name</label>
+                <input type="text" id="createIAMUserDisplayName" placeholder="John Doe" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:14px;">
+                <label for="createIAMUserPassword" style="display:block;margin-bottom:6px;font-weight:600;">Password</label>
+                <input type="password" id="createIAMUserPassword" placeholder="Minimum 8 characters" minlength="8" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label for="createIAMUserRole" style="display:block;margin-bottom:6px;font-weight:600;">Primary Access Role</label>
+                <select id="createIAMUserRole" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
+                    <option value="user">user</option>
+                </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.95em;">
+                    <input type="checkbox" id="createIAMUserActive" checked>
+                    Active account
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.95em;">
+                    <input type="checkbox" id="createIAMUserEmailVerified">
+                    Email verified
+                </label>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <button type="button" class="btn-secondary" onclick="closeCreateIAMUserModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="createIAMUserBtn">Create User</button>
+            </div>
+        </form>
+        <div id="createIAMUserResult" style="margin-top:16px;display:none;padding:12px;border-radius:8px;"></div>
+    </div>
+</div>
+
 <style>
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -535,15 +584,38 @@
     background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155);
     border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
 }
+.user-card .role-chip-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+}
 .user-card .user-role-badge {
     display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 600;
 }
 .role-admin { background: rgba(239,68,68,0.2); color: #ef4444; }
+.role-sysadmin,
+.role-system-manager { background: rgba(245,158,11,0.2); color: #f59e0b; }
 .role-manager { background: rgba(59,130,246,0.2); color: #3b82f6; }
 .role-user { background: rgba(16,185,129,0.2); color: #10b981; }
+.role-default { background: rgba(148,163,184,0.2); color: #94a3b8; }
+.user-card .user-role-actions {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color, #334155);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.user-card .user-role-actions select {
+    min-width: 150px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #334155);
+    background: var(--bg-primary, #0f172a);
+    color: var(--text-primary, #f8fafc);
+}
 </style>
 
-<script src="/static/system-manager.js?v=20260402"></script>
+<script src="/static/system-manager.js?v=20260403"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP

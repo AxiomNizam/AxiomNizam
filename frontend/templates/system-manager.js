@@ -479,8 +479,204 @@ function guessDbType(dbName) {
 // USER MANAGEMENT
 // ====================================
 
+var iamUsersCache = [];
+var iamRolesCache = [];
+var iamBindingsByUserID = {};
+
 function openIAMAdminConsole() {
     window.open('/iam-admin', '_blank');
+}
+
+function normalizeIAMRoleName(roleName) {
+    var value = String(roleName || '').toLowerCase().trim();
+    if (!value) return '';
+    return value;
+}
+
+function roleWeight(roleName) {
+    var normalized = normalizeIAMRoleName(roleName);
+    if (normalized === 'sysadmin' || normalized === 'system-manager' || normalized === 'system_admin' || normalized === 'system-admin') return 0;
+    if (normalized === 'superadmin' || normalized === 'super-admin') return 1;
+    if (normalized === 'admin') return 1;
+    if (normalized === 'api-manager' || normalized === 'api_manager') return 2;
+    if (normalized === 'manager') return 2;
+    if (normalized === 'user') return 3;
+    return 9;
+}
+
+function roleBadgeClass(roleName) {
+    var normalized = normalizeIAMRoleName(roleName);
+    if (normalized === 'sysadmin' || normalized === 'system-manager' || normalized === 'system_admin' || normalized === 'system-admin') return 'role-sysadmin';
+    if (normalized === 'superadmin' || normalized === 'super-admin') return 'role-admin';
+    if (normalized === 'admin') return 'role-admin';
+    if (normalized === 'api-manager' || normalized === 'api_manager') return 'role-manager';
+    if (normalized === 'manager') return 'role-manager';
+    if (normalized === 'user') return 'role-user';
+    return 'role-default';
+}
+
+function sortRoleNames(roleNames) {
+    return roleNames.slice().sort(function(a, b) {
+        var w = roleWeight(a) - roleWeight(b);
+        if (w !== 0) return w;
+        return String(a).localeCompare(String(b));
+    });
+}
+
+function resolvePrimaryRole(roleNames) {
+    if (!roleNames || roleNames.length === 0) return 'user';
+    var sorted = sortRoleNames(roleNames);
+    return normalizeIAMRoleName(sorted[0]) || 'user';
+}
+
+function roleNamesForSelection(roleName) {
+    var normalized = normalizeIAMRoleName(roleName);
+    if (!normalized || normalized === 'user') {
+        return ['user'];
+    }
+    if (normalized === 'sysadmin') {
+        return ['sysadmin'];
+    }
+    return ['user', normalized];
+}
+
+function parseJSONResponse(response) {
+    return response.text().then(function(text) {
+        var payload = {};
+        try {
+            payload = text ? JSON.parse(text) : {};
+        } catch (e) {
+            payload = { raw: text };
+        }
+
+        if (!response.ok) {
+            var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
+            var error = new Error(message);
+            error.status = response.status;
+            error.payload = payload;
+            throw error;
+        }
+
+        return payload;
+    });
+}
+
+function iamAdminFetch(path, options) {
+    var opts = options || {};
+    opts.headers = Object.assign({}, getAuthHeaders(), opts.headers || {});
+    return fetch(BACKEND_URL + path, opts).then(parseJSONResponse);
+}
+
+function getUserRolesForCard(user) {
+    var seen = {};
+    var roles = [];
+
+    var fromUser = Array.isArray(user && user.roles) ? user.roles : [];
+    var fromBindings = iamBindingsByUserID[user && user.id ? user.id : ''] || [];
+    var combined = fromUser.concat(fromBindings);
+
+    for (var i = 0; i < combined.length; i++) {
+        var normalized = normalizeIAMRoleName(combined[i]);
+        if (!normalized || seen[normalized]) continue;
+        seen[normalized] = true;
+        roles.push(normalized);
+    }
+
+    return sortRoleNames(roles);
+}
+
+function buildRoleOptionsHTML(selectedRole) {
+    var seen = {};
+    var roleNames = [];
+
+    for (var i = 0; i < iamRolesCache.length; i++) {
+        var role = iamRolesCache[i];
+        if (!role || !role.name) continue;
+        var normalized = normalizeIAMRoleName(role.name);
+        if (!normalized || seen[normalized]) continue;
+        seen[normalized] = true;
+        roleNames.push(normalized);
+    }
+
+    if (!seen.user) {
+        roleNames.push('user');
+    }
+
+    roleNames = sortRoleNames(roleNames);
+    var target = normalizeIAMRoleName(selectedRole) || 'user';
+
+    if (roleNames.indexOf(target) === -1) {
+        roleNames.unshift(target);
+        roleNames = sortRoleNames(roleNames);
+    }
+
+    var options = '';
+    for (var j = 0; j < roleNames.length; j++) {
+        var roleName = roleNames[j];
+        options += '<option value="' + escapeHtml(roleName) + '"' + (roleName === target ? ' selected' : '') + '>' + escapeHtml(roleName) + '</option>';
+    }
+    return options;
+}
+
+function populateCreateIAMUserRoleOptions() {
+    var select = document.getElementById('createIAMUserRole');
+    if (!select) return;
+
+    select.innerHTML = buildRoleOptionsHTML('user');
+    select.value = 'user';
+}
+
+function renderUsers(users) {
+    var userList = document.getElementById('userList');
+    if (!userList) return;
+
+    if (!users || users.length === 0) {
+        userList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary,#94a3b8);">No IAM users found. Use the create action to add users.</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < users.length; i++) {
+        var u = users[i] || {};
+        var userID = u.id || '';
+        var email = u.email || '';
+        var displayName = u.display_name || (email ? email.split('@')[0] : 'Unknown');
+        var createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
+        var statusColor = u.active ? '#10b981' : '#ef4444';
+        var verifyColor = u.email_verified ? '#10b981' : '#f59e0b';
+        var roleNames = getUserRolesForCard(u);
+        var primaryRole = resolvePrimaryRole(roleNames);
+
+        var roleBadges = '';
+        if (roleNames.length === 0) {
+            roleBadges = '<span class="user-role-badge role-default">unassigned</span>';
+        } else {
+            for (var r = 0; r < roleNames.length; r++) {
+                var roleName = roleNames[r];
+                roleBadges += '<span class="user-role-badge ' + roleBadgeClass(roleName) + '">' + escapeHtml(roleName) + '</span>';
+            }
+        }
+
+        html += '<div class="user-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                '<strong style="font-size:1.1em;">' + escapeHtml(displayName) + '</strong>' +
+                '<span style="color:' + statusColor + ';font-weight:600;">' + (u.active ? '● Active' : '● Disabled') + '</span>' +
+            '</div>' +
+            '<div style="color:var(--text-secondary,#94a3b8);font-size:0.9em;">' + escapeHtml(email) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;">' +
+                '<span style="color:' + verifyColor + ';">' + (u.email_verified ? '● Email Verified' : '● Email Unverified') + '</span>' +
+                '<span style="color:var(--text-secondary,#94a3b8);">Created: ' + createdAt + '</span>' +
+            '</div>' +
+            '<div class="role-chip-row">' + roleBadges + '</div>' +
+            '<div class="user-role-actions">' +
+                '<span style="font-size:0.85em;color:var(--text-secondary,#94a3b8);">Access role</span>' +
+                '<select class="user-role-select" data-user-id="' + escapeHtml(userID) + '">' + buildRoleOptionsHTML(primaryRole) + '</select>' +
+                '<button class="btn-secondary" data-user-id="' + escapeHtml(userID) + '" onclick="updateUserRole(this)">Update Role</button>' +
+            '</div>' +
+        '</div>';
+    }
+
+    userList.innerHTML = html;
 }
 
 function loadUsers() {
@@ -488,56 +684,171 @@ function loadUsers() {
     if (!userList) return;
     userList.innerHTML = '<div class="loading">Loading users...</div>';
 
-    fetch(BACKEND_URL + '/iam/admin/users', { headers: getAuthHeaders() })
-        .then(function(response) {
-            return response.text().then(function(text) {
-                var payload = {};
-                try {
-                    payload = text ? JSON.parse(text) : {};
-                } catch (e) {
-                    payload = { raw: text };
-                }
+    Promise.all([
+        iamAdminFetch('/iam/admin/users'),
+        iamAdminFetch('/iam/admin/roles'),
+        iamAdminFetch('/iam/admin/role-bindings')
+    ])
+        .then(function(results) {
+            var usersPayload = results[0] || {};
+            var rolesPayload = results[1] || {};
+            var bindingsPayload = results[2] || {};
 
-                if (!response.ok) {
-                    var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
-                    throw new Error(message);
-                }
+            iamUsersCache = usersPayload.users || [];
+            iamRolesCache = rolesPayload.roles || [];
 
-                return payload;
-            });
-        })
-        .then(function(data) {
-            var users = data.users || [];
-            if (users.length === 0) {
-                userList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary,#94a3b8);">No IAM users found. Use the IAM Console to create users.</div>';
-                return;
+            var roleByID = {};
+            for (var i = 0; i < iamRolesCache.length; i++) {
+                var role = iamRolesCache[i];
+                if (role && role.id) {
+                    roleByID[role.id] = role;
+                }
             }
 
-            var html = '';
-            for (var i = 0; i < users.length; i++) {
-                var u = users[i];
-                var email = u.email || '';
-                var displayName = u.display_name || (email ? email.split('@')[0] : 'Unknown');
-                var createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
-                var statusColor = u.active ? '#10b981' : '#ef4444';
-                var verifyColor = u.email_verified ? '#10b981' : '#f59e0b';
-                html += '<div class="user-card">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-                    '<strong style="font-size:1.1em;">' + escapeHtml(displayName) + '</strong>' +
-                    '<span style="color:' + statusColor + ';font-weight:600;">' + (u.active ? '● Active' : '● Disabled') + '</span>' +
-                    '</div>' +
-                    '<div style="color:var(--text-secondary,#94a3b8);font-size:0.9em;">' + escapeHtml(email) + '</div>' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;">' +
-                    '<span style="color:' + verifyColor + ';">' + (u.email_verified ? '● Email Verified' : '● Email Unverified') + '</span>' +
-                    '<span style="color:var(--text-secondary,#94a3b8);">Created: ' + createdAt + '</span>' +
-                    '</div>' +
-                    '</div>';
+            iamBindingsByUserID = {};
+            var bindings = bindingsPayload.bindings || [];
+            for (var j = 0; j < bindings.length; j++) {
+                var binding = bindings[j];
+                if (!binding || !binding.user_id || !binding.role_id) continue;
+                var linkedRole = roleByID[binding.role_id];
+                var roleName = linkedRole && linkedRole.name ? normalizeIAMRoleName(linkedRole.name) : '';
+                if (!roleName) continue;
+
+                if (!iamBindingsByUserID[binding.user_id]) {
+                    iamBindingsByUserID[binding.user_id] = [];
+                }
+                iamBindingsByUserID[binding.user_id].push(roleName);
             }
-            userList.innerHTML = html;
+
+            populateCreateIAMUserRoleOptions();
+            renderUsers(iamUsersCache);
         })
         .catch(function(err) {
             userList.innerHTML = '<div style="color:#ef4444;padding:20px;">Failed to load users: ' + err.message + '</div>';
         });
+}
+
+function openCreateIAMUserModal() {
+    populateCreateIAMUserRoleOptions();
+    document.getElementById('createIAMUserEmail').value = '';
+    document.getElementById('createIAMUserDisplayName').value = '';
+    document.getElementById('createIAMUserPassword').value = '';
+    document.getElementById('createIAMUserRole').value = 'user';
+    document.getElementById('createIAMUserActive').checked = true;
+    document.getElementById('createIAMUserEmailVerified').checked = false;
+    document.getElementById('createIAMUserResult').style.display = 'none';
+    document.getElementById('createIAMUserModal').style.display = 'flex';
+}
+
+function closeCreateIAMUserModal() {
+    document.getElementById('createIAMUserModal').style.display = 'none';
+}
+
+function submitCreateIAMUser(event) {
+    event.preventDefault();
+
+    var email = (document.getElementById('createIAMUserEmail').value || '').trim();
+    var displayName = (document.getElementById('createIAMUserDisplayName').value || '').trim();
+    var password = document.getElementById('createIAMUserPassword').value || '';
+    var roleName = normalizeIAMRoleName(document.getElementById('createIAMUserRole').value || 'user');
+    var active = document.getElementById('createIAMUserActive').checked;
+    var emailVerified = document.getElementById('createIAMUserEmailVerified').checked;
+
+    if (!email) {
+        alert('Email is required.');
+        return;
+    }
+    if (password.length < 8) {
+        alert('Password must be at least 8 characters.');
+        return;
+    }
+
+    var createBtn = document.getElementById('createIAMUserBtn');
+    var resultDiv = document.getElementById('createIAMUserResult');
+
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating...';
+    resultDiv.style.display = 'none';
+
+    iamAdminFetch('/iam/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({
+            email: email,
+            password: password,
+            display_name: displayName,
+            active: active,
+            email_verified: emailVerified,
+            role_names: roleNamesForSelection(roleName)
+        })
+    }).then(function(payload) {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Create User';
+
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(16,185,129,0.15)';
+        resultDiv.style.color = '#10b981';
+        resultDiv.textContent = 'IAM user created successfully: ' + (payload.email || email);
+
+        addOperationLog('IAM user created: ' + email, 'success');
+        setTimeout(function() {
+            closeCreateIAMUserModal();
+            loadUsers();
+        }, 400);
+    }).catch(function(err) {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Create User';
+
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(239,68,68,0.15)';
+        resultDiv.style.color = '#ef4444';
+        resultDiv.textContent = err.message;
+        addOperationLog('IAM user creation failed: ' + err.message, 'error');
+    });
+}
+
+function updateUserRole(button) {
+    if (!button) return;
+
+    var userID = button.getAttribute('data-user-id') || '';
+    if (!userID) {
+        alert('Missing user identifier.');
+        return;
+    }
+
+    var actionsRow = button.parentElement;
+    var select = actionsRow ? actionsRow.querySelector('.user-role-select') : null;
+    if (!select) {
+        alert('Role selector not found.');
+        return;
+    }
+
+    var selectedRole = normalizeIAMRoleName(select.value || 'user');
+    if (!selectedRole) {
+        alert('Please select a role.');
+        return;
+    }
+
+    if (!confirm('Update this user role to "' + selectedRole + '"?')) {
+        return;
+    }
+
+    var previousLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Updating...';
+
+    iamAdminFetch('/iam/admin/users/' + encodeURIComponent(userID) + '/roles', {
+        method: 'PUT',
+        body: JSON.stringify({ role_names: roleNamesForSelection(selectedRole) })
+    }).then(function() {
+        addOperationLog('Updated IAM role mapping for user ' + userID, 'success');
+        loadUsers();
+    }).catch(function(err) {
+        addOperationLog('IAM role update failed: ' + err.message, 'error');
+        alert('Failed to update user role: ' + err.message);
+    }).finally(function() {
+        button.disabled = false;
+        button.textContent = previousLabel;
+    });
 }
 
 // ====================================
@@ -862,5 +1173,9 @@ window.addEventListener('click', function(event) {
     var connectModal = document.getElementById('connectDbServerModal');
     if (connectModal && event.target === connectModal) {
         closeConnectDbServerModal();
+    }
+    var createIAMUserModal = document.getElementById('createIAMUserModal');
+    if (createIAMUserModal && event.target === createIAMUserModal) {
+        closeCreateIAMUserModal();
     }
 });

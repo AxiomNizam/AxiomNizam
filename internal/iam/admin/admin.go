@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -58,6 +59,92 @@ func NewHandler(
 		issuer:       issuer,
 		authn:        authenticator,
 	}
+}
+
+func normalizeRoleNames(roleNames []string) []string {
+	seen := make(map[string]struct{}, len(roleNames))
+	out := make([]string, 0, len(roleNames))
+
+	for _, roleName := range roleNames {
+		normalized := strings.ToLower(strings.TrimSpace(roleName))
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+
+	if len(out) == 0 {
+		out = []string{"user"}
+	}
+
+	return out
+}
+
+func hasRoleName(roleNames []string, roleName string) bool {
+	target := strings.ToLower(strings.TrimSpace(roleName))
+	if target == "" {
+		return false
+	}
+
+	for _, candidate := range roleNames {
+		if strings.ToLower(strings.TrimSpace(candidate)) == target {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (h *Handler) resolveRoleIDsByName(roleNames []string) (map[string]struct{}, error) {
+	desiredRoleIDs := make(map[string]struct{}, len(roleNames))
+
+	for _, roleName := range roleNames {
+		role, err := h.roles.GetRoleByName(roleName)
+		if err != nil {
+			return nil, err
+		}
+		if role == nil {
+			return nil, fmt.Errorf("unknown role: %s", roleName)
+		}
+		desiredRoleIDs[role.ID] = struct{}{}
+	}
+
+	return desiredRoleIDs, nil
+}
+
+func (h *Handler) setUserRoles(userID string, roleNames []string) error {
+	normalizedRoleNames := normalizeRoleNames(roleNames)
+	desiredRoleIDs, err := h.resolveRoleIDsByName(normalizedRoleNames)
+	if err != nil {
+		return err
+	}
+
+	existingBindings, err := h.bindings.ListBindingsForUser(userID)
+	if err != nil {
+		return err
+	}
+
+	for _, binding := range existingBindings {
+		if _, keep := desiredRoleIDs[binding.RoleID]; keep {
+			delete(desiredRoleIDs, binding.RoleID)
+			continue
+		}
+		if err := h.authorizer.RevokeRole(binding.ID); err != nil {
+			return err
+		}
+	}
+
+	for roleID := range desiredRoleIDs {
+		if _, err := h.authorizer.AssignRole(userID, roleID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ═══════════════════════════════════════════════
@@ -174,6 +261,15 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
 		return
 	}
+
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
+		user.Roles = roleNames
+	}
+
 	c.JSON(http.StatusOK, gin.H{"users": users, "count": len(users)})
 }
 
@@ -200,8 +296,21 @@ func (h *Handler) GetUser(c *gin.Context) {
 
 // CreateUser registers a new IAM user.
 func (h *Handler) CreateUser(c *gin.Context) {
-	var req identity.CreateUserRequest
+	var req struct {
+		Email         string   `json:"email" binding:"required,email"`
+		Password      string   `json:"password" binding:"required,min=8"`
+		DisplayName   string   `json:"display_name"`
+		Active        *bool    `json:"active"`
+		EmailVerified *bool    `json:"email_verified"`
+		RoleNames     []string `json:"role_names"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	desiredRoleNames := normalizeRoleNames(req.RoleNames)
+	if _, err := h.resolveRoleIDsByName(desiredRoleNames); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -228,17 +337,25 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
+	if req.Active != nil {
+		user.Active = *req.Active
+	}
+	if req.EmailVerified != nil {
+		user.EmailVerified = *req.EmailVerified
+	}
 
 	if err := h.users.Create(user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		return
 	}
 
-	// Assign default "user" role
-	userRole, _ := h.roles.GetRoleByName("user")
-	if userRole != nil {
-		_, _ = h.authorizer.AssignRole(user.ID, userRole.ID)
+	if err := h.setUserRoles(user.ID, desiredRoleNames); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "user created but role assignment failed: " + err.Error()})
+		return
 	}
+
+	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
+	user.Roles = roleNames
 
 	c.JSON(http.StatusCreated, user)
 }
@@ -290,6 +407,52 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, user)
+}
+
+// SetUserRoles replaces the role mapping for a user.
+func (h *Handler) SetUserRoles(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user id required"})
+		return
+	}
+
+	user, err := h.users.GetByID(id)
+	if err != nil || user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	var req struct {
+		RoleNames []string `json:"role_names" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	normalizedRoleNames := normalizeRoleNames(req.RoleNames)
+	actorUserID := iammw.GetUserID(c)
+	if actorUserID == user.ID && !hasRoleName(normalizedRoleNames, "sysadmin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot remove your own sysadmin role"})
+		return
+	}
+
+	if err := h.setUserRoles(user.ID, normalizedRoleNames); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unknown role") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user roles"})
+		return
+	}
+
+	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
+	c.JSON(http.StatusOK, gin.H{
+		"user_id": user.ID,
+		"roles":   roleNames,
+		"count":   len(roleNames),
+	})
 }
 
 // DeleteUser removes a user.

@@ -179,6 +179,7 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 		adminAPI.GET("/users/:id", h.GetUser)
 		adminAPI.POST("/users", h.CreateUser)
 		adminAPI.PUT("/users/:id", h.UpdateUser)
+		adminAPI.PUT("/users/:id/roles", h.SetUserRoles)
 		adminAPI.DELETE("/users/:id", h.DeleteUser)
 
 		// OAuth Clients
