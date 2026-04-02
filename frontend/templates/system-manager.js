@@ -770,16 +770,16 @@ function renderUsers(users) {
                 '<strong style="font-size:1.1em;">' + escapeHtml(displayName) + '</strong>' +
                 '<span style="color:' + statusColor + ';font-weight:600;">' + (u.active ? '● Active' : '● Disabled') + '</span>' +
             '</div>' +
-            '<div style="color:var(--text-secondary,#94a3b8);font-size:0.9em;">' + escapeHtml(email) + '</div>' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;">' +
+            '<div style="color:var(--text-secondary);font-size:0.95em;margin-bottom:8px;">' + escapeHtml(email) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;font-weight:500;">' +
                 '<span style="color:' + verifyColor + ';">' + (u.email_verified ? '● Email Verified' : '● Email Unverified') + '</span>' +
-                '<span style="color:var(--text-secondary,#94a3b8);">Created: ' + createdAt + '</span>' +
+                '<span style="color:var(--text-muted);">Created: ' + createdAt + '</span>' +
             '</div>' +
             '<div class="role-chip-row">' + roleBadges + '</div>' +
             '<div class="user-role-actions">' +
-                '<span style="font-size:0.85em;color:var(--text-secondary,#94a3b8);">Access role</span>' +
+                '<span>Access role</span>' +
                 '<select class="user-role-select" data-user-id="' + escapeHtml(userID) + '">' + buildRoleOptionsHTML(primaryRole) + '</select>' +
-                '<button class="btn-secondary" data-user-id="' + escapeHtml(userID) + '" onclick="updateUserRole(this)">Update Role</button>' +
+                '<button class="btn-secondary btn-sm" data-user-id="' + escapeHtml(userID) + '" onclick="updateUserRole(this)">Update Role</button>' +
             '</div>' +
         '</div>';
     }

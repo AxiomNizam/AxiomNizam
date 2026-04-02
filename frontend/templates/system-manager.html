@@ -4,39 +4,43 @@
     <!-- Header -->
     <div class="manager-header">
         <div class="header-left">
-            <h1>System Manager</h1>
-            <p class="subtitle">System Monitoring & Control Center</p>
+            <h1 style="font-family: var(--font-heading); font-weight: 700; letter-spacing: -0.5px;">System Manager</h1>
+            <p class="subtitle" style="margin-top: 4px;">System Monitoring & Control Center</p>
         </div>
 
-        <div id="tokenCopyShortcut" style="display:none;align-self:center;min-width:120px;">
-            <button
-                id="copyApiTokenBtn"
-                class="btn-secondary"
-                type="button"
-                onclick="copyAuthTokenForPostman()"
-                style="padding:8px 12px;white-space:nowrap;"
-            >
-                Copy Token
-            </button>
-            <div id="copyTokenStatus" style="margin-top:6px;font-size:0.75em;color:var(--text-secondary,#94a3b8);text-align:center;">Ready</div>
-        </div>
-        
-        <div class="header-stats" id="sysManagerHeaderStats">
-            <div class="stat-box">
-                <span class="stat-label">Rate Limit</span>
-                <span class="stat-value">5 / 100</span>
+        <div class="header-center" style="display: flex; gap: 24px; align-items: center; flex: 2; justify-content: center;">
+            <div id="tokenCopyShortcut" style="display: none; min-width: 110px;">
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <button
+                        id="copyApiTokenBtn"
+                        class="btn-secondary"
+                        type="button"
+                        onclick="copyAuthTokenForPostman()"
+                        style="padding: 8px 16px; white-space: nowrap; border-radius: 8px; font-weight: 500; box-shadow: var(--shadow-sm);"
+                    >
+                        Copy Token
+                    </button>
+                    <div id="copyTokenStatus" style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary, #94a3b8); font-weight: 500;">Ready</div>
+                </div>
             </div>
-            <div class="stat-box">
-                <span class="stat-label">Token Time</span>
-                <span class="stat-value" id="sysTokenExpiry">1h 15m</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-label">Current IP</span>
-                <span class="stat-value" id="sysCurrentIP">...</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-label">Uptime</span>
-                <span class="stat-value" style="color: var(--primary-color);">99.9%</span>
+
+            <div class="header-stats" id="sysManagerHeaderStats" style="margin: 0; min-width: 400px; flex: 1;">
+                <div class="stat-box">
+                    <span class="stat-label">Rate Limit</span>
+                    <span class="stat-value">5 / 100</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Token Time</span>
+                    <span class="stat-value" id="sysTokenExpiry">1h 15m</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Current IP</span>
+                    <span class="stat-value" id="sysCurrentIP">...</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Uptime</span>
+                    <span class="stat-value" style="color: var(--primary-color);">99.9%</span>
+                </div>
             </div>
         </div>
 
@@ -594,14 +598,21 @@
     justify-content: center; z-index: 9999;
 }
 .user-card {
-    background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155);
+    background: var(--card-bg); border: 1px solid var(--border-color);
     border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: var(--shadow-sm); transition: var(--transition);
+}
+.user-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-color);
 }
 .user-card .role-chip-row {
-    display: flex; flex-wrap: wrap; gap: 6px;
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 4px 0;
 }
 .user-card .user-role-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 600;
+    display: inline-block; padding: 4px 12px; border-radius: 8px; font-size: 0.75rem; 
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
 }
 .role-admin { background: rgba(239,68,68,0.2); color: #ef4444; }
 .role-sysadmin,
@@ -610,21 +621,26 @@
 .role-user { background: rgba(16,185,129,0.2); color: #10b981; }
 .role-default { background: rgba(148,163,184,0.2); color: #94a3b8; }
 .user-card .user-role-actions {
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border-color, #334155);
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     flex-wrap: wrap;
+}
+.user-card .user-role-actions span {
+    font-weight: 500;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
 }
 .user-card .user-role-actions select {
     min-width: 150px;
     padding: 8px;
     border-radius: 8px;
-    border: 1px solid var(--border-color, #334155);
-    background: var(--bg-primary, #0f172a);
-    color: var(--text-primary, #f8fafc);
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-primary);
 }
 </style>
 
