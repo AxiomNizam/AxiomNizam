@@ -225,11 +225,13 @@
                             <th>Redirect URIs</th>
                             <th>Scopes</th>
                             <th>Service Roles</th>
+                            <th>Rate Limit</th>
+                            <th>Token Validity</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="iamClientsBody">
-                        <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+                        <tr><td colspan="9" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -401,6 +403,14 @@
             <div class="form-group">
                 <label for="iamClientServiceRoles">Service Roles (comma separated, for client_credentials)</label>
                 <input type="text" id="iamClientServiceRoles" placeholder="user,admin" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="iamClientRateLimitMaxCalls">Rate Limit Max Calls (per token)</label>
+                <input type="number" id="iamClientRateLimitMaxCalls" min="1" step="1" value="500" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="iamClientTokenValidityMinutes">Token Validity (minutes)</label>
+                <input type="number" id="iamClientTokenValidityMinutes" min="1" step="1" value="15" class="form-control">
             </div>
             <div class="form-group">
                 <label><input type="checkbox" id="iamClientPublic"> Public client (no secret)</label>
@@ -584,5 +594,5 @@
     </div>
 </div>
 
-<script src="/static/iam-admin.js?v=20260405"></script>
+<script src="/static/iam-admin.js?v=20260406"></script>
 {{ end }}

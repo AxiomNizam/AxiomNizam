@@ -25,6 +25,15 @@ var (
 	clientIDPattern  = regexp.MustCompile(`^[A-Za-z0-9._:-]{3,128}$`)
 )
 
+const (
+	defaultClientRateLimitMaxCalls int64 = 500
+	minClientRateLimitMaxCalls     int64 = 1
+	maxClientRateLimitMaxCalls     int64 = 100000000
+
+	minClientTokenValidityMinutes = 1
+	maxClientTokenValidityMinutes = 10080 // 7 days
+)
+
 // Handler bundles all sysadmin (master-realm) API endpoints.
 type Handler struct {
 	users        *storage.PostgresUserRepository
@@ -193,6 +202,47 @@ func validateClientID(id string) error {
 		return fmt.Errorf("new_client_id must match %s", clientIDPattern.String())
 	}
 	return nil
+}
+
+func defaultClientTokenValidityMinutes(fallbackTTL time.Duration) int {
+	minutes := int((fallbackTTL + time.Minute - 1) / time.Minute)
+	if minutes < minClientTokenValidityMinutes {
+		minutes = 15
+	}
+	return minutes
+}
+
+func validateClientRateLimitMaxCalls(v int64) error {
+	if v < minClientRateLimitMaxCalls || v > maxClientRateLimitMaxCalls {
+		return fmt.Errorf("rate_limit_max_calls must be between %d and %d", minClientRateLimitMaxCalls, maxClientRateLimitMaxCalls)
+	}
+	return nil
+}
+
+func validateClientTokenValidityMinutes(v int) error {
+	if v < minClientTokenValidityMinutes || v > maxClientTokenValidityMinutes {
+		return fmt.Errorf("token_validity_minutes must be between %d and %d", minClientTokenValidityMinutes, maxClientTokenValidityMinutes)
+	}
+	return nil
+}
+
+func resolvedClientRateLimitMaxCalls(client *oauth.OAuthClient) int64 {
+	if client == nil || client.RateLimitMaxCalls <= 0 {
+		return defaultClientRateLimitMaxCalls
+	}
+	return client.RateLimitMaxCalls
+}
+
+func resolvedClientTokenValidityMinutes(client *oauth.OAuthClient, fallbackTTL time.Duration) int {
+	if client != nil && client.TokenValidityMinutes > 0 {
+		return client.TokenValidityMinutes
+	}
+	return defaultClientTokenValidityMinutes(fallbackTTL)
+}
+
+func resolvedClientAccessTokenTTL(client *oauth.OAuthClient, fallbackTTL time.Duration) time.Duration {
+	minutes := resolvedClientTokenValidityMinutes(client, fallbackTTL)
+	return time.Duration(minutes) * time.Minute
 }
 
 func (h *Handler) realmBaseURL(realm string) string {
@@ -576,12 +626,14 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 // RegisterClient creates a new OAuth2 client.
 func (h *Handler) RegisterClient(c *gin.Context) {
 	var req struct {
-		Name         string   `json:"name" binding:"required"`
-		RedirectURIs []string `json:"redirect_uris"`
-		Scopes       []string `json:"scopes"`
-		GrantTypes   []string `json:"grant_types"`
-		ServiceRoles []string `json:"service_roles"`
-		Public       bool     `json:"public"`
+		Name                 string   `json:"name" binding:"required"`
+		RedirectURIs         []string `json:"redirect_uris"`
+		Scopes               []string `json:"scopes"`
+		GrantTypes           []string `json:"grant_types"`
+		ServiceRoles         []string `json:"service_roles"`
+		RateLimitMaxCalls    int64    `json:"rate_limit_max_calls"`
+		TokenValidityMinutes int      `json:"token_validity_minutes"`
+		Public               bool     `json:"public"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -597,6 +649,24 @@ func (h *Handler) RegisterClient(c *gin.Context) {
 	}
 	if len(req.Scopes) == 0 {
 		req.Scopes = []string{"openid", "profile", "email"}
+	}
+
+	rateLimitMaxCalls := req.RateLimitMaxCalls
+	if rateLimitMaxCalls <= 0 {
+		rateLimitMaxCalls = defaultClientRateLimitMaxCalls
+	}
+	if err := validateClientRateLimitMaxCalls(rateLimitMaxCalls); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tokenValidityMinutes := req.TokenValidityMinutes
+	if tokenValidityMinutes <= 0 {
+		tokenValidityMinutes = defaultClientTokenValidityMinutes(h.issuer.AccessTokenTTL)
+	}
+	if err := validateClientTokenValidityMinutes(tokenValidityMinutes); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	serviceRoles := normalizeRoleNames(req.ServiceRoles)
@@ -618,16 +688,18 @@ func (h *Handler) RegisterClient(c *gin.Context) {
 	}
 
 	client := &oauth.OAuthClient{
-		ID:           oauth.GenerateClientID(),
-		Secret:       secretHash,
-		Name:         strings.TrimSpace(req.Name),
-		RedirectURIs: req.RedirectURIs,
-		Scopes:       req.Scopes,
-		GrantTypes:   req.GrantTypes,
-		ServiceRoles: serviceRoles,
-		Public:       req.Public,
-		CreatedAt:    time.Now().UTC(),
-		Active:       true,
+		ID:                   oauth.GenerateClientID(),
+		Secret:               secretHash,
+		Name:                 strings.TrimSpace(req.Name),
+		RedirectURIs:         req.RedirectURIs,
+		Scopes:               req.Scopes,
+		GrantTypes:           req.GrantTypes,
+		ServiceRoles:         serviceRoles,
+		RateLimitMaxCalls:    rateLimitMaxCalls,
+		TokenValidityMinutes: tokenValidityMinutes,
+		Public:               req.Public,
+		CreatedAt:            time.Now().UTC(),
+		Active:               true,
 	}
 
 	if err := h.clients.CreateClient(client); err != nil {
@@ -637,14 +709,16 @@ func (h *Handler) RegisterClient(c *gin.Context) {
 
 	// Return secret in plaintext only during creation
 	resp := gin.H{
-		"id":            client.ID,
-		"name":          client.Name,
-		"redirect_uris": client.RedirectURIs,
-		"scopes":        client.Scopes,
-		"grant_types":   client.GrantTypes,
-		"service_roles": client.ServiceRoles,
-		"public":        client.Public,
-		"created_at":    client.CreatedAt,
+		"id":                     client.ID,
+		"name":                   client.Name,
+		"redirect_uris":          client.RedirectURIs,
+		"scopes":                 client.Scopes,
+		"grant_types":            client.GrantTypes,
+		"service_roles":          client.ServiceRoles,
+		"rate_limit_max_calls":   client.RateLimitMaxCalls,
+		"token_validity_minutes": client.TokenValidityMinutes,
+		"public":                 client.Public,
+		"created_at":             client.CreatedAt,
 	}
 	if secret != "" {
 		resp["client_secret"] = secret
@@ -665,15 +739,17 @@ func (h *Handler) ListClients(c *gin.Context) {
 	safe := make([]gin.H, 0, len(clients))
 	for _, cl := range clients {
 		safe = append(safe, gin.H{
-			"id":            cl.ID,
-			"name":          cl.Name,
-			"redirect_uris": cl.RedirectURIs,
-			"scopes":        cl.Scopes,
-			"grant_types":   cl.GrantTypes,
-			"service_roles": cl.ServiceRoles,
-			"public":        cl.Public,
-			"active":        cl.Active,
-			"created_at":    cl.CreatedAt,
+			"id":                     cl.ID,
+			"name":                   cl.Name,
+			"redirect_uris":          cl.RedirectURIs,
+			"scopes":                 cl.Scopes,
+			"grant_types":            cl.GrantTypes,
+			"service_roles":          cl.ServiceRoles,
+			"rate_limit_max_calls":   resolvedClientRateLimitMaxCalls(cl),
+			"token_validity_minutes": resolvedClientTokenValidityMinutes(cl, h.issuer.AccessTokenTTL),
+			"public":                 cl.Public,
+			"active":                 cl.Active,
+			"created_at":             cl.CreatedAt,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"clients": safe, "count": len(safe)})
@@ -688,15 +764,17 @@ func (h *Handler) GetClient(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"id":            client.ID,
-		"name":          client.Name,
-		"redirect_uris": client.RedirectURIs,
-		"scopes":        client.Scopes,
-		"grant_types":   client.GrantTypes,
-		"service_roles": client.ServiceRoles,
-		"public":        client.Public,
-		"active":        client.Active,
-		"created_at":    client.CreatedAt,
+		"id":                     client.ID,
+		"name":                   client.Name,
+		"redirect_uris":          client.RedirectURIs,
+		"scopes":                 client.Scopes,
+		"grant_types":            client.GrantTypes,
+		"service_roles":          client.ServiceRoles,
+		"rate_limit_max_calls":   resolvedClientRateLimitMaxCalls(client),
+		"token_validity_minutes": resolvedClientTokenValidityMinutes(client, h.issuer.AccessTokenTTL),
+		"public":                 client.Public,
+		"active":                 client.Active,
+		"created_at":             client.CreatedAt,
 	})
 }
 
@@ -710,12 +788,14 @@ func (h *Handler) UpdateClient(c *gin.Context) {
 	}
 
 	var req struct {
-		RedirectURIs *[]string `json:"redirect_uris"`
-		Scopes       *[]string `json:"scopes"`
-		GrantTypes   *[]string `json:"grant_types"`
-		ServiceRoles *[]string `json:"service_roles"`
-		Active       *bool     `json:"active"`
-		Name         *string   `json:"name"`
+		RedirectURIs         *[]string `json:"redirect_uris"`
+		Scopes               *[]string `json:"scopes"`
+		GrantTypes           *[]string `json:"grant_types"`
+		ServiceRoles         *[]string `json:"service_roles"`
+		RateLimitMaxCalls    *int64    `json:"rate_limit_max_calls"`
+		TokenValidityMinutes *int      `json:"token_validity_minutes"`
+		Active               *bool     `json:"active"`
+		Name                 *string   `json:"name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -742,6 +822,20 @@ func (h *Handler) UpdateClient(c *gin.Context) {
 			return
 		}
 		client.ServiceRoles = normalized
+	}
+	if req.RateLimitMaxCalls != nil {
+		if err := validateClientRateLimitMaxCalls(*req.RateLimitMaxCalls); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		client.RateLimitMaxCalls = *req.RateLimitMaxCalls
+	}
+	if req.TokenValidityMinutes != nil {
+		if err := validateClientTokenValidityMinutes(*req.TokenValidityMinutes); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		client.TokenValidityMinutes = *req.TokenValidityMinutes
 	}
 	if req.Active != nil {
 		client.Active = *req.Active
@@ -798,12 +892,14 @@ func (h *Handler) RegenerateClientSecret(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":            client.ID,
-		"client_id":     client.ID,
-		"client_secret": newSecret,
-		"scopes":        client.Scopes,
-		"grant_types":   client.GrantTypes,
-		"warning":       "Store the client_secret securely. It will not be shown again.",
+		"id":                     client.ID,
+		"client_id":              client.ID,
+		"client_secret":          newSecret,
+		"scopes":                 client.Scopes,
+		"grant_types":            client.GrantTypes,
+		"rate_limit_max_calls":   resolvedClientRateLimitMaxCalls(client),
+		"token_validity_minutes": resolvedClientTokenValidityMinutes(client, h.issuer.AccessTokenTTL),
+		"warning":                "Store the client_secret securely. It will not be shown again.",
 	})
 }
 
@@ -863,16 +959,18 @@ func (h *Handler) ChangeClientID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":       "client id updated",
-		"old_client_id": id,
-		"new_client_id": newClientID,
-		"redirect_uris": replacement.RedirectURIs,
-		"scopes":        replacement.Scopes,
-		"grant_types":   replacement.GrantTypes,
-		"service_roles": replacement.ServiceRoles,
-		"public":        replacement.Public,
-		"active":        replacement.Active,
-		"created_at":    replacement.CreatedAt,
+		"message":                "client id updated",
+		"old_client_id":          id,
+		"new_client_id":          newClientID,
+		"redirect_uris":          replacement.RedirectURIs,
+		"scopes":                 replacement.Scopes,
+		"grant_types":            replacement.GrantTypes,
+		"service_roles":          replacement.ServiceRoles,
+		"rate_limit_max_calls":   resolvedClientRateLimitMaxCalls(&replacement),
+		"token_validity_minutes": resolvedClientTokenValidityMinutes(&replacement, h.issuer.AccessTokenTTL),
+		"public":                 replacement.Public,
+		"active":                 replacement.Active,
+		"created_at":             replacement.CreatedAt,
 	})
 }
 
@@ -1257,8 +1355,17 @@ func (h *Handler) handleAuthorizationCodeGrant(c *gin.Context, req *oauth.TokenR
 	}
 
 	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
+	accessTTL := resolvedClientAccessTokenTTL(client, h.issuer.AccessTokenTTL)
 
-	pair, err := h.issuer.IssueTokenPair(user.ID, user.Email, user.DisplayName, codeRecord.Scope, req.ClientID, "", roleNames)
+	pair, err := h.issuer.IssueTokenPairWithAccessTTL(token.IssueInput{
+		Sub:         user.ID,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Scope:       codeRecord.Scope,
+		ClientID:    req.ClientID,
+		SessionID:   "",
+		Roles:       roleNames,
+	}, accessTTL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
 		return
@@ -1275,6 +1382,16 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 
 	if req.RefreshToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token is required"})
+		return
+	}
+
+	client, err := h.clients.GetClient(req.ClientID)
+	if err != nil || client == nil || !client.Active {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unknown or inactive client"})
+		return
+	}
+	if !containsGrantType(client.GrantTypes, "refresh_token") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "client is not allowed to use refresh_token grant"})
 		return
 	}
 
@@ -1296,8 +1413,17 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 	if scope == "" {
 		scope = "openid profile email roles"
 	}
+	accessTTL := resolvedClientAccessTokenTTL(client, h.issuer.AccessTokenTTL)
 
-	pair, err := h.issuer.IssueTokenPair(user.ID, user.Email, user.DisplayName, scope, req.ClientID, "", roleNames)
+	pair, err := h.issuer.IssueTokenPairWithAccessTTL(token.IssueInput{
+		Sub:         user.ID,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Scope:       scope,
+		ClientID:    req.ClientID,
+		SessionID:   "",
+		Roles:       roleNames,
+	}, accessTTL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token re-issuance failed"})
 		return
@@ -1346,26 +1472,29 @@ func (h *Handler) handleClientCredentialsGrant(c *gin.Context, req *oauth.TokenR
 
 	grantedScope := strings.Join(requestedScopes, " ")
 	serviceRoles := normalizeRoleNames(client.ServiceRoles)
+	accessTTL := resolvedClientAccessTokenTTL(client, h.issuer.AccessTokenTTL)
 
-	accessToken, err := h.issuer.IssueAccessToken(
-		"service:"+client.ID,
-		"",
-		client.Name,
-		grantedScope,
-		client.ID,
-		"",
-		serviceRoles,
-	)
+	accessToken, err := h.issuer.IssueAccessTokenWithTTL(token.IssueInput{
+		Sub:         "service:" + client.ID,
+		Email:       "",
+		DisplayName: client.Name,
+		Scope:       grantedScope,
+		ClientID:    client.ID,
+		SessionID:   "",
+		Roles:       serviceRoles,
+	}, accessTTL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": accessToken.AccessToken,
-		"token_type":   accessToken.TokenType,
-		"expires_in":   accessToken.ExpiresIn,
-		"scope":        accessToken.Scope,
+		"access_token":           accessToken.AccessToken,
+		"token_type":             accessToken.TokenType,
+		"expires_in":             accessToken.ExpiresIn,
+		"scope":                  accessToken.Scope,
+		"rate_limit_max_calls":   resolvedClientRateLimitMaxCalls(client),
+		"token_validity_minutes": resolvedClientTokenValidityMinutes(client, h.issuer.AccessTokenTTL),
 	})
 }
 

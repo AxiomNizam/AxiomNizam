@@ -30,6 +30,7 @@ type Claims struct {
 	Email             string                 `json:"email"`
 	DisplayName       string                 `json:"display_name,omitempty"`
 	Name              string                 `json:"name"`
+	ClientID          string                 `json:"client_id,omitempty"`
 	Roles             []string               `json:"roles,omitempty"`
 	RealmAccess       RealmAccess            `json:"realm_access"`
 	ResourceAccess    map[string]interface{} `json:"resource_access"`

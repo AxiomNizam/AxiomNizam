@@ -565,7 +565,7 @@ function renderIAMClients(clients) {
     const tbody = document.getElementById('iamClientsBody');
     if (!tbody) return;
     if (!clients.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No clients registered</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">No clients registered</td></tr>';
         return;
     }
     tbody.innerHTML = clients.map(c => {
@@ -573,6 +573,8 @@ function renderIAMClients(clients) {
         const uris = (c.redirect_uris || []).map(u => escapeHtml(u)).join('<br>') || '–';
         const scopes = (c.scopes || []).join(', ') || '–';
         const serviceRoles = (c.service_roles || []).join(', ') || '–';
+        const rateLimit = c.rate_limit_max_calls || 500;
+        const tokenValidityMinutes = c.token_validity_minutes || 15;
         const mode = c.public ? 'Public' : 'Confidential';
         const hasClientCredentials = Array.isArray(c.grant_types) && c.grant_types.includes('client_credentials');
         const canGenerateToken = hasClientCredentials && !c.public;
@@ -584,6 +586,8 @@ function renderIAMClients(clients) {
             '<td style="font-size:.8rem;">' + uris + '</td>' +
             '<td>' + escapeHtml(scopes) + '</td>' +
             '<td>' + escapeHtml(serviceRoles) + '</td>' +
+            '<td>' + escapeHtml(String(rateLimit)) + '</td>' +
+            '<td>' + escapeHtml(String(tokenValidityMinutes) + ' min') + '</td>' +
             '<td style="white-space:nowrap;">' +
                 (canGenerateToken ? '<button class="btn-sm btn-primary" onclick="showGenerateTokenModal(\'' + escapeHtml(c.id) + '\')">Generate Token</button> ' : '') +
                 (canRegenerateSecret ? '<button class="btn-sm btn-secondary" onclick="regenerateClientSecret(\'' + escapeHtml(c.id) + '\')">Regen Secret</button> ' : '') +
@@ -601,6 +605,8 @@ function showCreateClientModal() {
     document.getElementById('iamClientGrantTypes').value = 'authorization_code,refresh_token,client_credentials';
     document.getElementById('iamClientScopes').value = 'openid,profile,email';
     document.getElementById('iamClientServiceRoles').value = '';
+    document.getElementById('iamClientRateLimitMaxCalls').value = '500';
+    document.getElementById('iamClientTokenValidityMinutes').value = '15';
     document.getElementById('iamClientPublic').checked = false;
     document.getElementById('iamClientModalTitle').textContent = 'Register OAuth Client';
     document.getElementById('iamClientSubmitBtn').textContent = 'Register';
@@ -618,6 +624,8 @@ async function editClient(id) {
         document.getElementById('iamClientGrantTypes').value = (c.grant_types || []).join(',');
         document.getElementById('iamClientScopes').value = (c.scopes || []).join(',');
         document.getElementById('iamClientServiceRoles').value = (c.service_roles || []).join(',');
+        document.getElementById('iamClientRateLimitMaxCalls').value = String(c.rate_limit_max_calls || 500);
+        document.getElementById('iamClientTokenValidityMinutes').value = String(c.token_validity_minutes || 15);
         document.getElementById('iamClientPublic').checked = c.public === true;
         document.getElementById('iamClientModalTitle').textContent = 'Edit Client';
         document.getElementById('iamClientSubmitBtn').textContent = 'Update';
@@ -641,6 +649,17 @@ async function submitClient() {
     const serviceRoles = document.getElementById('iamClientServiceRoles').value
         .split(',').map(s => s.trim()).filter(Boolean);
     const publicClient = document.getElementById('iamClientPublic').checked;
+    const rateLimitMaxCalls = parseInt(document.getElementById('iamClientRateLimitMaxCalls').value, 10);
+    const tokenValidityMinutes = parseInt(document.getElementById('iamClientTokenValidityMinutes').value, 10);
+
+    if (!Number.isFinite(rateLimitMaxCalls) || rateLimitMaxCalls < 1) {
+        showIAMToast('Rate limit max calls must be at least 1', true);
+        return;
+    }
+    if (!Number.isFinite(tokenValidityMinutes) || tokenValidityMinutes < 1) {
+        showIAMToast('Token validity minutes must be at least 1', true);
+        return;
+    }
 
     if (publicClient && grantTypes.includes('client_credentials')) {
         showIAMToast('Public clients cannot use client_credentials grant', true);
@@ -653,6 +672,8 @@ async function submitClient() {
         grant_types: grantTypes,
         scopes: scopes,
         service_roles: serviceRoles,
+        rate_limit_max_calls: rateLimitMaxCalls,
+        token_validity_minutes: tokenValidityMinutes,
         public: publicClient
     };
 

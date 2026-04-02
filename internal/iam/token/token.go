@@ -51,6 +51,17 @@ type AccessTokenResponse struct {
 	Scope       string    `json:"scope,omitempty"`
 }
 
+// IssueInput carries common token issuance arguments.
+type IssueInput struct {
+	Sub         string
+	Email       string
+	DisplayName string
+	Scope       string
+	ClientID    string
+	SessionID   string
+	Roles       []string
+}
+
 // JWKSResponse is the /.well-known/jwks.json payload.
 type JWKSResponse struct {
 	Keys []JWKEntry `json:"keys"`
@@ -135,22 +146,38 @@ func NewIssuer(issuerURL string) (*Issuer, error) {
 
 // IssueTokenPair creates a signed access and refresh token pair.
 func (iss *Issuer) IssueTokenPair(sub, email, displayName, scope, clientID, sessionID string, roles []string) (*TokenPair, error) {
-	now := time.Now().UTC()
-	accessExp := now.Add(iss.AccessTokenTTL)
-	refreshExp := now.Add(iss.RefreshTokenTTL)
-
-	accessClaims := IAMClaims{
+	return iss.IssueTokenPairWithAccessTTL(IssueInput{
 		Sub:         sub,
 		Email:       email,
 		DisplayName: displayName,
-		Roles:       roles,
 		Scope:       scope,
 		ClientID:    clientID,
 		SessionID:   sessionID,
+		Roles:       roles,
+	}, iss.AccessTokenTTL)
+}
+
+// IssueTokenPairWithAccessTTL creates a signed access and refresh token pair with custom access token TTL.
+func (iss *Issuer) IssueTokenPairWithAccessTTL(input IssueInput, accessTokenTTL time.Duration) (*TokenPair, error) {
+	now := time.Now().UTC()
+	if accessTokenTTL <= 0 {
+		accessTokenTTL = iss.AccessTokenTTL
+	}
+	accessExp := now.Add(accessTokenTTL)
+	refreshExp := now.Add(iss.RefreshTokenTTL)
+
+	accessClaims := IAMClaims{
+		Sub:         input.Sub,
+		Email:       input.Email,
+		DisplayName: input.DisplayName,
+		Roles:       input.Roles,
+		Scope:       input.Scope,
+		ClientID:    input.ClientID,
+		SessionID:   input.SessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    iss.issuerURL,
-			Subject:   sub,
-			Audience:  jwt.ClaimStrings{clientID},
+			Subject:   input.Sub,
+			Audience:  jwt.ClaimStrings{input.ClientID},
 			ExpiresAt: jwt.NewNumericDate(accessExp),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -168,8 +195,8 @@ func (iss *Issuer) IssueTokenPair(sub, email, displayName, scope, clientID, sess
 
 	refreshClaims := jwt.RegisteredClaims{
 		Issuer:    iss.issuerURL,
-		Subject:   sub,
-		Audience:  jwt.ClaimStrings{clientID},
+		Subject:   input.Sub,
+		Audience:  jwt.ClaimStrings{input.ClientID},
 		ExpiresAt: jwt.NewNumericDate(refreshExp),
 		IssuedAt:  jwt.NewNumericDate(now),
 		ID:        uuid.New().String(),
@@ -187,29 +214,45 @@ func (iss *Issuer) IssueTokenPair(sub, email, displayName, scope, clientID, sess
 		AccessToken:  signedAccess,
 		RefreshToken: signedRefresh,
 		TokenType:    "Bearer",
-		ExpiresIn:    int(iss.AccessTokenTTL.Seconds()),
+		ExpiresIn:    int(accessTokenTTL.Seconds()),
 		ExpiresAt:    accessExp,
-		Scope:        scope,
+		Scope:        input.Scope,
 	}, nil
 }
 
 // IssueAccessToken creates a signed access token without issuing a refresh token.
 func (iss *Issuer) IssueAccessToken(sub, email, displayName, scope, clientID, sessionID string, roles []string) (*AccessTokenResponse, error) {
-	now := time.Now().UTC()
-	accessExp := now.Add(iss.AccessTokenTTL)
-
-	accessClaims := IAMClaims{
+	return iss.IssueAccessTokenWithTTL(IssueInput{
 		Sub:         sub,
 		Email:       email,
 		DisplayName: displayName,
-		Roles:       roles,
 		Scope:       scope,
 		ClientID:    clientID,
 		SessionID:   sessionID,
+		Roles:       roles,
+	}, iss.AccessTokenTTL)
+}
+
+// IssueAccessTokenWithTTL creates a signed access token with a custom TTL and without issuing a refresh token.
+func (iss *Issuer) IssueAccessTokenWithTTL(input IssueInput, accessTokenTTL time.Duration) (*AccessTokenResponse, error) {
+	now := time.Now().UTC()
+	if accessTokenTTL <= 0 {
+		accessTokenTTL = iss.AccessTokenTTL
+	}
+	accessExp := now.Add(accessTokenTTL)
+
+	accessClaims := IAMClaims{
+		Sub:         input.Sub,
+		Email:       input.Email,
+		DisplayName: input.DisplayName,
+		Roles:       input.Roles,
+		Scope:       input.Scope,
+		ClientID:    input.ClientID,
+		SessionID:   input.SessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    iss.issuerURL,
-			Subject:   sub,
-			Audience:  jwt.ClaimStrings{clientID},
+			Subject:   input.Sub,
+			Audience:  jwt.ClaimStrings{input.ClientID},
 			ExpiresAt: jwt.NewNumericDate(accessExp),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -228,9 +271,9 @@ func (iss *Issuer) IssueAccessToken(sub, email, displayName, scope, clientID, se
 	return &AccessTokenResponse{
 		AccessToken: signedAccess,
 		TokenType:   "Bearer",
-		ExpiresIn:   int(iss.AccessTokenTTL.Seconds()),
+		ExpiresIn:   int(accessTokenTTL.Seconds()),
 		ExpiresAt:   accessExp,
-		Scope:       scope,
+		Scope:       input.Scope,
 	}, nil
 }
 

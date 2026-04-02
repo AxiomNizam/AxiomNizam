@@ -15,16 +15,18 @@ import (
 
 // OAuthClient represents a registered OAuth2 client application.
 type OAuthClient struct {
-	ID           string    `json:"id"`
-	Secret       string    `json:"secret,omitempty"` // bcrypt hash stored; raw returned at creation only
-	Name         string    `json:"name"`
-	RedirectURIs []string  `json:"redirect_uris"`
-	Scopes       []string  `json:"scopes"`
-	GrantTypes   []string  `json:"grant_types"` // authorization_code, refresh_token, client_credentials
-	ServiceRoles []string  `json:"service_roles,omitempty"`
-	Public       bool      `json:"public"` // public clients (SPA, mobile)
-	CreatedAt    time.Time `json:"created_at"`
-	Active       bool      `json:"active"`
+	ID                   string    `json:"id"`
+	Secret               string    `json:"secret,omitempty"` // bcrypt hash stored; raw returned at creation only
+	Name                 string    `json:"name"`
+	RedirectURIs         []string  `json:"redirect_uris"`
+	Scopes               []string  `json:"scopes"`
+	GrantTypes           []string  `json:"grant_types"` // authorization_code, refresh_token, client_credentials
+	ServiceRoles         []string  `json:"service_roles,omitempty"`
+	RateLimitMaxCalls    int64     `json:"rate_limit_max_calls,omitempty"`
+	TokenValidityMinutes int       `json:"token_validity_minutes,omitempty"`
+	Public               bool      `json:"public"` // public clients (SPA, mobile)
+	CreatedAt            time.Time `json:"created_at"`
+	Active               bool      `json:"active"`
 }
 
 // AuthorizationCode is a short-lived code exchanged for tokens (Authorization Code flow).

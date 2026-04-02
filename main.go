@@ -317,11 +317,33 @@ func main() {
 			principal = "token-user"
 		}
 
+		defaultMaxCalls, defaultValidity := rateLimiter.DefaultPolicy()
+		callsLimit := defaultMaxCalls
+
 		allowed, callsRemaining, expiresAt, limitErr := rateLimiter.CheckRateLimit(token)
 		if !allowed && limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
 			// Accept valid IAM/JWT tokens even if they were not issued through /auth/login.
-			rateLimiter.RegisterToken(token, principal)
+			policyCalls := defaultMaxCalls
+			policyValidity := defaultValidity
+
+			if claims != nil && strings.TrimSpace(claims.ClientID) != "" && iamSystem != nil && iamSystem.Clients != nil {
+				if clientCfg, clientErr := iamSystem.Clients.GetClient(strings.TrimSpace(claims.ClientID)); clientErr == nil && clientCfg != nil {
+					if clientCfg.RateLimitMaxCalls > 0 {
+						policyCalls = clientCfg.RateLimitMaxCalls
+					}
+					if clientCfg.TokenValidityMinutes > 0 {
+						policyValidity = time.Duration(clientCfg.TokenValidityMinutes) * time.Minute
+					}
+				}
+			}
+
+			rateLimiter.RegisterTokenWithPolicy(token, principal, policyCalls, policyValidity)
+			callsLimit = policyCalls
 			allowed, callsRemaining, expiresAt, limitErr = rateLimiter.CheckRateLimit(token)
+		}
+
+		if trackedLimit, _, tracked := rateLimiter.GetTokenPolicy(token); tracked && trackedLimit > 0 {
+			callsLimit = trackedLimit
 		}
 
 		if !allowed {
@@ -334,10 +356,10 @@ func main() {
 			} else {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error":           "api call limit exceeded",
-					"message":         "you have used all 500 api calls allowed per token",
-					"calls_limit":     500,
+					"message":         fmt.Sprintf("you have used all %d api calls allowed for this token", callsLimit),
+					"calls_limit":     callsLimit,
 					"expires_at":      expiresAt.Format("2006-01-02 15:04:05"),
-					"action_required": "login again to get a fresh token with new 500 calls",
+					"action_required": fmt.Sprintf("use a new token to continue with a fresh %d-call quota", callsLimit),
 					"action_endpoint": "/auth/login",
 				})
 			}
@@ -357,7 +379,7 @@ func main() {
 		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
 		c.Set("token", token)
 
-		c.Header("X-RateLimit-Limit", "500")
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", callsLimit))
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
