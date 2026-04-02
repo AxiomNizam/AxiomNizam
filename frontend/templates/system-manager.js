@@ -479,12 +479,16 @@ function guessDbType(dbName) {
 // USER MANAGEMENT
 // ====================================
 
+function openIAMAdminConsole() {
+    window.open('/iam-admin', '_blank');
+}
+
 function loadUsers() {
     var userList = document.getElementById('userList');
     if (!userList) return;
     userList.innerHTML = '<div class="loading">Loading users...</div>';
 
-    fetch(BACKEND_URL + '/api/v1/users', { headers: getAuthHeaders() })
+    fetch(BACKEND_URL + '/iam/admin/users', { headers: getAuthHeaders() })
         .then(function(response) {
             return response.text().then(function(text) {
                 var payload = {};
@@ -505,28 +509,27 @@ function loadUsers() {
         .then(function(data) {
             var users = data.users || [];
             if (users.length === 0) {
-                userList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary,#94a3b8);">No users found. Click "+ Create User" to add one.</div>';
+                userList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary,#94a3b8);">No IAM users found. Use the IAM Console to create users.</div>';
                 return;
             }
 
             var html = '';
             for (var i = 0; i < users.length; i++) {
                 var u = users[i];
-                var roleClass = 'role-' + u.role;
-                var statusColor = u.status === 'active' ? '#10b981' : '#ef4444';
+                var email = u.email || '';
+                var displayName = u.display_name || (email ? email.split('@')[0] : 'Unknown');
+                var createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
+                var statusColor = u.active ? '#10b981' : '#ef4444';
+                var verifyColor = u.email_verified ? '#10b981' : '#f59e0b';
                 html += '<div class="user-card">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-                    '<strong style="font-size:1.1em;">' + escapeHtml(u.username) + '</strong>' +
-                    '<span class="user-role-badge ' + roleClass + '">' + escapeHtml(u.role.toUpperCase()) + '</span>' +
+                    '<strong style="font-size:1.1em;">' + escapeHtml(displayName) + '</strong>' +
+                    '<span style="color:' + statusColor + ';font-weight:600;">' + (u.active ? '● Active' : '● Disabled') + '</span>' +
                     '</div>' +
-                    '<div style="color:var(--text-secondary,#94a3b8);font-size:0.9em;">' + escapeHtml(u.email) + '</div>' +
+                    '<div style="color:var(--text-secondary,#94a3b8);font-size:0.9em;">' + escapeHtml(email) + '</div>' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;">' +
-                    '<span style="color:' + statusColor + ';">' + (u.status === 'active' ? '● Active' : '● Disabled') + '</span>' +
-                    '<span style="color:var(--text-secondary,#94a3b8);">Created: ' + new Date(u.created_at).toLocaleDateString() + '</span>' +
-                    '</div>' +
-                    '<div class="user-card-actions">' +
-                    '<button class="btn-edit" onclick="openEditUserModal(\'' + u.id + '\')">✏️ Edit</button>' +
-                    '<button class="btn-delete" onclick="deleteUser(\'' + u.id + '\', \'' + escapeHtml(u.username) + '\')">🗑️ Delete</button>' +
+                    '<span style="color:' + verifyColor + ';">' + (u.email_verified ? '● Email Verified' : '● Email Unverified') + '</span>' +
+                    '<span style="color:var(--text-secondary,#94a3b8);">Created: ' + createdAt + '</span>' +
                     '</div>' +
                     '</div>';
             }
@@ -535,144 +538,6 @@ function loadUsers() {
         .catch(function(err) {
             userList.innerHTML = '<div style="color:#ef4444;padding:20px;">Failed to load users: ' + err.message + '</div>';
         });
-}
-
-function openCreateUserModal() {
-    document.getElementById('createUserModal').style.display = 'flex';
-    document.getElementById('newUserName').value = '';
-    document.getElementById('newUserEmail').value = '';
-    document.getElementById('newUserPassword').value = '';
-    document.getElementById('newUserRole').value = 'user';
-    document.getElementById('createUserResult').style.display = 'none';
-}
-
-function closeCreateUserModal() {
-    document.getElementById('createUserModal').style.display = 'none';
-}
-
-function submitCreateUser(event) {
-    event.preventDefault();
-    var btn = document.getElementById('createUserBtn');
-    var resultDiv = document.getElementById('createUserResult');
-    
-    var payload = {
-        username: document.getElementById('newUserName').value.trim(),
-        email: document.getElementById('newUserEmail').value.trim(),
-        password: document.getElementById('newUserPassword').value,
-        role: document.getElementById('newUserRole').value
-    };
-
-    btn.disabled = true;
-    btn.textContent = 'Creating...';
-    resultDiv.style.display = 'none';
-
-    fetch(BACKEND_URL + '/api/v1/users', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-    })
-    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
-    .then(function(result) {
-        btn.disabled = false;
-        btn.textContent = 'Create User';
-        resultDiv.style.display = 'block';
-        if (result.ok) {
-            resultDiv.style.background = 'rgba(16,185,129,0.15)';
-            resultDiv.style.color = '#10b981';
-            resultDiv.textContent = 'User "' + payload.username + '" created successfully with role: ' + payload.role;
-            addOperationLog('User "' + payload.username + '" created (role: ' + payload.role + ')', 'success');
-            loadUsers();
-        } else {
-            resultDiv.style.background = 'rgba(239,68,68,0.15)';
-            resultDiv.style.color = '#ef4444';
-            resultDiv.textContent = result.data.error || 'Failed to create user';
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = 'Create User';
-        resultDiv.style.display = 'block';
-        resultDiv.style.background = 'rgba(239,68,68,0.15)';
-        resultDiv.style.color = '#ef4444';
-        resultDiv.textContent = 'Connection error: ' + err.message;
-    });
-}
-
-function openEditUserModal(userId) {
-    fetch(BACKEND_URL + '/api/v1/users/' + userId, { headers: getAuthHeaders() })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var user = data.user;
-            if (!user) { alert('User not found'); return; }
-            document.getElementById('editUserId').value = user.id;
-            document.getElementById('editUserName').value = user.username;
-            document.getElementById('editUserEmail').value = user.email;
-            document.getElementById('editUserRole').value = user.role;
-            document.getElementById('editUserStatus').value = user.status || 'active';
-            document.getElementById('editUserModal').style.display = 'flex';
-        })
-        .catch(function(err) { alert('Failed to load user: ' + err.message); });
-}
-
-function closeEditUserModal() {
-    document.getElementById('editUserModal').style.display = 'none';
-}
-
-function submitEditUser(event) {
-    event.preventDefault();
-    var userId = document.getElementById('editUserId').value;
-    var btn = document.getElementById('editUserBtn');
-    
-    var payload = {
-        email: document.getElementById('editUserEmail').value.trim(),
-        role: document.getElementById('editUserRole').value,
-        status: document.getElementById('editUserStatus').value
-    };
-
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
-
-    fetch(BACKEND_URL + '/api/v1/users/' + userId, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-    })
-    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
-    .then(function(result) {
-        btn.disabled = false;
-        btn.textContent = 'Save Changes';
-        if (result.ok) {
-            closeEditUserModal();
-            addOperationLog('User updated successfully', 'success');
-            loadUsers();
-        } else {
-            alert('Failed to update user: ' + (result.data.error || 'Unknown error'));
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = 'Save Changes';
-        alert('Connection error: ' + err.message);
-    });
-}
-
-function deleteUser(userId, username) {
-    if (!confirm('Are you sure you want to delete user "' + username + '"? This action cannot be undone.')) return;
-
-    fetch(BACKEND_URL + '/api/v1/users/' + userId, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-    })
-    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
-    .then(function(result) {
-        if (result.ok) {
-            addOperationLog('User "' + username + '" deleted', 'success');
-            loadUsers();
-        } else {
-            alert('Failed to delete user: ' + (result.data.error || 'Unknown error'));
-        }
-    })
-    .catch(function(err) { alert('Connection error: ' + err.message); });
 }
 
 // ====================================

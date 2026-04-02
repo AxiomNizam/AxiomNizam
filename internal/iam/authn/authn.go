@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"example.com/axiomnizam/internal/iam/identity"
@@ -24,7 +25,7 @@ type Session struct {
 
 // LoginRequest is the credential payload.
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -55,6 +56,7 @@ type Authenticator struct {
 
 // UserRepository is the minimum user lookup contract.
 type UserRepository interface {
+	GetByLoginIdentifier(identifier string) (*identity.User, error)
 	GetByEmail(email string) (*identity.User, error)
 	GetByID(id string) (*identity.User, error)
 }
@@ -72,14 +74,14 @@ func NewAuthenticator(users UserRepository, sessions SessionRepository) *Authent
 	return &Authenticator{userRepo: users, sessionRepo: sessions}
 }
 
-// Authenticate validates email/password and returns the user on success.
-func (a *Authenticator) Authenticate(email, password string) (*identity.User, error) {
-	email = identity.NormaliseEmail(email)
-	if email == "" || password == "" {
+// Authenticate validates identifier/password and returns the user on success.
+func (a *Authenticator) Authenticate(identifier, password string) (*identity.User, error) {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" || password == "" {
 		return nil, errors.New("email and password are required")
 	}
 
-	user, err := a.userRepo.GetByEmail(email)
+	user, err := a.userRepo.GetByLoginIdentifier(identifier)
 	if err != nil {
 		return nil, errors.New("invalid credentials")
 	}

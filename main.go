@@ -73,6 +73,11 @@ func main() {
 	// Load configuration
 	cfg := config.LoadConfig()
 	applySecurityGuardrails(cfg)
+	iamOnlyAuthRaw := strings.TrimSpace(os.Getenv("IAM_ONLY_AUTH"))
+	iamOnlyAuth := true
+	if iamOnlyAuthRaw != "" {
+		iamOnlyAuth = strings.EqualFold(iamOnlyAuthRaw, "true")
+	}
 
 	// Initialize IAM token validator
 	iamIssuerURL := strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
@@ -526,12 +531,16 @@ func main() {
 	router.POST("/api/admin/table/create", adminOrSysMiddleware, adminHandler.CreateTable)
 	router.GET("/api/admin/table/list", adminOrSysMiddleware, adminHandler.ListTables)
 
-	// User management endpoints (admin only)
-	router.GET("/api/v1/users", adminOrSysMiddleware, platformUserHandler.ListPlatformUsers)
-	router.GET("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.GetPlatformUser)
-	router.POST("/api/v1/users", adminOrSysMiddleware, platformUserHandler.CreatePlatformUser)
-	router.PUT("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.UpdatePlatformUser)
-	router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
+	// Legacy platform user management endpoints (admin only)
+	if !iamOnlyAuth {
+		router.GET("/api/v1/users", adminOrSysMiddleware, platformUserHandler.ListPlatformUsers)
+		router.GET("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.GetPlatformUser)
+		router.POST("/api/v1/users", adminOrSysMiddleware, platformUserHandler.CreatePlatformUser)
+		router.PUT("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.UpdatePlatformUser)
+		router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
+	} else {
+		log.Println("ℹ️  IAM_ONLY_AUTH=true: legacy /api/v1/users endpoints are disabled; use /iam/admin/users")
+	}
 
 	// API Metrics endpoints (admin only)
 	router.GET("/api/admin/metrics/all", adminOrSysMiddleware, apiMetricsTracker.GetAllAPIMetrics)
@@ -1415,13 +1424,15 @@ func main() {
 	fmt.Println("  POST /api/admin/table/create     - Create a new table")
 	fmt.Println("  GET  /api/admin/table/list       - List all tables")
 	fmt.Println()
-	fmt.Println("User Management endpoints (admin only):")
-	fmt.Println("  GET    /api/v1/users            - List all platform users")
-	fmt.Println("  GET    /api/v1/users/:id        - Get a platform user")
-	fmt.Println("  POST   /api/v1/users            - Create a platform user")
-	fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
-	fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
-	fmt.Println()
+	if !iamOnlyAuth {
+		fmt.Println("User Management endpoints (admin only):")
+		fmt.Println("  GET    /api/v1/users            - List all platform users")
+		fmt.Println("  GET    /api/v1/users/:id        - Get a platform user")
+		fmt.Println("  POST   /api/v1/users            - Create a platform user")
+		fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
+		fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
+		fmt.Println()
+	}
 	fmt.Println("Dynamic Query endpoints:")
 	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")
 	fmt.Println("       Example: /api/mysql/query?q=SELECT * FROM users&params=1")

@@ -253,17 +253,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 	}
 
-	loginID := strings.TrimSpace(req.Username)
+	loginID := resolveIAMLoginIdentifier(req.Username)
 	if loginID == "" {
 		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "username is required"})
 		return
-	}
-
-	if !strings.Contains(loginID, "@") {
-		defaultDomain := strings.TrimSpace(getEnv("IAM_DEFAULT_EMAIL_DOMAIN", ""))
-		if defaultDomain != "" {
-			loginID = loginID + "@" + strings.TrimPrefix(defaultDomain, "@")
-		}
 	}
 
 	tokenURL := h.iamBaseURL + "/iam/auth/login"

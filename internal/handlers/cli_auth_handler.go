@@ -81,15 +81,10 @@ func (h *CLIAuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	identifier := strings.TrimSpace(req.Username)
+	identifier := resolveIAMLoginIdentifier(req.Username)
 	if identifier == "" || strings.TrimSpace(req.Password) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
 		return
-	}
-	if !strings.Contains(identifier, "@") {
-		if domain := strings.TrimSpace(os.Getenv("IAM_DEFAULT_EMAIL_DOMAIN")); domain != "" {
-			identifier = identifier + "@" + strings.TrimPrefix(domain, "@")
-		}
 	}
 
 	payload, _ := json.Marshal(map[string]string{

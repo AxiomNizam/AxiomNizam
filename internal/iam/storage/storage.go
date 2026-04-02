@@ -110,6 +110,32 @@ func (r *PostgresUserRepository) GetByEmail(email string) (*identity.User, error
 	return toModel(&row), nil
 }
 
+// GetByLoginIdentifier resolves an explicit email or a unique email local-part.
+func (r *PostgresUserRepository) GetByLoginIdentifier(identifier string) (*identity.User, error) {
+	normalized := strings.ToLower(strings.TrimSpace(identifier))
+	if normalized == "" {
+		return nil, nil
+	}
+
+	if strings.Contains(normalized, "@") {
+		return r.GetByEmail(normalized)
+	}
+
+	var rows []IAMUser
+	if err := r.db.Where("split_part(email, '@', 1) = ?", normalized).Order("created_at DESC").Limit(2).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if len(rows) > 1 {
+		log.Printf("⚠️  IAM: login identifier %q is ambiguous; use full email", normalized)
+		return nil, nil
+	}
+
+	return toModel(&rows[0]), nil
+}
+
 func (r *PostgresUserRepository) Update(user *identity.User) error {
 	return r.db.Save(fromModel(user)).Error
 }
