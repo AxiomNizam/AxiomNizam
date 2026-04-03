@@ -182,7 +182,13 @@
                     <h3>Monitoring Dashboards</h3>
                     <p class="monitoring-subtitle">Detailed metrics from API Builder, IAM realms and clients, and user management.</p>
                 </div>
-                <button class="btn-secondary" onclick="loadMonitoringDashboards()">Refresh Metrics</button>
+                <div class="monitoring-header-actions">
+                    <label for="monitoringRealmFilter" class="monitoring-filter-label">Realm</label>
+                    <select id="monitoringRealmFilter" class="monitoring-filter-select" onchange="handleMonitoringRealmFilterChange()">
+                        <option value="">All realms</option>
+                    </select>
+                    <button class="btn-secondary" onclick="loadMonitoringDashboards()">Refresh Metrics</button>
+                </div>
             </div>
 
             <div class="monitoring-kpi-grid" id="monitoringKPIGrid">
@@ -206,6 +212,7 @@
                                 <th>API</th>
                                 <th>Endpoint</th>
                                 <th>Calls</th>
+                                <th>Trend (Calls)</th>
                                 <th>Success</th>
                                 <th>Errors</th>
                                 <th>Avg Duration</th>
@@ -214,7 +221,7 @@
                             </tr>
                         </thead>
                         <tbody id="apiBuilderMetricsBody">
-                            <tr><td colspan="8" class="monitoring-loading-cell">Loading API Builder metrics...</td></tr>
+                            <tr><td colspan="9" class="monitoring-loading-cell">Loading API Builder metrics...</td></tr>
                         </tbody>
                     </table>
                 </div>

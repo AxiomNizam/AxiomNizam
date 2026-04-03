@@ -31,7 +31,10 @@ var monitoringDataSnapshot = {
     clients: [],
     users: [],
     roles: [],
-    bindings: []
+    bindings: [],
+    selectedRealm: '',
+    apiTrendHistory: {},
+    trendMaxPoints: 12
 };
 
 function normalizeSystemManagerRole(role) {
@@ -294,6 +297,166 @@ function setMonitoringBodyLoading(elementId, colSpan, message) {
     body.innerHTML = '<tr><td colspan="' + colSpan + '" class="monitoring-loading-cell">' + escapeHtml(message) + '</td></tr>';
 }
 
+function normalizeRealmIdentifier(realm) {
+    if (!realm || typeof realm !== 'object') return '';
+    return String(realm.id || realm.name || '').trim();
+}
+
+function populateMonitoringRealmFilter(realms) {
+    var select = document.getElementById('monitoringRealmFilter');
+    if (!select) return;
+
+    var realmList = Array.isArray(realms) ? realms : [];
+    var previousSelection = monitoringDataSnapshot.selectedRealm || select.value || '';
+    var seen = {};
+    var options = '<option value="">All realms</option>';
+
+    for (var i = 0; i < realmList.length; i++) {
+        var realm = realmList[i] || {};
+        var key = normalizeRealmIdentifier(realm);
+        if (!key || seen[key]) continue;
+        seen[key] = true;
+
+        var label = String(realm.display_name || realm.name || key);
+        options += '<option value="' + escapeHtml(key) + '">' + escapeHtml(label) + '</option>';
+    }
+
+    select.innerHTML = options;
+
+    if (previousSelection && seen[previousSelection]) {
+        select.value = previousSelection;
+        monitoringDataSnapshot.selectedRealm = previousSelection;
+    } else {
+        select.value = '';
+        monitoringDataSnapshot.selectedRealm = '';
+    }
+
+    select.disabled = realmList.length === 0;
+}
+
+function getSelectedMonitoringRealm() {
+    var select = document.getElementById('monitoringRealmFilter');
+    if (!select) {
+        return monitoringDataSnapshot.selectedRealm || '';
+    }
+    return String(select.value || '').trim();
+}
+
+function getMonitoringRealmLabel(realmID) {
+    if (!realmID) return 'All realms';
+    var realms = Array.isArray(monitoringDataSnapshot.realms) ? monitoringDataSnapshot.realms : [];
+    for (var i = 0; i < realms.length; i++) {
+        var realm = realms[i] || {};
+        if (normalizeRealmIdentifier(realm) === realmID) {
+            return String(realm.display_name || realm.name || realmID);
+        }
+    }
+    return realmID;
+}
+
+function handleMonitoringRealmFilterChange() {
+    monitoringDataSnapshot.selectedRealm = getSelectedMonitoringRealm();
+    applyMonitoringFiltersAndRender({ trackTrend: false });
+}
+
+function getMonitoringTrendKey(method, path) {
+    return String(method || 'GET').toUpperCase() + ' ' + normalizeMetricEndpoint(path || '/');
+}
+
+function updateMonitoringAPITrendHistory(rows) {
+    if (!Array.isArray(rows)) return;
+
+    var historyMap = monitoringDataSnapshot.apiTrendHistory || {};
+    var maxPoints = safeNumber(monitoringDataSnapshot.trendMaxPoints) || 12;
+
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i] || {};
+        var key = getMonitoringTrendKey(row.method, row.path);
+        if (!historyMap[key]) {
+            historyMap[key] = [];
+        }
+
+        var series = historyMap[key];
+        series.push(safeNumber(row.calls));
+        if (series.length > maxPoints) {
+            series.splice(0, series.length - maxPoints);
+        }
+    }
+
+    monitoringDataSnapshot.apiTrendHistory = historyMap;
+}
+
+function getMonitoringAPIDeltaSeries(history) {
+    var source = Array.isArray(history) ? history : [];
+    if (source.length === 0) {
+        return [0, 0];
+    }
+    if (source.length === 1) {
+        return [source[0], source[0]];
+    }
+
+    var deltas = [];
+    for (var i = 1; i < source.length; i++) {
+        deltas.push(Math.max(0, safeNumber(source[i]) - safeNumber(source[i - 1])));
+    }
+
+    if (deltas.length === 1) {
+        deltas.unshift(deltas[0]);
+    }
+    return deltas;
+}
+
+function buildMonitoringSparklineSVG(series, lineClass) {
+    var data = Array.isArray(series) ? series : [0, 0];
+    if (data.length < 2) {
+        data = [0, 0];
+    }
+
+    var width = 96;
+    var height = 26;
+    var padding = 2;
+    var min = Math.min.apply(null, data);
+    var max = Math.max.apply(null, data);
+    var range = max - min;
+    if (range <= 0) {
+        range = 1;
+    }
+
+    var points = [];
+    for (var i = 0; i < data.length; i++) {
+        var x = padding + ((width - (padding * 2)) * i / Math.max(1, data.length - 1));
+        var y = (height - padding) - (((safeNumber(data[i]) - min) / range) * (height - (padding * 2)));
+        points.push(x.toFixed(2) + ',' + y.toFixed(2));
+    }
+
+    return '<svg class="monitoring-sparkline-svg" viewBox="0 0 ' + width + ' ' + height + '" aria-hidden="true">' +
+        '<polyline class="' + lineClass + '" points="' + points.join(' ') + '"></polyline>' +
+        '</svg>';
+}
+
+function renderMonitoringAPISparkline(method, path) {
+    var key = getMonitoringTrendKey(method, path);
+    var historyMap = monitoringDataSnapshot.apiTrendHistory || {};
+    var history = historyMap[key] || [];
+    var deltas = getMonitoringAPIDeltaSeries(history);
+    var lineClass = 'sparkline-neutral';
+
+    if (deltas.length >= 2) {
+        var last = deltas[deltas.length - 1];
+        var prev = deltas[deltas.length - 2];
+        if (last > prev) lineClass = 'sparkline-up';
+        if (last < prev) lineClass = 'sparkline-down';
+    }
+
+    var latest = deltas.length > 0 ? deltas[deltas.length - 1] : 0;
+    var title = 'Recent call deltas per refresh sample';
+
+    return '<div class="monitoring-sparkline-wrap" title="' + escapeHtml(title) + '">' +
+        '<div class="monitoring-sparkline-value">Δ ' + formatMetricNumber(latest) + '</div>' +
+        buildMonitoringSparklineSVG(deltas, lineClass) +
+        '</div>';
+}
+
 function renderMonitoringKPIGrid(kpis) {
     var grid = document.getElementById('monitoringKPIGrid');
     if (!grid) return;
@@ -327,7 +490,7 @@ function renderMonitoringMiniCards(containerId, cards) {
     container.innerHTML = html;
 }
 
-function renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSummary, builderAPIs) {
+function renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSummary, builderAPIs, shouldTrackTrend) {
     var body = document.getElementById('apiBuilderMetricsBody');
     if (!body) return;
 
@@ -372,8 +535,12 @@ function renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSum
         return b.calls - a.calls;
     });
 
+    if (shouldTrackTrend) {
+        updateMonitoringAPITrendHistory(rows);
+    }
+
     if (rows.length === 0) {
-        body.innerHTML = '<tr><td colspan="8" class="monitoring-loading-cell">No API Builder endpoints found.</td></tr>';
+        body.innerHTML = '<tr><td colspan="9" class="monitoring-loading-cell">No API Builder endpoints found.</td></tr>';
     } else {
         var html = '';
         for (var r = 0; r < rows.length; r++) {
@@ -389,6 +556,7 @@ function renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSum
                 '<td><strong>' + escapeHtml(row.api.name || 'Unnamed API') + '</strong></td>' +
                 '<td><span class="method-badge method-' + escapeHtml(row.method.toLowerCase()) + '">' + escapeHtml(row.method) + '</span> <code>' + escapeHtml(row.path) + '</code></td>' +
                 '<td>' + formatMetricNumber(row.calls) + '</td>' +
+                '<td>' + renderMonitoringAPISparkline(row.method, row.path) + '</td>' +
                 '<td>' + formatMetricNumber(row.success) + '</td>' +
                 '<td>' + formatMetricNumber(row.errors) + '</td>' +
                 '<td>' + formatMetricDuration(row.avgMs) + '</td>' +
@@ -620,12 +788,83 @@ function renderUserMetricsDashboard(users, roles, bindings) {
     return summary;
 }
 
+function applyMonitoringFiltersAndRender(options) {
+    var opts = options || {};
+    var trackTrend = !!opts.trackTrend;
+    var snapshot = monitoringDataSnapshot || {};
+    var selectedRealm = getSelectedMonitoringRealm();
+    snapshot.selectedRealm = selectedRealm;
+
+    var allRealms = Array.isArray(snapshot.realms) ? snapshot.realms : [];
+    var allClients = Array.isArray(snapshot.clients) ? snapshot.clients : [];
+    var allUsers = Array.isArray(snapshot.users) ? snapshot.users : [];
+    var allRoles = Array.isArray(snapshot.roles) ? snapshot.roles : [];
+    var allBindings = Array.isArray(snapshot.bindings) ? snapshot.bindings : [];
+
+    var usersAreRealmScoped = allUsers.some(function(user) {
+        return String(user && user.realm_id || '').trim() !== '';
+    });
+
+    var rolesAreRealmScoped = allRoles.some(function(role) {
+        return String(role && role.realm_id || '').trim() !== '';
+    });
+
+    var bindingsAreRealmScoped = allBindings.some(function(binding) {
+        return String(binding && binding.realm_id || '').trim() !== '';
+    });
+
+    var filteredRealms = selectedRealm
+        ? allRealms.filter(function(realm) { return normalizeRealmIdentifier(realm) === selectedRealm; })
+        : allRealms;
+
+    var filteredClients = selectedRealm
+        ? allClients.filter(function(client) { return String(client && client.realm_id || '') === selectedRealm; })
+        : allClients;
+
+    var filteredUsers = (selectedRealm && usersAreRealmScoped)
+        ? allUsers.filter(function(user) { return String(user && user.realm_id || '') === selectedRealm; })
+        : allUsers;
+
+    var filteredRoles = (selectedRealm && rolesAreRealmScoped)
+        ? allRoles.filter(function(role) { return String(role && role.realm_id || '') === selectedRealm; })
+        : allRoles;
+
+    var filteredBindings = (selectedRealm && bindingsAreRealmScoped)
+        ? allBindings.filter(function(binding) {
+            var bindingRealm = String(binding && binding.realm_id || '');
+            return !bindingRealm || bindingRealm === selectedRealm;
+        })
+        : allBindings;
+
+    renderAPIBuilderMetricsDashboard(snapshot.apiStats || {}, snapshot.apiCount || {}, snapshot.builderSummary || {}, snapshot.builderAPIs || [], trackTrend);
+    var realmTotals = renderRealmClientMetricsDashboard(filteredRealms, snapshot.realmDashboards || {}, filteredClients) || {};
+    var userSummary = renderUserMetricsDashboard(filteredUsers, filteredRoles, filteredBindings) || {};
+
+    var totalCalls = safeNumber(snapshot.apiStats && snapshot.apiStats.total_calls);
+    var successCalls = safeNumber(snapshot.apiStats && snapshot.apiStats.success_calls);
+    var apiSuccessRate = totalCalls > 0 ? ((successCalls * 100) / totalCalls) : 0;
+    var scopeLabel = getMonitoringRealmLabel(selectedRealm);
+
+    renderMonitoringKPIGrid([
+        { label: 'API Calls', value: formatMetricNumber(snapshot.apiStats && snapshot.apiStats.total_calls) },
+        { label: 'API Success', value: formatMetricPercent(apiSuccessRate) },
+        { label: 'Realms', value: formatMetricNumber(realmTotals.totalRealms) },
+        { label: 'Active Users', value: formatMetricNumber(userSummary.activeUsers) },
+        { label: 'Active Sessions', value: formatMetricNumber(realmTotals.totalActiveSessions) }
+    ]);
+
+    var realmUpdatedEl = document.getElementById('realmClientMetricsUpdatedAt');
+    if (realmUpdatedEl) {
+        realmUpdatedEl.textContent = 'Scope: ' + scopeLabel + ' | Updated: ' + new Date().toLocaleTimeString();
+    }
+}
+
 function loadMonitoringDashboards() {
     if (!document.getElementById('monitoring')) {
         return;
     }
 
-    setMonitoringBodyLoading('apiBuilderMetricsBody', 8, 'Loading API Builder metrics...');
+    setMonitoringBodyLoading('apiBuilderMetricsBody', 9, 'Loading API Builder metrics...');
     setMonitoringBodyLoading('realmClientMetricsBody', 7, 'Loading realm and client metrics...');
     setMonitoringBodyLoading('userMetricsBody', 3, 'Loading user metrics...');
     setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Refreshing...');
@@ -696,31 +935,17 @@ function loadMonitoringDashboards() {
             monitoringDataSnapshot.roles = roles;
             monitoringDataSnapshot.bindings = bindings;
 
-            renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSummary, builderAPIs);
-            var realmTotals = renderRealmClientMetricsDashboard(realms, dashboardsByRealm, clients) || {};
-            var userSummary = renderUserMetricsDashboard(users, roles, bindings) || {};
-
-            var apiSuccessRate = safeNumber(apiStatsData.total_calls) > 0
-                ? (safeNumber(apiStatsData.success_calls) * 100) / safeNumber(apiStatsData.total_calls)
-                : 0;
-
-            renderMonitoringKPIGrid([
-                { label: 'API Calls', value: formatMetricNumber(apiStatsData.total_calls) },
-                { label: 'API Success', value: formatMetricPercent(apiSuccessRate) },
-                { label: 'Realms', value: formatMetricNumber(realmTotals.totalRealms) },
-                { label: 'Active Users', value: formatMetricNumber(userSummary.activeUsers) },
-                { label: 'Active Sessions', value: formatMetricNumber(realmTotals.totalActiveSessions) }
-            ]);
+            populateMonitoringRealmFilter(realms);
+            applyMonitoringFiltersAndRender({ trackTrend: true });
 
             setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt');
-            setMonitoringUpdatedAt('realmClientMetricsUpdatedAt');
             setMonitoringUpdatedAt('userMetricsUpdatedAt');
         });
     }).catch(function(err) {
         setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Unavailable');
         setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Unavailable');
         setMonitoringUpdatedAt('userMetricsUpdatedAt', 'Unavailable');
-        setMonitoringBodyLoading('apiBuilderMetricsBody', 8, 'Failed to load API Builder metrics: ' + (err.message || 'unknown error'));
+        setMonitoringBodyLoading('apiBuilderMetricsBody', 9, 'Failed to load API Builder metrics: ' + (err.message || 'unknown error'));
         setMonitoringBodyLoading('realmClientMetricsBody', 7, 'Failed to load realm and client metrics.');
         setMonitoringBodyLoading('userMetricsBody', 3, 'Failed to load user metrics.');
         renderMonitoringKPIGrid([
