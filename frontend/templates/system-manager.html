@@ -176,55 +176,96 @@
 
     <!-- Monitoring Tab -->
     <div id="monitoring" class="tab-content">
-        <div class="monitoring-section">
-            <h3>Performance Monitoring</h3>
-            <div class="chart-container">
-                <div class="chart-item">
-                    <h4>Request Rate</h4>
-                    <div class="chart-placeholder">📈 Chart visualization area</div>
+        <div class="monitoring-section monitoring-dashboards">
+            <div class="section-header">
+                <div>
+                    <h3>Monitoring Dashboards</h3>
+                    <p class="monitoring-subtitle">Detailed metrics from API Builder, IAM realms and clients, and user management.</p>
                 </div>
-                <div class="chart-item">
-                    <h4>Response Times</h4>
-                    <div class="chart-placeholder">📊 Chart visualization area</div>
+                <button class="btn-secondary" onclick="loadMonitoringDashboards()">Refresh Metrics</button>
+            </div>
+
+            <div class="monitoring-kpi-grid" id="monitoringKPIGrid">
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">API Calls</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">API Success</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">Realms</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">Active Users</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">Active Sessions</div></div>
+            </div>
+
+            <div class="metrics-table monitoring-dashboard-block">
+                <div class="metrics-section-header">
+                    <h4>API Builder Metrics Dashboard</h4>
+                    <span class="status-badge status-analyzed" id="apiBuilderMetricsUpdatedAt">Loading...</span>
+                </div>
+                <div class="monitoring-mini-cards" id="apiBuilderMetricCards"></div>
+                <div class="table-responsive">
+                    <table class="admin-table compact monitoring-detail-table">
+                        <thead>
+                            <tr>
+                                <th>API</th>
+                                <th>Endpoint</th>
+                                <th>Calls</th>
+                                <th>Success</th>
+                                <th>Errors</th>
+                                <th>Avg Duration</th>
+                                <th>Last Called</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apiBuilderMetricsBody">
+                            <tr><td colspan="8" class="monitoring-loading-cell">Loading API Builder metrics...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="metrics-table">
-                <h4>Detailed Metrics</h4>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            <th>Current</th>
-                            <th>Average</th>
-                            <th>Peak</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="metricsBody">
-                        <tr>
-                            <td>API Response Time</td>
-                            <td>45ms</td>
-                            <td>52ms</td>
-                            <td>120ms</td>
-                            <td><span class="status-ok">✓ Good</span></td>
-                        </tr>
-                        <tr>
-                            <td>Database Query Time</td>
-                            <td>12ms</td>
-                            <td>15ms</td>
-                            <td>45ms</td>
-                            <td><span class="status-ok">✓ Good</span></td>
-                        </tr>
-                        <tr>
-                            <td>Error Rate</td>
-                            <td>0.1%</td>
-                            <td>0.15%</td>
-                            <td>0.5%</td>
-                            <td><span class="status-ok">✓ Low</span></td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="metrics-table monitoring-dashboard-block">
+                <div class="metrics-section-header">
+                    <h4>Realm Client Metrics Dashboard</h4>
+                    <span class="status-badge status-analyzed" id="realmClientMetricsUpdatedAt">Loading...</span>
+                </div>
+                <div class="monitoring-mini-cards" id="realmClientMetricCards"></div>
+                <div class="table-responsive">
+                    <table class="admin-table compact monitoring-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Realm</th>
+                                <th>Users</th>
+                                <th>Clients</th>
+                                <th>Active Clients</th>
+                                <th>Roles</th>
+                                <th>Active Sessions</th>
+                                <th>Recent Events</th>
+                            </tr>
+                        </thead>
+                        <tbody id="realmClientMetricsBody">
+                            <tr><td colspan="7" class="monitoring-loading-cell">Loading realm and client metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="metrics-table monitoring-dashboard-block">
+                <div class="metrics-section-header">
+                    <h4>User Metrics Dashboard</h4>
+                    <span class="status-badge status-analyzed" id="userMetricsUpdatedAt">Loading...</span>
+                </div>
+                <div class="monitoring-mini-cards" id="userMetricCards"></div>
+                <div class="table-responsive">
+                    <table class="admin-table compact monitoring-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userMetricsBody">
+                            <tr><td colspan="3" class="monitoring-loading-cell">Loading user metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

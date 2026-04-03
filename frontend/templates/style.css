@@ -1270,6 +1270,85 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 18px;
 }
 
+.monitoring-dashboards {
+    display: grid;
+    gap: 18px;
+}
+
+.monitoring-subtitle {
+    margin: 6px 0 0 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.monitoring-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.monitoring-dashboard-block {
+    display: grid;
+    gap: 14px;
+}
+
+.metrics-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.metrics-section-header h4 {
+    margin: 0;
+}
+
+.monitoring-mini-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+}
+
+.monitoring-mini-card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: rgba(var(--primary-rgb), 0.06);
+    padding: 12px;
+    min-height: 84px;
+}
+
+.mmc-label {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+}
+
+.mmc-value {
+    margin-top: 4px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary-light);
+}
+
+.mmc-sub {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.monitoring-detail-table td,
+.monitoring-detail-table th {
+    white-space: nowrap;
+}
+
+.monitoring-loading-cell {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 22px 14px !important;
+}
+
 /* Metrics Table */
 .metrics-table {
     background: var(--dark-bg);
@@ -2054,6 +2133,119 @@ code {
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.85em;
+}
+
+.api-name-with-hover {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+}
+
+.api-name-text {
+    font-weight: 600;
+}
+
+.api-hover-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(var(--primary-rgb), 0.35);
+    background: rgba(var(--primary-rgb), 0.12);
+    color: var(--primary-light);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: default;
+}
+
+.api-hover-panel {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 8px);
+    width: 280px;
+    max-width: 72vw;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg);
+    box-shadow: 0 14px 26px rgba(2, 6, 23, 0.3);
+    padding: 10px;
+    display: none;
+    z-index: 30;
+}
+
+.api-name-with-hover:hover .api-hover-panel,
+.api-name-with-hover:focus-within .api-hover-panel {
+    display: block;
+}
+
+.api-hover-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+}
+
+.api-hover-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.api-hover-metric-item {
+    border: 1px solid rgba(var(--primary-rgb), 0.2);
+    border-radius: 8px;
+    padding: 6px;
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
+.api-hover-metric-label {
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.api-hover-metric-value {
+    margin-top: 3px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.api-hover-footnote {
+    margin-top: 8px;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .monitoring-kpi-grid,
+    .monitoring-mini-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .api-hover-panel {
+        left: auto;
+        right: 0;
+        width: min(280px, 88vw);
+    }
+}
+
+@media (max-width: 520px) {
+    .monitoring-kpi-grid,
+    .monitoring-mini-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .api-hover-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Method badges */

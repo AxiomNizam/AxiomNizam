@@ -21,6 +21,18 @@ const BACKEND_URL = (() => {
 console.log('System Manager - Backend URL:', BACKEND_URL);
 
 var availableDbServers = [];
+var monitoringDataSnapshot = {
+    apiStats: null,
+    apiCount: null,
+    builderSummary: null,
+    builderAPIs: [],
+    realms: [],
+    realmDashboards: {},
+    clients: [],
+    users: [],
+    roles: [],
+    bindings: []
+};
 
 function normalizeSystemManagerRole(role) {
     var value = String(role || '').toLowerCase().trim();
@@ -142,6 +154,7 @@ window.addEventListener('DOMContentLoaded', function() {
     loadStatusData();
     loadDatabases();
     loadDatabaseServers();
+    loadMonitoringDashboards();
     setInterval(loadStatusData, 30000);
 });
 
@@ -169,12 +182,555 @@ function switchManagerTab(tabName) {
     if (tabName === 'users') {
         loadUsers();
     }
+    if (tabName === 'monitoring') {
+        loadMonitoringDashboards();
+    }
     if (tabName === 'graphql-studio') {
         loadManagerGraphQLSchemaInfo();
     }
     if (tabName === 'control-plane') {
         refreshManagerControlPlaneData();
     }
+}
+
+function getSystemManagerAuthHeaders() {
+    if (typeof getAuthHeaders === 'function') {
+        return getAuthHeaders();
+    }
+
+    var token = localStorage.getItem('authToken') || readSystemManagerCookie('authToken') || '';
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers.Authorization = 'Bearer ' + token;
+    }
+    return headers;
+}
+
+function monitoringFetchJSON(path) {
+    return fetch(BACKEND_URL + path, { headers: getSystemManagerAuthHeaders() })
+        .then(function(response) {
+            return response.text().then(function(text) {
+                var payload = {};
+                try {
+                    payload = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    payload = { raw: text };
+                }
+
+                if (!response.ok) {
+                    var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
+                    var err = new Error(message);
+                    err.status = response.status;
+                    err.payload = payload;
+                    throw err;
+                }
+
+                return payload;
+            });
+        });
+}
+
+function safeNumber(value) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function formatMetricNumber(value) {
+    var n = safeNumber(value);
+    return new Intl.NumberFormat().format(n);
+}
+
+function formatMetricPercent(value) {
+    var n = safeNumber(value);
+    return n.toFixed(1) + '%';
+}
+
+function formatMetricDuration(ms) {
+    var n = safeNumber(ms);
+    if (n <= 0) {
+        return '--';
+    }
+    if (n < 1000) {
+        return n + 'ms';
+    }
+    return (n / 1000).toFixed(2) + 's';
+}
+
+function formatMetricDateTime(raw) {
+    if (!raw) return '--';
+    var d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '--';
+    return d.toLocaleString();
+}
+
+function monitoringStatusClassFromRate(percent) {
+    if (percent >= 95) return 'status-active';
+    if (percent >= 75) return 'status-draft';
+    return 'status-inactive';
+}
+
+function normalizeMetricEndpoint(path) {
+    var text = String(path || '').split('?')[0].trim();
+    if (!text) return '/';
+    if (text.charAt(0) !== '/') {
+        text = '/' + text;
+    }
+    return text;
+}
+
+function setMonitoringUpdatedAt(elementId, text) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    if (text) {
+        el.textContent = text;
+        return;
+    }
+    el.textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+function setMonitoringBodyLoading(elementId, colSpan, message) {
+    var body = document.getElementById(elementId);
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="' + colSpan + '" class="monitoring-loading-cell">' + escapeHtml(message) + '</td></tr>';
+}
+
+function renderMonitoringKPIGrid(kpis) {
+    var grid = document.getElementById('monitoringKPIGrid');
+    if (!grid) return;
+
+    var html = '';
+    for (var i = 0; i < kpis.length; i++) {
+        var item = kpis[i];
+        html += '<div class="summary-card">' +
+            '<div class="sc-value">' + escapeHtml(item.value) + '</div>' +
+            '<div class="sc-label">' + escapeHtml(item.label) + '</div>' +
+            '</div>';
+    }
+
+    grid.innerHTML = html;
+}
+
+function renderMonitoringMiniCards(containerId, cards) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+
+    var html = '';
+    for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        html += '<div class="monitoring-mini-card">' +
+            '<div class="mmc-label">' + escapeHtml(card.label) + '</div>' +
+            '<div class="mmc-value">' + escapeHtml(card.value) + '</div>' +
+            '<div class="mmc-sub">' + escapeHtml(card.subtext || '') + '</div>' +
+            '</div>';
+    }
+
+    container.innerHTML = html;
+}
+
+function renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSummary, builderAPIs) {
+    var body = document.getElementById('apiBuilderMetricsBody');
+    if (!body) return;
+
+    var metrics = Array.isArray(apiStatsData && apiStatsData.metrics) ? apiStatsData.metrics : [];
+    var apis = Array.isArray(builderAPIs) ? builderAPIs : [];
+    var metricByKey = {};
+
+    for (var i = 0; i < metrics.length; i++) {
+        var metric = metrics[i] || {};
+        var key = String(metric.method || '').toUpperCase() + ' ' + normalizeMetricEndpoint(metric.endpoint || '');
+        metricByKey[key] = metric;
+    }
+
+    var rows = [];
+    for (var j = 0; j < apis.length; j++) {
+        var api = apis[j] || {};
+        var method = String(api.method || 'GET').toUpperCase();
+        var path = normalizeMetricEndpoint(api.path || '/');
+        var metricKey = method + ' ' + path;
+        var endpointMetric = metricByKey[metricKey] || null;
+
+        var calls = endpointMetric ? safeNumber(endpointMetric.total_calls) : safeNumber(api.hit_count);
+        var success = endpointMetric ? safeNumber(endpointMetric.success_calls) : 0;
+        var errors = endpointMetric ? safeNumber(endpointMetric.error_calls) : 0;
+        var avgMs = endpointMetric ? safeNumber(endpointMetric.average_duration_ms) : 0;
+        var successRate = calls > 0 ? (success * 100) / calls : 0;
+
+        rows.push({
+            api: api,
+            method: method,
+            path: path,
+            calls: calls,
+            success: success,
+            errors: errors,
+            avgMs: avgMs,
+            successRate: successRate,
+            lastCalled: endpointMetric ? endpointMetric.last_called : ''
+        });
+    }
+
+    rows.sort(function(a, b) {
+        return b.calls - a.calls;
+    });
+
+    if (rows.length === 0) {
+        body.innerHTML = '<tr><td colspan="8" class="monitoring-loading-cell">No API Builder endpoints found.</td></tr>';
+    } else {
+        var html = '';
+        for (var r = 0; r < rows.length; r++) {
+            var row = rows[r];
+            var statusClass = monitoringStatusClassFromRate(row.successRate);
+            var statusText = row.calls === 0 ? 'No Traffic' : ('Healthy ' + formatMetricPercent(row.successRate));
+            var apiStatus = String((row.api && row.api.status) || 'draft').toLowerCase();
+            var apiStatusClass = 'status-draft';
+            if (apiStatus === 'active') apiStatusClass = 'status-active';
+            if (apiStatus === 'inactive') apiStatusClass = 'status-inactive';
+
+            html += '<tr>' +
+                '<td><strong>' + escapeHtml(row.api.name || 'Unnamed API') + '</strong></td>' +
+                '<td><span class="method-badge method-' + escapeHtml(row.method.toLowerCase()) + '">' + escapeHtml(row.method) + '</span> <code>' + escapeHtml(row.path) + '</code></td>' +
+                '<td>' + formatMetricNumber(row.calls) + '</td>' +
+                '<td>' + formatMetricNumber(row.success) + '</td>' +
+                '<td>' + formatMetricNumber(row.errors) + '</td>' +
+                '<td>' + formatMetricDuration(row.avgMs) + '</td>' +
+                '<td>' + escapeHtml(formatMetricDateTime(row.lastCalled)) + '</td>' +
+                '<td><span class="status-badge ' + apiStatusClass + '">' + escapeHtml(apiStatus) + '</span> <span class="status-badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
+                '</tr>';
+        }
+        body.innerHTML = html;
+    }
+
+    var totalCalls = safeNumber(apiStatsData && apiStatsData.total_calls);
+    var successCalls = safeNumber(apiStatsData && apiStatsData.success_calls);
+    var errorCalls = safeNumber(apiStatsData && apiStatsData.error_calls);
+    var avgDuration = safeNumber(apiStatsData && apiStatsData.average_duration_ms);
+    var totalEndpoints = safeNumber(apiCountData && apiCountData.total_unique_endpoints);
+    var totalAPIs = safeNumber(builderSummary && builderSummary.total_apis);
+    var totalHits = safeNumber(builderSummary && builderSummary.total_hits);
+    var successRateAll = totalCalls > 0 ? (successCalls * 100) / totalCalls : 0;
+
+    renderMonitoringMiniCards('apiBuilderMetricCards', [
+        { label: 'Total APIs', value: formatMetricNumber(totalAPIs || apis.length), subtext: 'Configured in API Builder' },
+        { label: 'Tracked Endpoints', value: formatMetricNumber(totalEndpoints), subtext: 'From API metrics tracker' },
+        { label: 'Total Calls', value: formatMetricNumber(totalCalls || totalHits), subtext: 'Observed runtime traffic' },
+        { label: 'Success Rate', value: formatMetricPercent(successRateAll), subtext: formatMetricNumber(errorCalls) + ' errors' },
+        { label: 'Avg Duration', value: formatMetricDuration(avgDuration), subtext: 'Across tracked endpoints' }
+    ]);
+}
+
+function renderRealmClientMetricsDashboard(realms, realmDashboards, clients) {
+    var body = document.getElementById('realmClientMetricsBody');
+    if (!body) return;
+
+    var realmList = Array.isArray(realms) ? realms : [];
+    var clientList = Array.isArray(clients) ? clients : [];
+
+    var totalClients = 0;
+    var totalActiveClients = 0;
+    var totalUsers = 0;
+    var totalActiveSessions = 0;
+    var totalRecentEvents = 0;
+
+    if (realmList.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="monitoring-loading-cell">No realms found or realm endpoints are unavailable.</td></tr>';
+    } else {
+        var rows = '';
+        for (var i = 0; i < realmList.length; i++) {
+            var realm = realmList[i] || {};
+            var realmID = String(realm.id || realm.name || '');
+            var dashboard = (realmDashboards && realmDashboards[realmID]) ? realmDashboards[realmID] : {};
+            var realmClients = clientList.filter(function(client) {
+                return String(client && client.realm_id || '') === realmID;
+            });
+
+            var userCount = safeNumber(dashboard.user_count);
+            var clientCount = safeNumber(dashboard.client_count);
+            if (clientCount === 0) {
+                clientCount = realmClients.length;
+            }
+            var activeClients = realmClients.filter(function(client) {
+                return client && client.active !== false;
+            }).length;
+            var roleCount = safeNumber(dashboard.role_count);
+            var activeSessions = safeNumber(dashboard.active_session_count);
+            var recentEvents = Array.isArray(dashboard.recent_events) ? dashboard.recent_events.length : 0;
+
+            totalClients += clientCount;
+            totalActiveClients += activeClients;
+            totalUsers += userCount;
+            totalActiveSessions += activeSessions;
+            totalRecentEvents += recentEvents;
+
+            rows += '<tr>' +
+                '<td><strong>' + escapeHtml(realm.display_name || realm.name || realmID || 'unknown') + '</strong></td>' +
+                '<td>' + formatMetricNumber(userCount) + '</td>' +
+                '<td>' + formatMetricNumber(clientCount) + '</td>' +
+                '<td>' + formatMetricNumber(activeClients) + '</td>' +
+                '<td>' + formatMetricNumber(roleCount) + '</td>' +
+                '<td>' + formatMetricNumber(activeSessions) + '</td>' +
+                '<td>' + formatMetricNumber(recentEvents) + '</td>' +
+                '</tr>';
+        }
+        body.innerHTML = rows;
+    }
+
+    renderMonitoringMiniCards('realmClientMetricCards', [
+        { label: 'Realms', value: formatMetricNumber(realmList.length), subtext: 'IAM v2 realm count' },
+        { label: 'Clients', value: formatMetricNumber(totalClients), subtext: formatMetricNumber(totalActiveClients) + ' active clients' },
+        { label: 'Realm Users', value: formatMetricNumber(totalUsers), subtext: 'Across all realms' },
+        { label: 'Active Sessions', value: formatMetricNumber(totalActiveSessions), subtext: 'SSO sessions currently active' },
+        { label: 'Recent Events', value: formatMetricNumber(totalRecentEvents), subtext: 'Events sampled per realm' }
+    ]);
+
+    return {
+        totalRealms: realmList.length,
+        totalClients: totalClients,
+        totalActiveClients: totalActiveClients,
+        totalRealmUsers: totalUsers,
+        totalActiveSessions: totalActiveSessions,
+        totalRecentEvents: totalRecentEvents
+    };
+}
+
+function buildUserRoleSummary(users, roles, bindings) {
+    var roleNameByID = {};
+    var roleCounts = {};
+    var bindingUsers = {};
+
+    var roleList = Array.isArray(roles) ? roles : [];
+    for (var i = 0; i < roleList.length; i++) {
+        var role = roleList[i] || {};
+        if (role.id) {
+            roleNameByID[role.id] = normalizeIAMRoleName(role.name || '');
+        }
+    }
+
+    var bindingRoleNamesByUser = {};
+    var bindingList = Array.isArray(bindings) ? bindings : [];
+    for (var j = 0; j < bindingList.length; j++) {
+        var binding = bindingList[j] || {};
+        var userID = String(binding.user_id || '');
+        if (!userID) continue;
+
+        bindingUsers[userID] = true;
+        if (!bindingRoleNamesByUser[userID]) {
+            bindingRoleNamesByUser[userID] = [];
+        }
+
+        var roleName = roleNameByID[binding.role_id] || normalizeIAMRoleName(binding.role_name || '');
+        if (roleName) {
+            bindingRoleNamesByUser[userID].push(roleName);
+        }
+    }
+
+    var userList = Array.isArray(users) ? users : [];
+    var totalUsers = userList.length;
+    var activeUsers = 0;
+    var disabledUsers = 0;
+    var verifiedUsers = 0;
+    var recentUsers7d = 0;
+    var unassignedUsers = 0;
+
+    var now = Date.now();
+    var sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+    for (var u = 0; u < userList.length; u++) {
+        var user = userList[u] || {};
+        var uid = String(user.id || '');
+
+        if (user.active) activeUsers++; else disabledUsers++;
+        if (user.email_verified) verifiedUsers++;
+
+        var createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
+        if (createdAt > 0 && (now - createdAt) <= sevenDaysMs) {
+            recentUsers7d++;
+        }
+
+        var roleSet = {};
+        var userRoles = Array.isArray(user.roles) ? user.roles : [];
+        for (var r = 0; r < userRoles.length; r++) {
+            var normalized = normalizeIAMRoleName(userRoles[r]);
+            if (normalized) {
+                roleSet[normalized] = true;
+            }
+        }
+
+        var boundRoles = bindingRoleNamesByUser[uid] || [];
+        for (var b = 0; b < boundRoles.length; b++) {
+            if (boundRoles[b]) {
+                roleSet[boundRoles[b]] = true;
+            }
+        }
+
+        var roleKeys = Object.keys(roleSet);
+        if (roleKeys.length === 0) {
+            unassignedUsers++;
+        }
+
+        for (var x = 0; x < roleKeys.length; x++) {
+            var roleName = roleKeys[x];
+            roleCounts[roleName] = (roleCounts[roleName] || 0) + 1;
+        }
+    }
+
+    return {
+        totalUsers: totalUsers,
+        activeUsers: activeUsers,
+        disabledUsers: disabledUsers,
+        verifiedUsers: verifiedUsers,
+        recentUsers7d: recentUsers7d,
+        unassignedUsers: unassignedUsers,
+        totalRoles: roleList.length,
+        totalBindings: bindingList.length,
+        usersWithBindings: Object.keys(bindingUsers).length,
+        roleCounts: roleCounts
+    };
+}
+
+function renderUserMetricsDashboard(users, roles, bindings) {
+    var body = document.getElementById('userMetricsBody');
+    if (!body) return null;
+
+    var summary = buildUserRoleSummary(users, roles, bindings);
+
+    var topRoles = Object.keys(summary.roleCounts)
+        .sort(function(a, b) { return summary.roleCounts[b] - summary.roleCounts[a]; })
+        .slice(0, 4)
+        .map(function(name) { return name + ' (' + summary.roleCounts[name] + ')'; });
+
+    renderMonitoringMiniCards('userMetricCards', [
+        { label: 'Total Users', value: formatMetricNumber(summary.totalUsers), subtext: formatMetricNumber(summary.activeUsers) + ' active users' },
+        { label: 'Verified Email', value: formatMetricNumber(summary.verifiedUsers), subtext: formatMetricPercent(summary.totalUsers > 0 ? (summary.verifiedUsers * 100) / summary.totalUsers : 0) },
+        { label: 'Recent Users (7d)', value: formatMetricNumber(summary.recentUsers7d), subtext: 'New identities this week' },
+        { label: 'Role Bindings', value: formatMetricNumber(summary.totalBindings), subtext: formatMetricNumber(summary.usersWithBindings) + ' users bound' },
+        { label: 'Unassigned Users', value: formatMetricNumber(summary.unassignedUsers), subtext: 'No effective role mapping' }
+    ]);
+
+    var rows = '';
+    rows += '<tr><td>Total IAM users</td><td>' + formatMetricNumber(summary.totalUsers) + '</td><td>All users available via /iam/admin/users</td></tr>';
+    rows += '<tr><td>Active users</td><td>' + formatMetricNumber(summary.activeUsers) + '</td><td>Enabled accounts currently allowed to login</td></tr>';
+    rows += '<tr><td>Disabled users</td><td>' + formatMetricNumber(summary.disabledUsers) + '</td><td>Accounts marked inactive</td></tr>';
+    rows += '<tr><td>Email verified</td><td>' + formatMetricNumber(summary.verifiedUsers) + '</td><td>' + formatMetricPercent(summary.totalUsers > 0 ? (summary.verifiedUsers * 100) / summary.totalUsers : 0) + ' of total users</td></tr>';
+    rows += '<tr><td>Recent users (last 7 days)</td><td>' + formatMetricNumber(summary.recentUsers7d) + '</td><td>Based on created_at timestamps</td></tr>';
+    rows += '<tr><td>Total roles</td><td>' + formatMetricNumber(summary.totalRoles) + '</td><td>Roles currently available in IAM</td></tr>';
+    rows += '<tr><td>Users with explicit bindings</td><td>' + formatMetricNumber(summary.usersWithBindings) + '</td><td>Users linked through /iam/admin/role-bindings</td></tr>';
+    rows += '<tr><td>Top assigned roles</td><td>' + formatMetricNumber(topRoles.length) + '</td><td>' + escapeHtml(topRoles.join(', ') || 'No roles assigned') + '</td></tr>';
+    rows += '<tr><td>Unassigned users</td><td>' + formatMetricNumber(summary.unassignedUsers) + '</td><td>Users with no role from user record or bindings</td></tr>';
+
+    body.innerHTML = rows;
+    return summary;
+}
+
+function loadMonitoringDashboards() {
+    if (!document.getElementById('monitoring')) {
+        return;
+    }
+
+    setMonitoringBodyLoading('apiBuilderMetricsBody', 8, 'Loading API Builder metrics...');
+    setMonitoringBodyLoading('realmClientMetricsBody', 7, 'Loading realm and client metrics...');
+    setMonitoringBodyLoading('userMetricsBody', 3, 'Loading user metrics...');
+    setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Refreshing...');
+    setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Refreshing...');
+    setMonitoringUpdatedAt('userMetricsUpdatedAt', 'Refreshing...');
+
+    Promise.all([
+        monitoringFetchJSON('/api/admin/metrics/stats').catch(function() { return { data: {} }; }),
+        monitoringFetchJSON('/api/admin/metrics/count').catch(function() { return { data: {} }; }),
+        monitoringFetchJSON('/api/v1/builder/summary?api_type=rest').catch(function() { return {}; }),
+        monitoringFetchJSON('/api/v1/builder/apis?api_type=rest').catch(function() { return { apis: [] }; }),
+        monitoringFetchJSON('/iam/admin/users').catch(function() { return { users: [] }; }),
+        monitoringFetchJSON('/iam/admin/roles').catch(function() { return { roles: [] }; }),
+        monitoringFetchJSON('/iam/admin/role-bindings').catch(function() { return { bindings: [] }; }),
+        monitoringFetchJSON('/iam/v2/realms').catch(function() { return []; }),
+        monitoringFetchJSON('/iam/v2/pg-clients').catch(function() { return []; })
+    ]).then(function(results) {
+        var apiStatsPayload = results[0] || {};
+        var apiCountPayload = results[1] || {};
+        var builderSummary = results[2] || {};
+        var builderListPayload = results[3] || {};
+        var usersPayload = results[4] || {};
+        var rolesPayload = results[5] || {};
+        var bindingsPayload = results[6] || {};
+        var realmsPayload = results[7] || [];
+        var clientsPayload = results[8] || [];
+
+        var realms = Array.isArray(realmsPayload) ? realmsPayload : [];
+        var clients = Array.isArray(clientsPayload) ? clientsPayload : [];
+
+        var dashboardRequests = realms.map(function(realm) {
+            var realmKey = String((realm && (realm.id || realm.name)) || '');
+            if (!realmKey) {
+                return Promise.resolve(null);
+            }
+            return monitoringFetchJSON('/iam/v2/realms/' + encodeURIComponent(realmKey) + '/dashboard')
+                .then(function(dashboard) {
+                    return { key: realmKey, dashboard: dashboard };
+                })
+                .catch(function() {
+                    return null;
+                });
+        });
+
+        Promise.all(dashboardRequests).then(function(dashboardResults) {
+            var dashboardsByRealm = {};
+            for (var i = 0; i < dashboardResults.length; i++) {
+                var entry = dashboardResults[i];
+                if (!entry || !entry.key) continue;
+                dashboardsByRealm[entry.key] = entry.dashboard || {};
+            }
+
+            var apiStatsData = (apiStatsPayload && apiStatsPayload.data) ? apiStatsPayload.data : {};
+            var apiCountData = (apiCountPayload && apiCountPayload.data) ? apiCountPayload.data : {};
+            var builderAPIs = Array.isArray(builderListPayload.apis) ? builderListPayload.apis : [];
+            var users = Array.isArray(usersPayload.users) ? usersPayload.users : [];
+            var roles = Array.isArray(rolesPayload.roles) ? rolesPayload.roles : [];
+            var bindings = Array.isArray(bindingsPayload.bindings) ? bindingsPayload.bindings : [];
+
+            monitoringDataSnapshot.apiStats = apiStatsData;
+            monitoringDataSnapshot.apiCount = apiCountData;
+            monitoringDataSnapshot.builderSummary = builderSummary;
+            monitoringDataSnapshot.builderAPIs = builderAPIs;
+            monitoringDataSnapshot.realms = realms;
+            monitoringDataSnapshot.realmDashboards = dashboardsByRealm;
+            monitoringDataSnapshot.clients = clients;
+            monitoringDataSnapshot.users = users;
+            monitoringDataSnapshot.roles = roles;
+            monitoringDataSnapshot.bindings = bindings;
+
+            renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSummary, builderAPIs);
+            var realmTotals = renderRealmClientMetricsDashboard(realms, dashboardsByRealm, clients) || {};
+            var userSummary = renderUserMetricsDashboard(users, roles, bindings) || {};
+
+            var apiSuccessRate = safeNumber(apiStatsData.total_calls) > 0
+                ? (safeNumber(apiStatsData.success_calls) * 100) / safeNumber(apiStatsData.total_calls)
+                : 0;
+
+            renderMonitoringKPIGrid([
+                { label: 'API Calls', value: formatMetricNumber(apiStatsData.total_calls) },
+                { label: 'API Success', value: formatMetricPercent(apiSuccessRate) },
+                { label: 'Realms', value: formatMetricNumber(realmTotals.totalRealms) },
+                { label: 'Active Users', value: formatMetricNumber(userSummary.activeUsers) },
+                { label: 'Active Sessions', value: formatMetricNumber(realmTotals.totalActiveSessions) }
+            ]);
+
+            setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt');
+            setMonitoringUpdatedAt('realmClientMetricsUpdatedAt');
+            setMonitoringUpdatedAt('userMetricsUpdatedAt');
+        });
+    }).catch(function(err) {
+        setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Unavailable');
+        setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Unavailable');
+        setMonitoringUpdatedAt('userMetricsUpdatedAt', 'Unavailable');
+        setMonitoringBodyLoading('apiBuilderMetricsBody', 8, 'Failed to load API Builder metrics: ' + (err.message || 'unknown error'));
+        setMonitoringBodyLoading('realmClientMetricsBody', 7, 'Failed to load realm and client metrics.');
+        setMonitoringBodyLoading('userMetricsBody', 3, 'Failed to load user metrics.');
+        renderMonitoringKPIGrid([
+            { label: 'API Calls', value: '--' },
+            { label: 'API Success', value: '--' },
+            { label: 'Realms', value: '--' },
+            { label: 'Active Users', value: '--' },
+            { label: 'Active Sessions', value: '--' }
+        ]);
+    });
 }
 
 function loadStatusData() {

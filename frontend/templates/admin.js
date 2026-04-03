@@ -306,6 +306,56 @@ function clearSQLAssistantPanel() {
     renderSQLAssistantSuggestions();
 }
 
+function formatBuilderAPITimestamp(raw) {
+    if (!raw) return '--';
+    var date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString();
+}
+
+function formatBuilderAPIRateLimit(rateLimit) {
+    var parsed = parseInt(rateLimit, 10);
+    if (!parsed || parsed <= 0) return 'Unlimited';
+    return parsed + ' / min';
+}
+
+function renderAPIHoverMetricItem(label, value) {
+    return '<div class="api-hover-metric-item">' +
+        '<div class="api-hover-metric-label">' + escapeHtml(label) + '</div>' +
+        '<div class="api-hover-metric-value">' + escapeHtml(value) + '</div>' +
+        '</div>';
+}
+
+function renderAPIHoverMetrics(api) {
+    var queryParamCount = Array.isArray(api.query_params) ? api.query_params.length : 0;
+    var cacheTTL = parseInt(api.cache_ttl, 10);
+    if (!cacheTTL || cacheTTL <= 0) cacheTTL = 300;
+    var cacheLabel = api.cache_enabled ? ('On (' + cacheTTL + 's)') : 'Off';
+    var authLabel = api.auth_required ? 'Required' : 'Optional';
+    var sqlMode = api.sql_template ? 'SQL Template' : (api.graphql_query ? 'GraphQL Query' : 'Mock/Static');
+
+    return '<div class="api-hover-panel" role="tooltip">' +
+        '<div class="api-hover-title">Short API Metrics</div>' +
+        '<div class="api-hover-grid">' +
+            renderAPIHoverMetricItem('Hits', String(api.hit_count || 0)) +
+            renderAPIHoverMetricItem('Rate Limit', formatBuilderAPIRateLimit(api.rate_limit)) +
+            renderAPIHoverMetricItem('Auth', authLabel) +
+            renderAPIHoverMetricItem('Cache', cacheLabel) +
+            renderAPIHoverMetricItem('Query Params', String(queryParamCount)) +
+            renderAPIHoverMetricItem('Mode', sqlMode) +
+        '</div>' +
+        '<div class="api-hover-footnote">Updated: ' + escapeHtml(formatBuilderAPITimestamp(api.updated_at)) + '</div>' +
+        '</div>';
+}
+
+function renderAPINameCell(api) {
+    return '<div class="api-name-with-hover">' +
+        '<span class="api-name-text">' + escapeHtml(api.name) + '</span>' +
+        '<span class="api-hover-trigger" tabindex="0">Metrics</span>' +
+        renderAPIHoverMetrics(api) +
+        '</div>';
+}
+
 function loadCustomAPIs() {
     var catEl = document.getElementById('apiCategoryFilter');
     var statEl = document.getElementById('apiStatusFilter');
@@ -339,7 +389,7 @@ function loadCustomAPIs() {
             }
             html += '<tr>' +
                 '<td><span class="method-badge method-' + api.method.toLowerCase() + '">' + api.method + '</span></td>' +
-                '<td>' + escapeHtml(api.name) + '</td>' +
+                '<td>' + renderAPINameCell(api) + '</td>' +
                 '<td><code>' + escapeHtml(api.path) + '</code></td>' +
                 '<td>' + escapeHtml(api.category || '-') + '</td>' +
                 '<td>' + escapeHtml(api.source_database || '-') + '</td>' +
