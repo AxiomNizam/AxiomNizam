@@ -93,7 +93,7 @@
 .kpi-card.kpi-success .kpi-value { color: #10b981; }
 .kpi-card.kpi-danger .kpi-value { color: #ef4444; }
 .kpi-card.kpi-warning .kpi-value { color: #f59e0b; }
-.kpi-card.kpi-info .kpi-value { color: #3b82f6; }
+.kpi-card.kpi-info .kpi-value { color: var(--accent-color, #3b82f6); }
 
 /* Pipeline Table */
 .pipeline-table-wrap {
