@@ -194,6 +194,11 @@ function switchIAMTab(tabId) {
     if (tabId === 'iam-bindings') loadIAMBindings();
     if (tabId === 'iam-oidc') loadOIDCInfo();
     if (tabId === 'iam-dashboard') loadIAMDashboard();
+    if (tabId === 'iam-realms') loadRealms();
+    if (tabId === 'iam-groups') { populateRealmDropdowns(); loadGroups(); }
+    if (tabId === 'iam-idps') { populateRealmDropdowns(); loadIdentityProviders(); }
+    if (tabId === 'iam-scopes') { populateRealmDropdowns(); loadClientScopes(); }
+    if (tabId === 'iam-events') { populateRealmDropdowns(); loadEvents(); }
 }
 
 // ── Modal helpers ────────────────────────────────────────────────────────────
@@ -1240,6 +1245,620 @@ async function loadOIDCInfo() {
     }
 
     loadServiceAccessInfo();
+}
+
+// ── V2 Realm Dropdown Helper ─────────────────────────────────────────────────
+
+let v2RealmsCache = [];
+
+async function populateRealmDropdowns() {
+    if (!iamToken) return;
+    try {
+        const resp = await iamFetch('/iam/v2/realms');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        v2RealmsCache = Array.isArray(data) ? data : (data.realms || []);
+    } catch (_) { return; }
+
+    const selectors = ['groupsRealmFilter', 'idpRealmFilter', 'scopeRealmFilter', 'eventRealmFilter',
+                       'iamGroupRealmID', 'iamIdPRealmID', 'iamScopeRealmID'];
+    selectors.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const isFilter = id.endsWith('Filter');
+        const current = sel.value;
+        sel.innerHTML = (isFilter ? '<option value="">All Realms</option>' : '') +
+            v2RealmsCache.map(r => '<option value="' + escapeHtml(r.ID || r.id) + '"' +
+                (r.name === 'master' && !isFilter ? ' selected' : '') +
+                '>' + escapeHtml(r.name || r.display_name) + '</option>').join('');
+        if (current) sel.value = current;
+    });
+}
+
+// ── Realms CRUD ──────────────────────────────────────────────────────────────
+
+async function loadRealms() {
+    if (!iamToken) return;
+    try {
+        const resp = await iamFetch('/iam/v2/realms');
+        if (!resp.ok) { showIAMToast('Failed to load realms: ' + resp.status, true); return; }
+        const data = await resp.json();
+        v2RealmsCache = Array.isArray(data) ? data : (data.realms || []);
+        renderRealms(v2RealmsCache);
+    } catch (err) { showIAMToast('Error loading realms: ' + err.message, true); }
+}
+
+function renderRealms(realms) {
+    const tbody = document.getElementById('realmsBody');
+    if (!tbody) return;
+    if (!realms.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No realms</td></tr>';
+        return;
+    }
+    tbody.innerHTML = realms.map(r => {
+        const id = r.ID || r.id;
+        return '<tr>' +
+            '<td style="font-weight:600;">' + escapeHtml(r.name) + '</td>' +
+            '<td>' + escapeHtml(r.display_name || '–') + '</td>' +
+            '<td><span class="status-badge ' + (r.enabled !== false ? 'status-active' : 'status-inactive') + '">' + (r.enabled !== false ? 'Yes' : 'No') + '</span></td>' +
+            '<td>' + (r.registration_allowed ? 'Yes' : 'No') + '</td>' +
+            '<td>' + (r.access_token_lifespan || 900) + 's</td>' +
+            '<td>' + (r.sso_session_idle_timeout || 1800) + 's</td>' +
+            '<td><span class="status-badge ' + (r.brute_force_protected ? 'status-active' : '') + '">' + (r.brute_force_protected ? 'On' : 'Off') + '</span></td>' +
+            '<td style="white-space:nowrap;">' +
+                '<button class="btn-sm btn-primary" onclick="viewRealmDashboard(\'' + escapeHtml(id) + '\')">Dashboard</button> ' +
+                '<button class="btn-sm btn-secondary" onclick="editRealm(\'' + escapeHtml(id) + '\')">Edit</button> ' +
+                (r.name !== 'master' ? '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteRealm(\'' + escapeHtml(id) + '\')">Delete</button>' : '') +
+            '</td></tr>';
+    }).join('');
+}
+
+function showCreateRealmModal() {
+    document.getElementById('iamRealmEditID').value = '';
+    document.getElementById('iamRealmName').value = '';
+    document.getElementById('iamRealmDisplayName').value = '';
+    document.getElementById('iamRealmAccessTTL').value = '900';
+    document.getElementById('iamRealmRefreshTTL').value = '604800';
+    document.getElementById('iamRealmSSOIdle').value = '1800';
+    document.getElementById('iamRealmSSOMax').value = '36000';
+    document.getElementById('iamRealmPassMinLen').value = '8';
+    document.getElementById('iamRealmMaxFailures').value = '30';
+    document.getElementById('iamRealmEnabled').checked = true;
+    document.getElementById('iamRealmRegAllowed').checked = false;
+    document.getElementById('iamRealmResetPw').checked = true;
+    document.getElementById('iamRealmRememberMe').checked = true;
+    document.getElementById('iamRealmVerifyEmail').checked = false;
+    document.getElementById('iamRealmLoginEmail').checked = true;
+    document.getElementById('iamRealmBruteForce').checked = true;
+    document.getElementById('iamRealmPassUpper').checked = true;
+    document.getElementById('iamRealmPassDigit').checked = true;
+    document.getElementById('iamRealmPassSpecial').checked = false;
+    document.getElementById('iamRealmModalTitle').textContent = 'Create Realm';
+    document.getElementById('iamRealmSubmitBtn').textContent = 'Create';
+    openIAMModal('iamRealmModal');
+}
+
+async function editRealm(id) {
+    try {
+        const resp = await iamFetch('/iam/v2/realms/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load realm', true); return; }
+        const r = await resp.json();
+        document.getElementById('iamRealmEditID').value = r.ID || r.id || id;
+        document.getElementById('iamRealmName').value = r.name || '';
+        document.getElementById('iamRealmDisplayName').value = r.display_name || '';
+        document.getElementById('iamRealmAccessTTL').value = String(r.access_token_lifespan || 900);
+        document.getElementById('iamRealmRefreshTTL').value = String(r.refresh_token_lifespan || 604800);
+        document.getElementById('iamRealmSSOIdle').value = String(r.sso_session_idle_timeout || 1800);
+        document.getElementById('iamRealmSSOMax').value = String(r.sso_session_max_lifespan || 36000);
+        document.getElementById('iamRealmPassMinLen').value = String(r.password_min_length || 8);
+        document.getElementById('iamRealmMaxFailures').value = String(r.max_login_failures || 30);
+        document.getElementById('iamRealmEnabled').checked = r.enabled !== false;
+        document.getElementById('iamRealmRegAllowed').checked = r.registration_allowed === true;
+        document.getElementById('iamRealmResetPw').checked = r.reset_password_allowed !== false;
+        document.getElementById('iamRealmRememberMe').checked = r.remember_me !== false;
+        document.getElementById('iamRealmVerifyEmail').checked = r.verify_email === true;
+        document.getElementById('iamRealmLoginEmail').checked = r.login_with_email_allowed !== false;
+        document.getElementById('iamRealmBruteForce').checked = r.brute_force_protected !== false;
+        document.getElementById('iamRealmPassUpper').checked = r.password_require_uppercase !== false;
+        document.getElementById('iamRealmPassDigit').checked = r.password_require_digit !== false;
+        document.getElementById('iamRealmPassSpecial').checked = r.password_require_special_char === true;
+        document.getElementById('iamRealmModalTitle').textContent = 'Edit Realm';
+        document.getElementById('iamRealmSubmitBtn').textContent = 'Update';
+        openIAMModal('iamRealmModal');
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function submitRealm() {
+    const editID = document.getElementById('iamRealmEditID').value;
+    const name = document.getElementById('iamRealmName').value.trim();
+    if (!name) { showIAMToast('Realm name is required', true); return; }
+
+    const body = {
+        name: name,
+        display_name: document.getElementById('iamRealmDisplayName').value.trim(),
+        enabled: document.getElementById('iamRealmEnabled').checked,
+        registration_allowed: document.getElementById('iamRealmRegAllowed').checked,
+        reset_password_allowed: document.getElementById('iamRealmResetPw').checked,
+        remember_me: document.getElementById('iamRealmRememberMe').checked,
+        verify_email: document.getElementById('iamRealmVerifyEmail').checked,
+        login_with_email_allowed: document.getElementById('iamRealmLoginEmail').checked,
+        brute_force_protected: document.getElementById('iamRealmBruteForce').checked,
+        access_token_lifespan: parseInt(document.getElementById('iamRealmAccessTTL').value, 10) || 900,
+        refresh_token_lifespan: parseInt(document.getElementById('iamRealmRefreshTTL').value, 10) || 604800,
+        sso_session_idle_timeout: parseInt(document.getElementById('iamRealmSSOIdle').value, 10) || 1800,
+        sso_session_max_lifespan: parseInt(document.getElementById('iamRealmSSOMax').value, 10) || 36000,
+        password_min_length: parseInt(document.getElementById('iamRealmPassMinLen').value, 10) || 8,
+        max_login_failures: parseInt(document.getElementById('iamRealmMaxFailures').value, 10) || 30,
+        password_require_uppercase: document.getElementById('iamRealmPassUpper').checked,
+        password_require_digit: document.getElementById('iamRealmPassDigit').checked,
+        password_require_special_char: document.getElementById('iamRealmPassSpecial').checked
+    };
+
+    try {
+        const url = editID ? '/iam/v2/realms/' + encodeURIComponent(editID) : '/iam/v2/realms';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+        showIAMToast(editID ? 'Realm updated' : 'Realm created');
+        closeIAMModal('iamRealmModal');
+        loadRealms();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function deleteRealm(id) {
+    if (!confirm('Delete this realm and all associated data?')) return;
+    try {
+        const resp = await iamFetch('/iam/v2/realms/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) { const d = await resp.json().catch(() => ({})); showIAMToast(d.error || 'Delete failed', true); return; }
+        showIAMToast('Realm deleted');
+        loadRealms();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function viewRealmDashboard(id) {
+    const panel = document.getElementById('realmDetailPanel');
+    if (!panel) return;
+    panel.style.display = 'block';
+    document.getElementById('realmDetailTitle').textContent = 'Loading…';
+    document.getElementById('realmDashCards').innerHTML = '';
+    document.getElementById('realmRecentEvents').textContent = 'Loading…';
+
+    try {
+        const resp = await iamFetch('/iam/v2/realms/' + encodeURIComponent(id) + '/dashboard');
+        if (!resp.ok) { showIAMToast('Failed to load realm dashboard', true); panel.style.display = 'none'; return; }
+        const d = await resp.json();
+        document.getElementById('realmDetailTitle').textContent = 'Realm: ' + (d.realm_name || id);
+        document.getElementById('realmDashCards').innerHTML =
+            '<div class="cp-card"><h4>' + (d.user_count || 0) + '</h4><p>Users</p></div>' +
+            '<div class="cp-card"><h4>' + (d.client_count || 0) + '</h4><p>Clients</p></div>' +
+            '<div class="cp-card"><h4>' + (d.role_count || 0) + '</h4><p>Roles</p></div>' +
+            '<div class="cp-card"><h4>' + (d.group_count || 0) + '</h4><p>Groups</p></div>' +
+            '<div class="cp-card"><h4>' + (d.idp_count || 0) + '</h4><p>Identity Providers</p></div>' +
+            '<div class="cp-card"><h4>' + (d.active_session_count || 0) + '</h4><p>Active Sessions</p></div>';
+
+        // Recent events
+        const events = d.recent_events || [];
+        if (events.length) {
+            document.getElementById('realmRecentEvents').innerHTML = events.map(e =>
+                '<div style="padding:4px 0;border-bottom:1px solid var(--border-color);">' +
+                    '<span style="font-weight:600;">' + escapeHtml(e.type || '') + '</span> — ' +
+                    escapeHtml(e.user_id || '') + ' — ' + formatDate(e.CreatedAt || e.created_at) +
+                '</div>'
+            ).join('');
+        } else {
+            document.getElementById('realmRecentEvents').textContent = 'No recent events';
+        }
+    } catch (err) {
+        showIAMToast('Error: ' + err.message, true);
+        panel.style.display = 'none';
+    }
+}
+
+// ── Groups CRUD ──────────────────────────────────────────────────────────────
+
+let v2GroupsCache = [];
+
+async function loadGroups() {
+    if (!iamToken) return;
+    const realmFilter = (document.getElementById('groupsRealmFilter') || {}).value || '';
+    const qs = realmFilter ? '?realm_id=' + encodeURIComponent(realmFilter) : '';
+    try {
+        const resp = await iamFetch('/iam/v2/groups' + qs);
+        if (!resp.ok) { showIAMToast('Failed to load groups: ' + resp.status, true); return; }
+        const data = await resp.json();
+        v2GroupsCache = Array.isArray(data) ? data : (data.groups || []);
+        renderGroups(v2GroupsCache);
+    } catch (err) { showIAMToast('Error loading groups: ' + err.message, true); }
+}
+
+function renderGroups(groups) {
+    const tbody = document.getElementById('groupsBody');
+    if (!tbody) return;
+    if (!groups.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No groups</td></tr>';
+        return;
+    }
+    tbody.innerHTML = groups.map(g => {
+        const id = g.ID || g.id;
+        const realmName = v2RealmsCache.find(r => (r.ID || r.id) === g.realm_id);
+        return '<tr>' +
+            '<td style="font-weight:600;">' + escapeHtml(g.name) + '</td>' +
+            '<td style="font-family:var(--font-mono);font-size:.85rem;">' + escapeHtml(g.path || '/') + '</td>' +
+            '<td>' + escapeHtml(realmName ? realmName.name : (g.realm_id || '–')) + '</td>' +
+            '<td>' + escapeHtml(g.parent_id || '–') + '</td>' +
+            '<td style="white-space:nowrap;">' +
+                '<button class="btn-sm btn-secondary" onclick="editGroup(\'' + escapeHtml(id) + '\')">Edit</button> ' +
+                '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteGroup(\'' + escapeHtml(id) + '\')">Delete</button>' +
+            '</td></tr>';
+    }).join('');
+}
+
+function showCreateGroupModal() {
+    document.getElementById('iamGroupEditID').value = '';
+    document.getElementById('iamGroupName').value = '';
+    populateGroupParentDropdown('');
+    document.getElementById('iamGroupModalTitle').textContent = 'Create Group';
+    document.getElementById('iamGroupSubmitBtn').textContent = 'Create';
+    openIAMModal('iamGroupModal');
+}
+
+function populateGroupParentDropdown(excludeId) {
+    const sel = document.getElementById('iamGroupParentID');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Top-level —</option>' +
+        v2GroupsCache.filter(g => (g.ID || g.id) !== excludeId).map(g =>
+            '<option value="' + escapeHtml(g.ID || g.id) + '">' + escapeHtml(g.path || g.name) + '</option>'
+        ).join('');
+}
+
+async function editGroup(id) {
+    try {
+        const resp = await iamFetch('/iam/v2/groups/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load group', true); return; }
+        const g = await resp.json();
+        document.getElementById('iamGroupEditID').value = g.ID || g.id || id;
+        document.getElementById('iamGroupName').value = g.name || '';
+        const realmSel = document.getElementById('iamGroupRealmID');
+        if (realmSel) realmSel.value = g.realm_id || '';
+        populateGroupParentDropdown(g.ID || g.id || id);
+        const parentSel = document.getElementById('iamGroupParentID');
+        if (parentSel) parentSel.value = g.parent_id || '';
+        document.getElementById('iamGroupModalTitle').textContent = 'Edit Group';
+        document.getElementById('iamGroupSubmitBtn').textContent = 'Update';
+        openIAMModal('iamGroupModal');
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function submitGroup() {
+    const editID = document.getElementById('iamGroupEditID').value;
+    const name = document.getElementById('iamGroupName').value.trim();
+    const realmID = document.getElementById('iamGroupRealmID').value;
+    if (!name) { showIAMToast('Group name is required', true); return; }
+    if (!realmID) { showIAMToast('Realm is required', true); return; }
+
+    const body = { name, realm_id: realmID, parent_id: document.getElementById('iamGroupParentID').value || '' };
+
+    try {
+        const url = editID ? '/iam/v2/groups/' + encodeURIComponent(editID) : '/iam/v2/groups';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+        showIAMToast(editID ? 'Group updated' : 'Group created');
+        closeIAMModal('iamGroupModal');
+        loadGroups();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function deleteGroup(id) {
+    if (!confirm('Delete this group?')) return;
+    try {
+        const resp = await iamFetch('/iam/v2/groups/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) { const d = await resp.json().catch(() => ({})); showIAMToast(d.error || 'Delete failed', true); return; }
+        showIAMToast('Group deleted');
+        loadGroups();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+// ── Identity Providers CRUD ──────────────────────────────────────────────────
+
+async function loadIdentityProviders() {
+    if (!iamToken) return;
+    const realmFilter = (document.getElementById('idpRealmFilter') || {}).value || '';
+    const qs = realmFilter ? '?realm_id=' + encodeURIComponent(realmFilter) : '';
+    try {
+        const resp = await iamFetch('/iam/v2/identity-providers' + qs);
+        if (!resp.ok) { showIAMToast('Failed to load identity providers: ' + resp.status, true); return; }
+        const data = await resp.json();
+        const idps = Array.isArray(data) ? data : (data.identity_providers || []);
+        renderIdentityProviders(idps);
+    } catch (err) { showIAMToast('Error loading IdPs: ' + err.message, true); }
+}
+
+function renderIdentityProviders(idps) {
+    const tbody = document.getElementById('idpsBody');
+    if (!tbody) return;
+    if (!idps.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No identity providers configured</td></tr>';
+        return;
+    }
+    tbody.innerHTML = idps.map(p => {
+        const id = p.ID || p.id;
+        const realmName = v2RealmsCache.find(r => (r.ID || r.id) === p.realm_id);
+        const typeBadgeColor = { oidc: '#3498db', saml: '#e67e22', github: '#333', google: '#ea4335', microsoft: '#00a4ef', ldap: '#9b59b6', gitlab: '#fc6d26', facebook: '#1877f2' }[p.provider_type] || 'var(--text-muted)';
+        return '<tr>' +
+            '<td style="font-weight:600;">' + escapeHtml(p.alias) + '</td>' +
+            '<td>' + escapeHtml(p.display_name || '–') + '</td>' +
+            '<td><span class="status-badge" style="background:' + typeBadgeColor + ';color:#fff;">' + escapeHtml(p.provider_type || '–') + '</span></td>' +
+            '<td><span class="status-badge ' + (p.enabled !== false ? 'status-active' : 'status-inactive') + '">' + (p.enabled !== false ? 'Yes' : 'No') + '</span></td>' +
+            '<td>' + (p.trust_email ? 'Yes' : 'No') + '</td>' +
+            '<td>' + escapeHtml(realmName ? realmName.name : (p.realm_id || '–')) + '</td>' +
+            '<td style="white-space:nowrap;">' +
+                '<button class="btn-sm btn-secondary" onclick="editIdentityProvider(\'' + escapeHtml(id) + '\')">Edit</button> ' +
+                '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteIdentityProvider(\'' + escapeHtml(id) + '\')">Delete</button>' +
+            '</td></tr>';
+    }).join('');
+}
+
+function toggleIdPFields() {
+    const type = (document.getElementById('iamIdPType') || {}).value || '';
+    const oidcFields = document.getElementById('idpOidcFields');
+    if (oidcFields) oidcFields.style.display = (type === 'oidc' || type === 'saml') ? '' : 'none';
+}
+
+function showCreateIdPModal() {
+    document.getElementById('iamIdPEditID').value = '';
+    document.getElementById('iamIdPAlias').value = '';
+    document.getElementById('iamIdPDisplayName').value = '';
+    document.getElementById('iamIdPType').value = 'oidc';
+    document.getElementById('iamIdPClientID').value = '';
+    document.getElementById('iamIdPClientSecret').value = '';
+    document.getElementById('iamIdPAuthURL').value = '';
+    document.getElementById('iamIdPTokenURL').value = '';
+    document.getElementById('iamIdPUserInfoURL').value = '';
+    document.getElementById('iamIdPIssuer').value = '';
+    document.getElementById('iamIdPScopes').value = 'openid profile email';
+    document.getElementById('iamIdPEnabled').checked = true;
+    document.getElementById('iamIdPTrustEmail').checked = false;
+    document.getElementById('iamIdPStoreToken').checked = false;
+    toggleIdPFields();
+    document.getElementById('iamIdPModalTitle').textContent = 'Add Identity Provider';
+    document.getElementById('iamIdPSubmitBtn').textContent = 'Add';
+    openIAMModal('iamIdPModal');
+}
+
+async function editIdentityProvider(id) {
+    try {
+        const resp = await iamFetch('/iam/v2/identity-providers/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load identity provider', true); return; }
+        const p = await resp.json();
+        document.getElementById('iamIdPEditID').value = p.ID || p.id || id;
+        document.getElementById('iamIdPAlias').value = p.alias || '';
+        document.getElementById('iamIdPDisplayName').value = p.display_name || '';
+        document.getElementById('iamIdPType').value = p.provider_type || 'oidc';
+        document.getElementById('iamIdPClientID').value = p.client_id || '';
+        document.getElementById('iamIdPClientSecret').value = p.client_secret || '';
+        document.getElementById('iamIdPAuthURL').value = p.authorization_url || '';
+        document.getElementById('iamIdPTokenURL').value = p.token_url || '';
+        document.getElementById('iamIdPUserInfoURL').value = p.userinfo_url || '';
+        document.getElementById('iamIdPIssuer').value = p.issuer || '';
+        document.getElementById('iamIdPScopes').value = p.default_scopes || 'openid profile email';
+        document.getElementById('iamIdPEnabled').checked = p.enabled !== false;
+        document.getElementById('iamIdPTrustEmail').checked = p.trust_email === true;
+        document.getElementById('iamIdPStoreToken').checked = p.store_token === true;
+        const realmSel = document.getElementById('iamIdPRealmID');
+        if (realmSel) realmSel.value = p.realm_id || '';
+        toggleIdPFields();
+        document.getElementById('iamIdPModalTitle').textContent = 'Edit Identity Provider';
+        document.getElementById('iamIdPSubmitBtn').textContent = 'Update';
+        openIAMModal('iamIdPModal');
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function submitIdentityProvider() {
+    const editID = document.getElementById('iamIdPEditID').value;
+    const alias = document.getElementById('iamIdPAlias').value.trim();
+    const realmID = document.getElementById('iamIdPRealmID').value;
+    if (!alias) { showIAMToast('Alias is required', true); return; }
+    if (!realmID) { showIAMToast('Realm is required', true); return; }
+
+    const body = {
+        alias, realm_id: realmID,
+        display_name: document.getElementById('iamIdPDisplayName').value.trim(),
+        provider_type: document.getElementById('iamIdPType').value,
+        client_id: document.getElementById('iamIdPClientID').value.trim(),
+        client_secret: document.getElementById('iamIdPClientSecret').value.trim(),
+        authorization_url: document.getElementById('iamIdPAuthURL').value.trim(),
+        token_url: document.getElementById('iamIdPTokenURL').value.trim(),
+        userinfo_url: document.getElementById('iamIdPUserInfoURL').value.trim(),
+        issuer: document.getElementById('iamIdPIssuer').value.trim(),
+        default_scopes: document.getElementById('iamIdPScopes').value.trim(),
+        enabled: document.getElementById('iamIdPEnabled').checked,
+        trust_email: document.getElementById('iamIdPTrustEmail').checked,
+        store_token: document.getElementById('iamIdPStoreToken').checked
+    };
+
+    try {
+        const url = editID ? '/iam/v2/identity-providers/' + encodeURIComponent(editID) : '/iam/v2/identity-providers';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+        showIAMToast(editID ? 'Identity provider updated' : 'Identity provider added');
+        closeIAMModal('iamIdPModal');
+        loadIdentityProviders();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function deleteIdentityProvider(id) {
+    if (!confirm('Delete this identity provider?')) return;
+    try {
+        const resp = await iamFetch('/iam/v2/identity-providers/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) { const d = await resp.json().catch(() => ({})); showIAMToast(d.error || 'Delete failed', true); return; }
+        showIAMToast('Identity provider deleted');
+        loadIdentityProviders();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+// ── Client Scopes CRUD ──────────────────────────────────────────────────────
+
+async function loadClientScopes() {
+    if (!iamToken) return;
+    const realmFilter = (document.getElementById('scopeRealmFilter') || {}).value || '';
+    const qs = realmFilter ? '?realm_id=' + encodeURIComponent(realmFilter) : '';
+    try {
+        const resp = await iamFetch('/iam/v2/client-scopes' + qs);
+        if (!resp.ok) { showIAMToast('Failed to load client scopes: ' + resp.status, true); return; }
+        const data = await resp.json();
+        const scopes = Array.isArray(data) ? data : (data.scopes || []);
+        renderClientScopes(scopes);
+    } catch (err) { showIAMToast('Error loading scopes: ' + err.message, true); }
+}
+
+function renderClientScopes(scopes) {
+    const tbody = document.getElementById('scopesBody');
+    if (!tbody) return;
+    if (!scopes.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">No client scopes</td></tr>';
+        return;
+    }
+    tbody.innerHTML = scopes.map(s => {
+        const id = s.ID || s.id;
+        return '<tr>' +
+            '<td style="font-weight:600;">' + escapeHtml(s.name) + '</td>' +
+            '<td>' + escapeHtml(s.description || '–') + '</td>' +
+            '<td>' + escapeHtml(s.protocol || 'openid-connect') + '</td>' +
+            '<td style="font-family:var(--font-mono);font-size:.85rem;">' + escapeHtml(s.claim_name || '–') + '</td>' +
+            '<td>' + (s.include_in_id_token ? 'Yes' : 'No') + '</td>' +
+            '<td>' + (s.include_in_access_token ? 'Yes' : 'No') + '</td>' +
+            '<td>' + (s.include_in_userinfo ? 'Yes' : 'No') + '</td>' +
+            '<td><span class="status-badge ' + (s.built_in ? 'status-active' : '') + '">' + (s.built_in ? 'Yes' : 'No') + '</span></td>' +
+            '<td style="white-space:nowrap;">' +
+                (s.built_in ? '<span style="color:var(--text-muted);font-size:.8rem;">Protected</span>' :
+                    '<button class="btn-sm btn-secondary" onclick="editClientScope(\'' + escapeHtml(id) + '\')">Edit</button> ' +
+                    '<button class="btn-sm" style="background:var(--danger-color);color:#fff;" onclick="deleteClientScope(\'' + escapeHtml(id) + '\')">Delete</button>') +
+            '</td></tr>';
+    }).join('');
+}
+
+function showCreateScopeModal() {
+    document.getElementById('iamScopeEditID').value = '';
+    document.getElementById('iamScopeName').value = '';
+    document.getElementById('iamScopeDescription').value = '';
+    document.getElementById('iamScopeClaimName').value = '';
+    document.getElementById('iamScopeClaimType').value = '';
+    document.getElementById('iamScopeIDToken').checked = true;
+    document.getElementById('iamScopeAccessToken').checked = true;
+    document.getElementById('iamScopeUserInfo').checked = true;
+    document.getElementById('iamScopeModalTitle').textContent = 'Create Client Scope';
+    document.getElementById('iamScopeSubmitBtn').textContent = 'Create';
+    openIAMModal('iamScopeModal');
+}
+
+async function editClientScope(id) {
+    try {
+        const resp = await iamFetch('/iam/v2/client-scopes/' + encodeURIComponent(id));
+        if (!resp.ok) { showIAMToast('Failed to load scope', true); return; }
+        const s = await resp.json();
+        document.getElementById('iamScopeEditID').value = s.ID || s.id || id;
+        document.getElementById('iamScopeName').value = s.name || '';
+        document.getElementById('iamScopeDescription').value = s.description || '';
+        document.getElementById('iamScopeClaimName').value = s.claim_name || '';
+        document.getElementById('iamScopeClaimType').value = s.claim_type || '';
+        document.getElementById('iamScopeIDToken').checked = s.include_in_id_token !== false;
+        document.getElementById('iamScopeAccessToken').checked = s.include_in_access_token !== false;
+        document.getElementById('iamScopeUserInfo').checked = s.include_in_userinfo !== false;
+        const realmSel = document.getElementById('iamScopeRealmID');
+        if (realmSel) realmSel.value = s.realm_id || '';
+        document.getElementById('iamScopeModalTitle').textContent = 'Edit Client Scope';
+        document.getElementById('iamScopeSubmitBtn').textContent = 'Update';
+        openIAMModal('iamScopeModal');
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function submitClientScope() {
+    const editID = document.getElementById('iamScopeEditID').value;
+    const name = document.getElementById('iamScopeName').value.trim();
+    const realmID = document.getElementById('iamScopeRealmID').value;
+    if (!name) { showIAMToast('Scope name is required', true); return; }
+    if (!realmID) { showIAMToast('Realm is required', true); return; }
+
+    const body = {
+        name, realm_id: realmID,
+        description: document.getElementById('iamScopeDescription').value.trim(),
+        claim_name: document.getElementById('iamScopeClaimName').value.trim(),
+        claim_type: document.getElementById('iamScopeClaimType').value,
+        include_in_id_token: document.getElementById('iamScopeIDToken').checked,
+        include_in_access_token: document.getElementById('iamScopeAccessToken').checked,
+        include_in_userinfo: document.getElementById('iamScopeUserInfo').checked
+    };
+
+    try {
+        const url = editID ? '/iam/v2/client-scopes/' + encodeURIComponent(editID) : '/iam/v2/client-scopes';
+        const method = editID ? 'PUT' : 'POST';
+        const resp = await iamFetch(url, { method, body: JSON.stringify(body) });
+        const data = await resp.json();
+        if (!resp.ok) { showIAMToast(data.error || 'Operation failed', true); return; }
+        showIAMToast(editID ? 'Client scope updated' : 'Client scope created');
+        closeIAMModal('iamScopeModal');
+        loadClientScopes();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+async function deleteClientScope(id) {
+    if (!confirm('Delete this client scope?')) return;
+    try {
+        const resp = await iamFetch('/iam/v2/client-scopes/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!resp.ok) { const d = await resp.json().catch(() => ({})); showIAMToast(d.error || 'Delete failed', true); return; }
+        showIAMToast('Client scope deleted');
+        loadClientScopes();
+    } catch (err) { showIAMToast('Error: ' + err.message, true); }
+}
+
+// ── Events (Audit Log) ──────────────────────────────────────────────────────
+
+async function loadEvents() {
+    if (!iamToken) return;
+    const typeFilter = (document.getElementById('eventTypeFilter') || {}).value || '';
+    const realmFilter = (document.getElementById('eventRealmFilter') || {}).value || '';
+    const limit = parseInt((document.getElementById('eventLimitInput') || {}).value, 10) || 100;
+
+    const params = new URLSearchParams();
+    if (typeFilter) params.set('type', typeFilter);
+    if (realmFilter) params.set('realm_id', realmFilter);
+    params.set('limit', String(limit));
+    const qs = '?' + params.toString();
+
+    try {
+        const resp = await iamFetch('/iam/v2/events' + qs);
+        if (!resp.ok) { showIAMToast('Failed to load events: ' + resp.status, true); return; }
+        const data = await resp.json();
+        const events = Array.isArray(data) ? data : (data.events || []);
+        renderEvents(events);
+    } catch (err) { showIAMToast('Error loading events: ' + err.message, true); }
+}
+
+function renderEvents(events) {
+    const tbody = document.getElementById('eventsBody');
+    if (!tbody) return;
+    if (!events.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No events found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = events.map(e => {
+        const typeColors = { LOGIN: '#27ae60', LOGIN_ERROR: '#e74c3c', LOGOUT: '#f39c12', REGISTER: '#3498db', TOKEN: '#9b59b6', ADMIN: '#2c3e50' };
+        const color = typeColors[e.type] || 'var(--text-muted)';
+        return '<tr>' +
+            '<td style="font-size:.85rem;">' + formatDate(e.CreatedAt || e.created_at) + '</td>' +
+            '<td><span class="status-badge" style="background:' + color + ';color:#fff;">' + escapeHtml(e.type || '–') + '</span></td>' +
+            '<td style="font-family:var(--font-mono);font-size:.8rem;">' + escapeHtml(e.user_id || '–') + '</td>' +
+            '<td style="font-family:var(--font-mono);font-size:.8rem;">' + escapeHtml(e.client_id || '–') + '</td>' +
+            '<td>' + escapeHtml(e.ip_address || '–') + '</td>' +
+            '<td style="font-size:.85rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(e.details || '–') + '</td>' +
+            '<td style="color:var(--danger-color);font-size:.85rem;">' + escapeHtml(e.error || '') + '</td>' +
+            '</tr>';
+    }).join('');
 }
 
 // ── Initialisation ───────────────────────────────────────────────────────────

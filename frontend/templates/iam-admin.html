@@ -83,6 +83,21 @@
         <button class="tab-btn" onclick="switchIAMTab('iam-oidc')">
             <span class="tab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span> OIDC / JWKS
         </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-realms')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Realms
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-groups')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Groups
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-idps')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span> Identity Providers
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-scopes')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Scopes
+        </button>
+        <button class="tab-btn" onclick="switchIAMTab('iam-events')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span> Events
+        </button>
     </div>
 
     <!-- ===================== DASHBOARD TAB ===================== -->
@@ -338,7 +353,279 @@
     </div>
 </div>
 
-<!-- ===================== MODALS ===================== -->
+    <!-- ===================== REALMS TAB ===================== -->
+    <div id="iam-realms" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;">Realm Management</h3>
+                <button class="btn-primary" onclick="showCreateRealmModal()">+ Create Realm</button>
+            </div>
+            <p style="color:var(--text-muted);font-size:.9rem;">Realms provide complete isolation of users, clients, roles, and policies — similar to Keycloak realms.</p>
+            <div id="realmsTableWrapper" style="overflow-x:auto;margin-top:16px;">
+                <table class="data-table" id="realmsTable"><thead><tr>
+                    <th>Name</th><th>Display Name</th><th>Enabled</th><th>Registration</th><th>Access TTL</th><th>SSO Idle</th><th>Brute Force</th><th>Actions</th>
+                </tr></thead><tbody id="realmsBody"><tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Loading…</td></tr></tbody></table>
+            </div>
+        </div>
+        <!-- Realm Detail / Dashboard -->
+        <div id="realmDetailPanel" class="cp-card" style="display:none;margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <h3 style="margin-top:0;" id="realmDetailTitle">Realm Dashboard</h3>
+            <div class="cp-grid-three" id="realmDashCards" style="margin-top:16px;"></div>
+            <div style="margin-top:16px;">
+                <h4>Recent Events</h4>
+                <div id="realmRecentEvents" style="font-size:.85rem;color:var(--text-muted);">No events</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== GROUPS TAB ===================== -->
+    <div id="iam-groups" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;">Groups</h3>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <select id="groupsRealmFilter" class="form-control" style="width:200px;" onchange="loadGroups()"><option value="">All Realms</option></select>
+                    <button class="btn-primary" onclick="showCreateGroupModal()">+ Create Group</button>
+                </div>
+            </div>
+            <p style="color:var(--text-muted);font-size:.9rem;">Organise users into hierarchical groups. Groups can inherit roles from parent groups.</p>
+            <div id="groupsTableWrapper" style="overflow-x:auto;margin-top:16px;">
+                <table class="data-table" id="groupsTable"><thead><tr>
+                    <th>Name</th><th>Path</th><th>Realm</th><th>Parent</th><th>Actions</th>
+                </tr></thead><tbody id="groupsBody"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Loading…</td></tr></tbody></table>
+            </div>
+        </div>
+        <div id="groupDetailPanel" class="cp-card" style="display:none;margin:0 0 20px 0;border-top:4px solid var(--primary-color);">
+            <h3 style="margin-top:0;" id="groupDetailTitle">Group Details</h3>
+            <div id="groupMembersList" style="margin-top:12px;"></div>
+            <div id="groupSubGroupsList" style="margin-top:12px;"></div>
+        </div>
+    </div>
+
+    <!-- ===================== IDENTITY PROVIDERS TAB ===================== -->
+    <div id="iam-idps" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;">Identity Providers (SSO Federation)</h3>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <select id="idpRealmFilter" class="form-control" style="width:200px;" onchange="loadIdentityProviders()"><option value="">All Realms</option></select>
+                    <button class="btn-primary" onclick="showCreateIdPModal()">+ Add Identity Provider</button>
+                </div>
+            </div>
+            <p style="color:var(--text-muted);font-size:.9rem;">Configure external identity providers for SSO federation (OIDC, SAML, GitHub, Google, LDAP, etc.).</p>
+            <div id="idpsTableWrapper" style="overflow-x:auto;margin-top:16px;">
+                <table class="data-table" id="idpsTable"><thead><tr>
+                    <th>Alias</th><th>Display Name</th><th>Type</th><th>Enabled</th><th>Trust Email</th><th>Realm</th><th>Actions</th>
+                </tr></thead><tbody id="idpsBody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading…</td></tr></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== SCOPES TAB ===================== -->
+    <div id="iam-scopes" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;">Client Scopes</h3>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <select id="scopeRealmFilter" class="form-control" style="width:200px;" onchange="loadClientScopes()"><option value="">All Realms</option></select>
+                    <button class="btn-primary" onclick="showCreateScopeModal()">+ Create Scope</button>
+                </div>
+            </div>
+            <p style="color:var(--text-muted);font-size:.9rem;">Define OIDC scopes and protocol mappers that control which claims appear in tokens.</p>
+            <div id="scopesTableWrapper" style="overflow-x:auto;margin-top:16px;">
+                <table class="data-table" id="scopesTable"><thead><tr>
+                    <th>Name</th><th>Description</th><th>Protocol</th><th>Claim</th><th>ID Token</th><th>Access Token</th><th>UserInfo</th><th>Built-in</th><th>Actions</th>
+                </tr></thead><tbody id="scopesBody"><tr><td colspan="9" style="text-align:center;color:var(--text-muted);">Loading…</td></tr></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== EVENTS TAB ===================== -->
+    <div id="iam-events" class="tab-content">
+        <div class="cp-card" style="margin:0 0 20px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;">Events &amp; Audit Log</h3>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <select id="eventTypeFilter" class="form-control" style="width:160px;" onchange="loadEvents()">
+                        <option value="">All Types</option>
+                        <option value="LOGIN">Login</option>
+                        <option value="LOGIN_ERROR">Login Error</option>
+                        <option value="LOGOUT">Logout</option>
+                        <option value="REGISTER">Register</option>
+                        <option value="TOKEN">Token</option>
+                        <option value="ADMIN">Admin</option>
+                    </select>
+                    <select id="eventRealmFilter" class="form-control" style="width:200px;" onchange="loadEvents()"><option value="">All Realms</option></select>
+                    <input type="number" id="eventLimitInput" value="100" min="10" max="1000" class="form-control" style="width:80px;" placeholder="Limit" onchange="loadEvents()">
+                </div>
+            </div>
+            <p style="color:var(--text-muted);font-size:.9rem;">View login, authentication, and administrative events across all realms.</p>
+            <div id="eventsTableWrapper" style="overflow-x:auto;margin-top:16px;">
+                <table class="data-table" id="eventsTable"><thead><tr>
+                    <th>Time</th><th>Type</th><th>User</th><th>Client</th><th>IP</th><th>Details</th><th>Error</th>
+                </tr></thead><tbody id="eventsBody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading…</td></tr></tbody></table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ===================== NEW MODALS ===================== -->
+
+<!-- Create/Edit Realm Modal -->
+<div id="iamRealmModal" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 id="iamRealmModalTitle">Create Realm</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamRealmModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamRealmEditID">
+            <div class="form-group"><label>Name *</label>
+                <input type="text" id="iamRealmName" placeholder="my-realm" class="form-control" required></div>
+            <div class="form-group"><label>Display Name</label>
+                <input type="text" id="iamRealmDisplayName" placeholder="My Realm" class="form-control"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group"><label>Access Token TTL (sec)</label>
+                    <input type="number" id="iamRealmAccessTTL" value="900" class="form-control"></div>
+                <div class="form-group"><label>Refresh Token TTL (sec)</label>
+                    <input type="number" id="iamRealmRefreshTTL" value="604800" class="form-control"></div>
+                <div class="form-group"><label>SSO Session Idle (sec)</label>
+                    <input type="number" id="iamRealmSSOIdle" value="1800" class="form-control"></div>
+                <div class="form-group"><label>SSO Session Max (sec)</label>
+                    <input type="number" id="iamRealmSSOMax" value="36000" class="form-control"></div>
+                <div class="form-group"><label>Password Min Length</label>
+                    <input type="number" id="iamRealmPassMinLen" value="8" class="form-control"></div>
+                <div class="form-group"><label>Max Login Failures</label>
+                    <input type="number" id="iamRealmMaxFailures" value="30" class="form-control"></div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;">
+                <label><input type="checkbox" id="iamRealmEnabled" checked> Enabled</label>
+                <label><input type="checkbox" id="iamRealmRegAllowed"> Registration Allowed</label>
+                <label><input type="checkbox" id="iamRealmResetPw" checked> Reset Password</label>
+                <label><input type="checkbox" id="iamRealmRememberMe" checked> Remember Me</label>
+                <label><input type="checkbox" id="iamRealmVerifyEmail"> Verify Email</label>
+                <label><input type="checkbox" id="iamRealmLoginEmail" checked> Login with Email</label>
+                <label><input type="checkbox" id="iamRealmBruteForce" checked> Brute Force Protection</label>
+                <label><input type="checkbox" id="iamRealmPassUpper" checked> Require Uppercase</label>
+                <label><input type="checkbox" id="iamRealmPassDigit" checked> Require Digit</label>
+                <label><input type="checkbox" id="iamRealmPassSpecial"> Require Special</label>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamRealmModal')">Cancel</button>
+                <button class="btn-primary" id="iamRealmSubmitBtn" onclick="submitRealm()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Group Modal -->
+<div id="iamGroupModal" class="modal">
+    <div class="modal-content" style="max-width:500px;">
+        <div class="modal-header">
+            <h2 id="iamGroupModalTitle">Create Group</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamGroupModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamGroupEditID">
+            <div class="form-group"><label>Realm *</label>
+                <select id="iamGroupRealmID" class="form-control"></select></div>
+            <div class="form-group"><label>Name *</label>
+                <input type="text" id="iamGroupName" placeholder="engineering" class="form-control" required></div>
+            <div class="form-group"><label>Parent Group (optional)</label>
+                <select id="iamGroupParentID" class="form-control"><option value="">— Top-level —</option></select></div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamGroupModal')">Cancel</button>
+                <button class="btn-primary" id="iamGroupSubmitBtn" onclick="submitGroup()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Identity Provider Modal -->
+<div id="iamIdPModal" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 id="iamIdPModalTitle">Add Identity Provider</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamIdPModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamIdPEditID">
+            <div class="form-group"><label>Realm *</label>
+                <select id="iamIdPRealmID" class="form-control"></select></div>
+            <div class="form-group"><label>Alias *</label>
+                <input type="text" id="iamIdPAlias" placeholder="corporate-sso" class="form-control" required></div>
+            <div class="form-group"><label>Display Name</label>
+                <input type="text" id="iamIdPDisplayName" placeholder="Corporate SSO" class="form-control"></div>
+            <div class="form-group"><label>Provider Type *</label>
+                <select id="iamIdPType" class="form-control" onchange="toggleIdPFields()">
+                    <option value="oidc">OpenID Connect</option><option value="saml">SAML 2.0</option>
+                    <option value="github">GitHub</option><option value="google">Google</option>
+                    <option value="microsoft">Microsoft</option><option value="gitlab">GitLab</option>
+                    <option value="ldap">LDAP</option><option value="facebook">Facebook</option>
+                </select></div>
+            <div class="form-group"><label>Client ID</label>
+                <input type="text" id="iamIdPClientID" class="form-control"></div>
+            <div class="form-group"><label>Client Secret</label>
+                <input type="password" id="iamIdPClientSecret" class="form-control"></div>
+            <div id="idpOidcFields">
+                <div class="form-group"><label>Authorization URL</label>
+                    <input type="text" id="iamIdPAuthURL" class="form-control" placeholder="https://provider.com/authorize"></div>
+                <div class="form-group"><label>Token URL</label>
+                    <input type="text" id="iamIdPTokenURL" class="form-control" placeholder="https://provider.com/token"></div>
+                <div class="form-group"><label>UserInfo URL</label>
+                    <input type="text" id="iamIdPUserInfoURL" class="form-control"></div>
+                <div class="form-group"><label>Issuer</label>
+                    <input type="text" id="iamIdPIssuer" class="form-control"></div>
+            </div>
+            <div class="form-group"><label>Default Scopes</label>
+                <input type="text" id="iamIdPScopes" class="form-control" placeholder="openid profile email"></div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;">
+                <label><input type="checkbox" id="iamIdPEnabled" checked> Enabled</label>
+                <label><input type="checkbox" id="iamIdPTrustEmail"> Trust Email</label>
+                <label><input type="checkbox" id="iamIdPStoreToken"> Store Token</label>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamIdPModal')">Cancel</button>
+                <button class="btn-primary" id="iamIdPSubmitBtn" onclick="submitIdentityProvider()">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Client Scope Modal -->
+<div id="iamScopeModal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+            <h2 id="iamScopeModalTitle">Create Client Scope</h2>
+            <button class="modal-close" onclick="closeIAMModal('iamScopeModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="iamScopeEditID">
+            <div class="form-group"><label>Realm *</label>
+                <select id="iamScopeRealmID" class="form-control"></select></div>
+            <div class="form-group"><label>Name *</label>
+                <input type="text" id="iamScopeName" placeholder="custom-scope" class="form-control" required></div>
+            <div class="form-group"><label>Description</label>
+                <input type="text" id="iamScopeDescription" class="form-control"></div>
+            <div class="form-group"><label>Claim Name</label>
+                <input type="text" id="iamScopeClaimName" class="form-control" placeholder="custom_claim"></div>
+            <div class="form-group"><label>Claim Type</label>
+                <select id="iamScopeClaimType" class="form-control"><option value="">—</option><option>String</option><option>long</option><option>int</option><option>boolean</option><option>JSON</option></select></div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;">
+                <label><input type="checkbox" id="iamScopeIDToken" checked> Add to ID Token</label>
+                <label><input type="checkbox" id="iamScopeAccessToken" checked> Add to Access Token</label>
+                <label><input type="checkbox" id="iamScopeUserInfo" checked> Add to UserInfo</label>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn-secondary" onclick="closeIAMModal('iamScopeModal')">Cancel</button>
+                <button class="btn-primary" id="iamScopeSubmitBtn" onclick="submitClientScope()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== EXISTING MODALS ===================== -->
 
 <!-- Create/Edit User Modal -->
 <div id="iamUserModal" class="modal">
@@ -594,5 +881,5 @@
     </div>
 </div>
 
-<script src="/static/iam-admin.js?v=20260406"></script>
+<script src="/static/iam-admin.js?v=20260407a"></script>
 {{ end }}

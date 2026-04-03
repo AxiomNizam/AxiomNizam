@@ -12,6 +12,7 @@ import (
 	"example.com/axiomnizam/internal/iam/authz"
 	"example.com/axiomnizam/internal/iam/identity"
 	iammw "example.com/axiomnizam/internal/iam/middleware"
+	"example.com/axiomnizam/internal/iam/pgstore"
 	"example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,10 @@ type System struct {
 	Authorizer    *authz.Authorizer
 	Authenticator *authn.Authenticator
 	AdminHandler  *admin.Handler
+
+	// Enhanced PostgreSQL-backed store (realms, groups, scopes, events, IdPs)
+	PGStore         *pgstore.Store
+	EnhancedHandler *admin.EnhancedHandler
 
 	// Repositories (exported for external callers that need direct access)
 	Users        *storage.PostgresUserRepository
@@ -132,19 +137,42 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config) (*System, error) 
 		authorizer, issuer, authenticator,
 	)
 
+	// ── Enhanced PostgreSQL-backed IAM store ──
+	pgStore, err := pgstore.New(pg)
+	if err != nil {
+		log.Printf("⚠️  IAM: enhanced pgstore init error (non-fatal): %v", err)
+	}
+
+	var enhancedHandler *admin.EnhancedHandler
+	if pgStore != nil {
+		enhancedHandler = admin.NewEnhancedHandler(pgStore)
+
+		// Seed default realm and its roles/scopes
+		defaultRealm, seedErr := pgStore.SeedDefaultRealm()
+		if seedErr != nil {
+			log.Printf("⚠️  IAM: default realm seed error: %v", seedErr)
+		} else if defaultRealm != nil {
+			_ = pgStore.SeedDefaultRoles(defaultRealm.ID)
+			_ = pgStore.SeedDefaultClientScopes(defaultRealm.ID)
+			log.Printf("✅ IAM: default realm '%s' ready (id=%s)", defaultRealm.Name, defaultRealm.ID)
+		}
+	}
+
 	return &System{
-		Issuer:        issuer,
-		Authorizer:    authorizer,
-		Authenticator: authenticator,
-		AdminHandler:  adminHandler,
-		Users:         userRepo,
-		Clients:       clientRepo,
-		Roles:         roleRepo,
-		Bindings:      bindingRepo,
-		Sessions:      sessionRepo,
-		RefreshRepo:   refreshRepo,
-		CodeRepo:      codeRepo,
-		RevokedStore:  revokedStore,
+		Issuer:          issuer,
+		Authorizer:      authorizer,
+		Authenticator:   authenticator,
+		AdminHandler:    adminHandler,
+		PGStore:         pgStore,
+		EnhancedHandler: enhancedHandler,
+		Users:           userRepo,
+		Clients:         clientRepo,
+		Roles:           roleRepo,
+		Bindings:        bindingRepo,
+		Sessions:        sessionRepo,
+		RefreshRepo:     refreshRepo,
+		CodeRepo:        codeRepo,
+		RevokedStore:    revokedStore,
 	}, nil
 }
 
@@ -211,6 +239,96 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 		// Token Management
 		adminAPI.POST("/tokens/revoke", h.RevokeToken)
 		adminAPI.POST("/users/:id/revoke-tokens", h.RevokeUserTokens)
+	}
+
+	// ── Enhanced Keycloak-style Admin API (PostgreSQL-backed) ──
+	if s.EnhancedHandler != nil {
+		eh := s.EnhancedHandler
+
+		enhancedAPI := router.Group("/iam/v2", iamAuth, sysadminOnly)
+		{
+			// Realms
+			enhancedAPI.GET("/realms", eh.ListRealms)
+			enhancedAPI.GET("/realms/:realmId", eh.GetRealm)
+			enhancedAPI.POST("/realms", eh.CreateRealm)
+			enhancedAPI.PUT("/realms/:realmId", eh.UpdateRealm)
+			enhancedAPI.DELETE("/realms/:realmId", eh.DeleteRealm)
+			enhancedAPI.GET("/realms/:realmId/dashboard", eh.RealmDashboard)
+			enhancedAPI.GET("/realms/:realmId/info", eh.RealmInfo)
+
+			// Groups
+			enhancedAPI.GET("/groups", eh.ListGroups)
+			enhancedAPI.GET("/groups/:id", eh.GetGroup)
+			enhancedAPI.POST("/groups", eh.CreateGroup)
+			enhancedAPI.PUT("/groups/:id", eh.UpdateGroup)
+			enhancedAPI.DELETE("/groups/:id", eh.DeleteGroup)
+			enhancedAPI.POST("/groups/:id/members", eh.AddGroupMember)
+			enhancedAPI.DELETE("/groups/:id/members/:userId", eh.RemoveGroupMember)
+
+			// Client Scopes
+			enhancedAPI.GET("/client-scopes", eh.ListClientScopes)
+			enhancedAPI.GET("/client-scopes/:id", eh.GetClientScope)
+			enhancedAPI.POST("/client-scopes", eh.CreateClientScope)
+			enhancedAPI.PUT("/client-scopes/:id", eh.UpdateClientScope)
+			enhancedAPI.DELETE("/client-scopes/:id", eh.DeleteClientScope)
+
+			// Identity Providers
+			enhancedAPI.GET("/identity-providers", eh.ListIdentityProviders)
+			enhancedAPI.GET("/identity-providers/:id", eh.GetIdentityProvider)
+			enhancedAPI.POST("/identity-providers", eh.CreateIdentityProvider)
+			enhancedAPI.PUT("/identity-providers/:id", eh.UpdateIdentityProvider)
+			enhancedAPI.DELETE("/identity-providers/:id", eh.DeleteIdentityProvider)
+
+			// SSO Sessions
+			enhancedAPI.GET("/users/:userId/sessions", eh.ListUserSessions)
+			enhancedAPI.DELETE("/sessions/:sessionId", eh.RevokeSession)
+			enhancedAPI.DELETE("/users/:userId/sessions", eh.RevokeUserSessions)
+
+			// Events / Audit Log
+			enhancedAPI.GET("/events", eh.ListEvents)
+			enhancedAPI.GET("/users/:userId/events", eh.ListUserEvents)
+
+			// User Attributes
+			enhancedAPI.GET("/users/:userId/attributes", eh.GetUserAttributes)
+			enhancedAPI.POST("/users/:userId/attributes", eh.SetUserAttribute)
+			enhancedAPI.DELETE("/users/:userId/attributes", eh.DeleteUserAttribute)
+
+			// User Groups
+			enhancedAPI.GET("/users/:userId/groups", eh.GetUserGroups)
+			enhancedAPI.POST("/users/:userId/groups", eh.AddUserToGroup)
+			enhancedAPI.DELETE("/users/:userId/groups/:groupId", eh.RemoveUserFromGroup)
+
+			// User Consents
+			enhancedAPI.GET("/users/:userId/consents", eh.GetUserConsents)
+			enhancedAPI.DELETE("/users/:userId/consents/:clientId", eh.RevokeUserConsent)
+
+			// Required Actions
+			enhancedAPI.GET("/users/:userId/required-actions", eh.GetRequiredActions)
+			enhancedAPI.POST("/users/:userId/required-actions", eh.AddRequiredAction)
+			enhancedAPI.DELETE("/users/:userId/required-actions/:action", eh.RemoveRequiredAction)
+
+			// Realm-scoped Roles (PostgreSQL)
+			enhancedAPI.GET("/pg-roles", eh.ListPGRoles)
+			enhancedAPI.GET("/pg-roles/:id", eh.GetPGRole)
+			enhancedAPI.POST("/pg-roles", eh.CreatePGRole)
+			enhancedAPI.PUT("/pg-roles/:id", eh.UpdatePGRole)
+			enhancedAPI.DELETE("/pg-roles/:id", eh.DeletePGRole)
+
+			// Role Bindings (PostgreSQL)
+			enhancedAPI.POST("/pg-role-bindings", eh.CreateRoleBinding)
+			enhancedAPI.GET("/users/:userId/pg-role-bindings", eh.ListUserRoleBindings)
+			enhancedAPI.GET("/users/:userId/effective-roles", eh.GetEffectiveRoles)
+			enhancedAPI.DELETE("/pg-role-bindings/:id", eh.DeleteRoleBinding)
+
+			// Realm-scoped Clients (PostgreSQL)
+			enhancedAPI.GET("/pg-clients", eh.ListPGClients)
+			enhancedAPI.GET("/pg-clients/:id", eh.GetPGClient)
+			enhancedAPI.POST("/pg-clients", eh.CreatePGClient)
+			enhancedAPI.PUT("/pg-clients/:id", eh.UpdatePGClient)
+			enhancedAPI.DELETE("/pg-clients/:id", eh.DeletePGClient)
+		}
+
+		log.Println("✅ IAM: enhanced Keycloak-style v2 routes registered")
 	}
 
 	log.Println("✅ IAM: all routes registered")
