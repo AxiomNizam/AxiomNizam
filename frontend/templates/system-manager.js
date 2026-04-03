@@ -34,7 +34,8 @@ var monitoringDataSnapshot = {
     bindings: [],
     selectedRealm: '',
     apiTrendHistory: {},
-    trendMaxPoints: 12
+    trendMaxPoints: 12,
+    realmDashboardsReady: false
 };
 
 function normalizeSystemManagerRole(role) {
@@ -209,8 +210,21 @@ function getSystemManagerAuthHeaders() {
     return headers;
 }
 
-function monitoringFetchJSON(path) {
-    return fetch(BACKEND_URL + path, { headers: getSystemManagerAuthHeaders() })
+function monitoringFetchJSON(path, timeoutMs) {
+    var headers = getSystemManagerAuthHeaders();
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var effectiveTimeout = safeNumber(timeoutMs) > 0 ? safeNumber(timeoutMs) : 10000;
+    var timeoutHandle = null;
+
+    var options = { headers: headers };
+    if (controller) {
+        options.signal = controller.signal;
+        timeoutHandle = setTimeout(function() {
+            controller.abort();
+        }, effectiveTimeout);
+    }
+
+    return fetch(BACKEND_URL + path, options)
         .then(function(response) {
             return response.text().then(function(text) {
                 var payload = {};
@@ -230,6 +244,17 @@ function monitoringFetchJSON(path) {
 
                 return payload;
             });
+        })
+        .catch(function(err) {
+            if (err && err.name === 'AbortError') {
+                throw new Error('Request timeout for ' + path);
+            }
+            throw err;
+        })
+        .finally(function() {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
         });
 }
 
@@ -855,8 +880,54 @@ function applyMonitoringFiltersAndRender(options) {
 
     var realmUpdatedEl = document.getElementById('realmClientMetricsUpdatedAt');
     if (realmUpdatedEl) {
-        realmUpdatedEl.textContent = 'Scope: ' + scopeLabel + ' | Updated: ' + new Date().toLocaleTimeString();
+        var statusText = monitoringDataSnapshot.realmDashboardsReady ? 'Updated' : 'Loading';
+        realmUpdatedEl.textContent = 'Scope: ' + scopeLabel + ' | ' + statusText + ': ' + new Date().toLocaleTimeString();
     }
+}
+
+function loadRealmDashboardDetails(realms) {
+    var realmList = Array.isArray(realms) ? realms : [];
+    if (realmList.length === 0) {
+        monitoringDataSnapshot.realmDashboards = {};
+        monitoringDataSnapshot.realmDashboardsReady = true;
+        applyMonitoringFiltersAndRender({ trackTrend: false });
+        return;
+    }
+
+    monitoringDataSnapshot.realmDashboardsReady = false;
+    applyMonitoringFiltersAndRender({ trackTrend: false });
+
+    var requests = realmList.map(function(realm) {
+        var realmKey = normalizeRealmIdentifier(realm);
+        if (!realmKey) {
+            return Promise.resolve(null);
+        }
+
+        return monitoringFetchJSON('/iam/v2/realms/' + encodeURIComponent(realmKey) + '/dashboard', 8000)
+            .then(function(dashboard) {
+                return { key: realmKey, dashboard: dashboard };
+            })
+            .catch(function() {
+                return null;
+            });
+    });
+
+    Promise.allSettled(requests).then(function(results) {
+        var dashboardsByRealm = {};
+        for (var i = 0; i < results.length; i++) {
+            var item = results[i];
+            var entry = item && item.status === 'fulfilled' ? item.value : null;
+            if (!entry || !entry.key) continue;
+            dashboardsByRealm[entry.key] = entry.dashboard || {};
+        }
+
+        monitoringDataSnapshot.realmDashboards = dashboardsByRealm;
+        monitoringDataSnapshot.realmDashboardsReady = true;
+        applyMonitoringFiltersAndRender({ trackTrend: false });
+    }).catch(function() {
+        monitoringDataSnapshot.realmDashboardsReady = true;
+        applyMonitoringFiltersAndRender({ trackTrend: false });
+    });
 }
 
 function loadMonitoringDashboards() {
@@ -871,6 +942,8 @@ function loadMonitoringDashboards() {
     setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Refreshing...');
     setMonitoringUpdatedAt('userMetricsUpdatedAt', 'Refreshing...');
 
+    monitoringDataSnapshot.realmDashboardsReady = false;
+
     Promise.all([
         monitoringFetchJSON('/api/admin/metrics/stats').catch(function() { return { data: {} }; }),
         monitoringFetchJSON('/api/admin/metrics/count').catch(function() { return { data: {} }; }),
@@ -880,7 +953,7 @@ function loadMonitoringDashboards() {
         monitoringFetchJSON('/iam/admin/roles').catch(function() { return { roles: [] }; }),
         monitoringFetchJSON('/iam/admin/role-bindings').catch(function() { return { bindings: [] }; }),
         monitoringFetchJSON('/iam/v2/realms').catch(function() { return []; }),
-        monitoringFetchJSON('/iam/v2/pg-clients').catch(function() { return []; })
+        monitoringFetchJSON('/iam/v2/pg-clients', 8000).catch(function() { return []; })
     ]).then(function(results) {
         var apiStatsPayload = results[0] || {};
         var apiCountPayload = results[1] || {};
@@ -895,52 +968,30 @@ function loadMonitoringDashboards() {
         var realms = Array.isArray(realmsPayload) ? realmsPayload : [];
         var clients = Array.isArray(clientsPayload) ? clientsPayload : [];
 
-        var dashboardRequests = realms.map(function(realm) {
-            var realmKey = String((realm && (realm.id || realm.name)) || '');
-            if (!realmKey) {
-                return Promise.resolve(null);
-            }
-            return monitoringFetchJSON('/iam/v2/realms/' + encodeURIComponent(realmKey) + '/dashboard')
-                .then(function(dashboard) {
-                    return { key: realmKey, dashboard: dashboard };
-                })
-                .catch(function() {
-                    return null;
-                });
-        });
+        var apiStatsData = (apiStatsPayload && apiStatsPayload.data) ? apiStatsPayload.data : {};
+        var apiCountData = (apiCountPayload && apiCountPayload.data) ? apiCountPayload.data : {};
+        var builderAPIs = Array.isArray(builderListPayload.apis) ? builderListPayload.apis : [];
+        var users = Array.isArray(usersPayload.users) ? usersPayload.users : [];
+        var roles = Array.isArray(rolesPayload.roles) ? rolesPayload.roles : [];
+        var bindings = Array.isArray(bindingsPayload.bindings) ? bindingsPayload.bindings : [];
 
-        Promise.all(dashboardRequests).then(function(dashboardResults) {
-            var dashboardsByRealm = {};
-            for (var i = 0; i < dashboardResults.length; i++) {
-                var entry = dashboardResults[i];
-                if (!entry || !entry.key) continue;
-                dashboardsByRealm[entry.key] = entry.dashboard || {};
-            }
+        monitoringDataSnapshot.apiStats = apiStatsData;
+        monitoringDataSnapshot.apiCount = apiCountData;
+        monitoringDataSnapshot.builderSummary = builderSummary;
+        monitoringDataSnapshot.builderAPIs = builderAPIs;
+        monitoringDataSnapshot.realms = realms;
+        monitoringDataSnapshot.realmDashboards = {};
+        monitoringDataSnapshot.clients = clients;
+        monitoringDataSnapshot.users = users;
+        monitoringDataSnapshot.roles = roles;
+        monitoringDataSnapshot.bindings = bindings;
 
-            var apiStatsData = (apiStatsPayload && apiStatsPayload.data) ? apiStatsPayload.data : {};
-            var apiCountData = (apiCountPayload && apiCountPayload.data) ? apiCountPayload.data : {};
-            var builderAPIs = Array.isArray(builderListPayload.apis) ? builderListPayload.apis : [];
-            var users = Array.isArray(usersPayload.users) ? usersPayload.users : [];
-            var roles = Array.isArray(rolesPayload.roles) ? rolesPayload.roles : [];
-            var bindings = Array.isArray(bindingsPayload.bindings) ? bindingsPayload.bindings : [];
+        populateMonitoringRealmFilter(realms);
+        applyMonitoringFiltersAndRender({ trackTrend: true });
+        loadRealmDashboardDetails(realms);
 
-            monitoringDataSnapshot.apiStats = apiStatsData;
-            monitoringDataSnapshot.apiCount = apiCountData;
-            monitoringDataSnapshot.builderSummary = builderSummary;
-            monitoringDataSnapshot.builderAPIs = builderAPIs;
-            monitoringDataSnapshot.realms = realms;
-            monitoringDataSnapshot.realmDashboards = dashboardsByRealm;
-            monitoringDataSnapshot.clients = clients;
-            monitoringDataSnapshot.users = users;
-            monitoringDataSnapshot.roles = roles;
-            monitoringDataSnapshot.bindings = bindings;
-
-            populateMonitoringRealmFilter(realms);
-            applyMonitoringFiltersAndRender({ trackTrend: true });
-
-            setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt');
-            setMonitoringUpdatedAt('userMetricsUpdatedAt');
-        });
+        setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt');
+        setMonitoringUpdatedAt('userMetricsUpdatedAt');
     }).catch(function(err) {
         setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Unavailable');
         setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Unavailable');
