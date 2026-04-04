@@ -44,7 +44,7 @@ function refreshData() {
 }
 
 function fetchHealth() {
-    const url = BACKEND_URL + '/health';
+    const url = '/api/health';
     console.log('Fetching health from:', url);
     console.log('BACKEND_URL value:', BACKEND_URL);
     
@@ -77,7 +77,7 @@ function fetchHealth() {
 }
 
 function fetchStatus() {
-    const url = BACKEND_URL + '/status';
+    const url = '/api/status';
     console.log('Fetching status from:', url);
     
     fetch(url, { mode: 'cors' })

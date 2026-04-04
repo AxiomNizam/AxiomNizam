@@ -160,11 +160,14 @@ func main() {
 		allowedOriginSet[candidate] = struct{}{}
 	}
 
+	// Always include canonical frontend URL when provided.
+	addAllowedOrigin(os.Getenv("PUBLIC_FRONTEND_URL"))
+
 	for _, candidate := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
 		addAllowedOrigin(candidate)
 	}
 	if len(allowedOriginSet) == 0 {
-		addAllowedOrigin(os.Getenv("PUBLIC_FRONTEND_URL"))
+		addAllowedOrigin("https://axiomnizam.bitbd.net")
 		addAllowedOrigin("http://localhost:7000")
 		addAllowedOrigin("http://127.0.0.1:7000")
 	}
