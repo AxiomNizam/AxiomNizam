@@ -19,13 +19,14 @@ type CLIAuthHandler struct {
 
 // NewCLIAuthHandler creates a CLI auth adapter backed by IAM endpoints.
 func NewCLIAuthHandler() *CLIAuthHandler {
-	baseURL := strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
+	baseURL := strings.TrimSpace(os.Getenv("IAM_INTERNAL_BASE_URL"))
 	if baseURL == "" {
-		host := getEnv("API_HOST", "localhost")
-		port := getEnv("API_PORT", "8000")
-		baseURL = "http://" + host + ":" + port
+		baseURL = strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
+	if baseURL == "" {
+		baseURL = defaultIAMInternalBaseURL()
+	}
+	baseURL = normalizeIAMBaseURL(baseURL)
 
 	return &CLIAuthHandler{
 		iamBaseURL: baseURL,

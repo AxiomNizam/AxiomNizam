@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -27,13 +28,14 @@ type AuthHandler struct {
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler() *AuthHandler {
-	iamBaseURL := strings.TrimSpace(getEnv("IAM_ISSUER_URL", ""))
+	iamBaseURL := strings.TrimSpace(getEnv("IAM_INTERNAL_BASE_URL", ""))
 	if iamBaseURL == "" {
-		host := getEnv("API_HOST", "localhost")
-		port := getEnv("API_PORT", "8000")
-		iamBaseURL = fmt.Sprintf("http://%s:%s", host, port)
+		iamBaseURL = strings.TrimSpace(getEnv("IAM_ISSUER_URL", ""))
 	}
-	iamBaseURL = strings.TrimRight(iamBaseURL, "/")
+	if iamBaseURL == "" {
+		iamBaseURL = defaultIAMInternalBaseURL()
+	}
+	iamBaseURL = normalizeIAMBaseURL(iamBaseURL)
 
 	return &AuthHandler{
 		iamBaseURL:  iamBaseURL,
@@ -61,6 +63,71 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func defaultIAMInternalBaseURL() string {
+	host := strings.TrimSpace(getEnv("API_HOST", "localhost"))
+	port := strings.TrimSpace(getEnv("API_PORT", "8000"))
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	if port == "" {
+		port = "8000"
+	}
+	return fmt.Sprintf("http://%s:%s", host, port)
+}
+
+func normalizeIAMBaseURL(raw string) string {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(candidate)
+	if err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		return strings.TrimRight(parsed.Scheme+"://"+parsed.Host, "/")
+	}
+
+	return strings.TrimRight(candidate, "/")
+}
+
+func summarizeIAMBody(raw []byte) string {
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return "empty response body"
+	}
+
+	compact := strings.Join(strings.Fields(strings.ReplaceAll(strings.ReplaceAll(text, "\r", " "), "\n", " ")), " ")
+	if strings.HasPrefix(strings.ToLower(compact), "<!doctype") || strings.HasPrefix(strings.ToLower(compact), "<html") || strings.HasPrefix(compact, "<") {
+		return "upstream returned HTML instead of JSON"
+	}
+	if len(compact) > 220 {
+		return compact[:220] + "..."
+	}
+	return compact
+}
+
+func shouldRetryIAMLogin(resp *http.Response, responseBody []byte, reqErr error) bool {
+	if reqErr != nil {
+		return true
+	}
+	if resp == nil {
+		return true
+	}
+
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	bodySummary := summarizeIAMBody(responseBody)
+	htmlResponse := strings.Contains(contentType, "text/html") || strings.Contains(bodySummary, "HTML instead of JSON")
+
+	if htmlResponse {
+		return true
+	}
+
+	if resp.StatusCode == http.StatusOK && !json.Valid(responseBody) {
+		return true
+	}
+
+	return false
 }
 
 // LoginRequest is the request payload for login
@@ -260,14 +327,44 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	tokenURL := h.iamBaseURL + "/iam/auth/login"
-	log.Printf("📝 IAM login attempt for identifier: %s", loginID)
+	log.Printf("📝 IAM login attempt for identifier: %s (base=%s)", loginID, h.iamBaseURL)
 
 	body, _ := json.Marshal(map[string]string{
 		"email":    loginID,
 		"password": req.Password,
 	})
 
-	resp, err := h.httpClient.Post(tokenURL, "application/json", strings.NewReader(string(body)))
+	postLogin := func(targetURL string) (*http.Response, []byte, error) {
+		resp, err := h.httpClient.Post(targetURL, "application/json", strings.NewReader(string(body)))
+		if err != nil {
+			return nil, nil, err
+		}
+		defer resp.Body.Close()
+
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return resp, nil, readErr
+		}
+		return resp, responseBody, nil
+	}
+
+	resp, responseBody, err := postLogin(tokenURL)
+	if shouldRetryIAMLogin(resp, responseBody, err) {
+		fallbackBase := normalizeIAMBaseURL(defaultIAMInternalBaseURL())
+		fallbackURL := fallbackBase + "/iam/auth/login"
+		if fallbackURL != tokenURL {
+			log.Printf("⚠️  IAM login primary endpoint returned unusable response; retrying fallback %s", fallbackURL)
+			fallbackResp, fallbackBody, fallbackErr := postLogin(fallbackURL)
+			if fallbackErr == nil {
+				resp = fallbackResp
+				responseBody = fallbackBody
+				err = nil
+			} else if err != nil {
+				err = fmt.Errorf("primary IAM login error: %v; fallback error: %v", err, fallbackErr)
+			}
+		}
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
@@ -275,13 +372,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		})
 		return
 	}
-	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
+	contentType := ""
+	if resp != nil {
+		contentType = strings.TrimSpace(resp.Header.Get("Content-Type"))
+	}
+
+	if !json.Valid(responseBody) {
+		summary := summarizeIAMBody(responseBody)
+		log.Printf("⚠️  IAM login non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  "Failed to read IAM authentication response: " + err.Error(),
+			Error:  fmt.Sprintf("IAM authentication service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
 		})
 		return
 	}
@@ -301,13 +403,23 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			errMsg = strings.TrimSpace(tokenResp.ErrorDesc)
 		}
 		if errMsg == "" {
-			errMsg = strings.TrimSpace(string(responseBody))
+			errMsg = summarizeIAMBody(responseBody)
 		}
 		if errMsg == "" {
 			errMsg = "authentication failed"
 		}
 
-		c.JSON(http.StatusUnauthorized, models.Response{
+		statusCode := http.StatusUnauthorized
+		switch {
+		case resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+			statusCode = resp.StatusCode
+		case resp.StatusCode == http.StatusTooManyRequests:
+			statusCode = http.StatusTooManyRequests
+		case resp.StatusCode >= 500:
+			statusCode = http.StatusBadGateway
+		}
+
+		c.JSON(statusCode, models.Response{
 			Status: "error",
 			Error:  errMsg,
 		})

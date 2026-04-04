@@ -14,9 +14,10 @@ services:
       OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS: ${OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS:-20}
       IAM_SYSADMIN_EMAIL: ${IAM_SYSADMIN_EMAIL:-sysadmin@axiomnizam.local}
       IAM_SYSADMIN_PASSWORD: ${IAM_SYSADMIN_PASSWORD:-changeme-on-first-login}
-      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-http://localhost:8000}
-      PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-http://localhost:7000}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:7000}
+      IAM_INTERNAL_BASE_URL: ${IAM_INTERNAL_BASE_URL:-https://axiomnizam-platfrom.bitbd.net}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platfrom.bitbd.net}
+      PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-https://axiomnizam.bitbd.net}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
     depends_on:
       # - valkey
       - etcd
