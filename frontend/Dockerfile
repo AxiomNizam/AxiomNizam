@@ -21,9 +21,9 @@ WORKDIR /root/
 COPY --from=builder /app/frontend .
 COPY --from=builder /app/templates ./templates
 
-EXPOSE 8080
+EXPOSE 7000
 
 ENV BACKEND_URL=http://axiomnizam:8000
-ENV FRONTEND_PORT=8080
+ENV FRONTEND_PORT=7000
 
 CMD ["./frontend"]
