@@ -40,9 +40,10 @@ services:
     ports:
       - "7000:7000"
     environment:
-      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-http://localhost:8000}
+      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-https://axiomnizam-platfrom.bitbd.net}
+      BACKEND_PROXY_URL: ${BACKEND_PROXY_URL:-https://axiomnizam-platfrom.bitbd.net}
       FRONTEND_PORT: ${FRONTEND_PORT:-7000}
-      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-http://localhost:8000}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platfrom.bitbd.net}
     depends_on:
       - axiomnizam
     networks:

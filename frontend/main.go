@@ -29,6 +29,15 @@ type StatusResponse struct {
 }
 
 var backendURL string
+var backendProxyURL string
+
+func trimTrailingSlash(raw string) string {
+	value := strings.TrimSpace(raw)
+	if len(value) > 1 && strings.HasSuffix(value, "/") {
+		return value[:len(value)-1]
+	}
+	return value
+}
 
 func normalizeFrontendRole(role string) string {
 	value := strings.ToLower(strings.TrimSpace(role))
@@ -104,14 +113,17 @@ func main() {
 		log.Println("⚠️  No .env file found, using defaults")
 	}
 
-	// Get backend URL from environment or use default
-	backendURL = os.Getenv("BACKEND_URL")
+	// Get browser-facing backend URL from environment or use default.
+	backendURL = trimTrailingSlash(os.Getenv("BACKEND_URL"))
 	if backendURL == "" {
 		backendURL = "http://localhost:8000"
 	}
-	// Ensure backendURL doesn't have trailing slash
-	if len(backendURL) > 1 && backendURL[len(backendURL)-1] == '/' {
-		backendURL = backendURL[:len(backendURL)-1]
+
+	// Backend proxy URL is used by frontend server-side routes (/api/health, /api/status).
+	// This can point to an internal service address even when BACKEND_URL is public.
+	backendProxyURL = trimTrailingSlash(os.Getenv("BACKEND_PROXY_URL"))
+	if backendProxyURL == "" {
+		backendProxyURL = backendURL
 	}
 
 	router := gin.Default()
@@ -163,7 +175,8 @@ func main() {
 	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
 	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
 	fmt.Printf("� IAM Admin Console: http://localhost:%s/iam-admin\n", port)
-	fmt.Printf("�📡 Backend: %s\n\n", backendURL)
+	fmt.Printf("�📡 Backend (browser): %s\n", backendURL)
+	fmt.Printf("🔁 Backend (proxy): %s\n\n", backendProxyURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
 }
@@ -467,7 +480,7 @@ func apiHealthHandler(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":  "error",
-			"message": fmt.Sprintf("Failed to fetch health: %v", err),
+			"message": fmt.Sprintf("Failed to fetch health from %s: %v", backendProxyURL, err),
 		})
 		return
 	}
@@ -480,7 +493,7 @@ func apiStatusHandler(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":  "error",
-			"message": fmt.Sprintf("Failed to fetch status: %v", err),
+			"message": fmt.Sprintf("Failed to fetch status from %s: %v", backendProxyURL, err),
 		})
 		return
 	}
@@ -493,7 +506,7 @@ func fetchHealth() (*HealthResponse, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(fmt.Sprintf("%s/health", backendURL))
+	resp, err := client.Get(fmt.Sprintf("%s/health", backendProxyURL))
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +532,7 @@ func fetchStatus() (*StatusResponse, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(fmt.Sprintf("%s/status", backendURL))
+	resp, err := client.Get(fmt.Sprintf("%s/status", backendProxyURL))
 	if err != nil {
 		return nil, err
 	}
