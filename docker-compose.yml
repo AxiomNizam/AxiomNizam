@@ -1,7 +1,7 @@
 services:
   # Go application
   axiomnizam:
-    image: axiomnizam-axiomnizam-frontend:latest
+    image: shafiunmiraz/axiomnizam-axiomnizam:latest
     ports:
       - "8000:8000"
     env_file:
@@ -36,7 +36,7 @@ services:
 
   # Frontend Dashboard
   axiomnizam-frontend:
-    image: axiomnizam-axiomnizam-frontend:latest
+    image: shafiunmiraz/axiomnizam-axiomnizam-frontend:latest
     ports:
       - "7000:7000"
     environment:
