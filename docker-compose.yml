@@ -1,7 +1,9 @@
 services:
   # Go application
   axiomnizam:
-    image: shafiunmiraz/axiomnizam-axiomnizam:latest
+    build: .
+    container_name: axiomnizam
+    # image: shafiunmiraz/axiomnizam-axiomnizam:latest
     ports:
       - "8000:8000"
     env_file:
@@ -36,7 +38,9 @@ services:
 
   # Frontend Dashboard
   axiomnizam-frontend:
-    image: shafiunmiraz/axiomnizam-axiomnizam-frontend:latest
+    build:
+      context: ./frontend
+    # image: shafiunmiraz/axiomnizam-axiomnizam-frontend:latest
     ports:
       - "7000:7000"
     environment:
