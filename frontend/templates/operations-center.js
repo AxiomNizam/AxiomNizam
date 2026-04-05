@@ -1,4 +1,4 @@
-const OPERATIONS_API_BASE = window.BACKEND_URL || 'http://localhost:8000';
+const OPERATIONS_API_BASE = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
 
 function operationsURL(path) {
     if (!path) return OPERATIONS_API_BASE;

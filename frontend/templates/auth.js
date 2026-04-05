@@ -1,10 +1,24 @@
 // Authentication Module
 const AUTH_CONFIG = (() => {
-    // Prefer server-injected backend URL from env.
-    let apiURL = window.BACKEND_URL || 'http://localhost:8000';
-    if (!window.BACKEND_URL && window.location.hostname && window.location.hostname !== 'localhost') {
-        apiURL = window.location.protocol + '//' + window.location.hostname + ':8000';
+    // Prefer shared backend resolver to avoid stale localhost fallbacks.
+    let apiURL = (typeof window.resolveBackendURL === 'function')
+        ? window.resolveBackendURL()
+        : String(window.BACKEND_URL || '').trim();
+
+    if (!apiURL) {
+        const host = String(window.location.hostname || '').toLowerCase();
+        if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '0.0.0.0') {
+            const protocol = window.location.protocol || 'https:';
+            if (host.indexOf('axiomnizam.') === 0) {
+                apiURL = protocol + '//axiomnizam-platform.' + host.substring('axiomnizam.'.length);
+            } else {
+                apiURL = protocol + '//' + host;
+            }
+        } else {
+            apiURL = 'http://localhost:8000';
+        }
     }
+
     if (apiURL.length > 1 && apiURL.endsWith('/')) {
         apiURL = apiURL.slice(0, -1);
     }

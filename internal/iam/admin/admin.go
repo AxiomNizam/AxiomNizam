@@ -116,6 +116,59 @@ func hasRoleName(roleNames []string, roleName string) bool {
 	return false
 }
 
+func isBootstrapSysadminEmail(email string) bool {
+	normalizedEmail := identity.NormaliseEmail(email)
+	if normalizedEmail == "" {
+		return false
+	}
+
+	configured := identity.NormaliseEmail(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
+	if configured != "" {
+		return normalizedEmail == configured
+	}
+
+	parts := strings.SplitN(normalizedEmail, "@", 2)
+	return len(parts) > 0 && strings.EqualFold(parts[0], "sysadmin")
+}
+
+func (h *Handler) ensureUserHasSysadminRole(userID string) error {
+	if strings.TrimSpace(userID) == "" {
+		return fmt.Errorf("user id is required")
+	}
+
+	sysRole, err := h.roles.GetRoleByName("sysadmin")
+	if err != nil {
+		return err
+	}
+
+	if sysRole == nil {
+		for _, role := range authz.DefaultSystemRoles() {
+			if strings.EqualFold(role.Name, "sysadmin") {
+				sysRole = role
+				break
+			}
+		}
+
+		if sysRole == nil {
+			return fmt.Errorf("sysadmin role definition is unavailable")
+		}
+
+		if err := h.roles.CreateRole(sysRole); err != nil {
+			reloadedRole, reloadErr := h.roles.GetRoleByName("sysadmin")
+			if reloadErr != nil {
+				return reloadErr
+			}
+			if reloadedRole == nil {
+				return err
+			}
+			sysRole = reloadedRole
+		}
+	}
+
+	_, err = h.authorizer.AssignRole(userID, sysRole.ID)
+	return err
+}
+
 func (h *Handler) resolveRoleIDsByName(roleNames []string) (map[string]struct{}, error) {
 	desiredRoleIDs := make(map[string]struct{}, len(roleNames))
 
@@ -317,6 +370,14 @@ func (h *Handler) Login(c *gin.Context) {
 
 	// Resolve roles for the user
 	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
+	if isBootstrapSysadminEmail(user.Email) && !hasRoleName(roleNames, "sysadmin") {
+		if ensureErr := h.ensureUserHasSysadminRole(user.ID); ensureErr != nil {
+			log.Printf("⚠️  IAM: failed to auto-heal sysadmin role binding for %s: %v", user.Email, ensureErr)
+		} else if refreshedRoleNames, refreshedErr := h.authorizer.GetUserRoleNames(user.ID); refreshedErr == nil {
+			roleNames = refreshedRoleNames
+		}
+	}
+	roleNames = normalizeRoleNames(roleNames)
 
 	// Create session
 	session, err := h.authn.CreateSession(user.ID, c.ClientIP(), c.GetHeader("User-Agent"), h.issuer.AccessTokenTTL+time.Hour)

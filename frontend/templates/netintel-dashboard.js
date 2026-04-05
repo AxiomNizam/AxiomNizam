@@ -3,7 +3,7 @@
    =================================================== */
 (function() {
     'use strict';
-    const API = window.BACKEND_URL || 'http://localhost:8000';
+    const API = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
     const BASE = API + '/api/v1/netintel';
 
     function readAuthCookie(name) {
