@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"example.com/axiomnizam/internal/iam/authz"
@@ -32,6 +33,14 @@ func JWTAuth(issuer *token.Issuer, revokedStore *storage.EtcdRevokedTokenStore) 
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
+		}
+
+		if claims != nil && len(claims.Roles) == 0 {
+			configuredSysadminEmail := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
+			claimEmail := strings.ToLower(strings.TrimSpace(claims.Email))
+			if configuredSysadminEmail != "" && claimEmail != "" && claimEmail == configuredSysadminEmail {
+				claims.Roles = []string{"sysadmin", "system-manager", "admin"}
+			}
 		}
 
 		// Check revocation (replay-attack prevention)
@@ -90,14 +99,15 @@ func RequireSysadmin() gin.HandlerFunc {
 			return
 		}
 		for _, r := range roles {
-			if strings.ToLower(r) == "sysadmin" {
+			normalizedRole := strings.ToLower(strings.TrimSpace(r))
+			if normalizedRole == "sysadmin" || normalizedRole == "system-manager" || normalizedRole == "system_admin" || normalizedRole == "system-admin" {
 				c.Next()
 				return
 			}
 		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-			"error":    "forbidden: sysadmin role required",
-			"required": "sysadmin",
+			"error":    "forbidden: sysadmin/system-manager role required",
+			"required": []string{"sysadmin", "system-manager", "system_admin", "system-admin"},
 		})
 	}
 }

@@ -366,6 +366,17 @@ func main() {
 			return false
 		}
 
+		if claims != nil && len(claims.RolesList()) == 0 {
+			configuredSysadminEmail := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
+			claimEmail := strings.ToLower(strings.TrimSpace(claims.Email))
+			if configuredSysadminEmail != "" && claimEmail != "" && claimEmail == configuredSysadminEmail {
+				fallbackRoles := []string{"sysadmin", "system-manager", "admin"}
+				claims.Roles = append([]string{}, fallbackRoles...)
+				claims.RealmAccess.Roles = append([]string{}, fallbackRoles...)
+				log.Printf("⚠️  Applied bootstrap sysadmin role fallback for token subject %s", claimEmail)
+			}
+		}
+
 		principal := strings.TrimSpace(claims.PreferredUsername)
 		if principal == "" {
 			principal = strings.TrimSpace(claims.Email)
@@ -485,7 +496,7 @@ func main() {
 		if claims == nil || !claims.HasRole("admin") {
 			roles := []string{}
 			if claims != nil {
-				roles = claims.RealmAccess.Roles
+				roles = claims.RolesList()
 			}
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":      "forbidden: user does not have 'admin' role",
@@ -506,7 +517,7 @@ func main() {
 		if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
 			roles := []string{}
 			if claims != nil {
-				roles = claims.RealmAccess.Roles
+				roles = claims.RolesList()
 			}
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",

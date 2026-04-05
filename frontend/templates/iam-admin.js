@@ -21,9 +21,29 @@ const IAM_API = (() => {
     return base;
 })();
 
+function readIAMCookie(name) {
+    const prefix = name + '=';
+    const parts = document.cookie.split(';');
+    for (let i = 0; i < parts.length; i++) {
+        const item = parts[i].trim();
+        if (item.startsWith(prefix)) {
+            return decodeURIComponent(item.substring(prefix.length));
+        }
+    }
+    return '';
+}
+
+function resolvePlatformAuthToken() {
+    return localStorage.getItem('authToken') || readIAMCookie('authToken') || '';
+}
+
+function resolvePlatformRefreshToken() {
+    return localStorage.getItem('refreshToken') || '';
+}
+
 // IAM-specific auth token (separate from platform auth)
-let iamToken = localStorage.getItem('iamToken') || '';
-let iamRefreshToken = localStorage.getItem('iamRefreshToken') || '';
+let iamToken = localStorage.getItem('iamToken') || resolvePlatformAuthToken();
+let iamRefreshToken = localStorage.getItem('iamRefreshToken') || resolvePlatformRefreshToken();
 let iamServiceAccessInfo = null;
 let iamLastGeneratedTokenResponse = null;
 let iamSelectedRealm = '';
@@ -43,6 +63,11 @@ function clearIAMSession() {
 
 function iamHeaders() {
     const h = { 'Content-Type': 'application/json' };
+
+    if (!iamToken) {
+        iamToken = localStorage.getItem('iamToken') || resolvePlatformAuthToken();
+    }
+
     if (iamToken) h['Authorization'] = 'Bearer ' + iamToken;
     return h;
 }
@@ -274,7 +299,8 @@ function iamLogout() {
 
 function updateIAMLoginBanner() {
     const banner = document.getElementById('iamLoginBanner');
-    if (banner) banner.style.display = iamToken ? 'none' : 'block';
+    const latestToken = iamToken || localStorage.getItem('iamToken') || resolvePlatformAuthToken();
+    if (banner) banner.style.display = latestToken ? 'none' : 'block';
 }
 
 function updateIAMPermissionBanner(show, message) {
@@ -298,6 +324,13 @@ function setIAMSystemStatus(text, color) {
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
 async function loadIAMDashboard() {
+    if (!iamToken) {
+        iamToken = localStorage.getItem('iamToken') || resolvePlatformAuthToken();
+    }
+    if (!iamRefreshToken) {
+        iamRefreshToken = localStorage.getItem('iamRefreshToken') || resolvePlatformRefreshToken();
+    }
+
     if (!iamToken) {
         updateIAMPermissionBanner(false, '');
         updateIAMLoginBanner();
