@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -32,10 +33,10 @@ const headerContentType = "Content-Type"
 func NewAuthHandler() *AuthHandler {
 	iamBaseURL := strings.TrimSpace(getEnv("IAM_INTERNAL_BASE_URL", ""))
 	if iamBaseURL == "" {
-		iamBaseURL = strings.TrimSpace(getEnv("IAM_ISSUER_URL", ""))
+		iamBaseURL = defaultIAMInternalBaseURL()
 	}
 	if iamBaseURL == "" {
-		iamBaseURL = defaultIAMInternalBaseURL()
+		iamBaseURL = strings.TrimSpace(getEnv("IAM_ISSUER_URL", ""))
 	}
 	iamBaseURL = normalizeIAMBaseURL(iamBaseURL)
 
@@ -43,7 +44,7 @@ func NewAuthHandler() *AuthHandler {
 		iamBaseURL:  iamBaseURL,
 		rateLimiter: nil, // Will be set via SetRateLimiter
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: iamAuthProxyTimeout(),
 		},
 	}
 }
@@ -69,14 +70,73 @@ func getEnv(key, fallback string) string {
 
 func defaultIAMInternalBaseURL() string {
 	host := strings.TrimSpace(getEnv("API_HOST", "localhost"))
-	port := strings.TrimSpace(getEnv("API_PORT", "8000"))
+	port := apiPortOrDefault()
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "localhost"
 	}
-	if port == "" {
-		port = "8000"
-	}
 	return fmt.Sprintf("http://%s:%s", host, port)
+}
+
+func apiPortOrDefault() string {
+	port := strings.TrimSpace(getEnv("API_PORT", "8000"))
+	if port == "" {
+		return "8000"
+	}
+	return port
+}
+
+func defaultIAMLoopbackBaseURL() string {
+	return fmt.Sprintf("http://127.0.0.1:%s", apiPortOrDefault())
+}
+
+func defaultIAMServiceBaseURL() string {
+	host := strings.TrimSpace(getEnv("IAM_INTERNAL_SERVICE_HOST", "axiomnizam"))
+	if host == "" {
+		host = "axiomnizam"
+	}
+	return fmt.Sprintf("http://%s:%s", host, apiPortOrDefault())
+}
+
+func iamAuthProxyTimeout() time.Duration {
+	raw := strings.TrimSpace(getEnv("IAM_AUTH_PROXY_TIMEOUT", "25s"))
+	if raw == "" {
+		return 25 * time.Second
+	}
+
+	timeout, err := time.ParseDuration(raw)
+	if err != nil || timeout <= 0 {
+		return 25 * time.Second
+	}
+	if timeout > 2*time.Minute {
+		return 2 * time.Minute
+	}
+	return timeout
+}
+
+func iamLoginBaseCandidates(primaryBase string) []string {
+	rawCandidates := []string{
+		primaryBase,
+		defaultIAMLoopbackBaseURL(),
+		defaultIAMInternalBaseURL(),
+		defaultIAMServiceBaseURL(),
+		strings.TrimSpace(getEnv("IAM_ISSUER_URL", "")),
+	}
+
+	seen := map[string]struct{}{}
+	candidates := make([]string, 0, len(rawCandidates))
+	for _, raw := range rawCandidates {
+		normalized := normalizeIAMBaseURL(raw)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		candidates = append(candidates, normalized)
+	}
+
+	return candidates
 }
 
 func normalizeIAMBaseURL(raw string) string {
@@ -328,9 +388,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	tokenURL := h.iamBaseURL + "/iam/auth/login"
-	log.Printf("📝 IAM login attempt for identifier: %s (base=%s)", loginID, h.iamBaseURL)
-
 	body, _ := json.Marshal(map[string]string{
 		"email":    loginID,
 		"password": req.Password,
@@ -350,21 +407,51 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return resp, responseBody, nil
 	}
 
-	resp, responseBody, err := postLogin(tokenURL)
-	if shouldRetryIAMLogin(resp, responseBody, err) {
-		fallbackBase := normalizeIAMBaseURL(defaultIAMInternalBaseURL())
-		fallbackURL := fallbackBase + "/iam/auth/login"
-		if fallbackURL != tokenURL {
-			log.Printf("⚠️  IAM login primary endpoint returned unusable response; retrying fallback %s", fallbackURL)
-			fallbackResp, fallbackBody, fallbackErr := postLogin(fallbackURL)
-			if fallbackErr == nil {
-				resp = fallbackResp
-				responseBody = fallbackBody
-				err = nil
-			} else if err != nil {
-				err = fmt.Errorf("primary IAM login error: %v; fallback error: %v", err, fallbackErr)
-			}
+	var (
+		resp         *http.Response
+		responseBody []byte
+		err          error
+	)
+
+	loginBases := iamLoginBaseCandidates(h.iamBaseURL)
+	if len(loginBases) == 0 {
+		loginBases = []string{normalizeIAMBaseURL(defaultIAMInternalBaseURL())}
+	}
+
+	attemptErrors := make([]string, 0, len(loginBases))
+	for idx, base := range loginBases {
+		targetURL := base + "/iam/auth/login"
+		if idx == 0 {
+			log.Printf("📝 IAM login attempt for identifier: %s (base=%s)", loginID, base)
+		} else {
+			log.Printf("⚠️  IAM login retrying with alternate base=%s", base)
 		}
+
+		attemptResp, attemptBody, attemptErr := postLogin(targetURL)
+		resp = attemptResp
+		responseBody = attemptBody
+		err = attemptErr
+
+		if !shouldRetryIAMLogin(resp, responseBody, err) {
+			break
+		}
+
+		if attemptErr != nil {
+			attemptErrors = append(attemptErrors, fmt.Sprintf("Post %q: %v", targetURL, attemptErr))
+			continue
+		}
+
+		statusCode := 0
+		contentType := ""
+		if attemptResp != nil {
+			statusCode = attemptResp.StatusCode
+			contentType = strings.TrimSpace(attemptResp.Header.Get(headerContentType))
+		}
+		attemptErrors = append(attemptErrors, fmt.Sprintf("%s returned status=%d content-type=%q body=%q", targetURL, statusCode, contentType, summarizeIAMBody(attemptBody)))
+	}
+
+	if shouldRetryIAMLogin(resp, responseBody, err) && len(attemptErrors) > 0 {
+		err = errors.New(strings.Join(attemptErrors, "; "))
 	}
 
 	if err != nil {
