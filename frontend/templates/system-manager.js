@@ -1,20 +1,24 @@
 // System Manager JS
 const BACKEND_URL = (() => {
-    const elem = document.getElementById('backendURL');
-    let url = 'http://localhost:8000'; // Default fallback
-    
-    if (elem && elem.textContent) {
-        const text = elem.textContent.trim();
-        if (text && text.length > 0) {
-            url = text;
+    if (typeof window.resolveBackendURL === 'function') {
+        return window.resolveBackendURL();
+    }
+
+    var url = String(window.BACKEND_URL || '').trim();
+    if (!url) {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        if (browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0') {
+            var protocol = window.location.protocol || 'https:';
+            if (browserHost.indexOf('axiomnizam.') === 0) {
+                return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+            }
+            return protocol + '//' + browserHost;
         }
+        return 'http://localhost:8000';
     }
-    
-    // If contains Docker hostname, replace with localhost
-    if (url.includes('axiomnizam:8000')) {
-        url = url.replace('axiomnizam:8000', 'localhost:8000');
+    if (url.length > 1 && url.endsWith('/')) {
+        return url.slice(0, -1);
     }
-    
     return url;
 })();
 

@@ -3,7 +3,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const IAM_API = (() => {
-    let base = window.BACKEND_URL || 'http://localhost:8000';
+    let base = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : String(window.BACKEND_URL || '').trim();
+    if (!base) {
+        const browserHost = String(window.location.hostname || '').toLowerCase();
+        if (browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0') {
+            const protocol = window.location.protocol || 'https:';
+            if (browserHost.indexOf('axiomnizam.') === 0) {
+                base = protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+            } else {
+                base = protocol + '//' + browserHost;
+            }
+        } else {
+            base = 'http://localhost:8000';
+        }
+    }
     if (base.endsWith('/')) base = base.slice(0, -1);
     return base;
 })();

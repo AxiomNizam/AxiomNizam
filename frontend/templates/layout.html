@@ -24,18 +24,71 @@
             if (configuredBackendURL.length > 1 && configuredBackendURL.endsWith('/')) {
                 configuredBackendURL = configuredBackendURL.slice(0, -1);
             }
-            window.BACKEND_URL = configuredBackendURL;
-            window.__backendURL = configuredBackendURL;
-            window.resolveBackendURL = function() {
-                var value = String(window.BACKEND_URL || '').trim();
+
+            function normalizeURL(raw) {
+                var value = String(raw || '').trim();
                 if (!value) {
-                    return 'http://localhost:8000';
+                    return '';
+                }
+                if (!/^https?:\/\//i.test(value) && /^[a-z0-9.-]+(?::\d+)?$/i.test(value)) {
+                    value = (window.location.protocol || 'http:') + '//' + value;
                 }
                 if (value.length > 1 && value.endsWith('/')) {
-                    return value.slice(0, -1);
+                    value = value.slice(0, -1);
                 }
                 return value;
+            }
+
+            function parseHostname(rawURL) {
+                try {
+                    return new URL(rawURL).hostname.toLowerCase();
+                } catch (_) {
+                    return '';
+                }
+            }
+
+            function isLocalOrInternalHost(hostname) {
+                if (!hostname) return true;
+                if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '::1') return true;
+                if (hostname === 'axiomnizam') return true;
+                if (hostname.endsWith('.local')) return true;
+                return hostname.indexOf('.') === -1;
+            }
+
+            function inferPublicBackendURL() {
+                var browserHost = String(window.location.hostname || '').toLowerCase();
+                if (!browserHost || browserHost === 'localhost' || browserHost === '127.0.0.1' || browserHost === '0.0.0.0') {
+                    return '';
+                }
+
+                var protocol = window.location.protocol || 'https:';
+                if (browserHost.indexOf('axiomnizam.') === 0) {
+                    return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+                }
+                return protocol + '//' + browserHost;
+            }
+
+            window.BACKEND_URL = normalizeURL(configuredBackendURL);
+            window.__backendURL = window.BACKEND_URL;
+            window.resolveBackendURL = function() {
+                var value = normalizeURL(window.BACKEND_URL || '');
+                if (!value) {
+                    return inferPublicBackendURL() || 'http://localhost:8000';
+                }
+
+                var backendHost = parseHostname(value);
+                var browserHost = String(window.location.hostname || '').toLowerCase();
+                var browserIsPublic = browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0';
+
+                if (browserIsPublic && isLocalOrInternalHost(backendHost)) {
+                    return inferPublicBackendURL() || value;
+                }
+
+                return value;
             };
+
+            window.BACKEND_URL = window.resolveBackendURL();
+            window.__backendURL = window.BACKEND_URL;
         })();
     </script>
     {{ if .embedded }}
