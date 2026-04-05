@@ -1,14 +1,15 @@
 // Admin Dashboard JS — API Builder, File-to-Dashboard, Dashboard↔GIS Converter, File Scanner
 const BACKEND_URL = (() => {
-    const elem = document.getElementById('backendURL');
-    if (elem && elem.textContent) {
-        let url = elem.textContent.trim();
-        if (url.includes('axiomnizam:8000')) {
-            url = url.replace('axiomnizam:8000', 'localhost:8000');
-        }
-        return url;
+    if (typeof window.resolveBackendURL === 'function') {
+        return window.resolveBackendURL();
     }
-    return 'http://' + window.location.hostname + ':8000';
+
+    const value = String(window.BACKEND_URL || '').trim();
+    if (value) {
+        return value.endsWith('/') ? value.slice(0, -1) : value;
+    }
+
+    return 'http://localhost:8000';
 })();
 
 let filteredMethod = 'ALL';

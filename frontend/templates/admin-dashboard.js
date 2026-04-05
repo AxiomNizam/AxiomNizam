@@ -1,8 +1,25 @@
 let authToken = null;
 let userName = null;
 const IAM_API_BASE = (() => {
-    const fromWindow = window.BACKEND_URL || 'http://localhost:8000';
-    return fromWindow.endsWith('/') ? fromWindow.slice(0, -1) : fromWindow;
+    if (typeof window.resolveBackendURL === 'function') {
+        return window.resolveBackendURL();
+    }
+
+    const fromWindow = String(window.BACKEND_URL || '').trim();
+    if (fromWindow) {
+        return fromWindow.endsWith('/') ? fromWindow.slice(0, -1) : fromWindow;
+    }
+
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '0.0.0.0') {
+        const protocol = window.location.protocol || 'https:';
+        if (host.indexOf('axiomnizam.') === 0) {
+            return protocol + '//axiomnizam-platform.' + host.substring('axiomnizam.'.length);
+        }
+        return protocol + '//' + host;
+    }
+
+    return 'http://localhost:8000';
 })();
 
 // Check if user is already logged in
@@ -106,7 +123,7 @@ function showTab(tabName) {
 }
 
 function loadStatusData() {
-    fetch('http://localhost:8000/api/health')
+    fetch(IAM_API_BASE + '/api/health')
         .then(function(response) { return response.json(); })
         .then(function(data) {
             document.getElementById('overallStatus').textContent = data.status ? data.status.toUpperCase() : 'UNKNOWN';
@@ -118,7 +135,7 @@ function loadStatusData() {
             document.getElementById('overallStatus').className = 'status-value error';
         });
 
-    fetch('http://localhost:8000/api/status')
+    fetch(IAM_API_BASE + '/api/status')
         .then(function(response) { return response.json(); })
         .then(function(data) {
             const databases = data.data || data.databases || {};
@@ -149,21 +166,21 @@ function loadStatusData() {
 function loadAPIs() {
     const apiCategories = {
         'Health & Status': [
-            { method: 'GET', path: '/health', url: 'http://localhost:8000/health', description: 'Health check', auth: false },
-            { method: 'GET', path: '/status', url: 'http://localhost:8000/status', description: 'Check all connections', auth: false },
+            { method: 'GET', path: '/health', url: IAM_API_BASE + '/health', description: 'Health check', auth: false },
+            { method: 'GET', path: '/status', url: IAM_API_BASE + '/status', description: 'Check all connections', auth: false },
         ],
         'Notifications': [
-            { method: 'POST', path: '/api/notifications/send', url: 'http://localhost:8000/api/notifications/send', description: 'Send custom notification', auth: true, body: {title: 'Test', message: 'Test notification', type: 'info'} },
-            { method: 'POST', path: '/api/notifications/health', url: 'http://localhost:8000/api/notifications/health', description: 'Send health notification', auth: true },
-            { method: 'POST', path: '/api/notifications/status', url: 'http://localhost:8000/api/notifications/status', description: 'Send status notification', auth: true },
+            { method: 'POST', path: '/api/notifications/send', url: IAM_API_BASE + '/api/notifications/send', description: 'Send custom notification', auth: true, body: {title: 'Test', message: 'Test notification', type: 'info'} },
+            { method: 'POST', path: '/api/notifications/health', url: IAM_API_BASE + '/api/notifications/health', description: 'Send health notification', auth: true },
+            { method: 'POST', path: '/api/notifications/status', url: IAM_API_BASE + '/api/notifications/status', description: 'Send status notification', auth: true },
         ],
         'Admin - Database': [
-            { method: 'GET', path: '/api/admin/database/list', url: 'http://localhost:8000/api/admin/database/list?db_type=mysql', description: 'List databases', auth: true },
-            { method: 'POST', path: '/api/admin/database/create', url: 'http://localhost:8000/api/admin/database/create', description: 'Create database', auth: true, body: {database_name: 'test_db', db_type: 'mysql'} },
+            { method: 'GET', path: '/api/admin/database/list', url: IAM_API_BASE + '/api/admin/database/list?db_type=mysql', description: 'List databases', auth: true },
+            { method: 'POST', path: '/api/admin/database/create', url: IAM_API_BASE + '/api/admin/database/create', description: 'Create database', auth: true, body: {database_name: 'test_db', db_type: 'mysql'} },
         ],
         'Admin - Tables': [
-            { method: 'GET', path: '/api/admin/table/list', url: 'http://localhost:8000/api/admin/table/list?db_type=mysql', description: 'List tables', auth: true },
-            { method: 'POST', path: '/api/admin/table/create', url: 'http://localhost:8000/api/admin/table/create', description: 'Create table', auth: true, body: {table_name: 'test_table', db_type: 'mysql', columns: [{name: 'id', type: 'INT', nullable: false, primary: true}]} },
+            { method: 'GET', path: '/api/admin/table/list', url: IAM_API_BASE + '/api/admin/table/list?db_type=mysql', description: 'List tables', auth: true },
+            { method: 'POST', path: '/api/admin/table/create', url: IAM_API_BASE + '/api/admin/table/create', description: 'Create table', auth: true, body: {table_name: 'test_table', db_type: 'mysql', columns: [{name: 'id', type: 'INT', nullable: false, primary: true}]} },
         ],
     };
 

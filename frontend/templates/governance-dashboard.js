@@ -1,4 +1,4 @@
-const GOVERNANCE_API_BASE = window.BACKEND_URL || 'http://localhost:8000';
+const GOVERNANCE_API_BASE = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
 
 function governanceURL(path) {
     if (!path) return GOVERNANCE_API_BASE;
