@@ -153,12 +153,32 @@ function handleLogin(event) {
     })
     .then(function(response) {
         console.log('📡 Login response status:', response.status);
-        if (!response.ok) {
-            return response.json().then(function(data) {
+        return response.text().then(function(rawBody) {
+            var data = {};
+            if (rawBody) {
+                try {
+                    data = JSON.parse(rawBody);
+                } catch (parseErr) {
+                    var compactBody = rawBody.replace(/\s+/g, ' ').trim();
+                    if (compactBody.length > 180) {
+                        compactBody = compactBody.substring(0, 180) + '...';
+                    }
+                    data = {
+                        error: 'Login endpoint returned non-JSON response (status ' + response.status + '): ' + compactBody
+                    };
+                }
+            }
+
+            if (!response.ok) {
                 throw new Error(data.error || 'Login failed: ' + response.statusText);
-            });
-        }
-        return response.json();
+            }
+
+            if (!data || !data.access_token) {
+                throw new Error(data.error || 'Login succeeded but no access token was returned');
+            }
+
+            return data;
+        });
     })
     .then(function(data) {
         console.log('✅ Login successful:', data);

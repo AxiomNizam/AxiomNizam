@@ -15,8 +15,8 @@ services:
       OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS: ${OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS:-20}
       IAM_SYSADMIN_EMAIL: ${IAM_SYSADMIN_EMAIL:-sysadmin@axiomnizam.local}
       IAM_SYSADMIN_PASSWORD: ${IAM_SYSADMIN_PASSWORD:-changeme-on-first-login}
-      IAM_INTERNAL_BASE_URL: ${IAM_INTERNAL_BASE_URL:-https://axiomnizam-platfrom.bitbd.net}
-      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platfrom.bitbd.net}
+      IAM_INTERNAL_BASE_URL: ${IAM_INTERNAL_BASE_URL:-https://axiomnizam-platform.bitbd.net}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
       PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-https://axiomnizam.bitbd.net}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
     depends_on:
@@ -44,10 +44,10 @@ services:
     ports:
       - "7000:7000"
     environment:
-      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-https://axiomnizam-platfrom.bitbd.net}
-      BACKEND_PROXY_URL: ${BACKEND_PROXY_URL:-https://axiomnizam-platfrom.bitbd.net}
+      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-https://axiomnizam-platform.bitbd.net}
+      BACKEND_PROXY_URL: ${BACKEND_PROXY_URL:-https://axiomnizam-platform.bitbd.net}
       FRONTEND_PORT: ${FRONTEND_PORT:-7000}
-      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platfrom.bitbd.net}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
     depends_on:
       - axiomnizam
     networks:

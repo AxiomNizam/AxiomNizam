@@ -26,6 +26,8 @@ type AuthHandler struct {
 	httpClient    *http.Client
 }
 
+const headerContentType = "Content-Type"
+
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler() *AuthHandler {
 	iamBaseURL := strings.TrimSpace(getEnv("IAM_INTERNAL_BASE_URL", ""))
@@ -115,7 +117,7 @@ func shouldRetryIAMLogin(resp *http.Response, responseBody []byte, reqErr error)
 		return true
 	}
 
-	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get(headerContentType)))
 	bodySummary := summarizeIAMBody(responseBody)
 	htmlResponse := strings.Contains(contentType, "text/html") || strings.Contains(bodySummary, "HTML instead of JSON")
 
@@ -375,7 +377,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	contentType := ""
 	if resp != nil {
-		contentType = strings.TrimSpace(resp.Header.Get("Content-Type"))
+		contentType = strings.TrimSpace(resp.Header.Get(headerContentType))
 	}
 
 	if !json.Valid(responseBody) {
@@ -390,9 +392,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
+		summary := summarizeIAMBody(responseBody)
+		log.Printf("⚠️  IAM login malformed JSON payload: status=%d content-type=%q body=%q err=%v", resp.StatusCode, contentType, summary, err)
+		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  "Failed to parse IAM authentication response: " + err.Error(),
+			Error:  fmt.Sprintf("IAM authentication service returned malformed JSON (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
 		})
 		return
 	}
@@ -507,12 +511,25 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
+	if !json.Valid(responseBody) {
+		summary := summarizeIAMBody(responseBody)
+		log.Printf("⚠️  IAM refresh non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		c.JSON(http.StatusBadGateway, models.Response{
+			Status: "error",
+			Error:  fmt.Sprintf("IAM token refresh service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+		})
+		return
+	}
+
 	// Parse token response
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
+		summary := summarizeIAMBody(responseBody)
+		log.Printf("⚠️  IAM refresh malformed JSON payload: status=%d content-type=%q body=%q err=%v", resp.StatusCode, contentType, summary, err)
+		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  "Failed to parse IAM authentication response: " + err.Error(),
+			Error:  fmt.Sprintf("IAM token refresh service returned malformed JSON (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
 		})
 		return
 	}
