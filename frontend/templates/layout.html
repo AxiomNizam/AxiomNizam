@@ -18,6 +18,26 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <!-- Chart.js for Analytics dashboard -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+        (function() {
+            var configuredBackendURL = '{{ .backendURL }}'.trim();
+            if (configuredBackendURL.length > 1 && configuredBackendURL.endsWith('/')) {
+                configuredBackendURL = configuredBackendURL.slice(0, -1);
+            }
+            window.BACKEND_URL = configuredBackendURL;
+            window.__backendURL = configuredBackendURL;
+            window.resolveBackendURL = function() {
+                var value = String(window.BACKEND_URL || '').trim();
+                if (!value) {
+                    return 'http://localhost:8000';
+                }
+                if (value.length > 1 && value.endsWith('/')) {
+                    return value.slice(0, -1);
+                }
+                return value;
+            };
+        })();
+    </script>
     {{ if .embedded }}
     <style>
         .navbar, .footer { display: none !important; }
@@ -205,9 +225,6 @@
         </div>
     </div>
 
-    <script>
-        window.BACKEND_URL = '{{ .backendURL }}';
-    </script>
     <script src="/static/auth.js"></script>
     <script>
 

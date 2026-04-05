@@ -84,12 +84,69 @@ func main() {
 	if iamIssuerURL == "" {
 		iamIssuerURL = cfg.GetIAMURL()
 	}
-	iamAuthConfig := &auth.TokenValidatorConfig{
-		IssuerURL: iamIssuerURL,
-		JWKSURL:   strings.TrimRight(iamIssuerURL, "/") + "/.well-known/jwks.json",
+	normalizeBaseURL := func(raw string) string {
+		candidate := strings.TrimSpace(raw)
+		if candidate == "" {
+			return ""
+		}
+
+		if parsed, parseErr := url.Parse(candidate); parseErr == nil && parsed.Scheme != "" && parsed.Host != "" {
+			return strings.TrimRight(parsed.Scheme+"://"+parsed.Host+parsed.Path, "/")
+		}
+
+		return strings.TrimRight(candidate, "/")
 	}
+
+	validatorJWKSBases := make([]string, 0, 4)
+	seenValidatorBase := make(map[string]struct{}, 4)
+	addValidatorJWKSBase := func(raw string) {
+		base := normalizeBaseURL(raw)
+		if base == "" {
+			return
+		}
+		if _, exists := seenValidatorBase[base]; exists {
+			return
+		}
+		seenValidatorBase[base] = struct{}{}
+		validatorJWKSBases = append(validatorJWKSBases, base)
+	}
+
+	addValidatorJWKSBase(os.Getenv("IAM_INTERNAL_BASE_URL"))
+	addValidatorJWKSBase(iamIssuerURL)
+	addValidatorJWKSBase(cfg.GetIAMURL())
+	addValidatorJWKSBase("http://localhost:8000")
+
+	buildValidatorConfig := func(jwksBase string) *auth.TokenValidatorConfig {
+		validatorConfig := &auth.TokenValidatorConfig{
+			IssuerURL: iamIssuerURL,
+		}
+		if jwksBase != "" {
+			validatorConfig.JWKSURL = strings.TrimRight(jwksBase, "/") + "/.well-known/jwks.json"
+		}
+		return validatorConfig
+	}
+
+	initializeTokenValidator := func() (*auth.TokenValidator, error) {
+		if len(validatorJWKSBases) == 0 {
+			return nil, fmt.Errorf("no IAM JWKS base URLs configured")
+		}
+
+		initErrors := make([]string, 0, len(validatorJWKSBases))
+		for _, jwksBase := range validatorJWKSBases {
+			candidateConfig := buildValidatorConfig(jwksBase)
+			initializedValidator, initErr := auth.NewTokenValidator(candidateConfig)
+			if initErr == nil {
+				log.Printf("✅ IAM token validator JWKS source: %s/.well-known/jwks.json", strings.TrimRight(jwksBase, "/"))
+				return initializedValidator, nil
+			}
+			initErrors = append(initErrors, fmt.Sprintf("%s: %v", jwksBase, initErr))
+		}
+
+		return nil, fmt.Errorf("all IAM JWKS endpoints failed: %s", strings.Join(initErrors, " | "))
+	}
+
 	var tokenValidatorMu sync.RWMutex
-	tokenValidator, err := auth.NewTokenValidator(iamAuthConfig)
+	tokenValidator, err := initializeTokenValidator()
 	if err != nil {
 		log.Printf("⚠️  IAM token validator initialization failed at startup: %v", err)
 		log.Printf("⚠️  Auth-protected APIs will return 503 until IAM JWKS becomes reachable")
@@ -110,7 +167,7 @@ func main() {
 			return tokenValidator
 		}
 
-		initializedValidator, initErr := auth.NewTokenValidator(iamAuthConfig)
+		initializedValidator, initErr := initializeTokenValidator()
 		if initErr != nil {
 			log.Printf("⚠️  IAM token validator still unavailable: %v", initErr)
 			return nil

@@ -4,7 +4,7 @@
 //           Satellite, Airplane, Ship (International)
 // =============================================
 
-const GIS_API = (window.BACKEND_URL || 'http://localhost:8000') + '/api/v1/gis';
+const GIS_API = ((typeof window.resolveBackendURL === 'function' ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000'))) + '/api/v1/gis';
 
 function readAuthCookie(name) {
     const prefix = name + '=';
