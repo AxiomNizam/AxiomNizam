@@ -25,16 +25,82 @@ let userRole = 'user';
 function normalizeRole(role) {
     const value = String(role || '').toLowerCase().trim();
     if (!value) return 'user';
-    if (value === 'sysadmin' || value === 'system-admin' || value === 'system_admin' || value === 'system-manager') {
+    if (value === 'sysadmin' || value === 'sys-admin' || value === 'system-admin' || value === 'system_admin' || value === 'system-manager' || value === 'system manager' || value === 'systemadministrator' || value === 'system-administrator' || value === 'system administrator') {
         return 'system-manager';
     }
     if (value === 'manager' || value === 'api-manager' || value === 'api_manager') {
         return 'manager';
     }
-    if (value === 'admin' || value === 'superadmin' || value === 'super-admin') {
+    if (value === 'admin' || value === 'administrator' || value === 'superadmin' || value === 'super-admin') {
+        return 'admin';
+    }
+    if (value.indexOf('system') !== -1 && value.indexOf('admin') !== -1) {
+        return 'system-manager';
+    }
+    if (value.indexOf('admin') !== -1 && value.indexOf('account') === -1) {
         return 'admin';
     }
     return value;
+}
+
+function roleFromAlias(value) {
+    const raw = String(value || '').toLowerCase().trim();
+    if (!raw) return '';
+
+    const localPart = raw.indexOf('@') !== -1 ? raw.split('@')[0] : raw;
+    const compact = localPart.replace(/[^a-z0-9]/g, '');
+
+    if (compact === 'sysadmin' || compact === 'systemadmin' || compact === 'systemadministrator' || compact === 'systemmanager') {
+        return 'system-manager';
+    }
+    if (compact === 'admin' || compact === 'administrator' || compact === 'superadmin') {
+        return 'admin';
+    }
+    if (compact === 'manager' || compact === 'apimanager' || compact === 'mgr') {
+        return 'manager';
+    }
+    return '';
+}
+
+function roleFromRoleList(roles) {
+    if (!Array.isArray(roles)) {
+        return normalizeRole(roles || '');
+    }
+
+    for (let i = 0; i < roles.length; i++) {
+        const normalized = normalizeRole(roles[i]);
+        if (normalized === 'system-manager') return 'system-manager';
+    }
+    for (let i = 0; i < roles.length; i++) {
+        const normalized = normalizeRole(roles[i]);
+        if (normalized === 'admin') return 'admin';
+    }
+    for (let i = 0; i < roles.length; i++) {
+        const normalized = normalizeRole(roles[i]);
+        if (normalized === 'manager') return 'manager';
+    }
+    return 'user';
+}
+
+function resolveBestRole(loginData, token, submittedUsername) {
+    const candidates = [
+        normalizeRole(loginData && loginData.role),
+        roleFromRoleList(loginData && loginData.user && loginData.user.roles),
+        extractUserRole(token),
+        roleFromAlias(loginData && loginData.username),
+        roleFromAlias(loginData && loginData.user && loginData.user.email),
+        roleFromAlias(loginData && loginData.user && loginData.user.display_name),
+        roleFromAlias(submittedUsername),
+    ];
+
+    for (let i = 0; i < candidates.length; i++) {
+        const role = normalizeRole(candidates[i]);
+        if (role && role !== 'user') {
+            return role;
+        }
+    }
+
+    return 'user';
 }
 
 function readCookie(name) {
@@ -191,19 +257,9 @@ function handleLogin(event) {
         }
         localStorage.setItem('userName', userName);
         
-        // Use server-returned role if available (most reliable), else decode JWT
-        const serverRole = normalizeRole(data.role || '');
-        let userRole = normalizeRole(serverRole || extractUserRole(authToken));
+        const userRole = resolveBestRole(data, authToken, username);
 
-        // Safety net: map known demo usernames to their expected roles when the
-        // server role is missing or fell back to generic 'user'.
-        const knownRoles = { 'sysadmin': 'system-manager', 'admin': 'admin', 'manager': 'manager' };
-        if ((!serverRole || userRole === 'user') && knownRoles[data.username]) {
-            userRole = knownRoles[data.username];
-            console.log('🔄 Role overridden by username mapping:', data.username, '→', userRole);
-        }
-
-        console.log('👤 User role:', userRole, '(source:', serverRole ? 'server' : 'jwt-decode', ')');
+        console.log('👤 User role:', userRole, '(server role:', normalizeRole(data.role || ''), ', user.roles:', (data.user && data.user.roles) || [], ')');
         localStorage.setItem('userRole', userRole);
         setAuthCookies(authToken, userRole, userName);
         
@@ -251,9 +307,9 @@ function extractUserRole(token) {
         }
         
         // Decode the payload (second part)
-        const payload = parts[1];
+        const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
         // Add padding if needed
-        const padded = payload + '=='.substring(0, (4 - payload.length % 4) % 4);
+        const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
         const decoded = JSON.parse(atob(padded));
         
         console.log('🔐 Full token payload:', JSON.stringify(decoded, null, 2));

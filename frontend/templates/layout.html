@@ -277,9 +277,22 @@
             const role = String(rawRole || '').toLowerCase().trim();
             if (!role) return 'user';
             if (role === 'administrator' || role === 'superadmin' || role === 'super-admin') return 'admin';
-            if (role === 'system_manager' || role === 'system manager' || role === 'sysadmin' || role === 'sys-admin') return 'system-manager';
+            if (role === 'system-manager' || role === 'system_admin' || role === 'system_manager' || role === 'system manager' || role === 'system administrator' || role === 'system-administrator' || role === 'sysadmin' || role === 'sys-admin') return 'system-manager';
             if (role === 'mgr') return 'manager';
+            if (role.indexOf('system') !== -1 && role.indexOf('admin') !== -1) return 'system-manager';
+            if (role.indexOf('admin') !== -1 && role.indexOf('account') === -1) return 'admin';
             return role;
+        }
+
+        function roleFromAlias(rawValue) {
+            const value = String(rawValue || '').toLowerCase().trim();
+            if (!value) return '';
+            const localPart = value.indexOf('@') !== -1 ? value.split('@')[0] : value;
+            const compact = localPart.replace(/[^a-z0-9]/g, '');
+            if (compact === 'sysadmin' || compact === 'systemadmin' || compact === 'systemadministrator' || compact === 'systemmanager') return 'system-manager';
+            if (compact === 'admin' || compact === 'administrator' || compact === 'superadmin') return 'admin';
+            if (compact === 'manager' || compact === 'apimanager' || compact === 'mgr') return 'manager';
+            return '';
         }
 
         function readCookieValue(name) {
@@ -301,9 +314,7 @@
 
             let role = normalizeUserRole(storedRole || 'user');
             if (role === 'user' && storedName) {
-                if (storedName === 'sysadmin') role = 'system-manager';
-                if (storedName === 'admin') role = 'admin';
-                if (storedName === 'manager') role = 'manager';
+                role = roleFromAlias(storedName) || role;
             }
 
             const navAdmin = document.getElementById('nav-admin');
