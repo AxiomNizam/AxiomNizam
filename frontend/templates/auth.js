@@ -173,8 +173,75 @@ function isProtectedPath(path) {
         path === '/iam-admin';
 }
 
+function consumeOAuthErrorQuery() {
+    if (window.location.pathname !== '/login') return;
+    const params = new URLSearchParams(window.location.search || '');
+    const oauthError = params.get('oauth_error');
+    if (!oauthError) return;
+
+    alert('OAuth login failed: ' + oauthError);
+    params.delete('oauth_error');
+
+    if (window.history && window.history.replaceState) {
+        const nextQuery = params.toString();
+        const cleanedURL = window.location.pathname + (nextQuery ? ('?' + nextQuery) : '') + (window.location.hash || '');
+        window.history.replaceState({}, document.title, cleanedURL);
+    }
+}
+
+function completeOAuthLoginFromFragment() {
+    const hash = String(window.location.hash || '').replace(/^#/, '');
+    if (!hash || hash.indexOf('oauth_access_token=') === -1) {
+        return false;
+    }
+
+    const params = new URLSearchParams(hash);
+    const token = String(params.get('oauth_access_token') || '').trim();
+    if (!token) {
+        return false;
+    }
+
+    const oauthRefresh = String(params.get('oauth_refresh_token') || '').trim();
+    const oauthUser = String(params.get('oauth_username') || '').trim();
+    const oauthRole = normalizeRole(String(params.get('oauth_role') || '').trim() || extractUserRole(token) || 'user');
+    const oauthReturnTo = String(params.get('oauth_return_to') || '').trim();
+
+    authToken = token;
+    refreshToken = oauthRefresh || null;
+    userName = oauthUser || readCookie('userName') || 'OAuth User';
+    userRole = oauthRole;
+
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('userRole', userRole);
+    localStorage.setItem('userName', userName);
+    if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+    } else {
+        localStorage.removeItem('refreshToken');
+    }
+    setAuthCookies(authToken, userRole, userName);
+
+    if (window.history && window.history.replaceState) {
+        const cleaned = window.location.pathname + (window.location.search || '');
+        window.history.replaceState({}, document.title, cleaned);
+    }
+
+    if (oauthReturnTo && oauthReturnTo.charAt(0) === '/' && oauthReturnTo !== '/login' && canAccessPath(oauthReturnTo, userRole)) {
+        window.location.href = oauthReturnTo;
+    } else {
+        window.location.href = defaultPathForRole(userRole);
+    }
+    return true;
+}
+
 // Initialize authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
+    if (completeOAuthLoginFromFragment()) {
+        return;
+    }
+
+    consumeOAuthErrorQuery();
+
     authToken = localStorage.getItem('authToken');
     refreshToken = localStorage.getItem('refreshToken');
     userName = localStorage.getItem('userName');

@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,6 +17,8 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/auth"
+	iammodels "example.com/axiomnizam/internal/iam/models"
+	"example.com/axiomnizam/internal/iam/pgstore"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 	gojwt "github.com/golang-jwt/jwt/v5"
@@ -24,10 +29,16 @@ type AuthHandler struct {
 	iamBaseURL    string
 	rateLimiter   *auth.RateLimiter
 	platformUsers *PlatformUserHandler
+	idpStore      *pgstore.Store
 	httpClient    *http.Client
 }
 
-const headerContentType = "Content-Type"
+const (
+	headerContentType  = "Content-Type"
+	oauthStateCookie   = "axiomnizam_oauth_state"
+	oauthStateMaxAge   = 600
+	oauthStateLifetime = 10 * time.Minute
+)
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler() *AuthHandler {
@@ -58,6 +69,11 @@ func (h *AuthHandler) SetRateLimiter(limiter *auth.RateLimiter) {
 // so that users created via the sysadmin UI can log in.
 func (h *AuthHandler) SetPlatformUserHandler(puh *PlatformUserHandler) {
 	h.platformUsers = puh
+}
+
+// SetIdentityProviderStore wires IAM identity provider persistence into auth flows.
+func (h *AuthHandler) SetIdentityProviderStore(store *pgstore.Store) {
+	h.idpStore = store
 }
 
 // getEnv gets environment variable with fallback
@@ -192,6 +208,697 @@ func shouldRetryIAMLogin(resp *http.Response, responseBody []byte, reqErr error)
 	return false
 }
 
+type oauthStatePayload struct {
+	State          string `json:"state"`
+	ProviderKey    string `json:"provider_key"`
+	ReturnTo       string `json:"return_to"`
+	FrontendOrigin string `json:"frontend_origin"`
+	CodeVerifier   string `json:"code_verifier"`
+	IssuedAt       int64  `json:"issued_at"`
+}
+
+type oauthProviderTokenResponse struct {
+	AccessToken      string `json:"access_token"`
+	RefreshToken     string `json:"refresh_token"`
+	IDToken          string `json:"id_token"`
+	TokenType        string `json:"token_type"`
+	Scope            string `json:"scope"`
+	ExpiresIn        int    `json:"expires_in"`
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
+type oauthIdentityProfile struct {
+	Subject           string
+	Email             string
+	Name              string
+	DisplayName       string
+	PreferredUsername string
+}
+
+func oauthStateSecret() string {
+	if secret := strings.TrimSpace(getEnv("OAUTH_STATE_SECRET", "")); secret != "" {
+		return secret
+	}
+	return auth.DemoJWTSecret()
+}
+
+func isHTTPSRequest(c *gin.Context) bool {
+	if c != nil && c.Request != nil && c.Request.TLS != nil {
+		return true
+	}
+	proto := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")))
+	if strings.Contains(proto, "https") {
+		return true
+	}
+	return false
+}
+
+func requestScheme(c *gin.Context) string {
+	if isHTTPSRequest(c) {
+		return "https"
+	}
+	proto := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")))
+	if proto != "" {
+		if comma := strings.Index(proto, ","); comma > 0 {
+			proto = strings.TrimSpace(proto[:comma])
+		}
+		if proto == "http" || proto == "https" {
+			return proto
+		}
+	}
+	return "http"
+}
+
+func requestHost(c *gin.Context) string {
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host != "" {
+		if comma := strings.Index(host, ","); comma > 0 {
+			host = strings.TrimSpace(host[:comma])
+		}
+		if host != "" {
+			return host
+		}
+	}
+	if c != nil && c.Request != nil {
+		return strings.TrimSpace(c.Request.Host)
+	}
+	return ""
+}
+
+func requestBaseURL(c *gin.Context) string {
+	host := requestHost(c)
+	if host == "" {
+		return ""
+	}
+	return requestScheme(c) + "://" + host
+}
+
+func oauthCallbackURL(c *gin.Context) string {
+	base := strings.TrimRight(requestBaseURL(c), "/")
+	if base == "" {
+		base = strings.TrimRight(normalizeIAMBaseURL(getEnv("IAM_ISSUER_URL", "")), "/")
+	}
+	if base == "" {
+		base = strings.TrimRight(normalizeIAMBaseURL(defaultIAMInternalBaseURL()), "/")
+	}
+	return base + "/auth/oauth/callback"
+}
+
+func normalizeOrigin(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	return scheme + "://" + strings.TrimSpace(parsed.Host)
+}
+
+func resolveFrontendOrigin(c *gin.Context, requested string) string {
+	if origin := normalizeOrigin(requested); origin != "" {
+		return origin
+	}
+
+	if origin := normalizeOrigin(strings.TrimSpace(getEnv("PUBLIC_FRONTEND_URL", ""))); origin != "" {
+		return origin
+	}
+
+	if host := strings.TrimSpace(getEnv("PUBLIC_FRONTEND_HOSTNAME", "")); host != "" {
+		scheme := requestScheme(c)
+		if strings.Contains(host, "localhost") || strings.HasPrefix(host, "127.") {
+			scheme = "http"
+		}
+		if origin := normalizeOrigin(scheme + "://" + host); origin != "" {
+			return origin
+		}
+	}
+
+	if ref := normalizeOrigin(strings.TrimSpace(c.GetHeader("Referer"))); ref != "" {
+		return ref
+	}
+
+	return normalizeOrigin(requestBaseURL(c))
+}
+
+func sanitizeReturnPath(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "/"
+	}
+	if strings.Contains(value, "://") || strings.HasPrefix(value, "//") {
+		return "/"
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	return value
+}
+
+func defaultPathForRole(role string) string {
+	r := strings.ToLower(strings.TrimSpace(role))
+	switch {
+	case r == "system-manager" || r == "system_manager" || r == "system-admin" || r == "sysadmin":
+		return "/system-manager"
+	case strings.Contains(r, "admin") && !strings.Contains(r, "account"):
+		return "/admin"
+	case r == "manager" || r == "api-manager" || r == "api_manager":
+		return "/manager"
+	default:
+		return "/"
+	}
+}
+
+func sanitizeUsername(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return ""
+	}
+	builder := strings.Builder{}
+	builder.Grow(len(value))
+	for _, ch := range value {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+			builder.WriteRune(ch)
+		case ch >= '0' && ch <= '9':
+			builder.WriteRune(ch)
+		case ch == '.' || ch == '-' || ch == '_' || ch == '@':
+			builder.WriteRune(ch)
+		case ch == ' ':
+			builder.WriteRune('.')
+		}
+	}
+	clean := strings.Trim(builder.String(), ".")
+	return clean
+}
+
+func deriveOAuthRole(username, email, displayName string) string {
+	candidates := []string{username, email, displayName}
+	for _, candidate := range candidates {
+		value := strings.ToLower(strings.TrimSpace(candidate))
+		if value == "" {
+			continue
+		}
+		local := value
+		if at := strings.Index(local, "@"); at > 0 {
+			local = local[:at]
+		}
+		compact := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(local, "-", ""), "_", ""), " ", "")
+		switch compact {
+		case "sysadmin", "systemadmin", "systemadministrator", "systemmanager":
+			return "system-manager"
+		case "admin", "administrator", "superadmin":
+			return "admin"
+		case "manager", "apimanager", "mgr":
+			return "manager"
+		}
+	}
+	return "user"
+}
+
+func randomURLSafeString(length int) (string, error) {
+	if length < 32 {
+		length = 32
+	}
+	buf := make([]byte, length)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	value := base64.RawURLEncoding.EncodeToString(buf)
+	if len(value) >= length {
+		return value[:length], nil
+	}
+	for len(value) < length {
+		value += "A"
+	}
+	return value, nil
+}
+
+func pkceChallenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func signOAuthPayload(raw []byte) string {
+	mac := hmac.New(sha256.New, []byte(oauthStateSecret()))
+	_, _ = mac.Write(raw)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func encodeOAuthStateCookie(payload oauthStatePayload) (string, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(raw)
+	signature := signOAuthPayload(raw)
+	return encoded + "." + signature, nil
+}
+
+func decodeOAuthStateCookie(value string) (*oauthStatePayload, error) {
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 {
+		return nil, errors.New("invalid oauth state cookie format")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, fmt.Errorf("decode oauth state payload: %w", err)
+	}
+	providedSig, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("decode oauth state signature: %w", err)
+	}
+	mac := hmac.New(sha256.New, []byte(oauthStateSecret()))
+	_, _ = mac.Write(raw)
+	expectedSig := mac.Sum(nil)
+	if !hmac.Equal(providedSig, expectedSig) {
+		return nil, errors.New("oauth state signature mismatch")
+	}
+
+	var payload oauthStatePayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("parse oauth state payload: %w", err)
+	}
+	if payload.State == "" {
+		return nil, errors.New("oauth state payload missing state")
+	}
+	return &payload, nil
+}
+
+func clearOAuthStateCookie(c *gin.Context) {
+	c.SetCookie(oauthStateCookie, "", -1, "/", "", isHTTPSRequest(c), true)
+}
+
+func redirectOAuthError(c *gin.Context, frontendOrigin, message string) {
+	cleanOrigin := normalizeOrigin(frontendOrigin)
+	if cleanOrigin == "" {
+		cleanOrigin = normalizeOrigin(requestBaseURL(c))
+	}
+	if cleanOrigin == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": message})
+		return
+	}
+	qs := url.Values{}
+	qs.Set("oauth_error", message)
+	target := strings.TrimRight(cleanOrigin, "/") + "/login?" + qs.Encode()
+	c.Redirect(http.StatusFound, target)
+}
+
+func redirectOAuthSuccess(c *gin.Context, frontendOrigin, returnPath, accessToken, refreshToken, username, role string) {
+	cleanOrigin := normalizeOrigin(frontendOrigin)
+	if cleanOrigin == "" {
+		cleanOrigin = normalizeOrigin(requestBaseURL(c))
+	}
+	if cleanOrigin == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to resolve frontend origin"})
+		return
+	}
+
+	values := url.Values{}
+	values.Set("oauth_access_token", accessToken)
+	values.Set("oauth_username", username)
+	values.Set("oauth_role", role)
+	values.Set("oauth_return_to", sanitizeReturnPath(returnPath))
+	if refreshToken != "" {
+		values.Set("oauth_refresh_token", refreshToken)
+	}
+
+	target := strings.TrimRight(cleanOrigin, "/") + "/login#" + values.Encode()
+	c.Redirect(http.StatusFound, target)
+}
+
+func defaultIdentityProviderAuthorizationURL(providerType string) string {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "google":
+		return "https://accounts.google.com/o/oauth2/v2/auth"
+	case "github":
+		return "https://github.com/login/oauth/authorize"
+	case "gitlab":
+		return "https://gitlab.com/oauth/authorize"
+	case "microsoft":
+		return "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+	case "facebook":
+		return "https://www.facebook.com/v19.0/dialog/oauth"
+	default:
+		return ""
+	}
+}
+
+func defaultIdentityProviderTokenURL(providerType string) string {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "google":
+		return "https://oauth2.googleapis.com/token"
+	case "github":
+		return "https://github.com/login/oauth/access_token"
+	case "gitlab":
+		return "https://gitlab.com/oauth/token"
+	case "microsoft":
+		return "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+	case "facebook":
+		return "https://graph.facebook.com/v19.0/oauth/access_token"
+	default:
+		return ""
+	}
+}
+
+func defaultIdentityProviderUserInfoURL(providerType string) string {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "google":
+		return "https://openidconnect.googleapis.com/v1/userinfo"
+	case "github":
+		return "https://api.github.com/user"
+	case "gitlab":
+		return "https://gitlab.com/api/v4/user"
+	case "microsoft":
+		return "https://graph.microsoft.com/oidc/userinfo"
+	case "facebook":
+		return "https://graph.facebook.com/me?fields=id,name,email"
+	default:
+		return ""
+	}
+}
+
+func defaultIdentityProviderScopes(providerType string) string {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "github":
+		return "read:user user:email"
+	case "gitlab":
+		return "read_user"
+	case "microsoft":
+		return "openid profile email User.Read"
+	case "facebook":
+		return "email public_profile"
+	default:
+		return "openid profile email"
+	}
+}
+
+func (h *AuthHandler) resolveIdentityProvider(providerKey string) (*iammodels.IdentityProvider, error) {
+	if h.idpStore == nil {
+		return nil, errors.New("identity provider store is not configured")
+	}
+	key := strings.ToLower(strings.TrimSpace(providerKey))
+	if key == "" {
+		return nil, errors.New("provider identifier is required")
+	}
+
+	idps, err := h.idpStore.ListIdentityProviders("")
+	if err != nil {
+		return nil, fmt.Errorf("list identity providers: %w", err)
+	}
+
+	var fallback *iammodels.IdentityProvider
+	for i := range idps {
+		idp := idps[i]
+		if !idp.Enabled {
+			continue
+		}
+
+		if strings.EqualFold(strings.TrimSpace(idp.ID), key) || strings.EqualFold(strings.TrimSpace(idp.Alias), key) {
+			copyIDP := idp
+			return &copyIDP, nil
+		}
+
+		if strings.EqualFold(strings.TrimSpace(idp.ProviderType), key) && fallback == nil {
+			copyIDP := idp
+			fallback = &copyIDP
+		}
+	}
+
+	if fallback != nil {
+		return fallback, nil
+	}
+
+	return nil, fmt.Errorf("identity provider %q is not configured or enabled", providerKey)
+}
+
+func buildOAuthAuthorizationURL(idp *iammodels.IdentityProvider, callbackURL, state, codeChallenge string) (string, error) {
+	if idp == nil {
+		return "", errors.New("identity provider is required")
+	}
+	providerType := strings.ToLower(strings.TrimSpace(idp.ProviderType))
+	authorizeURL := strings.TrimSpace(idp.AuthorizationURL)
+	if authorizeURL == "" {
+		authorizeURL = defaultIdentityProviderAuthorizationURL(providerType)
+	}
+	if authorizeURL == "" {
+		return "", fmt.Errorf("identity provider %q requires authorization_url", idp.Alias)
+	}
+
+	parsed, err := url.Parse(authorizeURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid authorization_url: %w", err)
+	}
+
+	q := parsed.Query()
+	if q.Get("response_type") == "" {
+		q.Set("response_type", "code")
+	}
+	if q.Get("client_id") == "" {
+		q.Set("client_id", strings.TrimSpace(idp.ClientID))
+	}
+	if strings.TrimSpace(q.Get("client_id")) == "" {
+		return "", fmt.Errorf("identity provider %q requires client_id", idp.Alias)
+	}
+	if q.Get("redirect_uri") == "" {
+		q.Set("redirect_uri", callbackURL)
+	}
+	if q.Get("scope") == "" {
+		scopes := strings.TrimSpace(idp.DefaultScopes)
+		if scopes == "" {
+			scopes = defaultIdentityProviderScopes(providerType)
+		}
+		if scopes != "" {
+			q.Set("scope", scopes)
+		}
+	}
+	q.Set("state", state)
+	if codeChallenge != "" {
+		q.Set("code_challenge", codeChallenge)
+		q.Set("code_challenge_method", "S256")
+	}
+
+	if providerType == "google" {
+		if q.Get("access_type") == "" {
+			q.Set("access_type", "offline")
+		}
+		if q.Get("prompt") == "" {
+			q.Set("prompt", "select_account")
+		}
+	}
+
+	parsed.RawQuery = q.Encode()
+	return parsed.String(), nil
+}
+
+func parseOAuthJWTClaims(token string) (map[string]interface{}, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return nil, errors.New("invalid JWT payload")
+	}
+	payload := parts[1]
+	decoded, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, err
+	}
+	claims := map[string]interface{}{}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+func stringValueFromMap(data map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		raw, ok := data[key]
+		if !ok || raw == nil {
+			continue
+		}
+		switch v := raw.(type) {
+		case string:
+			if strings.TrimSpace(v) != "" {
+				return strings.TrimSpace(v)
+			}
+		case fmt.Stringer:
+			value := strings.TrimSpace(v.String())
+			if value != "" {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+func (h *AuthHandler) exchangeOAuthAuthorizationCode(c *gin.Context, idp *iammodels.IdentityProvider, code, codeVerifier string) (*oauthProviderTokenResponse, error) {
+	tokenURL := strings.TrimSpace(idp.TokenURL)
+	if tokenURL == "" {
+		tokenURL = defaultIdentityProviderTokenURL(idp.ProviderType)
+	}
+	if tokenURL == "" {
+		return nil, fmt.Errorf("identity provider %q requires token_url", idp.Alias)
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", strings.TrimSpace(code))
+	form.Set("redirect_uri", oauthCallbackURL(c))
+	if strings.TrimSpace(idp.ClientID) != "" {
+		form.Set("client_id", strings.TrimSpace(idp.ClientID))
+	}
+	if strings.TrimSpace(idp.ClientSecret) != "" {
+		form.Set("client_secret", strings.TrimSpace(idp.ClientSecret))
+	}
+	if strings.TrimSpace(codeVerifier) != "" {
+		form.Set("code_verifier", strings.TrimSpace(codeVerifier))
+	}
+
+	req, err := http.NewRequest(http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read token response: %w", err)
+	}
+	if !json.Valid(body) {
+		return nil, fmt.Errorf("invalid token response from provider: %s", summarizeIAMBody(body))
+	}
+
+	var tokenResp oauthProviderTokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return nil, fmt.Errorf("parse token response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		errText := strings.TrimSpace(tokenResp.ErrorDescription)
+		if errText == "" {
+			errText = strings.TrimSpace(tokenResp.Error)
+		}
+		if errText == "" {
+			errText = summarizeIAMBody(body)
+		}
+		return nil, fmt.Errorf("provider token exchange failed: %s", errText)
+	}
+
+	if strings.TrimSpace(tokenResp.Error) != "" {
+		errText := strings.TrimSpace(tokenResp.ErrorDescription)
+		if errText == "" {
+			errText = strings.TrimSpace(tokenResp.Error)
+		}
+		return nil, fmt.Errorf("provider token exchange failed: %s", errText)
+	}
+
+	if strings.TrimSpace(tokenResp.AccessToken) == "" && strings.TrimSpace(tokenResp.IDToken) == "" {
+		return nil, errors.New("provider token exchange returned no access_token or id_token")
+	}
+
+	if strings.TrimSpace(tokenResp.TokenType) == "" {
+		tokenResp.TokenType = "Bearer"
+	}
+
+	return &tokenResp, nil
+}
+
+func (h *AuthHandler) fetchOAuthIdentityProfile(idp *iammodels.IdentityProvider, tokenResp *oauthProviderTokenResponse) (*oauthIdentityProfile, error) {
+	profile := &oauthIdentityProfile{}
+
+	if idToken := strings.TrimSpace(tokenResp.IDToken); idToken != "" {
+		if claims, err := parseOAuthJWTClaims(idToken); err == nil {
+			profile.Subject = stringValueFromMap(claims, "sub", "id")
+			profile.Email = stringValueFromMap(claims, "email", "upn")
+			profile.Name = stringValueFromMap(claims, "name")
+			profile.DisplayName = stringValueFromMap(claims, "display_name", "name")
+			profile.PreferredUsername = stringValueFromMap(claims, "preferred_username", "nickname")
+		}
+	}
+
+	needUserInfo := strings.TrimSpace(profile.Email) == "" || strings.TrimSpace(profile.PreferredUsername) == "" || strings.TrimSpace(profile.DisplayName) == ""
+	if needUserInfo && strings.TrimSpace(tokenResp.AccessToken) != "" {
+		userInfoURL := strings.TrimSpace(idp.UserInfoURL)
+		if userInfoURL == "" {
+			userInfoURL = defaultIdentityProviderUserInfoURL(idp.ProviderType)
+		}
+
+		if userInfoURL != "" {
+			req, err := http.NewRequest(http.MethodGet, userInfoURL, nil)
+			if err == nil {
+				req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(tokenResp.AccessToken))
+				req.Header.Set("Accept", "application/json")
+
+				resp, callErr := h.httpClient.Do(req)
+				if callErr == nil {
+					defer resp.Body.Close()
+					if body, readErr := io.ReadAll(resp.Body); readErr == nil && json.Valid(body) {
+						data := map[string]interface{}{}
+						if unmarshalErr := json.Unmarshal(body, &data); unmarshalErr == nil {
+							if profile.Subject == "" {
+								profile.Subject = stringValueFromMap(data, "sub", "id")
+							}
+							if profile.Email == "" {
+								profile.Email = stringValueFromMap(data, "email", "upn")
+							}
+							if profile.Name == "" {
+								profile.Name = stringValueFromMap(data, "name")
+							}
+							if profile.DisplayName == "" {
+								profile.DisplayName = stringValueFromMap(data, "display_name", "name")
+							}
+							if profile.PreferredUsername == "" {
+								profile.PreferredUsername = stringValueFromMap(data, "preferred_username", "username", "login", "nickname")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if profile.DisplayName == "" {
+		switch {
+		case profile.Name != "":
+			profile.DisplayName = profile.Name
+		case profile.PreferredUsername != "":
+			profile.DisplayName = profile.PreferredUsername
+		case profile.Email != "":
+			profile.DisplayName = profile.Email
+		}
+	}
+
+	if profile.PreferredUsername == "" {
+		if profile.Email != "" {
+			profile.PreferredUsername = profile.Email
+		} else {
+			profile.PreferredUsername = profile.DisplayName
+		}
+	}
+
+	if profile.Subject == "" {
+		profile.Subject = sanitizeUsername(profile.PreferredUsername)
+	}
+
+	if strings.TrimSpace(profile.PreferredUsername) == "" && strings.TrimSpace(profile.Email) == "" && strings.TrimSpace(profile.Subject) == "" {
+		return nil, errors.New("unable to determine identity from OAuth provider response")
+	}
+
+	return profile, nil
+}
+
+
 // LoginRequest is the request payload for login
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
@@ -225,6 +932,27 @@ func generateDemoToken(username, role string) (string, error) {
 		"demo": true,
 		"iat":  now.Unix(),
 		"exp":  now.Add(8 * time.Hour).Unix(),
+	}
+	token := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(auth.DemoJWTSecret()))
+}
+
+// generateFederatedToken creates an HMAC-HS256 JWT for OAuth-based sessions.
+func generateFederatedToken(username, email, role string) (string, error) {
+	now := time.Now()
+	resolvedEmail := strings.TrimSpace(email)
+	if resolvedEmail == "" {
+		resolvedEmail = strings.TrimSpace(username) + "@federated.local"
+	}
+	claims := gojwt.MapClaims{
+		"preferred_username": strings.TrimSpace(username),
+		"email":              resolvedEmail,
+		"realm_access": map[string]interface{}{
+			"roles": []string{role, "uma_authorization"},
+		},
+		"federated": true,
+		"iat":       now.Unix(),
+		"exp":       now.Add(8 * time.Hour).Unix(),
 	}
 	token := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(auth.DemoJWTSecret()))
@@ -316,6 +1044,167 @@ type TokenResponse struct {
 		DisplayName string   `json:"display_name,omitempty"`
 		Roles       []string `json:"roles,omitempty"`
 	} `json:"user,omitempty"`
+}
+
+// OAuthStart handles GET /auth/oauth/start and redirects to the selected identity provider.
+func (h *AuthHandler) OAuthStart(c *gin.Context) {
+	frontendOrigin := resolveFrontendOrigin(c, c.Query("frontend_origin"))
+	providerKey := strings.TrimSpace(c.Query("provider"))
+	returnTo := sanitizeReturnPath(c.Query("return_to"))
+
+	if providerKey == "" {
+		redirectOAuthError(c, frontendOrigin, "Missing provider identifier")
+		return
+	}
+
+	idp, err := h.resolveIdentityProvider(providerKey)
+	if err != nil {
+		redirectOAuthError(c, frontendOrigin, err.Error())
+		return
+	}
+
+	stateValue, err := randomURLSafeString(48)
+	if err != nil {
+		redirectOAuthError(c, frontendOrigin, "Failed to initialize OAuth state")
+		return
+	}
+
+	codeVerifier, err := randomURLSafeString(96)
+	if err != nil {
+		redirectOAuthError(c, frontendOrigin, "Failed to initialize PKCE verifier")
+		return
+	}
+
+	payload := oauthStatePayload{
+		State:          stateValue,
+		ProviderKey:    strings.TrimSpace(idp.ID),
+		ReturnTo:       returnTo,
+		FrontendOrigin: frontendOrigin,
+		CodeVerifier:   codeVerifier,
+		IssuedAt:       time.Now().UTC().Unix(),
+	}
+
+	encodedState, err := encodeOAuthStateCookie(payload)
+	if err != nil {
+		redirectOAuthError(c, frontendOrigin, "Failed to encode OAuth state")
+		return
+	}
+
+	c.SetCookie(oauthStateCookie, encodedState, oauthStateMaxAge, "/", "", isHTTPSRequest(c), true)
+
+	authorizeURL, err := buildOAuthAuthorizationURL(idp, oauthCallbackURL(c), stateValue, pkceChallenge(codeVerifier))
+	if err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, err.Error())
+		return
+	}
+
+	c.Redirect(http.StatusFound, authorizeURL)
+}
+
+// OAuthCallback handles GET /auth/oauth/callback and finalizes a platform session.
+func (h *AuthHandler) OAuthCallback(c *gin.Context) {
+	frontendOrigin := resolveFrontendOrigin(c, "")
+
+	rawStateCookie, cookieErr := c.Cookie(oauthStateCookie)
+	if cookieErr != nil {
+		redirectOAuthError(c, frontendOrigin, "OAuth session state is missing. Please retry login.")
+		return
+	}
+
+	statePayload, err := decodeOAuthStateCookie(rawStateCookie)
+	if err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, "OAuth session state is invalid. Please retry login.")
+		return
+	}
+
+	if statePayload.FrontendOrigin != "" {
+		frontendOrigin = statePayload.FrontendOrigin
+	}
+
+	if oauthErr := strings.TrimSpace(c.Query("error")); oauthErr != "" {
+		detail := strings.TrimSpace(c.Query("error_description"))
+		clearOAuthStateCookie(c)
+		if detail != "" {
+			redirectOAuthError(c, frontendOrigin, oauthErr+": "+detail)
+		} else {
+			redirectOAuthError(c, frontendOrigin, oauthErr)
+		}
+		return
+	}
+
+	if statePayload.IssuedAt <= 0 || time.Since(time.Unix(statePayload.IssuedAt, 0).UTC()) > oauthStateLifetime {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, "OAuth session expired. Please retry login.")
+		return
+	}
+
+	requestState := strings.TrimSpace(c.Query("state"))
+	if requestState == "" || requestState != statePayload.State {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, "OAuth state mismatch. Please retry login.")
+		return
+	}
+
+	code := strings.TrimSpace(c.Query("code"))
+	if code == "" {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, "OAuth provider did not return an authorization code")
+		return
+	}
+
+	idp, err := h.resolveIdentityProvider(statePayload.ProviderKey)
+	if err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, err.Error())
+		return
+	}
+
+	tokenResp, err := h.exchangeOAuthAuthorizationCode(c, idp, code, statePayload.CodeVerifier)
+	if err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, err.Error())
+		return
+	}
+
+	identity, err := h.fetchOAuthIdentityProfile(idp, tokenResp)
+	if err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, err.Error())
+		return
+	}
+
+	username := sanitizeUsername(identity.PreferredUsername)
+	if username == "" {
+		username = sanitizeUsername(identity.Email)
+	}
+	if username == "" {
+		username = sanitizeUsername(identity.DisplayName)
+	}
+	if username == "" {
+		username = "oauth-user"
+	}
+
+	role := deriveOAuthRole(username, identity.Email, identity.DisplayName)
+	platformToken, err := generateFederatedToken(username, identity.Email, role)
+	if err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, "Failed to create platform session token")
+		return
+	}
+
+	if h.rateLimiter != nil {
+		h.rateLimiter.RegisterToken(platformToken, username)
+	}
+
+	returnTo := sanitizeReturnPath(statePayload.ReturnTo)
+	if returnTo == "/login" {
+		returnTo = defaultPathForRole(role)
+	}
+
+	clearOAuthStateCookie(c)
+	redirectOAuthSuccess(c, frontendOrigin, returnTo, platformToken, "", username, role)
 }
 
 // Login handles POST /auth/login

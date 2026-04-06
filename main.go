@@ -476,9 +476,14 @@ func main() {
 	authHandler := handlers.NewAuthHandler()
 	authHandler.SetRateLimiter(rateLimiter)
 	authHandler.SetPlatformUserHandler(platformUserHandler)
+	if iamSystem != nil && iamSystem.PGStore != nil {
+		authHandler.SetIdentityProviderStore(iamSystem.PGStore)
+	}
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)
+	router.GET("/auth/oauth/start", authHandler.OAuthStart)
+	router.GET("/auth/oauth/callback", authHandler.OAuthCallback)
 
 	// Token status endpoints (auth required)
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)

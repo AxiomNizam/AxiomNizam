@@ -712,13 +712,18 @@
                 return;
             }
 
-            var authURL = String(idp.authorization_url || '').trim();
-            if (!authURL) {
-                alert('Identity provider is configured, but no authorization_url is set yet. Please update it in IAM Admin > Identity Providers.');
-                return;
+            var apiURL = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
+            if (apiURL.length > 1 && apiURL.endsWith('/')) {
+                apiURL = apiURL.slice(0, -1);
             }
 
-            window.location.href = authURL;
+            var returnTo = (window.location.pathname || '/') + (window.location.search || '');
+            var startURL = apiURL + '/auth/oauth/start' +
+                '?provider=' + encodeURIComponent(String(providerKey || '')) +
+                '&return_to=' + encodeURIComponent(returnTo) +
+                '&frontend_origin=' + encodeURIComponent(window.location.origin || '');
+
+            window.location.href = startURL;
         }
 
         window.onclick = function(event) {
