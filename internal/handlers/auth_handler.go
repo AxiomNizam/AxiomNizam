@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/auth"
+	iamidentity "example.com/axiomnizam/internal/iam/identity"
 	iammodels "example.com/axiomnizam/internal/iam/models"
 	"example.com/axiomnizam/internal/iam/pgstore"
+	iamstorage "example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 	gojwt "github.com/golang-jwt/jwt/v5"
@@ -30,6 +32,7 @@ type AuthHandler struct {
 	rateLimiter   *auth.RateLimiter
 	platformUsers *PlatformUserHandler
 	idpStore      *pgstore.Store
+	iamUsers      *iamstorage.PostgresUserRepository
 	httpClient    *http.Client
 }
 
@@ -74,6 +77,11 @@ func (h *AuthHandler) SetPlatformUserHandler(puh *PlatformUserHandler) {
 // SetIdentityProviderStore wires IAM identity provider persistence into auth flows.
 func (h *AuthHandler) SetIdentityProviderStore(store *pgstore.Store) {
 	h.idpStore = store
+}
+
+// SetIAMUserRepository wires IAM user repository into OAuth provisioning flow.
+func (h *AuthHandler) SetIAMUserRepository(repo *iamstorage.PostgresUserRepository) {
+	h.iamUsers = repo
 }
 
 // getEnv gets environment variable with fallback
@@ -898,6 +906,83 @@ func (h *AuthHandler) fetchOAuthIdentityProfile(idp *iammodels.IdentityProvider,
 	return profile, nil
 }
 
+func resolveFederatedEmail(username, email string) string {
+	resolved := strings.TrimSpace(email)
+	if resolved == "" {
+		if strings.Contains(strings.TrimSpace(username), "@") {
+			resolved = strings.TrimSpace(username)
+		} else {
+			resolved = strings.TrimSpace(username) + "@federated.local"
+		}
+	}
+	return iamidentity.NormaliseEmail(resolved)
+}
+
+func (h *AuthHandler) ensureIAMFederatedUser(username, email, displayName string) error {
+	if h.iamUsers == nil {
+		return nil
+	}
+
+	resolvedEmail := resolveFederatedEmail(username, email)
+	if resolvedEmail == "" {
+		return errors.New("unable to resolve IAM email for federated user")
+	}
+
+	existing, err := h.iamUsers.GetByEmail(resolvedEmail)
+	if err != nil {
+		return fmt.Errorf("lookup IAM user by email: %w", err)
+	}
+
+	if existing != nil {
+		changed := false
+		if strings.TrimSpace(existing.DisplayName) == "" && strings.TrimSpace(displayName) != "" {
+			existing.DisplayName = strings.TrimSpace(displayName)
+			changed = true
+		}
+		if !existing.EmailVerified {
+			existing.EmailVerified = true
+			changed = true
+		}
+		if changed {
+			existing.UpdatedAt = time.Now().UTC()
+			if updateErr := h.iamUsers.Update(existing); updateErr != nil {
+				return fmt.Errorf("update IAM federated user: %w", updateErr)
+			}
+		}
+		return nil
+	}
+
+	randomPass, err := randomURLSafeString(40)
+	if err != nil {
+		return fmt.Errorf("generate federated password seed: %w", err)
+	}
+	passwordHash, err := iamidentity.HashPassword(randomPass)
+	if err != nil {
+		return fmt.Errorf("hash federated password: %w", err)
+	}
+
+	now := time.Now().UTC()
+	user := &iamidentity.User{
+		ID:            iamidentity.NewUserID(),
+		Email:         resolvedEmail,
+		PasswordHash:  passwordHash,
+		DisplayName:   strings.TrimSpace(displayName),
+		Active:        true,
+		EmailVerified: true,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	if err := h.iamUsers.Create(user); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil
+		}
+		return fmt.Errorf("create IAM federated user: %w", err)
+	}
+
+	return nil
+}
+
 // LoginRequest is the request payload for login
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
@@ -1185,7 +1270,39 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 		username = "oauth-user"
 	}
 
-	role := deriveOAuthRole(username, identity.Email, identity.DisplayName)
+	if err := h.ensureIAMFederatedUser(username, identity.Email, identity.DisplayName); err != nil {
+		clearOAuthStateCookie(c)
+		redirectOAuthError(c, frontendOrigin, "Failed to register IAM user profile: "+err.Error())
+		return
+	}
+
+	role := "user"
+	if h.platformUsers != nil {
+		persistedUser, persistErr := h.platformUsers.EnsureFederatedUser(username, identity.Email, "user")
+		if persistErr != nil {
+			clearOAuthStateCookie(c)
+			redirectOAuthError(c, frontendOrigin, "Failed to register platform user profile: "+persistErr.Error())
+			return
+		} else if persistedUser != nil {
+			if strings.ToLower(strings.TrimSpace(persistedUser.Status)) != "active" {
+				clearOAuthStateCookie(c)
+				redirectOAuthError(c, frontendOrigin, "Account is disabled. Please contact administrator.")
+				return
+			}
+			persistedRole := strings.ToLower(strings.TrimSpace(persistedUser.Role))
+			if persistedRole != "" {
+				role = persistedRole
+			}
+		}
+	}
+
+	if role == "user" {
+		role = deriveOAuthRole(username, identity.Email, identity.DisplayName)
+	}
+	if role != "admin" && role != "manager" && role != "user" {
+		role = "user"
+	}
+
 	platformToken, err := generateFederatedToken(username, identity.Email, role)
 	if err != nil {
 		clearOAuthStateCookie(c)

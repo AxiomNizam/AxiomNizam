@@ -321,3 +321,122 @@ func (h *PlatformUserHandler) ValidateCredentials(username, password string) (*P
 	}
 	return nil, false
 }
+
+func normalizePlatformUserStatus(status string) string {
+	v := strings.ToLower(strings.TrimSpace(status))
+	switch v {
+	case "active", "enabled":
+		return "active"
+	case "disabled", "inactive", "deactive", "deactivated":
+		return "disabled"
+	default:
+		return "active"
+	}
+}
+
+func normalizePlatformUserRole(role string) string {
+	v := strings.ToLower(strings.TrimSpace(role))
+	if validPlatformRoles[v] {
+		return v
+	}
+	if strings.Contains(v, "admin") {
+		return "admin"
+	}
+	if strings.Contains(v, "manager") {
+		return "manager"
+	}
+	return "user"
+}
+
+func randomFederatedPassword() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(b)), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+// EnsureFederatedUser creates or updates a user record for OAuth/federated login.
+// It ensures the user appears in the platform user list so roles can be managed.
+func (h *PlatformUserHandler) EnsureFederatedUser(username, email, defaultRole string) (*PlatformUser, error) {
+	uname := strings.TrimSpace(username)
+	mail := strings.TrimSpace(email)
+	if uname == "" && mail == "" {
+		return nil, fmt.Errorf("federated user requires username or email")
+	}
+
+	if uname == "" && strings.Contains(mail, "@") {
+		uname = strings.TrimSpace(strings.Split(mail, "@")[0])
+	}
+	role := normalizePlatformUserRole(defaultRole)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var existing *PlatformUser
+	for _, u := range h.users {
+		if uname != "" && strings.EqualFold(strings.TrimSpace(u.Username), uname) {
+			existing = u
+			break
+		}
+		if mail != "" && strings.EqualFold(strings.TrimSpace(u.Email), mail) {
+			existing = u
+			break
+		}
+	}
+
+	now := time.Now()
+	if existing != nil {
+		changed := false
+		if strings.TrimSpace(existing.Username) == "" && uname != "" {
+			existing.Username = uname
+			changed = true
+		}
+		if strings.TrimSpace(existing.Email) == "" && mail != "" {
+			existing.Email = mail
+			changed = true
+		}
+		if strings.TrimSpace(existing.Role) == "" {
+			existing.Role = role
+			changed = true
+		}
+		normalizedStatus := normalizePlatformUserStatus(existing.Status)
+		if normalizedStatus != existing.Status {
+			existing.Status = normalizedStatus
+			changed = true
+		}
+		if changed {
+			existing.UpdatedAt = now
+			h.persistStateLocked()
+		}
+
+		copyUser := *existing
+		return &copyUser, nil
+	}
+
+	hashedPassword, err := randomFederatedPassword()
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare federated password: %w", err)
+	}
+
+	user := &PlatformUser{
+		ID:        generateUserID(),
+		Username:  uname,
+		Email:     mail,
+		Password:  hashedPassword,
+		Role:      role,
+		Status:    "active",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	h.users[user.ID] = user
+	h.persistStateLocked()
+
+	copyUser := *user
+	return &copyUser, nil
+}

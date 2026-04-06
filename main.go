@@ -479,6 +479,9 @@ func main() {
 	if iamSystem != nil && iamSystem.PGStore != nil {
 		authHandler.SetIdentityProviderStore(iamSystem.PGStore)
 	}
+	if iamSystem != nil && iamSystem.Users != nil {
+		authHandler.SetIAMUserRepository(iamSystem.Users)
+	}
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)
