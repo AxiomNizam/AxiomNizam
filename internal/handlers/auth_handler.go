@@ -898,7 +898,6 @@ func (h *AuthHandler) fetchOAuthIdentityProfile(idp *iammodels.IdentityProvider,
 	return profile, nil
 }
 
-
 // LoginRequest is the request payload for login
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
