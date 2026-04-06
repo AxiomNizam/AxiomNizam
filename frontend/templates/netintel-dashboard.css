@@ -603,13 +603,56 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .netintel-container { padding: 0.7rem; }
     .ni-kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .ni-charts-row { grid-template-columns: 1fr; }
     .ni-pred-grid { grid-template-columns: 1fr; }
     .ni-forecast-grid { grid-template-columns: 1fr; }
     .ni-logtypes-grid { grid-template-columns: 1fr; }
-    .ni-tab-nav { gap: 0; }
+    .ni-tab-nav {
+        gap: 0;
+        -webkit-overflow-scrolling: touch;
+    }
     .ni-tab { padding: 0.5rem 0.6rem; font-size: 0.78rem; }
-    .tab-icon { display: none; }
+    .ni-tab .tab-icon { display: none; }
+
+    .ni-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ni-toolbar select,
+    .ni-toolbar input[type="text"],
+    .ni-toolbar .ni-btn {
+        width: 100%;
+    }
+
+    .ni-table {
+        min-width: 680px;
+    }
+
+    .ni-topo-stats {
+        flex-wrap: wrap;
+        gap: 0.6rem;
+    }
+
+    .ni-topo-container canvas {
+        width: 100%;
+        min-width: 640px;
+        height: auto;
+        display: block;
+    }
+
     .ni-heatmap-map { height: 350px; }
+}
+
+@media (max-width: 520px) {
+    .ni-kpi-grid { grid-template-columns: 1fr; }
+
+    .ni-tab {
+        padding: 0.48rem 0.55rem;
+        font-size: 0.75rem;
+    }
+
+    .ni-heatmap-map { height: 300px; }
 }

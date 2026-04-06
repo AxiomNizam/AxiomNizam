@@ -878,6 +878,25 @@
 }
 
 @media (max-width: 992px) {
+    .gis-dashboard {
+        height: auto;
+        min-height: calc(100dvh - 92px);
+        overflow: visible;
+    }
+
+    .gis-hub-container {
+        min-height: calc(100dvh - 92px);
+    }
+
+    .gis-type-bar {
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    .gis-type-group-label {
+        display: none;
+    }
+
     .gis-container {
         flex-direction: column;
         height: auto;
@@ -909,6 +928,11 @@
 
     .gis-main {
         min-height: 400px;
+    }
+
+    .gis-map-wrapper,
+    .gis-map {
+        min-height: 340px;
     }
 
     .gis-data-panel {
@@ -943,15 +967,75 @@
         min-width: 120px;
         padding: 6px 10px;
     }
+
+    .gis-data-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .gis-data-tab {
+        white-space: nowrap;
+    }
+
+    .gis-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .gis-table {
+        min-width: 620px;
+    }
+
+    .gis-table-footer {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
 }
 
 @media (max-width: 576px) {
+    .gis-filter-actions {
+        flex-direction: column;
+    }
+
+    .gis-filter-actions .gis-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .gis-table-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .gis-table-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .gis-search-input {
+        width: 100%;
+    }
+
     .gis-summary-card {
         min-width: 100px;
     }
 
     .summary-value {
         font-size: 15px;
+    }
+
+    .gis-map-wrapper,
+    .gis-map {
+        min-height: 280px;
+    }
+
+    .gis-data-panel {
+        max-height: min(56dvh, 460px);
+    }
+
+    .gis-table-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
     }
 
     .gis-legend {

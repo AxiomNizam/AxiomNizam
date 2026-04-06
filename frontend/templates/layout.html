@@ -111,8 +111,21 @@
                     </span>
                     <span class="logo-text">AxiomNizam</span>
                 </div>
+
+                <button
+                    type="button"
+                    class="mobile-nav-toggle"
+                    id="mobileNavToggle"
+                    aria-label="Toggle navigation"
+                    aria-expanded="false"
+                    aria-controls="primary-navigation"
+                    onclick="toggleMobileNav(event)">
+                    <span class="mobile-nav-toggle-line"></span>
+                    <span class="mobile-nav-toggle-line"></span>
+                    <span class="mobile-nav-toggle-line"></span>
+                </button>
                 
-                <div class="nav-center">
+                <div class="nav-center" id="primary-navigation">
                     <a href="/" class="nav-link {{ if eq .page "public-dashboard" }}active{{ end }}">
                         <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span>
                         <span>Dashboard</span>
@@ -179,7 +192,7 @@
                     </div>
                 </div>
                 
-                <div class="nav-right">
+                <div class="nav-right" id="primary-actions">
                     <div class="theme-switcher">
                         <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="toggleTheme()">🌙</button>
                     </div>
@@ -306,6 +319,53 @@
             const currentIndex = themes.indexOf(currentTheme);
             const nextTheme = themes[(currentIndex + 1) % themes.length];
             setTheme(nextTheme);
+        }
+
+        function isMobileNavViewport() {
+            return window.matchMedia('(max-width: 980px)').matches;
+        }
+
+        function syncMobileNavState(shouldOpen) {
+            const navbar = document.querySelector('.navbar');
+            const toggle = document.getElementById('mobileNavToggle');
+            if (!navbar || !toggle) return;
+
+            const open = !!shouldOpen && isMobileNavViewport();
+            navbar.classList.toggle('mobile-open', open);
+            document.body.classList.toggle('mobile-nav-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function closeMobileNav() {
+            syncMobileNavState(false);
+        }
+
+        function toggleMobileNav(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            const navbar = document.querySelector('.navbar');
+            if (!navbar) return;
+            syncMobileNavState(!navbar.classList.contains('mobile-open'));
+        }
+
+        function initMobileNavInteractions() {
+            const toggle = document.getElementById('mobileNavToggle');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+
+            document.querySelectorAll('.nav-link, .nav-dropdown-link').forEach(function(link) {
+                if (link.dataset.mobileNavInit === '1') {
+                    return;
+                }
+                link.dataset.mobileNavInit = '1';
+                link.addEventListener('click', function() {
+                    closeMobileNav();
+                    closeNavMoreMenu();
+                });
+            });
         }
 
         function updateThemeButton(theme) {
@@ -525,6 +585,13 @@
             setTimeout(applyRoleNavVisibility, 350);
             setTimeout(applyRoleNavVisibility, 1200);
             window.addEventListener('focus', applyRoleNavVisibility);
+            window.addEventListener('resize', function() {
+                if (!isMobileNavViewport()) {
+                    closeMobileNav();
+                }
+            });
+
+            initMobileNavInteractions();
             initTabNavigationScrollUX();
 
             {{ if .forceLogin }}
@@ -731,6 +798,10 @@
                 closeNavMoreMenu();
             }
 
+            if (isMobileNavViewport() && !event.target.closest('.navbar')) {
+                closeMobileNav();
+            }
+
             const modal = document.getElementById('loginModal');
             if (event.target === modal) {
                 modal.style.display = 'none';
@@ -740,6 +811,7 @@
         window.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
                 closeNavMoreMenu();
+                closeMobileNav();
             }
         });
     </script>
