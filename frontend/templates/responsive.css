@@ -1116,3 +1116,334 @@ body.mobile-nav-open {
         padding: 14px 12px !important;
     }
 }
+
+/* ===================================================================
+   Device Width Profiles (Android + iPhone)
+   Targets:
+   - 320-360: very small Android phones
+   - 361-389: small/medium Android phones
+   - 390-430: iPhone 11/12/13/14/15/16 portrait class widths
+   - 431-480: large Android phones / plus-size handsets
+   =================================================================== */
+
+@media (max-width: 360px) {
+    .main-content {
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 12px;
+    }
+
+    .admin-header,
+    .manager-header,
+    .dashboard-header,
+    .live-status {
+        padding: 12px 10px;
+        margin-bottom: 14px;
+    }
+
+    .admin-header h1,
+    .manager-header h1,
+    .dashboard-header h1,
+    .header-left h1 {
+        font-size: 1.2rem;
+        line-height: 1.2;
+    }
+
+    .subtitle,
+    .monitoring-subtitle {
+        font-size: 0.78rem;
+    }
+
+    .section,
+    .cp-card,
+    .overview-card,
+    .metrics-table,
+    .operation-card,
+    .api-testing-section,
+    .logs-section,
+    .settings-section {
+        padding: 12px 10px;
+    }
+
+    .tab-navigation {
+        padding: 5px;
+        gap: 6px;
+    }
+
+    .tab-btn {
+        padding: 7px 10px;
+        font-size: 11px;
+        border-radius: 7px;
+    }
+
+    .admin-container .tab-btn .tab-icon,
+    .system-manager-container .tab-btn .tab-icon {
+        display: none;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-warning,
+    .btn-danger,
+    .btn-login,
+    .btn-logout,
+    .btn-sm {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .form-control,
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+
+    .admin-table,
+    .pipeline-table,
+    .analytics-table,
+    .gis-table,
+    .ni-table,
+    .data-table {
+        min-width: 560px;
+        font-size: 11px;
+    }
+
+    .api-builder-list .admin-table {
+        min-width: 620px;
+    }
+
+    th,
+    td,
+    .admin-table thead th,
+    .admin-table tbody td {
+        padding: 7px 8px;
+    }
+
+    #systemManagerAdminFrame,
+    #mgrGisFrame,
+    #mgrAnalyticsFrame,
+    #mgrNetintelFrame {
+        height: min(58dvh, 440px) !important;
+        min-height: 280px !important;
+    }
+
+    .modal-content,
+    .modal-box,
+    [id^="iam"][id$="Modal"] .modal-content {
+        width: calc(100vw - 8px) !important;
+        max-height: calc(100dvh - 8px);
+        border-radius: 10px;
+    }
+
+    .modal-body,
+    .analytics-modal-body,
+    [id^="iam"][id$="Modal"] .modal-body {
+        padding: 10px;
+    }
+}
+
+@media (min-width: 361px) and (max-width: 389px) {
+    .main-content {
+        padding-left: 10px;
+        padding-right: 10px;
+        padding-top: 14px;
+    }
+
+    .admin-header,
+    .manager-header,
+    .dashboard-header,
+    .live-status {
+        padding: 14px 12px;
+        margin-bottom: 16px;
+    }
+
+    .admin-header h1,
+    .manager-header h1,
+    .dashboard-header h1,
+    .header-left h1 {
+        font-size: 1.28rem;
+    }
+
+    .section,
+    .cp-card,
+    .overview-card,
+    .metrics-table,
+    .operation-card {
+        padding: 13px 12px;
+    }
+
+    .tab-navigation {
+        padding: 6px;
+        gap: 6px;
+    }
+
+    .tab-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-warning,
+    .btn-danger,
+    .btn-login,
+    .btn-logout {
+        padding: 9px 12px;
+        font-size: 13px;
+    }
+
+    .admin-table,
+    .pipeline-table,
+    .analytics-table,
+    .gis-table,
+    .ni-table,
+    .data-table {
+        min-width: 600px;
+    }
+
+    .api-builder-list .admin-table {
+        min-width: 680px;
+    }
+
+    #systemManagerAdminFrame,
+    #mgrGisFrame,
+    #mgrAnalyticsFrame,
+    #mgrNetintelFrame {
+        height: min(62dvh, 500px) !important;
+        min-height: 300px !important;
+    }
+}
+
+@media (min-width: 390px) and (max-width: 430px) {
+    .main-content {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+        padding-top: 16px;
+    }
+
+    .admin-header,
+    .manager-header,
+    .dashboard-header,
+    .live-status {
+        padding: 16px 14px;
+        margin-bottom: 18px;
+    }
+
+    .admin-header h1,
+    .manager-header h1,
+    .dashboard-header h1,
+    .header-left h1 {
+        font-size: 1.36rem;
+    }
+
+    .section,
+    .cp-card,
+    .overview-card,
+    .metrics-table,
+    .operation-card {
+        padding: 15px 13px;
+    }
+
+    .tab-navigation {
+        padding: 7px;
+        gap: 7px;
+    }
+
+    .tab-btn {
+        padding: 9px 13px;
+        font-size: 12.5px;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-warning,
+    .btn-danger,
+    .btn-login,
+    .btn-logout {
+        padding: 10px 13px;
+        font-size: 13px;
+    }
+
+    .admin-table,
+    .pipeline-table,
+    .analytics-table,
+    .gis-table,
+    .ni-table,
+    .data-table {
+        min-width: 620px;
+    }
+
+    .api-builder-list .admin-table {
+        min-width: 720px;
+    }
+
+    #systemManagerAdminFrame,
+    #mgrGisFrame,
+    #mgrAnalyticsFrame,
+    #mgrNetintelFrame {
+        height: min(66dvh, 540px) !important;
+        min-height: 320px !important;
+    }
+
+    .footer {
+        padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    }
+}
+
+@media (min-width: 431px) and (max-width: 480px) {
+    .main-content {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 18px;
+    }
+
+    .admin-header,
+    .manager-header,
+    .dashboard-header,
+    .live-status {
+        padding: 18px 16px;
+    }
+
+    .admin-header h1,
+    .manager-header h1,
+    .dashboard-header h1,
+    .header-left h1 {
+        font-size: 1.42rem;
+    }
+
+    .tab-btn {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+
+    .cp-card,
+    .section,
+    .metrics-table,
+    .overview-card,
+    .operation-card {
+        padding: 16px 14px;
+    }
+
+    .admin-table,
+    .pipeline-table,
+    .analytics-table,
+    .gis-table,
+    .ni-table,
+    .data-table {
+        min-width: 640px;
+    }
+
+    .api-builder-list .admin-table {
+        min-width: 760px;
+    }
+
+    #systemManagerAdminFrame,
+    #mgrGisFrame,
+    #mgrAnalyticsFrame,
+    #mgrNetintelFrame {
+        height: min(70dvh, 580px) !important;
+        min-height: 340px !important;
+    }
+}
