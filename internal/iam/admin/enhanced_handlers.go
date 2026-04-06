@@ -336,6 +336,49 @@ func (h *EnhancedHandler) DeleteClientScope(c *gin.Context) {
 // Identity Provider Endpoints
 // ═══════════════════════════════════════════════
 
+func (h *EnhancedHandler) ListPublicIdentityProviders(c *gin.Context) {
+	realmID := strings.TrimSpace(c.Query("realm_id"))
+	idps, err := h.store.ListIdentityProviders(realmID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	providers := make([]gin.H, 0, len(idps))
+	for _, idp := range idps {
+		if !idp.Enabled {
+			continue
+		}
+
+		providers = append(providers, gin.H{
+			"id":                idp.ID,
+			"realm_id":          idp.RealmID,
+			"alias":             idp.Alias,
+			"display_name":      idp.DisplayName,
+			"provider_type":     strings.ToLower(strings.TrimSpace(idp.ProviderType)),
+			"enabled":           true,
+			"authorization_url": strings.TrimSpace(idp.AuthorizationURL),
+			"default_scopes":    strings.TrimSpace(idp.DefaultScopes),
+			"client_id":         strings.TrimSpace(idp.ClientID),
+			"issuer":            strings.TrimSpace(idp.Issuer),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"identity_providers": providers,
+		"supported_provider_types": []string{
+			"oidc",
+			"saml",
+			"github",
+			"google",
+			"ldap",
+			"microsoft",
+			"gitlab",
+			"facebook",
+		},
+	})
+}
+
 func (h *EnhancedHandler) ListIdentityProviders(c *gin.Context) {
 	realmID := c.Query("realm_id")
 	idps, err := h.store.ListIdentityProviders(realmID)

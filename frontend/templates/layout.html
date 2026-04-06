@@ -578,6 +578,106 @@
             oidc: 'idp-oidc', saml: 'idp-saml', ldap: 'idp-ldap'
         };
 
+        var IDP_FALLBACK_TYPES = ['google', 'github', 'gitlab', 'microsoft', 'facebook', 'oidc', 'saml', 'ldap'];
+        var IDP_BY_KEY = {};
+
+        function escapeSingleQuotedAttr(value) {
+            return String(value || '')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/\r/g, ' ')
+                .replace(/\n/g, ' ');
+        }
+
+        function escapeHTML(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function normalizeIDPProviders(payload) {
+            var data = payload || {};
+            var list = Array.isArray(data) ? data : (Array.isArray(data.identity_providers) ? data.identity_providers : []);
+            var providers = [];
+
+            list.forEach(function(raw) {
+                if (!raw || raw.enabled === false) return;
+                var providerType = String(raw.provider_type || '').toLowerCase().trim();
+                if (!providerType) return;
+                providers.push({
+                    id: String(raw.id || '').trim(),
+                    alias: String(raw.alias || '').trim(),
+                    display_name: String(raw.display_name || '').trim(),
+                    provider_type: providerType,
+                    authorization_url: String(raw.authorization_url || '').trim(),
+                    fallback: false
+                });
+            });
+
+            if (providers.length > 0) {
+                return providers;
+            }
+
+            var supported = Array.isArray(data.supported_provider_types) ? data.supported_provider_types : IDP_FALLBACK_TYPES;
+            supported.forEach(function(rawType) {
+                var providerType = String(rawType || '').toLowerCase().trim();
+                if (!providerType) return;
+                providers.push({
+                    id: providerType,
+                    alias: providerType,
+                    display_name: IDP_LABELS[providerType] || providerType.toUpperCase(),
+                    provider_type: providerType,
+                    authorization_url: '',
+                    fallback: true
+                });
+            });
+
+            return providers;
+        }
+
+        function renderIdentityProviderButtons(providers) {
+            var container = document.getElementById('idpButtonsContainer');
+            if (!container) return;
+
+            var divider = document.querySelector('.idp-divider');
+            var list = Array.isArray(providers) ? providers : [];
+            IDP_BY_KEY = {};
+
+            if (list.length === 0) {
+                container.innerHTML = '';
+                if (divider) divider.style.display = 'none';
+                return;
+            }
+
+            if (divider) divider.style.display = '';
+
+            var html = '';
+            list.forEach(function(idp) {
+                var type = String(idp.provider_type || '').toLowerCase().trim();
+                if (!type) return;
+
+                var key = String(idp.id || idp.alias || type).trim();
+                if (!key) return;
+
+                IDP_BY_KEY[key] = idp;
+
+                var icon = IDP_ICONS[type] || IDP_ICONS.oidc;
+                var label = idp.display_name || IDP_LABELS[type] || idp.alias || type.toUpperCase();
+                var cls = IDP_CLASSES[type] || 'idp-oidc';
+                var disabledClass = idp.fallback ? ' idp-disabled' : '';
+
+                html += '<button type="button" class="idp-btn ' + cls + disabledClass + '" onclick="initiateIDPLogin(\'' + escapeSingleQuotedAttr(key) + '\')">' +
+                    '<span class="idp-icon">' + icon + '</span>' +
+                    '<span class="idp-label">' + escapeHTML(label) + '</span>' +
+                    '</button>';
+            });
+
+            container.innerHTML = html;
+        }
+
         function loadIdentityProviderButtons() {
             var container = document.getElementById('idpButtonsContainer');
             if (!container) return;
@@ -585,57 +685,39 @@
             var apiURL = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
             if (apiURL.length > 1 && apiURL.endsWith('/')) apiURL = apiURL.slice(0, -1);
 
-            fetch(apiURL + '/iam/admin/identity-providers', {
-                headers: {
-                    'Authorization': 'Bearer ' + (localStorage.getItem('authToken') || ''),
-                    'Accept': 'application/json'
-                }
-            })
+            fetch(apiURL + '/iam/auth/identity-providers', { headers: { 'Accept': 'application/json' } })
             .then(function(resp) {
-                if (!resp.ok) return [];
+                if (!resp.ok) {
+                    throw new Error('identity providers endpoint returned status ' + resp.status);
+                }
                 return resp.json();
             })
-            .then(function(providers) {
-                if (!Array.isArray(providers) || providers.length === 0) {
-                    container.innerHTML = '';
-                    var divider = document.querySelector('.idp-divider');
-                    if (divider) divider.style.display = 'none';
-                    return;
-                }
-                var enabledProviders = providers.filter(function(p) { return p.enabled; });
-                if (enabledProviders.length === 0) {
-                    container.innerHTML = '';
-                    var divider = document.querySelector('.idp-divider');
-                    if (divider) divider.style.display = 'none';
-                    return;
-                }
-                var divider = document.querySelector('.idp-divider');
-                if (divider) divider.style.display = '';
-                var html = '';
-                enabledProviders.forEach(function(idp) {
-                    var type = (idp.provider_type || '').toLowerCase();
-                    var icon = IDP_ICONS[type] || IDP_ICONS['oidc'];
-                    var label = idp.display_name || IDP_LABELS[type] || idp.alias || type.toUpperCase();
-                    var cls = IDP_CLASSES[type] || 'idp-oidc';
-                    html += '<button type="button" class="idp-btn ' + cls + '" onclick="initiateIDPLogin(\'' + (idp.id || '').replace(/'/g, '') + '\', \'' + type.replace(/'/g, '') + '\')">' +
-                        '<span class="idp-icon">' + icon + '</span>' +
-                        '<span class="idp-label">' + label.replace(/</g, '&lt;') + '</span>' +
-                        '</button>';
-                });
-                container.innerHTML = html;
+            .then(function(payload) {
+                renderIdentityProviderButtons(normalizeIDPProviders(payload));
             })
             .catch(function() {
-                container.innerHTML = '';
-                var divider = document.querySelector('.idp-divider');
-                if (divider) divider.style.display = 'none';
+                renderIdentityProviderButtons(normalizeIDPProviders({ supported_provider_types: IDP_FALLBACK_TYPES }));
             });
         }
 
-        function initiateIDPLogin(idpId, providerType) {
-            var apiURL = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
-            if (apiURL.length > 1 && apiURL.endsWith('/')) apiURL = apiURL.slice(0, -1);
-            var redirectURI = encodeURIComponent(window.location.origin + '/login');
-            var authURL = apiURL + '/oauth/authorize?response_type=code&idp_hint=' + encodeURIComponent(idpId) + '&redirect_uri=' + redirectURI;
+        function initiateIDPLogin(providerKey) {
+            var idp = IDP_BY_KEY[String(providerKey || '')];
+            if (!idp) {
+                alert('Identity provider is not available right now.');
+                return;
+            }
+
+            if (idp.fallback) {
+                alert('This provider type is supported by the platform. Configure it in IAM Admin > Identity Providers to enable direct login.');
+                return;
+            }
+
+            var authURL = String(idp.authorization_url || '').trim();
+            if (!authURL) {
+                alert('Identity provider is configured, but no authorization_url is set yet. Please update it in IAM Admin > Identity Providers.');
+                return;
+            }
+
             window.location.href = authURL;
         }
 

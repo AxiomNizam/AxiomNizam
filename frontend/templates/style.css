@@ -885,6 +885,18 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
+.idp-btn.idp-disabled {
+    opacity: 0.78;
+    border-style: dashed;
+}
+
+.idp-btn.idp-disabled .idp-label::after {
+    content: ' (configure)';
+    color: var(--text-muted);
+    font-size: 0.8em;
+    margin-left: 6px;
+}
+
 .idp-icon {
     display: flex;
     align-items: center;

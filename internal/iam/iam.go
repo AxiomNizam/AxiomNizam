@@ -190,6 +190,25 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 	// ── Authentication (public) ──
 	router.POST("/iam/auth/login", h.Login)
 	router.POST("/iam/auth/refresh", h.RefreshToken)
+	if s.EnhancedHandler != nil {
+		router.GET("/iam/auth/identity-providers", s.EnhancedHandler.ListPublicIdentityProviders)
+	} else {
+		router.GET("/iam/auth/identity-providers", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"identity_providers": []gin.H{},
+				"supported_provider_types": []string{
+					"oidc",
+					"saml",
+					"github",
+					"google",
+					"ldap",
+					"microsoft",
+					"gitlab",
+					"facebook",
+				},
+			})
+		})
+	}
 
 	// IAM JWT middleware for all protected IAM routes
 	iamAuth := iammw.JWTAuth(s.Issuer, s.RevokedStore)
