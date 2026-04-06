@@ -1,26 +1,188 @@
 // System Manager JS
 const BACKEND_URL = (() => {
-    const elem = document.getElementById('backendURL');
-    let url = 'http://localhost:8000'; // Default fallback
-    
-    if (elem && elem.textContent) {
-        const text = elem.textContent.trim();
-        if (text && text.length > 0) {
-            url = text;
+    function normalizeURL(raw) {
+        var value = String(raw || '').trim();
+        if (!value) return '';
+        if (value.length > 1 && value.endsWith('/')) {
+            value = value.slice(0, -1);
+        }
+        return value;
+    }
+
+    function parseHostname(rawURL) {
+        try {
+            return new URL(rawURL).hostname.toLowerCase();
+        } catch (_) {
+            return '';
         }
     }
-    
-    // If contains Docker hostname, replace with localhost
-    if (url.includes('axiomnizam:8000')) {
-        url = url.replace('axiomnizam:8000', 'localhost:8000');
+
+    function isLocalOrInternalHost(hostname) {
+        if (!hostname) return true;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '::1') return true;
+        if (hostname === 'axiomnizam' || hostname.endsWith('.local')) return true;
+        return hostname.indexOf('.') === -1;
     }
-    
-    return url;
+
+    function inferPublicBackendURL() {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        if (!browserHost || browserHost === 'localhost' || browserHost === '127.0.0.1' || browserHost === '0.0.0.0') {
+            return '';
+        }
+        var protocol = window.location.protocol || 'https:';
+        if (browserHost.indexOf('axiomnizam.') === 0) {
+            return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+        }
+        return protocol + '//' + browserHost;
+    }
+
+    if (typeof window.resolveBackendURL === 'function') {
+        var resolved = normalizeURL(window.resolveBackendURL());
+        if (resolved) {
+            return resolved;
+        }
+    }
+
+    var url = normalizeURL(window.BACKEND_URL || '');
+    if (url) {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        var browserIsPublic = browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0';
+        var backendHost = parseHostname(url);
+        if (browserIsPublic && isLocalOrInternalHost(backendHost)) {
+            return inferPublicBackendURL() || url;
+        }
+        return url;
+    }
+
+    return inferPublicBackendURL() || 'http://localhost:8000';
 })();
 
 console.log('System Manager - Backend URL:', BACKEND_URL);
 
 var availableDbServers = [];
+var monitoringDataSnapshot = {
+    apiStats: null,
+    apiCount: null,
+    builderSummary: null,
+    builderAPIs: [],
+    realms: [],
+    realmDashboards: {},
+    clients: [],
+    users: [],
+    roles: [],
+    bindings: [],
+    selectedRealm: '',
+    apiTrendHistory: {},
+    trendMaxPoints: 12,
+    realmDashboardsReady: false
+};
+
+function normalizeSystemManagerRole(role) {
+    var value = String(role || '').toLowerCase().trim();
+    if (!value) return '';
+    if (value === 'sysadmin' || value === 'system-admin' || value === 'system_admin') return 'system-manager';
+    if (value === 'superadmin' || value === 'super-admin') return 'admin';
+    if (value === 'api-manager' || value === 'api_manager') return 'manager';
+    return value;
+}
+
+function readSystemManagerCookie(name) {
+    var prefix = name + '=';
+    var parts = document.cookie.split(';');
+    for (var i = 0; i < parts.length; i++) {
+        var item = parts[i].trim();
+        if (item.indexOf(prefix) === 0) {
+            return decodeURIComponent(item.substring(prefix.length));
+        }
+    }
+    return '';
+}
+
+function getLatestAuthTokenForCopy() {
+    return localStorage.getItem('authToken') || readSystemManagerCookie('authToken') || '';
+}
+
+function canShowTokenCopyShortcut() {
+    var role = normalizeSystemManagerRole(localStorage.getItem('userRole') || readSystemManagerCookie('userRole') || '');
+    return role === 'admin' || role === 'system-manager';
+}
+
+function setTokenCopyStatus(message, color) {
+    var el = document.getElementById('copyTokenStatus');
+    if (!el) return;
+    el.textContent = message;
+    if (color) {
+        el.style.color = color;
+    }
+}
+
+function setupTokenCopyShortcut() {
+    var container = document.getElementById('tokenCopyShortcut');
+    if (!container) return;
+
+    if (!canShowTokenCopyShortcut()) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    setTokenCopyStatus('Ready', 'var(--text-secondary,#94a3b8)');
+}
+
+function fallbackCopyToken(token, onSuccess, onError) {
+    try {
+        var textArea = document.createElement('textarea');
+        textArea.value = token;
+        textArea.setAttribute('readonly', 'readonly');
+        textArea.style.position = 'fixed';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        var copied = document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        if (copied) {
+            onSuccess();
+            return;
+        }
+        onError();
+    } catch (_) {
+        onError();
+    }
+}
+
+function copyAuthTokenForPostman() {
+    var token = getLatestAuthTokenForCopy();
+    if (!token) {
+        setTokenCopyStatus('No token found', '#ef4444');
+        return;
+    }
+
+    var success = function() {
+        setTokenCopyStatus('Copied', '#10b981');
+        addOperationLog('API token copied for Postman', 'info');
+        setTimeout(function() {
+            setTokenCopyStatus('Ready', 'var(--text-secondary,#94a3b8)');
+        }, 2500);
+    };
+
+    var failure = function() {
+        setTokenCopyStatus('Copy failed', '#ef4444');
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(token)
+            .then(success)
+            .catch(function() {
+                fallbackCopyToken(token, success, failure);
+            });
+        return;
+    }
+
+    fallbackCopyToken(token, success, failure);
+}
 
 window.addEventListener('DOMContentLoaded', function() {
     // Set user name from localStorage
@@ -31,9 +193,11 @@ window.addEventListener('DOMContentLoaded', function() {
             userNameElem.textContent = userName;
         }
     }
+    setupTokenCopyShortcut();
     loadStatusData();
     loadDatabases();
     loadDatabaseServers();
+    loadMonitoringDashboards();
     setInterval(loadStatusData, 30000);
 });
 
@@ -61,12 +225,827 @@ function switchManagerTab(tabName) {
     if (tabName === 'users') {
         loadUsers();
     }
+    if (tabName === 'monitoring') {
+        loadMonitoringDashboards();
+    }
     if (tabName === 'graphql-studio') {
         loadManagerGraphQLSchemaInfo();
     }
     if (tabName === 'control-plane') {
         refreshManagerControlPlaneData();
     }
+}
+
+function getSystemManagerAuthHeaders() {
+    if (typeof getAuthHeaders === 'function') {
+        return getAuthHeaders();
+    }
+
+    var token = localStorage.getItem('authToken') || readSystemManagerCookie('authToken') || '';
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers.Authorization = 'Bearer ' + token;
+    }
+    return headers;
+}
+
+function monitoringFetchJSON(path, timeoutMs) {
+    var headers = getSystemManagerAuthHeaders();
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var effectiveTimeout = safeNumber(timeoutMs) > 0 ? safeNumber(timeoutMs) : 10000;
+    var timeoutHandle = null;
+
+    var options = { headers: headers };
+    if (controller) {
+        options.signal = controller.signal;
+        timeoutHandle = setTimeout(function() {
+            controller.abort();
+        }, effectiveTimeout);
+    }
+
+    return fetch(BACKEND_URL + path, options)
+        .then(function(response) {
+            return response.text().then(function(text) {
+                var payload = {};
+                try {
+                    payload = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    payload = { raw: text };
+                }
+
+                if (!response.ok) {
+                    var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
+                    var err = new Error(message);
+                    err.status = response.status;
+                    err.payload = payload;
+                    throw err;
+                }
+
+                return payload;
+            });
+        })
+        .catch(function(err) {
+            if (err && err.name === 'AbortError') {
+                throw new Error('Request timeout for ' + path);
+            }
+            throw err;
+        })
+        .finally(function() {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
+        });
+}
+
+function safeNumber(value) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function formatMetricNumber(value) {
+    var n = safeNumber(value);
+    return new Intl.NumberFormat().format(n);
+}
+
+function formatMetricPercent(value) {
+    var n = safeNumber(value);
+    return n.toFixed(1) + '%';
+}
+
+function formatMetricDuration(ms) {
+    var n = safeNumber(ms);
+    if (n <= 0) {
+        return '--';
+    }
+    if (n < 1000) {
+        return n + 'ms';
+    }
+    return (n / 1000).toFixed(2) + 's';
+}
+
+function formatMetricDateTime(raw) {
+    if (!raw) return '--';
+    var d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '--';
+    return d.toLocaleString();
+}
+
+function monitoringStatusClassFromRate(percent) {
+    if (percent >= 95) return 'status-active';
+    if (percent >= 75) return 'status-draft';
+    return 'status-inactive';
+}
+
+function normalizeMetricEndpoint(path) {
+    var text = String(path || '').split('?')[0].trim();
+    if (!text) return '/';
+    if (text.charAt(0) !== '/') {
+        text = '/' + text;
+    }
+    return text;
+}
+
+function setMonitoringUpdatedAt(elementId, text) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    if (text) {
+        el.textContent = text;
+        return;
+    }
+    el.textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+function setMonitoringBodyLoading(elementId, colSpan, message) {
+    var body = document.getElementById(elementId);
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="' + colSpan + '" class="monitoring-loading-cell">' + escapeHtml(message) + '</td></tr>';
+}
+
+function normalizeRealmIdentifier(realm) {
+    if (!realm || typeof realm !== 'object') return '';
+    return String(realm.id || realm.name || '').trim();
+}
+
+function populateMonitoringRealmFilter(realms) {
+    var select = document.getElementById('monitoringRealmFilter');
+    if (!select) return;
+
+    var realmList = Array.isArray(realms) ? realms : [];
+    var previousSelection = monitoringDataSnapshot.selectedRealm || select.value || '';
+    var seen = {};
+    var options = '<option value="">All realms</option>';
+
+    for (var i = 0; i < realmList.length; i++) {
+        var realm = realmList[i] || {};
+        var key = normalizeRealmIdentifier(realm);
+        if (!key || seen[key]) continue;
+        seen[key] = true;
+
+        var label = String(realm.display_name || realm.name || key);
+        options += '<option value="' + escapeHtml(key) + '">' + escapeHtml(label) + '</option>';
+    }
+
+    select.innerHTML = options;
+
+    if (previousSelection && seen[previousSelection]) {
+        select.value = previousSelection;
+        monitoringDataSnapshot.selectedRealm = previousSelection;
+    } else {
+        select.value = '';
+        monitoringDataSnapshot.selectedRealm = '';
+    }
+
+    select.disabled = realmList.length === 0;
+}
+
+function getSelectedMonitoringRealm() {
+    var select = document.getElementById('monitoringRealmFilter');
+    if (!select) {
+        return monitoringDataSnapshot.selectedRealm || '';
+    }
+    return String(select.value || '').trim();
+}
+
+function getMonitoringRealmLabel(realmID) {
+    if (!realmID) return 'All realms';
+    var realms = Array.isArray(monitoringDataSnapshot.realms) ? monitoringDataSnapshot.realms : [];
+    for (var i = 0; i < realms.length; i++) {
+        var realm = realms[i] || {};
+        if (normalizeRealmIdentifier(realm) === realmID) {
+            return String(realm.display_name || realm.name || realmID);
+        }
+    }
+    return realmID;
+}
+
+function handleMonitoringRealmFilterChange() {
+    monitoringDataSnapshot.selectedRealm = getSelectedMonitoringRealm();
+    applyMonitoringFiltersAndRender({ trackTrend: false });
+}
+
+function getMonitoringTrendKey(method, path) {
+    return String(method || 'GET').toUpperCase() + ' ' + normalizeMetricEndpoint(path || '/');
+}
+
+function updateMonitoringAPITrendHistory(rows) {
+    if (!Array.isArray(rows)) return;
+
+    var historyMap = monitoringDataSnapshot.apiTrendHistory || {};
+    var maxPoints = safeNumber(monitoringDataSnapshot.trendMaxPoints) || 12;
+
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i] || {};
+        var key = getMonitoringTrendKey(row.method, row.path);
+        if (!historyMap[key]) {
+            historyMap[key] = [];
+        }
+
+        var series = historyMap[key];
+        series.push(safeNumber(row.calls));
+        if (series.length > maxPoints) {
+            series.splice(0, series.length - maxPoints);
+        }
+    }
+
+    monitoringDataSnapshot.apiTrendHistory = historyMap;
+}
+
+function getMonitoringAPIDeltaSeries(history) {
+    var source = Array.isArray(history) ? history : [];
+    if (source.length === 0) {
+        return [0, 0];
+    }
+    if (source.length === 1) {
+        return [source[0], source[0]];
+    }
+
+    var deltas = [];
+    for (var i = 1; i < source.length; i++) {
+        deltas.push(Math.max(0, safeNumber(source[i]) - safeNumber(source[i - 1])));
+    }
+
+    if (deltas.length === 1) {
+        deltas.unshift(deltas[0]);
+    }
+    return deltas;
+}
+
+function buildMonitoringSparklineSVG(series, lineClass) {
+    var data = Array.isArray(series) ? series : [0, 0];
+    if (data.length < 2) {
+        data = [0, 0];
+    }
+
+    var width = 96;
+    var height = 26;
+    var padding = 2;
+    var min = Math.min.apply(null, data);
+    var max = Math.max.apply(null, data);
+    var range = max - min;
+    if (range <= 0) {
+        range = 1;
+    }
+
+    var points = [];
+    for (var i = 0; i < data.length; i++) {
+        var x = padding + ((width - (padding * 2)) * i / Math.max(1, data.length - 1));
+        var y = (height - padding) - (((safeNumber(data[i]) - min) / range) * (height - (padding * 2)));
+        points.push(x.toFixed(2) + ',' + y.toFixed(2));
+    }
+
+    return '<svg class="monitoring-sparkline-svg" viewBox="0 0 ' + width + ' ' + height + '" aria-hidden="true">' +
+        '<polyline class="' + lineClass + '" points="' + points.join(' ') + '"></polyline>' +
+        '</svg>';
+}
+
+function renderMonitoringAPISparkline(method, path) {
+    var key = getMonitoringTrendKey(method, path);
+    var historyMap = monitoringDataSnapshot.apiTrendHistory || {};
+    var history = historyMap[key] || [];
+    var deltas = getMonitoringAPIDeltaSeries(history);
+    var lineClass = 'sparkline-neutral';
+
+    if (deltas.length >= 2) {
+        var last = deltas[deltas.length - 1];
+        var prev = deltas[deltas.length - 2];
+        if (last > prev) lineClass = 'sparkline-up';
+        if (last < prev) lineClass = 'sparkline-down';
+    }
+
+    var latest = deltas.length > 0 ? deltas[deltas.length - 1] : 0;
+    var title = 'Recent call deltas per refresh sample';
+
+    return '<div class="monitoring-sparkline-wrap" title="' + escapeHtml(title) + '">' +
+        '<div class="monitoring-sparkline-value">Δ ' + formatMetricNumber(latest) + '</div>' +
+        buildMonitoringSparklineSVG(deltas, lineClass) +
+        '</div>';
+}
+
+function renderMonitoringKPIGrid(kpis) {
+    var grid = document.getElementById('monitoringKPIGrid');
+    if (!grid) return;
+
+    var html = '';
+    for (var i = 0; i < kpis.length; i++) {
+        var item = kpis[i];
+        html += '<div class="summary-card">' +
+            '<div class="sc-value">' + escapeHtml(item.value) + '</div>' +
+            '<div class="sc-label">' + escapeHtml(item.label) + '</div>' +
+            '</div>';
+    }
+
+    grid.innerHTML = html;
+}
+
+function renderMonitoringMiniCards(containerId, cards) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+
+    var html = '';
+    for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        html += '<div class="monitoring-mini-card">' +
+            '<div class="mmc-label">' + escapeHtml(card.label) + '</div>' +
+            '<div class="mmc-value">' + escapeHtml(card.value) + '</div>' +
+            '<div class="mmc-sub">' + escapeHtml(card.subtext || '') + '</div>' +
+            '</div>';
+    }
+
+    container.innerHTML = html;
+}
+
+function renderAPIBuilderMetricsDashboard(apiStatsData, apiCountData, builderSummary, builderAPIs, shouldTrackTrend) {
+    var body = document.getElementById('apiBuilderMetricsBody');
+    if (!body) return;
+
+    var metrics = Array.isArray(apiStatsData && apiStatsData.metrics) ? apiStatsData.metrics : [];
+    var apis = Array.isArray(builderAPIs) ? builderAPIs : [];
+    var metricByKey = {};
+
+    for (var i = 0; i < metrics.length; i++) {
+        var metric = metrics[i] || {};
+        var key = String(metric.method || '').toUpperCase() + ' ' + normalizeMetricEndpoint(metric.endpoint || '');
+        metricByKey[key] = metric;
+    }
+
+    var rows = [];
+    for (var j = 0; j < apis.length; j++) {
+        var api = apis[j] || {};
+        var method = String(api.method || 'GET').toUpperCase();
+        var path = normalizeMetricEndpoint(api.path || '/');
+        var metricKey = method + ' ' + path;
+        var endpointMetric = metricByKey[metricKey] || null;
+
+        var calls = endpointMetric ? safeNumber(endpointMetric.total_calls) : safeNumber(api.hit_count);
+        var success = endpointMetric ? safeNumber(endpointMetric.success_calls) : 0;
+        var errors = endpointMetric ? safeNumber(endpointMetric.error_calls) : 0;
+        var avgMs = endpointMetric ? safeNumber(endpointMetric.average_duration_ms) : 0;
+        var successRate = calls > 0 ? (success * 100) / calls : 0;
+
+        rows.push({
+            api: api,
+            method: method,
+            path: path,
+            calls: calls,
+            success: success,
+            errors: errors,
+            avgMs: avgMs,
+            successRate: successRate,
+            lastCalled: endpointMetric ? endpointMetric.last_called : ''
+        });
+    }
+
+    rows.sort(function(a, b) {
+        return b.calls - a.calls;
+    });
+
+    if (shouldTrackTrend) {
+        updateMonitoringAPITrendHistory(rows);
+    }
+
+    if (rows.length === 0) {
+        body.innerHTML = '<tr><td colspan="9" class="monitoring-loading-cell">No API Builder endpoints found.</td></tr>';
+    } else {
+        var html = '';
+        for (var r = 0; r < rows.length; r++) {
+            var row = rows[r];
+            var statusClass = monitoringStatusClassFromRate(row.successRate);
+            var statusText = row.calls === 0 ? 'No Traffic' : ('Healthy ' + formatMetricPercent(row.successRate));
+            var apiStatus = String((row.api && row.api.status) || 'draft').toLowerCase();
+            var apiStatusClass = 'status-draft';
+            if (apiStatus === 'active') apiStatusClass = 'status-active';
+            if (apiStatus === 'inactive') apiStatusClass = 'status-inactive';
+
+            html += '<tr>' +
+                '<td><strong>' + escapeHtml(row.api.name || 'Unnamed API') + '</strong></td>' +
+                '<td><span class="method-badge method-' + escapeHtml(row.method.toLowerCase()) + '">' + escapeHtml(row.method) + '</span> <code>' + escapeHtml(row.path) + '</code></td>' +
+                '<td>' + formatMetricNumber(row.calls) + '</td>' +
+                '<td>' + renderMonitoringAPISparkline(row.method, row.path) + '</td>' +
+                '<td>' + formatMetricNumber(row.success) + '</td>' +
+                '<td>' + formatMetricNumber(row.errors) + '</td>' +
+                '<td>' + formatMetricDuration(row.avgMs) + '</td>' +
+                '<td>' + escapeHtml(formatMetricDateTime(row.lastCalled)) + '</td>' +
+                '<td><span class="status-badge ' + apiStatusClass + '">' + escapeHtml(apiStatus) + '</span> <span class="status-badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
+                '</tr>';
+        }
+        body.innerHTML = html;
+    }
+
+    var totalCalls = safeNumber(apiStatsData && apiStatsData.total_calls);
+    var successCalls = safeNumber(apiStatsData && apiStatsData.success_calls);
+    var errorCalls = safeNumber(apiStatsData && apiStatsData.error_calls);
+    var avgDuration = safeNumber(apiStatsData && apiStatsData.average_duration_ms);
+    var totalEndpoints = safeNumber(apiCountData && apiCountData.total_unique_endpoints);
+    var totalAPIs = safeNumber(builderSummary && builderSummary.total_apis);
+    var totalHits = safeNumber(builderSummary && builderSummary.total_hits);
+    var successRateAll = totalCalls > 0 ? (successCalls * 100) / totalCalls : 0;
+
+    renderMonitoringMiniCards('apiBuilderMetricCards', [
+        { label: 'Total APIs', value: formatMetricNumber(totalAPIs || apis.length), subtext: 'Configured in API Builder' },
+        { label: 'Tracked Endpoints', value: formatMetricNumber(totalEndpoints), subtext: 'From API metrics tracker' },
+        { label: 'Total Calls', value: formatMetricNumber(totalCalls || totalHits), subtext: 'Observed runtime traffic' },
+        { label: 'Success Rate', value: formatMetricPercent(successRateAll), subtext: formatMetricNumber(errorCalls) + ' errors' },
+        { label: 'Avg Duration', value: formatMetricDuration(avgDuration), subtext: 'Across tracked endpoints' }
+    ]);
+}
+
+function renderRealmClientMetricsDashboard(realms, realmDashboards, clients) {
+    var body = document.getElementById('realmClientMetricsBody');
+    if (!body) return;
+
+    var realmList = Array.isArray(realms) ? realms : [];
+    var clientList = Array.isArray(clients) ? clients : [];
+
+    var totalClients = 0;
+    var totalActiveClients = 0;
+    var totalUsers = 0;
+    var totalActiveSessions = 0;
+    var totalRecentEvents = 0;
+
+    if (realmList.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="monitoring-loading-cell">No realms found or realm endpoints are unavailable.</td></tr>';
+    } else {
+        var rows = '';
+        for (var i = 0; i < realmList.length; i++) {
+            var realm = realmList[i] || {};
+            var realmID = String(realm.id || realm.name || '');
+            var dashboard = (realmDashboards && realmDashboards[realmID]) ? realmDashboards[realmID] : {};
+            var realmClients = clientList.filter(function(client) {
+                return String(client && client.realm_id || '') === realmID;
+            });
+
+            var userCount = safeNumber(dashboard.user_count);
+            var clientCount = safeNumber(dashboard.client_count);
+            if (clientCount === 0) {
+                clientCount = realmClients.length;
+            }
+            var activeClients = realmClients.filter(function(client) {
+                return client && client.active !== false;
+            }).length;
+            var roleCount = safeNumber(dashboard.role_count);
+            var activeSessions = safeNumber(dashboard.active_session_count);
+            var recentEvents = Array.isArray(dashboard.recent_events) ? dashboard.recent_events.length : 0;
+
+            totalClients += clientCount;
+            totalActiveClients += activeClients;
+            totalUsers += userCount;
+            totalActiveSessions += activeSessions;
+            totalRecentEvents += recentEvents;
+
+            rows += '<tr>' +
+                '<td><strong>' + escapeHtml(realm.display_name || realm.name || realmID || 'unknown') + '</strong></td>' +
+                '<td>' + formatMetricNumber(userCount) + '</td>' +
+                '<td>' + formatMetricNumber(clientCount) + '</td>' +
+                '<td>' + formatMetricNumber(activeClients) + '</td>' +
+                '<td>' + formatMetricNumber(roleCount) + '</td>' +
+                '<td>' + formatMetricNumber(activeSessions) + '</td>' +
+                '<td>' + formatMetricNumber(recentEvents) + '</td>' +
+                '</tr>';
+        }
+        body.innerHTML = rows;
+    }
+
+    renderMonitoringMiniCards('realmClientMetricCards', [
+        { label: 'Realms', value: formatMetricNumber(realmList.length), subtext: 'IAM v2 realm count' },
+        { label: 'Clients', value: formatMetricNumber(totalClients), subtext: formatMetricNumber(totalActiveClients) + ' active clients' },
+        { label: 'Realm Users', value: formatMetricNumber(totalUsers), subtext: 'Across all realms' },
+        { label: 'Active Sessions', value: formatMetricNumber(totalActiveSessions), subtext: 'SSO sessions currently active' },
+        { label: 'Recent Events', value: formatMetricNumber(totalRecentEvents), subtext: 'Events sampled per realm' }
+    ]);
+
+    return {
+        totalRealms: realmList.length,
+        totalClients: totalClients,
+        totalActiveClients: totalActiveClients,
+        totalRealmUsers: totalUsers,
+        totalActiveSessions: totalActiveSessions,
+        totalRecentEvents: totalRecentEvents
+    };
+}
+
+function buildUserRoleSummary(users, roles, bindings) {
+    var roleNameByID = {};
+    var roleCounts = {};
+    var bindingUsers = {};
+
+    var roleList = Array.isArray(roles) ? roles : [];
+    for (var i = 0; i < roleList.length; i++) {
+        var role = roleList[i] || {};
+        if (role.id) {
+            roleNameByID[role.id] = normalizeIAMRoleName(role.name || '');
+        }
+    }
+
+    var bindingRoleNamesByUser = {};
+    var bindingList = Array.isArray(bindings) ? bindings : [];
+    for (var j = 0; j < bindingList.length; j++) {
+        var binding = bindingList[j] || {};
+        var userID = String(binding.user_id || '');
+        if (!userID) continue;
+
+        bindingUsers[userID] = true;
+        if (!bindingRoleNamesByUser[userID]) {
+            bindingRoleNamesByUser[userID] = [];
+        }
+
+        var roleName = roleNameByID[binding.role_id] || normalizeIAMRoleName(binding.role_name || '');
+        if (roleName) {
+            bindingRoleNamesByUser[userID].push(roleName);
+        }
+    }
+
+    var userList = Array.isArray(users) ? users : [];
+    var totalUsers = userList.length;
+    var activeUsers = 0;
+    var disabledUsers = 0;
+    var verifiedUsers = 0;
+    var recentUsers7d = 0;
+    var unassignedUsers = 0;
+
+    var now = Date.now();
+    var sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+    for (var u = 0; u < userList.length; u++) {
+        var user = userList[u] || {};
+        var uid = String(user.id || '');
+
+        if (user.active) activeUsers++; else disabledUsers++;
+        if (user.email_verified) verifiedUsers++;
+
+        var createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
+        if (createdAt > 0 && (now - createdAt) <= sevenDaysMs) {
+            recentUsers7d++;
+        }
+
+        var roleSet = {};
+        var userRoles = Array.isArray(user.roles) ? user.roles : [];
+        for (var r = 0; r < userRoles.length; r++) {
+            var normalized = normalizeIAMRoleName(userRoles[r]);
+            if (normalized) {
+                roleSet[normalized] = true;
+            }
+        }
+
+        var boundRoles = bindingRoleNamesByUser[uid] || [];
+        for (var b = 0; b < boundRoles.length; b++) {
+            if (boundRoles[b]) {
+                roleSet[boundRoles[b]] = true;
+            }
+        }
+
+        var roleKeys = Object.keys(roleSet);
+        if (roleKeys.length === 0) {
+            unassignedUsers++;
+        }
+
+        for (var x = 0; x < roleKeys.length; x++) {
+            var roleName = roleKeys[x];
+            roleCounts[roleName] = (roleCounts[roleName] || 0) + 1;
+        }
+    }
+
+    return {
+        totalUsers: totalUsers,
+        activeUsers: activeUsers,
+        disabledUsers: disabledUsers,
+        verifiedUsers: verifiedUsers,
+        recentUsers7d: recentUsers7d,
+        unassignedUsers: unassignedUsers,
+        totalRoles: roleList.length,
+        totalBindings: bindingList.length,
+        usersWithBindings: Object.keys(bindingUsers).length,
+        roleCounts: roleCounts
+    };
+}
+
+function renderUserMetricsDashboard(users, roles, bindings) {
+    var body = document.getElementById('userMetricsBody');
+    if (!body) return null;
+
+    var summary = buildUserRoleSummary(users, roles, bindings);
+
+    var topRoles = Object.keys(summary.roleCounts)
+        .sort(function(a, b) { return summary.roleCounts[b] - summary.roleCounts[a]; })
+        .slice(0, 4)
+        .map(function(name) { return name + ' (' + summary.roleCounts[name] + ')'; });
+
+    renderMonitoringMiniCards('userMetricCards', [
+        { label: 'Total Users', value: formatMetricNumber(summary.totalUsers), subtext: formatMetricNumber(summary.activeUsers) + ' active users' },
+        { label: 'Verified Email', value: formatMetricNumber(summary.verifiedUsers), subtext: formatMetricPercent(summary.totalUsers > 0 ? (summary.verifiedUsers * 100) / summary.totalUsers : 0) },
+        { label: 'Recent Users (7d)', value: formatMetricNumber(summary.recentUsers7d), subtext: 'New identities this week' },
+        { label: 'Role Bindings', value: formatMetricNumber(summary.totalBindings), subtext: formatMetricNumber(summary.usersWithBindings) + ' users bound' },
+        { label: 'Unassigned Users', value: formatMetricNumber(summary.unassignedUsers), subtext: 'No effective role mapping' }
+    ]);
+
+    var rows = '';
+    rows += '<tr><td>Total IAM users</td><td>' + formatMetricNumber(summary.totalUsers) + '</td><td>All users available via /iam/admin/users</td></tr>';
+    rows += '<tr><td>Active users</td><td>' + formatMetricNumber(summary.activeUsers) + '</td><td>Enabled accounts currently allowed to login</td></tr>';
+    rows += '<tr><td>Disabled users</td><td>' + formatMetricNumber(summary.disabledUsers) + '</td><td>Accounts marked inactive</td></tr>';
+    rows += '<tr><td>Email verified</td><td>' + formatMetricNumber(summary.verifiedUsers) + '</td><td>' + formatMetricPercent(summary.totalUsers > 0 ? (summary.verifiedUsers * 100) / summary.totalUsers : 0) + ' of total users</td></tr>';
+    rows += '<tr><td>Recent users (last 7 days)</td><td>' + formatMetricNumber(summary.recentUsers7d) + '</td><td>Based on created_at timestamps</td></tr>';
+    rows += '<tr><td>Total roles</td><td>' + formatMetricNumber(summary.totalRoles) + '</td><td>Roles currently available in IAM</td></tr>';
+    rows += '<tr><td>Users with explicit bindings</td><td>' + formatMetricNumber(summary.usersWithBindings) + '</td><td>Users linked through /iam/admin/role-bindings</td></tr>';
+    rows += '<tr><td>Top assigned roles</td><td>' + formatMetricNumber(topRoles.length) + '</td><td>' + escapeHtml(topRoles.join(', ') || 'No roles assigned') + '</td></tr>';
+    rows += '<tr><td>Unassigned users</td><td>' + formatMetricNumber(summary.unassignedUsers) + '</td><td>Users with no role from user record or bindings</td></tr>';
+
+    body.innerHTML = rows;
+    return summary;
+}
+
+function applyMonitoringFiltersAndRender(options) {
+    var opts = options || {};
+    var trackTrend = !!opts.trackTrend;
+    var snapshot = monitoringDataSnapshot || {};
+    var selectedRealm = getSelectedMonitoringRealm();
+    snapshot.selectedRealm = selectedRealm;
+
+    var allRealms = Array.isArray(snapshot.realms) ? snapshot.realms : [];
+    var allClients = Array.isArray(snapshot.clients) ? snapshot.clients : [];
+    var allUsers = Array.isArray(snapshot.users) ? snapshot.users : [];
+    var allRoles = Array.isArray(snapshot.roles) ? snapshot.roles : [];
+    var allBindings = Array.isArray(snapshot.bindings) ? snapshot.bindings : [];
+
+    var usersAreRealmScoped = allUsers.some(function(user) {
+        return String(user && user.realm_id || '').trim() !== '';
+    });
+
+    var rolesAreRealmScoped = allRoles.some(function(role) {
+        return String(role && role.realm_id || '').trim() !== '';
+    });
+
+    var bindingsAreRealmScoped = allBindings.some(function(binding) {
+        return String(binding && binding.realm_id || '').trim() !== '';
+    });
+
+    var filteredRealms = selectedRealm
+        ? allRealms.filter(function(realm) { return normalizeRealmIdentifier(realm) === selectedRealm; })
+        : allRealms;
+
+    var filteredClients = selectedRealm
+        ? allClients.filter(function(client) { return String(client && client.realm_id || '') === selectedRealm; })
+        : allClients;
+
+    var filteredUsers = (selectedRealm && usersAreRealmScoped)
+        ? allUsers.filter(function(user) { return String(user && user.realm_id || '') === selectedRealm; })
+        : allUsers;
+
+    var filteredRoles = (selectedRealm && rolesAreRealmScoped)
+        ? allRoles.filter(function(role) { return String(role && role.realm_id || '') === selectedRealm; })
+        : allRoles;
+
+    var filteredBindings = (selectedRealm && bindingsAreRealmScoped)
+        ? allBindings.filter(function(binding) {
+            var bindingRealm = String(binding && binding.realm_id || '');
+            return !bindingRealm || bindingRealm === selectedRealm;
+        })
+        : allBindings;
+
+    renderAPIBuilderMetricsDashboard(snapshot.apiStats || {}, snapshot.apiCount || {}, snapshot.builderSummary || {}, snapshot.builderAPIs || [], trackTrend);
+    var realmTotals = renderRealmClientMetricsDashboard(filteredRealms, snapshot.realmDashboards || {}, filteredClients) || {};
+    var userSummary = renderUserMetricsDashboard(filteredUsers, filteredRoles, filteredBindings) || {};
+
+    var totalCalls = safeNumber(snapshot.apiStats && snapshot.apiStats.total_calls);
+    var successCalls = safeNumber(snapshot.apiStats && snapshot.apiStats.success_calls);
+    var apiSuccessRate = totalCalls > 0 ? ((successCalls * 100) / totalCalls) : 0;
+    var scopeLabel = getMonitoringRealmLabel(selectedRealm);
+
+    renderMonitoringKPIGrid([
+        { label: 'API Calls', value: formatMetricNumber(snapshot.apiStats && snapshot.apiStats.total_calls) },
+        { label: 'API Success', value: formatMetricPercent(apiSuccessRate) },
+        { label: 'Realms', value: formatMetricNumber(realmTotals.totalRealms) },
+        { label: 'Active Users', value: formatMetricNumber(userSummary.activeUsers) },
+        { label: 'Active Sessions', value: formatMetricNumber(realmTotals.totalActiveSessions) }
+    ]);
+
+    var realmUpdatedEl = document.getElementById('realmClientMetricsUpdatedAt');
+    if (realmUpdatedEl) {
+        var statusText = monitoringDataSnapshot.realmDashboardsReady ? 'Updated' : 'Loading';
+        realmUpdatedEl.textContent = 'Scope: ' + scopeLabel + ' | ' + statusText + ': ' + new Date().toLocaleTimeString();
+    }
+}
+
+function loadRealmDashboardDetails(realms) {
+    var realmList = Array.isArray(realms) ? realms : [];
+    if (realmList.length === 0) {
+        monitoringDataSnapshot.realmDashboards = {};
+        monitoringDataSnapshot.realmDashboardsReady = true;
+        applyMonitoringFiltersAndRender({ trackTrend: false });
+        return;
+    }
+
+    monitoringDataSnapshot.realmDashboardsReady = false;
+    applyMonitoringFiltersAndRender({ trackTrend: false });
+
+    var requests = realmList.map(function(realm) {
+        var realmKey = normalizeRealmIdentifier(realm);
+        if (!realmKey) {
+            return Promise.resolve(null);
+        }
+
+        return monitoringFetchJSON('/iam/v2/realms/' + encodeURIComponent(realmKey) + '/dashboard', 8000)
+            .then(function(dashboard) {
+                return { key: realmKey, dashboard: dashboard };
+            })
+            .catch(function() {
+                return null;
+            });
+    });
+
+    Promise.allSettled(requests).then(function(results) {
+        var dashboardsByRealm = {};
+        for (var i = 0; i < results.length; i++) {
+            var item = results[i];
+            var entry = item && item.status === 'fulfilled' ? item.value : null;
+            if (!entry || !entry.key) continue;
+            dashboardsByRealm[entry.key] = entry.dashboard || {};
+        }
+
+        monitoringDataSnapshot.realmDashboards = dashboardsByRealm;
+        monitoringDataSnapshot.realmDashboardsReady = true;
+        applyMonitoringFiltersAndRender({ trackTrend: false });
+    }).catch(function() {
+        monitoringDataSnapshot.realmDashboardsReady = true;
+        applyMonitoringFiltersAndRender({ trackTrend: false });
+    });
+}
+
+function loadMonitoringDashboards() {
+    if (!document.getElementById('monitoring')) {
+        return;
+    }
+
+    setMonitoringBodyLoading('apiBuilderMetricsBody', 9, 'Loading API Builder metrics...');
+    setMonitoringBodyLoading('realmClientMetricsBody', 7, 'Loading realm and client metrics...');
+    setMonitoringBodyLoading('userMetricsBody', 3, 'Loading user metrics...');
+    setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Refreshing...');
+    setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Refreshing...');
+    setMonitoringUpdatedAt('userMetricsUpdatedAt', 'Refreshing...');
+
+    monitoringDataSnapshot.realmDashboardsReady = false;
+
+    Promise.all([
+        monitoringFetchJSON('/api/admin/metrics/stats').catch(function() { return { data: {} }; }),
+        monitoringFetchJSON('/api/admin/metrics/count').catch(function() { return { data: {} }; }),
+        monitoringFetchJSON('/api/v1/builder/summary?api_type=rest').catch(function() { return {}; }),
+        monitoringFetchJSON('/api/v1/builder/apis?api_type=rest').catch(function() { return { apis: [] }; }),
+        monitoringFetchJSON('/iam/admin/users').catch(function() { return { users: [] }; }),
+        monitoringFetchJSON('/iam/admin/roles').catch(function() { return { roles: [] }; }),
+        monitoringFetchJSON('/iam/admin/role-bindings').catch(function() { return { bindings: [] }; }),
+        monitoringFetchJSON('/iam/v2/realms').catch(function() { return []; }),
+        monitoringFetchJSON('/iam/v2/pg-clients', 8000).catch(function() { return []; })
+    ]).then(function(results) {
+        var apiStatsPayload = results[0] || {};
+        var apiCountPayload = results[1] || {};
+        var builderSummary = results[2] || {};
+        var builderListPayload = results[3] || {};
+        var usersPayload = results[4] || {};
+        var rolesPayload = results[5] || {};
+        var bindingsPayload = results[6] || {};
+        var realmsPayload = results[7] || [];
+        var clientsPayload = results[8] || [];
+
+        var realms = Array.isArray(realmsPayload) ? realmsPayload : [];
+        var clients = Array.isArray(clientsPayload) ? clientsPayload : [];
+
+        var apiStatsData = (apiStatsPayload && apiStatsPayload.data) ? apiStatsPayload.data : {};
+        var apiCountData = (apiCountPayload && apiCountPayload.data) ? apiCountPayload.data : {};
+        var builderAPIs = Array.isArray(builderListPayload.apis) ? builderListPayload.apis : [];
+        var users = Array.isArray(usersPayload.users) ? usersPayload.users : [];
+        var roles = Array.isArray(rolesPayload.roles) ? rolesPayload.roles : [];
+        var bindings = Array.isArray(bindingsPayload.bindings) ? bindingsPayload.bindings : [];
+
+        monitoringDataSnapshot.apiStats = apiStatsData;
+        monitoringDataSnapshot.apiCount = apiCountData;
+        monitoringDataSnapshot.builderSummary = builderSummary;
+        monitoringDataSnapshot.builderAPIs = builderAPIs;
+        monitoringDataSnapshot.realms = realms;
+        monitoringDataSnapshot.realmDashboards = {};
+        monitoringDataSnapshot.clients = clients;
+        monitoringDataSnapshot.users = users;
+        monitoringDataSnapshot.roles = roles;
+        monitoringDataSnapshot.bindings = bindings;
+
+        populateMonitoringRealmFilter(realms);
+        applyMonitoringFiltersAndRender({ trackTrend: true });
+        loadRealmDashboardDetails(realms);
+
+        setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt');
+        setMonitoringUpdatedAt('userMetricsUpdatedAt');
+    }).catch(function(err) {
+        setMonitoringUpdatedAt('apiBuilderMetricsUpdatedAt', 'Unavailable');
+        setMonitoringUpdatedAt('realmClientMetricsUpdatedAt', 'Unavailable');
+        setMonitoringUpdatedAt('userMetricsUpdatedAt', 'Unavailable');
+        setMonitoringBodyLoading('apiBuilderMetricsBody', 9, 'Failed to load API Builder metrics: ' + (err.message || 'unknown error'));
+        setMonitoringBodyLoading('realmClientMetricsBody', 7, 'Failed to load realm and client metrics.');
+        setMonitoringBodyLoading('userMetricsBody', 3, 'Failed to load user metrics.');
+        renderMonitoringKPIGrid([
+            { label: 'API Calls', value: '--' },
+            { label: 'API Success', value: '--' },
+            { label: 'Realms', value: '--' },
+            { label: 'Active Users', value: '--' },
+            { label: 'Active Sessions', value: '--' }
+        ]);
+    });
 }
 
 function loadStatusData() {
@@ -479,200 +1458,376 @@ function guessDbType(dbName) {
 // USER MANAGEMENT
 // ====================================
 
+var iamUsersCache = [];
+var iamRolesCache = [];
+var iamBindingsByUserID = {};
+
+function openIAMAdminConsole() {
+    window.open('/iam-admin', '_blank');
+}
+
+function normalizeIAMRoleName(roleName) {
+    var value = String(roleName || '').toLowerCase().trim();
+    if (!value) return '';
+    return value;
+}
+
+function roleWeight(roleName) {
+    var normalized = normalizeIAMRoleName(roleName);
+    if (normalized === 'sysadmin' || normalized === 'system-manager' || normalized === 'system_admin' || normalized === 'system-admin') return 0;
+    if (normalized === 'superadmin' || normalized === 'super-admin') return 1;
+    if (normalized === 'admin') return 1;
+    if (normalized === 'api-manager' || normalized === 'api_manager') return 2;
+    if (normalized === 'manager') return 2;
+    if (normalized === 'user') return 3;
+    return 9;
+}
+
+function roleBadgeClass(roleName) {
+    var normalized = normalizeIAMRoleName(roleName);
+    if (normalized === 'sysadmin' || normalized === 'system-manager' || normalized === 'system_admin' || normalized === 'system-admin') return 'role-sysadmin';
+    if (normalized === 'superadmin' || normalized === 'super-admin') return 'role-admin';
+    if (normalized === 'admin') return 'role-admin';
+    if (normalized === 'api-manager' || normalized === 'api_manager') return 'role-manager';
+    if (normalized === 'manager') return 'role-manager';
+    if (normalized === 'user') return 'role-user';
+    return 'role-default';
+}
+
+function sortRoleNames(roleNames) {
+    return roleNames.slice().sort(function(a, b) {
+        var w = roleWeight(a) - roleWeight(b);
+        if (w !== 0) return w;
+        return String(a).localeCompare(String(b));
+    });
+}
+
+function resolvePrimaryRole(roleNames) {
+    if (!roleNames || roleNames.length === 0) return 'user';
+    var sorted = sortRoleNames(roleNames);
+    return normalizeIAMRoleName(sorted[0]) || 'user';
+}
+
+function roleNamesForSelection(roleName) {
+    var normalized = normalizeIAMRoleName(roleName);
+    if (!normalized || normalized === 'user') {
+        return ['user'];
+    }
+    if (normalized === 'sysadmin') {
+        return ['sysadmin'];
+    }
+    return ['user', normalized];
+}
+
+function parseJSONResponse(response) {
+    return response.text().then(function(text) {
+        var payload = {};
+        try {
+            payload = text ? JSON.parse(text) : {};
+        } catch (e) {
+            payload = { raw: text };
+        }
+
+        if (!response.ok) {
+            var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
+            var error = new Error(message);
+            error.status = response.status;
+            error.payload = payload;
+            throw error;
+        }
+
+        return payload;
+    });
+}
+
+function iamAdminFetch(path, options) {
+    var opts = options || {};
+    opts.headers = Object.assign({}, getAuthHeaders(), opts.headers || {});
+    return fetch(BACKEND_URL + path, opts).then(parseJSONResponse);
+}
+
+function getUserRolesForCard(user) {
+    var seen = {};
+    var roles = [];
+
+    var fromUser = Array.isArray(user && user.roles) ? user.roles : [];
+    var fromBindings = iamBindingsByUserID[user && user.id ? user.id : ''] || [];
+    var combined = fromUser.concat(fromBindings);
+
+    for (var i = 0; i < combined.length; i++) {
+        var normalized = normalizeIAMRoleName(combined[i]);
+        if (!normalized || seen[normalized]) continue;
+        seen[normalized] = true;
+        roles.push(normalized);
+    }
+
+    return sortRoleNames(roles);
+}
+
+function buildRoleOptionsHTML(selectedRole) {
+    var seen = {};
+    var roleNames = [];
+
+    for (var i = 0; i < iamRolesCache.length; i++) {
+        var role = iamRolesCache[i];
+        if (!role || !role.name) continue;
+        var normalized = normalizeIAMRoleName(role.name);
+        if (!normalized || seen[normalized]) continue;
+        seen[normalized] = true;
+        roleNames.push(normalized);
+    }
+
+    if (!seen.user) {
+        roleNames.push('user');
+    }
+
+    roleNames = sortRoleNames(roleNames);
+    var target = normalizeIAMRoleName(selectedRole) || 'user';
+
+    if (roleNames.indexOf(target) === -1) {
+        roleNames.unshift(target);
+        roleNames = sortRoleNames(roleNames);
+    }
+
+    var options = '';
+    for (var j = 0; j < roleNames.length; j++) {
+        var roleName = roleNames[j];
+        options += '<option value="' + escapeHtml(roleName) + '"' + (roleName === target ? ' selected' : '') + '>' + escapeHtml(roleName) + '</option>';
+    }
+    return options;
+}
+
+function populateCreateIAMUserRoleOptions() {
+    var select = document.getElementById('createIAMUserRole');
+    if (!select) return;
+
+    select.innerHTML = buildRoleOptionsHTML('user');
+    select.value = 'user';
+}
+
+function renderUsers(users) {
+    var userList = document.getElementById('userList');
+    if (!userList) return;
+
+    if (!users || users.length === 0) {
+        userList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary,#94a3b8);">No IAM users found. Use the create action to add users.</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < users.length; i++) {
+        var u = users[i] || {};
+        var userID = u.id || '';
+        var email = u.email || '';
+        var displayName = u.display_name || (email ? email.split('@')[0] : 'Unknown');
+        var createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
+        var statusColor = u.active ? '#10b981' : '#ef4444';
+        var verifyColor = u.email_verified ? '#10b981' : '#f59e0b';
+        var roleNames = getUserRolesForCard(u);
+        var primaryRole = resolvePrimaryRole(roleNames);
+
+        var roleBadges = '';
+        if (roleNames.length === 0) {
+            roleBadges = '<span class="user-role-badge role-default">unassigned</span>';
+        } else {
+            for (var r = 0; r < roleNames.length; r++) {
+                var roleName = roleNames[r];
+                roleBadges += '<span class="user-role-badge ' + roleBadgeClass(roleName) + '">' + escapeHtml(roleName) + '</span>';
+            }
+        }
+
+        html += '<div class="user-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                '<strong style="font-size:1.1em;">' + escapeHtml(displayName) + '</strong>' +
+                '<span style="color:' + statusColor + ';font-weight:600;">' + (u.active ? '● Active' : '● Disabled') + '</span>' +
+            '</div>' +
+            '<div style="color:var(--text-secondary);font-size:0.95em;margin-bottom:8px;">' + escapeHtml(email) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;font-weight:500;">' +
+                '<span style="color:' + verifyColor + ';">' + (u.email_verified ? '● Email Verified' : '● Email Unverified') + '</span>' +
+                '<span style="color:var(--text-muted);">Created: ' + createdAt + '</span>' +
+            '</div>' +
+            '<div class="role-chip-row">' + roleBadges + '</div>' +
+            '<div class="user-role-actions">' +
+                '<span>Access role</span>' +
+                '<select class="user-role-select" data-user-id="' + escapeHtml(userID) + '">' + buildRoleOptionsHTML(primaryRole) + '</select>' +
+                '<button class="btn-secondary btn-sm" data-user-id="' + escapeHtml(userID) + '" onclick="updateUserRole(this)">Update Role</button>' +
+            '</div>' +
+        '</div>';
+    }
+
+    userList.innerHTML = html;
+}
+
 function loadUsers() {
     var userList = document.getElementById('userList');
     if (!userList) return;
     userList.innerHTML = '<div class="loading">Loading users...</div>';
 
-    fetch(BACKEND_URL + '/api/v1/users', { headers: getAuthHeaders() })
-        .then(function(response) {
-            return response.text().then(function(text) {
-                var payload = {};
-                try {
-                    payload = text ? JSON.parse(text) : {};
-                } catch (e) {
-                    payload = { raw: text };
-                }
+    Promise.all([
+        iamAdminFetch('/iam/admin/users'),
+        iamAdminFetch('/iam/admin/roles'),
+        iamAdminFetch('/iam/admin/role-bindings')
+    ])
+        .then(function(results) {
+            var usersPayload = results[0] || {};
+            var rolesPayload = results[1] || {};
+            var bindingsPayload = results[2] || {};
 
-                if (!response.ok) {
-                    var message = (payload && (payload.error || payload.message)) || ('Request failed with status ' + response.status);
-                    throw new Error(message);
-                }
+            iamUsersCache = usersPayload.users || [];
+            iamRolesCache = rolesPayload.roles || [];
 
-                return payload;
-            });
-        })
-        .then(function(data) {
-            var users = data.users || [];
-            if (users.length === 0) {
-                userList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary,#94a3b8);">No users found. Click "+ Create User" to add one.</div>';
-                return;
+            var roleByID = {};
+            for (var i = 0; i < iamRolesCache.length; i++) {
+                var role = iamRolesCache[i];
+                if (role && role.id) {
+                    roleByID[role.id] = role;
+                }
             }
 
-            var html = '';
-            for (var i = 0; i < users.length; i++) {
-                var u = users[i];
-                var roleClass = 'role-' + u.role;
-                var statusColor = u.status === 'active' ? '#10b981' : '#ef4444';
-                html += '<div class="user-card">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-                    '<strong style="font-size:1.1em;">' + escapeHtml(u.username) + '</strong>' +
-                    '<span class="user-role-badge ' + roleClass + '">' + escapeHtml(u.role.toUpperCase()) + '</span>' +
-                    '</div>' +
-                    '<div style="color:var(--text-secondary,#94a3b8);font-size:0.9em;">' + escapeHtml(u.email) + '</div>' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85em;">' +
-                    '<span style="color:' + statusColor + ';">' + (u.status === 'active' ? '● Active' : '● Disabled') + '</span>' +
-                    '<span style="color:var(--text-secondary,#94a3b8);">Created: ' + new Date(u.created_at).toLocaleDateString() + '</span>' +
-                    '</div>' +
-                    '<div class="user-card-actions">' +
-                    '<button class="btn-edit" onclick="openEditUserModal(\'' + u.id + '\')">✏️ Edit</button>' +
-                    '<button class="btn-delete" onclick="deleteUser(\'' + u.id + '\', \'' + escapeHtml(u.username) + '\')">🗑️ Delete</button>' +
-                    '</div>' +
-                    '</div>';
+            iamBindingsByUserID = {};
+            var bindings = bindingsPayload.bindings || [];
+            for (var j = 0; j < bindings.length; j++) {
+                var binding = bindings[j];
+                if (!binding || !binding.user_id || !binding.role_id) continue;
+                var linkedRole = roleByID[binding.role_id];
+                var roleName = linkedRole && linkedRole.name ? normalizeIAMRoleName(linkedRole.name) : '';
+                if (!roleName) continue;
+
+                if (!iamBindingsByUserID[binding.user_id]) {
+                    iamBindingsByUserID[binding.user_id] = [];
+                }
+                iamBindingsByUserID[binding.user_id].push(roleName);
             }
-            userList.innerHTML = html;
+
+            populateCreateIAMUserRoleOptions();
+            renderUsers(iamUsersCache);
         })
         .catch(function(err) {
             userList.innerHTML = '<div style="color:#ef4444;padding:20px;">Failed to load users: ' + err.message + '</div>';
         });
 }
 
-function openCreateUserModal() {
-    document.getElementById('createUserModal').style.display = 'flex';
-    document.getElementById('newUserName').value = '';
-    document.getElementById('newUserEmail').value = '';
-    document.getElementById('newUserPassword').value = '';
-    document.getElementById('newUserRole').value = 'user';
-    document.getElementById('createUserResult').style.display = 'none';
+function openCreateIAMUserModal() {
+    populateCreateIAMUserRoleOptions();
+    document.getElementById('createIAMUserEmail').value = '';
+    document.getElementById('createIAMUserDisplayName').value = '';
+    document.getElementById('createIAMUserPassword').value = '';
+    document.getElementById('createIAMUserRole').value = 'user';
+    document.getElementById('createIAMUserActive').checked = true;
+    document.getElementById('createIAMUserEmailVerified').checked = false;
+    document.getElementById('createIAMUserResult').style.display = 'none';
+    document.getElementById('createIAMUserModal').style.display = 'flex';
 }
 
-function closeCreateUserModal() {
-    document.getElementById('createUserModal').style.display = 'none';
+function closeCreateIAMUserModal() {
+    document.getElementById('createIAMUserModal').style.display = 'none';
 }
 
-function submitCreateUser(event) {
+function submitCreateIAMUser(event) {
     event.preventDefault();
-    var btn = document.getElementById('createUserBtn');
-    var resultDiv = document.getElementById('createUserResult');
-    
-    var payload = {
-        username: document.getElementById('newUserName').value.trim(),
-        email: document.getElementById('newUserEmail').value.trim(),
-        password: document.getElementById('newUserPassword').value,
-        role: document.getElementById('newUserRole').value
-    };
 
-    btn.disabled = true;
-    btn.textContent = 'Creating...';
+    var email = (document.getElementById('createIAMUserEmail').value || '').trim();
+    var displayName = (document.getElementById('createIAMUserDisplayName').value || '').trim();
+    var password = document.getElementById('createIAMUserPassword').value || '';
+    var roleName = normalizeIAMRoleName(document.getElementById('createIAMUserRole').value || 'user');
+    var active = document.getElementById('createIAMUserActive').checked;
+    var emailVerified = document.getElementById('createIAMUserEmailVerified').checked;
+
+    if (!email) {
+        alert('Email is required.');
+        return;
+    }
+    if (password.length < 8) {
+        alert('Password must be at least 8 characters.');
+        return;
+    }
+
+    var createBtn = document.getElementById('createIAMUserBtn');
+    var resultDiv = document.getElementById('createIAMUserResult');
+
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating...';
     resultDiv.style.display = 'none';
 
-    fetch(BACKEND_URL + '/api/v1/users', {
+    iamAdminFetch('/iam/admin/users', {
         method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-    })
-    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
-    .then(function(result) {
-        btn.disabled = false;
-        btn.textContent = 'Create User';
+        body: JSON.stringify({
+            email: email,
+            password: password,
+            display_name: displayName,
+            active: active,
+            email_verified: emailVerified,
+            role_names: roleNamesForSelection(roleName)
+        })
+    }).then(function(payload) {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Create User';
+
         resultDiv.style.display = 'block';
-        if (result.ok) {
-            resultDiv.style.background = 'rgba(16,185,129,0.15)';
-            resultDiv.style.color = '#10b981';
-            resultDiv.textContent = 'User "' + payload.username + '" created successfully with role: ' + payload.role;
-            addOperationLog('User "' + payload.username + '" created (role: ' + payload.role + ')', 'success');
+        resultDiv.style.background = 'rgba(16,185,129,0.15)';
+        resultDiv.style.color = '#10b981';
+        resultDiv.textContent = 'IAM user created successfully: ' + (payload.email || email);
+
+        addOperationLog('IAM user created: ' + email, 'success');
+        setTimeout(function() {
+            closeCreateIAMUserModal();
             loadUsers();
-        } else {
-            resultDiv.style.background = 'rgba(239,68,68,0.15)';
-            resultDiv.style.color = '#ef4444';
-            resultDiv.textContent = result.data.error || 'Failed to create user';
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = 'Create User';
+        }, 400);
+    }).catch(function(err) {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Create User';
+
         resultDiv.style.display = 'block';
         resultDiv.style.background = 'rgba(239,68,68,0.15)';
         resultDiv.style.color = '#ef4444';
-        resultDiv.textContent = 'Connection error: ' + err.message;
+        resultDiv.textContent = err.message;
+        addOperationLog('IAM user creation failed: ' + err.message, 'error');
     });
 }
 
-function openEditUserModal(userId) {
-    fetch(BACKEND_URL + '/api/v1/users/' + userId, { headers: getAuthHeaders() })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var user = data.user;
-            if (!user) { alert('User not found'); return; }
-            document.getElementById('editUserId').value = user.id;
-            document.getElementById('editUserName').value = user.username;
-            document.getElementById('editUserEmail').value = user.email;
-            document.getElementById('editUserRole').value = user.role;
-            document.getElementById('editUserStatus').value = user.status || 'active';
-            document.getElementById('editUserModal').style.display = 'flex';
-        })
-        .catch(function(err) { alert('Failed to load user: ' + err.message); });
-}
+function updateUserRole(button) {
+    if (!button) return;
 
-function closeEditUserModal() {
-    document.getElementById('editUserModal').style.display = 'none';
-}
+    var userID = button.getAttribute('data-user-id') || '';
+    if (!userID) {
+        alert('Missing user identifier.');
+        return;
+    }
 
-function submitEditUser(event) {
-    event.preventDefault();
-    var userId = document.getElementById('editUserId').value;
-    var btn = document.getElementById('editUserBtn');
-    
-    var payload = {
-        email: document.getElementById('editUserEmail').value.trim(),
-        role: document.getElementById('editUserRole').value,
-        status: document.getElementById('editUserStatus').value
-    };
+    var actionsRow = button.parentElement;
+    var select = actionsRow ? actionsRow.querySelector('.user-role-select') : null;
+    if (!select) {
+        alert('Role selector not found.');
+        return;
+    }
 
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
+    var selectedRole = normalizeIAMRoleName(select.value || 'user');
+    if (!selectedRole) {
+        alert('Please select a role.');
+        return;
+    }
 
-    fetch(BACKEND_URL + '/api/v1/users/' + userId, {
+    if (!confirm('Update this user role to "' + selectedRole + '"?')) {
+        return;
+    }
+
+    var previousLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Updating...';
+
+    iamAdminFetch('/iam/admin/users/' + encodeURIComponent(userID) + '/roles', {
         method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-    })
-    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
-    .then(function(result) {
-        btn.disabled = false;
-        btn.textContent = 'Save Changes';
-        if (result.ok) {
-            closeEditUserModal();
-            addOperationLog('User updated successfully', 'success');
-            loadUsers();
-        } else {
-            alert('Failed to update user: ' + (result.data.error || 'Unknown error'));
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = 'Save Changes';
-        alert('Connection error: ' + err.message);
+        body: JSON.stringify({ role_names: roleNamesForSelection(selectedRole) })
+    }).then(function() {
+        addOperationLog('Updated IAM role mapping for user ' + userID, 'success');
+        loadUsers();
+    }).catch(function(err) {
+        addOperationLog('IAM role update failed: ' + err.message, 'error');
+        alert('Failed to update user role: ' + err.message);
+    }).finally(function() {
+        button.disabled = false;
+        button.textContent = previousLabel;
     });
-}
-
-function deleteUser(userId, username) {
-    if (!confirm('Are you sure you want to delete user "' + username + '"? This action cannot be undone.')) return;
-
-    fetch(BACKEND_URL + '/api/v1/users/' + userId, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-    })
-    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
-    .then(function(result) {
-        if (result.ok) {
-            addOperationLog('User "' + username + '" deleted', 'success');
-            loadUsers();
-        } else {
-            alert('Failed to delete user: ' + (result.data.error || 'Unknown error'));
-        }
-    })
-    .catch(function(err) { alert('Connection error: ' + err.message); });
 }
 
 // ====================================
@@ -997,5 +2152,9 @@ window.addEventListener('click', function(event) {
     var connectModal = document.getElementById('connectDbServerModal');
     if (connectModal && event.target === connectModal) {
         closeConnectDbServerModal();
+    }
+    var createIAMUserModal = document.getElementById('createIAMUserModal');
+    if (createIAMUserModal && event.target === createIAMUserModal) {
+        closeCreateIAMUserModal();
     }
 });

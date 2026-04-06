@@ -1,14 +1,58 @@
 // Admin Dashboard JS — API Builder, File-to-Dashboard, Dashboard↔GIS Converter, File Scanner
 const BACKEND_URL = (() => {
-    const elem = document.getElementById('backendURL');
-    if (elem && elem.textContent) {
-        let url = elem.textContent.trim();
-        if (url.includes('axiomnizam:8000')) {
-            url = url.replace('axiomnizam:8000', 'localhost:8000');
+    function normalizeURL(raw) {
+        var value = String(raw || '').trim();
+        if (!value) return '';
+        if (value.length > 1 && value.endsWith('/')) {
+            value = value.slice(0, -1);
         }
-        return url;
+        return value;
     }
-    return 'http://' + window.location.hostname + ':8000';
+
+    function parseHostname(rawURL) {
+        try {
+            return new URL(rawURL).hostname.toLowerCase();
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function isLocalOrInternalHost(hostname) {
+        if (!hostname) return true;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '::1') return true;
+        if (hostname === 'axiomnizam' || hostname.endsWith('.local')) return true;
+        return hostname.indexOf('.') === -1;
+    }
+
+    function inferPublicBackendURL() {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        if (!browserHost || browserHost === 'localhost' || browserHost === '127.0.0.1' || browserHost === '0.0.0.0') {
+            return '';
+        }
+        var protocol = window.location.protocol || 'https:';
+        if (browserHost.indexOf('axiomnizam.') === 0) {
+            return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+        }
+        return protocol + '//' + browserHost;
+    }
+
+    if (typeof window.resolveBackendURL === 'function') {
+        var resolved = normalizeURL(window.resolveBackendURL());
+        if (resolved) return resolved;
+    }
+
+    var value = normalizeURL(window.BACKEND_URL || '');
+    if (value) {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        var browserIsPublic = browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0';
+        var backendHost = parseHostname(value);
+        if (browserIsPublic && isLocalOrInternalHost(backendHost)) {
+            return inferPublicBackendURL() || value;
+        }
+        return value;
+    }
+
+    return inferPublicBackendURL() || 'http://localhost:8000';
 })();
 
 let filteredMethod = 'ALL';
@@ -306,6 +350,56 @@ function clearSQLAssistantPanel() {
     renderSQLAssistantSuggestions();
 }
 
+function formatBuilderAPITimestamp(raw) {
+    if (!raw) return '--';
+    var date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString();
+}
+
+function formatBuilderAPIRateLimit(rateLimit) {
+    var parsed = parseInt(rateLimit, 10);
+    if (!parsed || parsed <= 0) return 'Unlimited';
+    return parsed + ' / min';
+}
+
+function renderAPIHoverMetricItem(label, value) {
+    return '<div class="api-hover-metric-item">' +
+        '<div class="api-hover-metric-label">' + escapeHtml(label) + '</div>' +
+        '<div class="api-hover-metric-value">' + escapeHtml(value) + '</div>' +
+        '</div>';
+}
+
+function renderAPIHoverMetrics(api) {
+    var queryParamCount = Array.isArray(api.query_params) ? api.query_params.length : 0;
+    var cacheTTL = parseInt(api.cache_ttl, 10);
+    if (!cacheTTL || cacheTTL <= 0) cacheTTL = 300;
+    var cacheLabel = api.cache_enabled ? ('On (' + cacheTTL + 's)') : 'Off';
+    var authLabel = api.auth_required ? 'Required' : 'Optional';
+    var sqlMode = api.sql_template ? 'SQL Template' : (api.graphql_query ? 'GraphQL Query' : 'Mock/Static');
+
+    return '<div class="api-hover-panel" role="tooltip">' +
+        '<div class="api-hover-title">Short API Metrics</div>' +
+        '<div class="api-hover-grid">' +
+            renderAPIHoverMetricItem('Hits', String(api.hit_count || 0)) +
+            renderAPIHoverMetricItem('Rate Limit', formatBuilderAPIRateLimit(api.rate_limit)) +
+            renderAPIHoverMetricItem('Auth', authLabel) +
+            renderAPIHoverMetricItem('Cache', cacheLabel) +
+            renderAPIHoverMetricItem('Query Params', String(queryParamCount)) +
+            renderAPIHoverMetricItem('Mode', sqlMode) +
+        '</div>' +
+        '<div class="api-hover-footnote">Updated: ' + escapeHtml(formatBuilderAPITimestamp(api.updated_at)) + '</div>' +
+        '</div>';
+}
+
+function renderAPINameCell(api) {
+    return '<div class="api-name-with-hover">' +
+        '<span class="api-name-text">' + escapeHtml(api.name) + '</span>' +
+        '<span class="api-hover-trigger" tabindex="0">Metrics</span>' +
+        renderAPIHoverMetrics(api) +
+        '</div>';
+}
+
 function loadCustomAPIs() {
     var catEl = document.getElementById('apiCategoryFilter');
     var statEl = document.getElementById('apiStatusFilter');
@@ -339,7 +433,7 @@ function loadCustomAPIs() {
             }
             html += '<tr>' +
                 '<td><span class="method-badge method-' + api.method.toLowerCase() + '">' + api.method + '</span></td>' +
-                '<td>' + escapeHtml(api.name) + '</td>' +
+                '<td>' + renderAPINameCell(api) + '</td>' +
                 '<td><code>' + escapeHtml(api.path) + '</code></td>' +
                 '<td>' + escapeHtml(api.category || '-') + '</td>' +
                 '<td>' + escapeHtml(api.source_database || '-') + '</td>' +

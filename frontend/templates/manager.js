@@ -1,7 +1,7 @@
 // Manager Portal JavaScript
 // View + Edit only — NO create, NO delete
 
-const BACKEND_URL = window.BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
 
 function mgrBuildEmbedURL(path) {
     const sep = path.indexOf('?') >= 0 ? '&' : '?';

@@ -1,3 +1,74 @@
+
+.gis-dashboard {
+    height: calc(100vh - 60px); 
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--bg-primary, #0f172a);
+    color: var(--text-primary, #f8fafc);
+    font-family: 'Inter', sans-serif;
+}
+
+.type-icon svg, .panel-icon svg, .summary-icon svg, .toggle-icon svg, .gis-tool-btn svg, .lucide {
+    vertical-align: middle;
+    width: 1rem;
+    height: 1rem;
+    display: inline-block;
+}
+
+.summary-icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: white;
+}
+
+.gis-type-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 0.5rem;
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.gis-type-btn.active {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--accent-color, #3b82f6);
+    color: var(--accent-color, #3b82f6);
+}
+
+.gis-type-btn:hover:not(.active) {
+    background: var(--border-color, #334155);
+    color: var(--text-primary, #f8fafc);
+}
+
+.gis-sidebar {
+    background: var(--card-bg, #1e293b);
+    border-right: 1px solid var(--border-color, #334155);
+    transition: transform 0.3s ease, margin 0.3s ease;
+}
+
+.gis-panel {
+    background: rgba(var(--card-bg-rgb, 30, 41, 59), 0.95);
+    border: 1px solid var(--border-color, #334155);
+    backdrop-filter: blur(8px);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.gis-panel-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color, #334155);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 /* =============================================
    AxiomNizam GIS Dashboard Styles
    ============================================= */
@@ -807,6 +878,25 @@
 }
 
 @media (max-width: 992px) {
+    .gis-dashboard {
+        height: auto;
+        min-height: calc(100dvh - 92px);
+        overflow: visible;
+    }
+
+    .gis-hub-container {
+        min-height: calc(100dvh - 92px);
+    }
+
+    .gis-type-bar {
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    .gis-type-group-label {
+        display: none;
+    }
+
     .gis-container {
         flex-direction: column;
         height: auto;
@@ -838,6 +928,11 @@
 
     .gis-main {
         min-height: 400px;
+    }
+
+    .gis-map-wrapper,
+    .gis-map {
+        min-height: 340px;
     }
 
     .gis-data-panel {
@@ -872,15 +967,75 @@
         min-width: 120px;
         padding: 6px 10px;
     }
+
+    .gis-data-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .gis-data-tab {
+        white-space: nowrap;
+    }
+
+    .gis-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .gis-table {
+        min-width: 620px;
+    }
+
+    .gis-table-footer {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
 }
 
 @media (max-width: 576px) {
+    .gis-filter-actions {
+        flex-direction: column;
+    }
+
+    .gis-filter-actions .gis-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .gis-table-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .gis-table-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .gis-search-input {
+        width: 100%;
+    }
+
     .gis-summary-card {
         min-width: 100px;
     }
 
     .summary-value {
         font-size: 15px;
+    }
+
+    .gis-map-wrapper,
+    .gis-map {
+        min-height: 280px;
+    }
+
+    .gis-data-panel {
+        max-height: min(56dvh, 460px);
+    }
+
+    .gis-table-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
     }
 
     .gis-legend {

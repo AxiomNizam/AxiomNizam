@@ -458,7 +458,7 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 			return
 		}
 		if sqlTemplate != "" && !isStrictReadOnlyQuery(sqlTemplate, policyMode) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN/INSERT)"})
 			return
 		}
 		req.SQLTemplate = sqlTemplate
@@ -600,7 +600,7 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["sql_template"].(string); ok {
 		template := strings.TrimSpace(v)
 		if template != "" && !isStrictReadOnlyQuery(template, resolveSQLPolicyMode(api.SQLPolicyMode)) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN/INSERT)"})
 			return
 		}
 		api.SQLTemplate = template
@@ -638,7 +638,7 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 			return
 		}
 		if !isStrictReadOnlyQuery(template, resolveSQLPolicyMode(api.SQLPolicyMode)) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sql_template must be read-only (SELECT/WITH/SHOW/DESCRIBE/EXPLAIN/INSERT)"})
 			return
 		}
 		api.SQLTemplate = template
@@ -1246,7 +1246,7 @@ func isStrictReadOnlyQuery(query string, policyMode string) bool {
 	padded := " " + normalized + " "
 
 	blockedKeywords := []string{
-		" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
+		" UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
 		" CREATE ", " REPLACE ", " MERGE ", " GRANT ", " REVOKE ", " CALL ",
 		" EXEC ", " EXECUTE ", " UPSERT ", " DO ", " SET ", " USE ",
 	}
@@ -1293,13 +1293,14 @@ func classifySQLQuery(firstKeyword string) (string, bool) {
 		"DESCRIBE": {},
 		"DESC":     {},
 		"EXPLAIN":  {},
+		"INSERT":   {},
 	}
 	if _, ok := readOnly[kw]; ok {
 		return "read", true
 	}
 
 	write := map[string]struct{}{
-		"INSERT": {}, "UPDATE": {}, "DELETE": {}, "REPLACE": {}, "UPSERT": {}, "MERGE": {},
+		"UPDATE": {}, "DELETE": {}, "REPLACE": {}, "UPSERT": {}, "MERGE": {},
 	}
 	if _, ok := write[kw]; ok {
 		return "write", true
@@ -1502,12 +1503,13 @@ func legacyReadOnlyHeuristic(query string) bool {
 		strings.HasPrefix(normalized, "WITH") ||
 		strings.HasPrefix(normalized, "SHOW") ||
 		strings.HasPrefix(normalized, "DESCRIBE") ||
-		strings.HasPrefix(normalized, "EXPLAIN")) {
+		strings.HasPrefix(normalized, "EXPLAIN") ||
+		strings.HasPrefix(normalized, "INSERT")) {
 		return false
 	}
 
 	blockedKeywords := []string{
-		" INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
+		" UPDATE ", " DELETE ", " DROP ", " ALTER ", " TRUNCATE ",
 		" CREATE ", " REPLACE ", " MERGE ", " GRANT ", " REVOKE ", " CALL ",
 		" EXEC ", " EXECUTE ",
 	}

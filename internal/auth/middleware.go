@@ -45,9 +45,9 @@ func Middleware(validator *TokenValidator) gin.HandlerFunc {
 		c.Set("user", claims)
 		c.Set("username", claims.PreferredUsername)
 		c.Set("email", claims.Email)
-		c.Set("roles", claims.RealmAccess.Roles)
+		c.Set("roles", claims.collectRoles())
 
-		log.Printf("✅ Token validated for user: %s (roles: %v)", claims.PreferredUsername, claims.RealmAccess.Roles)
+		log.Printf("✅ Token validated for user: %s (roles: %v)", claims.PreferredUsername, claims.collectRoles())
 		c.Next()
 	}
 }
@@ -78,7 +78,7 @@ func RequireRole(requiredRole string) gin.HandlerFunc {
 		if !claims.HasRole(requiredRole) {
 			c.JSON(403, gin.H{
 				"error":      fmt.Sprintf("forbidden: user does not have '%s' role", requiredRole),
-				"user_roles": claims.RealmAccess.Roles,
+				"user_roles": claims.collectRoles(),
 				"required":   requiredRole,
 			})
 			c.Abort()
@@ -139,7 +139,7 @@ func RequireAnyRole(requiredRoles ...string) gin.HandlerFunc {
 
 		c.JSON(403, gin.H{
 			"error":      fmt.Sprintf("forbidden: user must have one of roles %v", normalized),
-			"user_roles": claims.RealmAccess.Roles,
+			"user_roles": claims.collectRoles(),
 			"required":   normalized,
 		})
 		c.Abort()

@@ -33,32 +33,32 @@
     <div class="ni-panel active" id="panel-overview">
         <div class="ni-kpi-grid">
             <div class="ni-kpi-card">
-                <div class="ni-kpi-icon">📡</div>
+                <div class="ni-kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg></div>
                 <div class="ni-kpi-value" id="kpi-devices">—</div>
                 <div class="ni-kpi-label">Active Devices</div>
             </div>
             <div class="ni-kpi-card">
-                <div class="ni-kpi-icon">📋</div>
+                <div class="ni-kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-list"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></div>
                 <div class="ni-kpi-value" id="kpi-entries">—</div>
                 <div class="ni-kpi-label">Log Entries</div>
             </div>
             <div class="ni-kpi-card">
-                <div class="ni-kpi-icon">🔔</div>
+                <div class="ni-kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bell"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
                 <div class="ni-kpi-value ni-kpi-alert" id="kpi-alerts">—</div>
                 <div class="ni-kpi-label">Active Alerts</div>
             </div>
             <div class="ni-kpi-card">
-                <div class="ni-kpi-icon">⚠️</div>
+                <div class="ni-kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-triangle-alert"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
                 <div class="ni-kpi-value ni-kpi-anomaly" id="kpi-anomalies">—</div>
                 <div class="ni-kpi-label">Anomalies</div>
             </div>
             <div class="ni-kpi-card">
-                <div class="ni-kpi-icon">🎯</div>
+                <div class="ni-kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                 <div class="ni-kpi-value" id="kpi-accuracy">—</div>
                 <div class="ni-kpi-label">Prediction Accuracy</div>
             </div>
             <div class="ni-kpi-card">
-                <div class="ni-kpi-icon">📶</div>
+                <div class="ni-kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-signal"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg></div>
                 <div class="ni-kpi-value" id="kpi-signal">—</div>
                 <div class="ni-kpi-label">Avg Signal (dBm)</div>
             </div>
@@ -120,8 +120,8 @@
                 <option value="500">500 entries</option>
                 <option value="1000">1000 entries</option>
             </select>
-            <button class="ni-btn" onclick="NI.loadLogs()">🔄 Refresh</button>
-            <button class="ni-btn ni-btn-secondary" onclick="NI.exportLogs()">📥 Export CSV</button>
+            <button class="ni-btn" onclick="NI.loadLogs()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
+            <button class="ni-btn ni-btn-secondary" onclick="NI.exportLogs()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download-cloud"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4 4 4-4"/></svg> Export CSV</button>
         </div>
 
         <div class="ni-log-stats" id="logStats"></div>
@@ -140,7 +140,7 @@
     <div class="ni-panel" id="panel-topology">
         <div class="ni-toolbar">
             <span class="ni-toolbar-label">Network Topology Graph</span>
-            <button class="ni-btn" onclick="NI.loadTopology()">🔄 Refresh</button>
+            <button class="ni-btn" onclick="NI.loadTopology()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
         </div>
         <div class="ni-topo-stats" id="topoStats"></div>
         <div class="ni-topo-container">
@@ -167,7 +167,7 @@
                 <option value="movement_density">Movement Density</option>
                 <option value="traffic_volume">Traffic Volume</option>
             </select>
-            <button class="ni-btn" onclick="NI.loadHeatmap()">🔄 Refresh</button>
+            <button class="ni-btn" onclick="NI.loadHeatmap()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
         </div>
         <div id="heatmapMap" class="ni-heatmap-map"></div>
         <div class="ni-heatmap-legend" id="heatmapLegend"></div>
@@ -188,7 +188,7 @@
                 <option value="24" selected>Last 24h</option>
                 <option value="48">Last 48h</option>
             </select>
-            <button class="ni-btn" onclick="NI.loadTrends()">🔄 Refresh</button>
+            <button class="ni-btn" onclick="NI.loadTrends()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
         </div>
         <div class="ni-chart-card ni-chart-full">
             <h3 id="trendTitle">Traffic Trend</h3>
@@ -210,7 +210,7 @@
                 <option value="acknowledged">Acknowledged</option>
                 <option value="resolved">Resolved</option>
             </select>
-            <button class="ni-btn" onclick="NI.loadAlerts()">🔄 Refresh</button>
+            <button class="ni-btn" onclick="NI.loadAlerts()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
         </div>
 
         <div class="ni-section">
@@ -243,7 +243,7 @@
     <div class="ni-panel" id="panel-predictions">
         <div class="ni-toolbar">
             <span class="ni-toolbar-label">Movement Predictions & Device Tracking</span>
-            <button class="ni-btn" onclick="NI.loadPredictions()">🔄 Refresh</button>
+            <button class="ni-btn" onclick="NI.loadPredictions()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
         </div>
 
         <div class="ni-pred-grid" id="predictionGrid"></div>
@@ -266,7 +266,7 @@
         <div class="ni-toolbar">
             <span class="ni-toolbar-label">Log Parser Configuration</span>
             <button class="ni-btn ni-btn-primary" onclick="NI.showCreateParser()">+ New Parser</button>
-            <button class="ni-btn" onclick="NI.loadParsers()">🔄 Refresh</button>
+            <button class="ni-btn" onclick="NI.loadParsers()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh</button>
         </div>
 
         <div class="ni-section">
@@ -327,5 +327,5 @@
     </div>
 </div>
 
-<script src="/static/netintel-dashboard.js"></script>
+<script src="/static/netintel-dashboard.js?v=20260405-2"></script>
 {{ end }}

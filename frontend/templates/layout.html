@@ -18,6 +18,79 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <!-- Chart.js for Analytics dashboard -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+        (function() {
+            var configuredBackendURL = '{{ .backendURL }}'.trim();
+            if (configuredBackendURL.length > 1 && configuredBackendURL.endsWith('/')) {
+                configuredBackendURL = configuredBackendURL.slice(0, -1);
+            }
+
+            function normalizeURL(raw) {
+                var value = String(raw || '').trim();
+                if (!value) {
+                    return '';
+                }
+                if (!/^https?:\/\//i.test(value) && /^[a-z0-9.-]+(?::\d+)?$/i.test(value)) {
+                    value = (window.location.protocol || 'http:') + '//' + value;
+                }
+                if (value.length > 1 && value.endsWith('/')) {
+                    value = value.slice(0, -1);
+                }
+                return value;
+            }
+
+            function parseHostname(rawURL) {
+                try {
+                    return new URL(rawURL).hostname.toLowerCase();
+                } catch (_) {
+                    return '';
+                }
+            }
+
+            function isLocalOrInternalHost(hostname) {
+                if (!hostname) return true;
+                if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '::1') return true;
+                if (hostname === 'axiomnizam') return true;
+                if (hostname.endsWith('.local')) return true;
+                return hostname.indexOf('.') === -1;
+            }
+
+            function inferPublicBackendURL() {
+                var browserHost = String(window.location.hostname || '').toLowerCase();
+                if (!browserHost || browserHost === 'localhost' || browserHost === '127.0.0.1' || browserHost === '0.0.0.0') {
+                    return '';
+                }
+
+                var protocol = window.location.protocol || 'https:';
+                if (browserHost.indexOf('axiomnizam.') === 0) {
+                    return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+                }
+                return protocol + '//' + browserHost;
+            }
+
+            window.BACKEND_URL = normalizeURL(configuredBackendURL);
+            window.__backendURL = window.BACKEND_URL;
+            window.resolveBackendURL = function() {
+                var value = normalizeURL(window.BACKEND_URL || '');
+                if (!value) {
+                    return inferPublicBackendURL() || 'http://localhost:8000';
+                }
+
+                var backendHost = parseHostname(value);
+                var browserHost = String(window.location.hostname || '').toLowerCase();
+                var browserIsPublic = browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0';
+
+                if (browserIsPublic && isLocalOrInternalHost(backendHost)) {
+                    return inferPublicBackendURL() || value;
+                }
+
+                return value;
+            };
+
+            window.BACKEND_URL = window.resolveBackendURL();
+            window.__backendURL = window.BACKEND_URL;
+        })();
+    </script>
     {{ if .embedded }}
     <style>
         .navbar, .footer { display: none !important; }
@@ -38,8 +111,21 @@
                     </span>
                     <span class="logo-text">AxiomNizam</span>
                 </div>
+
+                <button
+                    type="button"
+                    class="mobile-nav-toggle"
+                    id="mobileNavToggle"
+                    aria-label="Toggle navigation"
+                    aria-expanded="false"
+                    aria-controls="primary-navigation"
+                    onclick="toggleMobileNav(event)">
+                    <span class="mobile-nav-toggle-line"></span>
+                    <span class="mobile-nav-toggle-line"></span>
+                    <span class="mobile-nav-toggle-line"></span>
+                </button>
                 
-                <div class="nav-center">
+                <div class="nav-center" id="primary-navigation">
                     <a href="/" class="nav-link {{ if eq .page "public-dashboard" }}active{{ end }}">
                         <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span>
                         <span>Dashboard</span>
@@ -63,7 +149,7 @@
 
                     <div class="nav-dropdown" id="nav-more-wrap">
                         <button
-                            class="nav-more-btn {{ if or (eq .page "governance-dashboard") (eq .page "operations-center") (eq .page "version-lineage-dashboard") (eq .page "admin") (eq .page "system-manager") (eq .page "manager") }}active{{ end }}"
+                            class="nav-more-btn {{ if or (eq .page "governance-dashboard") (eq .page "operations-center") (eq .page "version-lineage-dashboard") (eq .page "admin") (eq .page "system-manager") (eq .page "manager") (eq .page "iam-admin") }}active{{ end }}"
                             id="navMoreBtn"
                             onclick="toggleNavMoreMenu(event)">
                             <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
@@ -97,12 +183,16 @@
                                 <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span>
                                 <span>Manager</span>
                             </a>
+                            <a href="/iam-admin" class="nav-dropdown-link {{ if eq .page "iam-admin" }}active{{ end }}" id="nav-iam-admin" style="display:none">
+                                <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+                                <span>IAM Console</span>
+                            </a>
                             {{ end }}
                         </div>
                     </div>
                 </div>
                 
-                <div class="nav-right">
+                <div class="nav-right" id="primary-actions">
                     <div class="theme-switcher">
                         <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="toggleTheme()">🌙</button>
                     </div>
@@ -144,6 +234,8 @@
                 {{ template "operations-center" . }}
             {{ else if eq .pageName "version-lineage-dashboard" }}
                 {{ template "version-lineage-dashboard" . }}
+            {{ else if eq .pageName "iam-admin" }}
+                {{ template "iam-admin" . }}
             {{ end }}
         </main>
 
@@ -179,9 +271,16 @@
                         <label for="password">Password</label>
                         <input type="password" id="password" name="password" placeholder="Enter password" required>
                     </div>
-                    <button type="submit" class="btn-primary btn-large">Login with Keycloak</button>
+                    <button type="submit" class="btn-primary btn-large">Login</button>
                 </form>
-                <p class="login-hint">AxiomNixam oAuth(Role): admin | sysadmin | manager | user</p>
+
+                <div class="idp-divider"><span>or continue with</span></div>
+
+                <div id="idpButtonsContainer" class="idp-buttons">
+                    <!-- Dynamically loaded identity provider buttons -->
+                </div>
+
+                <p class="login-hint">AxiomNizam IAM — Roles: sysadmin | admin | manager | user</p>
             </div>
         </div>
     </div>
@@ -199,10 +298,7 @@
         </div>
     </div>
 
-    <script>
-        window.BACKEND_URL = '{{ .backendURL }}';
-    </script>
-    <script src="/static/auth.js"></script>
+    <script src="/static/auth.js?v=20260405-2"></script>
     <script>
 
         // Theme management
@@ -223,6 +319,53 @@
             const currentIndex = themes.indexOf(currentTheme);
             const nextTheme = themes[(currentIndex + 1) % themes.length];
             setTheme(nextTheme);
+        }
+
+        function isMobileNavViewport() {
+            return window.matchMedia('(max-width: 980px)').matches;
+        }
+
+        function syncMobileNavState(shouldOpen) {
+            const navbar = document.querySelector('.navbar');
+            const toggle = document.getElementById('mobileNavToggle');
+            if (!navbar || !toggle) return;
+
+            const open = !!shouldOpen && isMobileNavViewport();
+            navbar.classList.toggle('mobile-open', open);
+            document.body.classList.toggle('mobile-nav-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function closeMobileNav() {
+            syncMobileNavState(false);
+        }
+
+        function toggleMobileNav(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            const navbar = document.querySelector('.navbar');
+            if (!navbar) return;
+            syncMobileNavState(!navbar.classList.contains('mobile-open'));
+        }
+
+        function initMobileNavInteractions() {
+            const toggle = document.getElementById('mobileNavToggle');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+
+            document.querySelectorAll('.nav-link, .nav-dropdown-link').forEach(function(link) {
+                if (link.dataset.mobileNavInit === '1') {
+                    return;
+                }
+                link.dataset.mobileNavInit = '1';
+                link.addEventListener('click', function() {
+                    closeMobileNav();
+                    closeNavMoreMenu();
+                });
+            });
         }
 
         function updateThemeButton(theme) {
@@ -254,9 +397,22 @@
             const role = String(rawRole || '').toLowerCase().trim();
             if (!role) return 'user';
             if (role === 'administrator' || role === 'superadmin' || role === 'super-admin') return 'admin';
-            if (role === 'system_manager' || role === 'system manager' || role === 'sysadmin' || role === 'sys-admin') return 'system-manager';
+            if (role === 'system-manager' || role === 'system_admin' || role === 'system_manager' || role === 'system manager' || role === 'system administrator' || role === 'system-administrator' || role === 'sysadmin' || role === 'sys-admin') return 'system-manager';
             if (role === 'mgr') return 'manager';
+            if (role.indexOf('system') !== -1 && role.indexOf('admin') !== -1) return 'system-manager';
+            if (role.indexOf('admin') !== -1 && role.indexOf('account') === -1) return 'admin';
             return role;
+        }
+
+        function roleFromAlias(rawValue) {
+            const value = String(rawValue || '').toLowerCase().trim();
+            if (!value) return '';
+            const localPart = value.indexOf('@') !== -1 ? value.split('@')[0] : value;
+            const compact = localPart.replace(/[^a-z0-9]/g, '');
+            if (compact === 'sysadmin' || compact === 'systemadmin' || compact === 'systemadministrator' || compact === 'systemmanager') return 'system-manager';
+            if (compact === 'admin' || compact === 'administrator' || compact === 'superadmin') return 'admin';
+            if (compact === 'manager' || compact === 'apimanager' || compact === 'mgr') return 'manager';
+            return '';
         }
 
         function readCookieValue(name) {
@@ -278,9 +434,7 @@
 
             let role = normalizeUserRole(storedRole || 'user');
             if (role === 'user' && storedName) {
-                if (storedName === 'sysadmin') role = 'system-manager';
-                if (storedName === 'admin') role = 'admin';
-                if (storedName === 'manager') role = 'manager';
+                role = roleFromAlias(storedName) || role;
             }
 
             const navAdmin = document.getElementById('nav-admin');
@@ -289,6 +443,7 @@
             const navGovernance = document.getElementById('nav-governance');
             const navOps = document.getElementById('nav-ops');
             const navLineage = document.getElementById('nav-lineage');
+            const navIAM = document.getElementById('nav-iam-admin');
 
             const isAdmin = role === 'admin';
             const isSystemManager = role === 'system-manager';
@@ -300,6 +455,7 @@
             if (navGovernance) navGovernance.style.display = (isAdmin || isSystemManager) ? '' : 'none';
             if (navOps) navOps.style.display = (isAdmin || isSystemManager || isManager) ? '' : 'none';
             if (navLineage) navLineage.style.display = (isAdmin || isSystemManager) ? '' : 'none';
+            if (navIAM) navIAM.style.display = isSystemManager ? '' : 'none';
 
             const navMoreWrap = document.getElementById('nav-more-wrap');
             const navMoreMenu = document.getElementById('navMoreMenu');
@@ -429,6 +585,13 @@
             setTimeout(applyRoleNavVisibility, 350);
             setTimeout(applyRoleNavVisibility, 1200);
             window.addEventListener('focus', applyRoleNavVisibility);
+            window.addEventListener('resize', function() {
+                if (!isMobileNavViewport()) {
+                    closeMobileNav();
+                }
+            });
+
+            initMobileNavInteractions();
             initTabNavigationScrollUX();
 
             {{ if .forceLogin }}
@@ -448,6 +611,7 @@
 
         function openLoginModal() {
             document.getElementById('loginModal').style.display = 'flex';
+            loadIdentityProviderButtons();
         }
 
         function closeLoginModal() {
@@ -458,9 +622,184 @@
             document.getElementById('responseModal').style.display = 'none';
         }
 
+        var IDP_ICONS = {
+            google: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>',
+            github: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>',
+            gitlab: '<svg viewBox="0 0 24 24" width="20" height="20"><path d="m12 22.172-4.383-13.49h8.766z" fill="#E24329"/><path d="m12 22.172-4.383-13.49H1.77z" fill="#FC6D26"/><path d="M1.77 8.682 0.452 12.74a.9.9 0 0 0 .327 1.006L12 22.172z" fill="#FCA326"/><path d="M1.77 8.682h5.847L5.137 1.33a.45.45 0 0 0-.856 0z" fill="#E24329"/><path d="m12 22.172 4.383-13.49h5.847z" fill="#FC6D26"/><path d="m22.23 8.682 1.318 4.058a.9.9 0 0 1-.327 1.006L12 22.172z" fill="#FCA326"/><path d="M22.23 8.682h-5.847l2.48-7.352a.45.45 0 0 1 .856 0z" fill="#E24329"/></svg>',
+            microsoft: '<svg viewBox="0 0 24 24" width="20" height="20"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="13" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="13" width="10" height="10" fill="#00A4EF"/><rect x="13" y="13" width="10" height="10" fill="#FFB900"/></svg>',
+            facebook: '<svg viewBox="0 0 24 24" width="20" height="20" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>',
+            oidc: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>',
+            saml: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+            ldap: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
+        };
+
+        var IDP_LABELS = {
+            google: 'Google', github: 'GitHub', gitlab: 'GitLab',
+            microsoft: 'Microsoft', facebook: 'Facebook',
+            oidc: 'OpenID Connect', saml: 'SAML SSO', ldap: 'LDAP'
+        };
+
+        var IDP_CLASSES = {
+            google: 'idp-google', github: 'idp-github', gitlab: 'idp-gitlab',
+            microsoft: 'idp-microsoft', facebook: 'idp-facebook',
+            oidc: 'idp-oidc', saml: 'idp-saml', ldap: 'idp-ldap'
+        };
+
+        var IDP_FALLBACK_TYPES = ['google', 'github', 'gitlab', 'microsoft', 'facebook', 'oidc', 'saml', 'ldap'];
+        var IDP_BY_KEY = {};
+
+        function escapeSingleQuotedAttr(value) {
+            return String(value || '')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/\r/g, ' ')
+                .replace(/\n/g, ' ');
+        }
+
+        function escapeHTML(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function normalizeIDPProviders(payload) {
+            var data = payload || {};
+            var list = Array.isArray(data) ? data : (Array.isArray(data.identity_providers) ? data.identity_providers : []);
+            var providers = [];
+
+            list.forEach(function(raw) {
+                if (!raw || raw.enabled === false) return;
+                var providerType = String(raw.provider_type || '').toLowerCase().trim();
+                if (!providerType) return;
+                providers.push({
+                    id: String(raw.id || '').trim(),
+                    alias: String(raw.alias || '').trim(),
+                    display_name: String(raw.display_name || '').trim(),
+                    provider_type: providerType,
+                    authorization_url: String(raw.authorization_url || '').trim(),
+                    fallback: false
+                });
+            });
+
+            if (providers.length > 0) {
+                return providers;
+            }
+
+            var supported = Array.isArray(data.supported_provider_types) ? data.supported_provider_types : IDP_FALLBACK_TYPES;
+            supported.forEach(function(rawType) {
+                var providerType = String(rawType || '').toLowerCase().trim();
+                if (!providerType) return;
+                providers.push({
+                    id: providerType,
+                    alias: providerType,
+                    display_name: IDP_LABELS[providerType] || providerType.toUpperCase(),
+                    provider_type: providerType,
+                    authorization_url: '',
+                    fallback: true
+                });
+            });
+
+            return providers;
+        }
+
+        function renderIdentityProviderButtons(providers) {
+            var container = document.getElementById('idpButtonsContainer');
+            if (!container) return;
+
+            var divider = document.querySelector('.idp-divider');
+            var list = Array.isArray(providers) ? providers : [];
+            IDP_BY_KEY = {};
+
+            if (list.length === 0) {
+                container.innerHTML = '';
+                if (divider) divider.style.display = 'none';
+                return;
+            }
+
+            if (divider) divider.style.display = '';
+
+            var html = '';
+            list.forEach(function(idp) {
+                var type = String(idp.provider_type || '').toLowerCase().trim();
+                if (!type) return;
+
+                var key = String(idp.id || idp.alias || type).trim();
+                if (!key) return;
+
+                IDP_BY_KEY[key] = idp;
+
+                var icon = IDP_ICONS[type] || IDP_ICONS.oidc;
+                var label = idp.display_name || IDP_LABELS[type] || idp.alias || type.toUpperCase();
+                var cls = IDP_CLASSES[type] || 'idp-oidc';
+                var disabledClass = idp.fallback ? ' idp-disabled' : '';
+
+                html += '<button type="button" class="idp-btn ' + cls + disabledClass + '" onclick="initiateIDPLogin(\'' + escapeSingleQuotedAttr(key) + '\')">' +
+                    '<span class="idp-icon">' + icon + '</span>' +
+                    '<span class="idp-label">' + escapeHTML(label) + '</span>' +
+                    '</button>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function loadIdentityProviderButtons() {
+            var container = document.getElementById('idpButtonsContainer');
+            if (!container) return;
+
+            var apiURL = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
+            if (apiURL.length > 1 && apiURL.endsWith('/')) apiURL = apiURL.slice(0, -1);
+
+            fetch(apiURL + '/iam/auth/identity-providers', { headers: { 'Accept': 'application/json' } })
+            .then(function(resp) {
+                if (!resp.ok) {
+                    throw new Error('identity providers endpoint returned status ' + resp.status);
+                }
+                return resp.json();
+            })
+            .then(function(payload) {
+                renderIdentityProviderButtons(normalizeIDPProviders(payload));
+            })
+            .catch(function() {
+                renderIdentityProviderButtons(normalizeIDPProviders({ supported_provider_types: IDP_FALLBACK_TYPES }));
+            });
+        }
+
+        function initiateIDPLogin(providerKey) {
+            var idp = IDP_BY_KEY[String(providerKey || '')];
+            if (!idp) {
+                alert('Identity provider is not available right now.');
+                return;
+            }
+
+            if (idp.fallback) {
+                alert('This provider type is supported by the platform. Configure it in IAM Admin > Identity Providers to enable direct login.');
+                return;
+            }
+
+            var apiURL = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
+            if (apiURL.length > 1 && apiURL.endsWith('/')) {
+                apiURL = apiURL.slice(0, -1);
+            }
+
+            var returnTo = (window.location.pathname || '/') + (window.location.search || '');
+            var startURL = apiURL + '/auth/oauth/start' +
+                '?provider=' + encodeURIComponent(String(providerKey || '')) +
+                '&return_to=' + encodeURIComponent(returnTo) +
+                '&frontend_origin=' + encodeURIComponent(window.location.origin || '');
+
+            window.location.href = startURL;
+        }
+
         window.onclick = function(event) {
             if (!event.target.closest('#nav-more-wrap')) {
                 closeNavMoreMenu();
+            }
+
+            if (isMobileNavViewport() && !event.target.closest('.navbar')) {
+                closeMobileNav();
             }
 
             const modal = document.getElementById('loginModal');
@@ -472,6 +811,7 @@
         window.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
                 closeNavMoreMenu();
+                closeMobileNav();
             }
         });
     </script>

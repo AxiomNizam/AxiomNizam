@@ -21,6 +21,7 @@ import (
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
+	iampkg "example.com/axiomnizam/internal/iam"
 	"example.com/axiomnizam/internal/integration"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
@@ -72,18 +73,83 @@ func main() {
 	// Load configuration
 	cfg := config.LoadConfig()
 	applySecurityGuardrails(cfg)
-
-	// Initialize Keycloak token validator
-	keycloakConfig := &auth.KeycloakConfig{
-		ServerURL: cfg.GetKeycloakURL(),
-		Realm:     cfg.Keycloak.Realm,
-		ClientID:  cfg.Keycloak.ClientID,
+	iamOnlyAuthRaw := strings.TrimSpace(os.Getenv("IAM_ONLY_AUTH"))
+	iamOnlyAuth := true
+	if iamOnlyAuthRaw != "" {
+		iamOnlyAuth = strings.EqualFold(iamOnlyAuthRaw, "true")
 	}
+
+	// Initialize IAM token validator
+	iamIssuerURL := strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
+	if iamIssuerURL == "" {
+		iamIssuerURL = cfg.GetIAMURL()
+	}
+	normalizeBaseURL := func(raw string) string {
+		candidate := strings.TrimSpace(raw)
+		if candidate == "" {
+			return ""
+		}
+
+		if parsed, parseErr := url.Parse(candidate); parseErr == nil && parsed.Scheme != "" && parsed.Host != "" {
+			return strings.TrimRight(parsed.Scheme+"://"+parsed.Host+parsed.Path, "/")
+		}
+
+		return strings.TrimRight(candidate, "/")
+	}
+
+	validatorJWKSBases := make([]string, 0, 4)
+	seenValidatorBase := make(map[string]struct{}, 4)
+	addValidatorJWKSBase := func(raw string) {
+		base := normalizeBaseURL(raw)
+		if base == "" {
+			return
+		}
+		if _, exists := seenValidatorBase[base]; exists {
+			return
+		}
+		seenValidatorBase[base] = struct{}{}
+		validatorJWKSBases = append(validatorJWKSBases, base)
+	}
+
+	addValidatorJWKSBase(os.Getenv("IAM_INTERNAL_BASE_URL"))
+	addValidatorJWKSBase(iamIssuerURL)
+	addValidatorJWKSBase(cfg.GetIAMURL())
+	addValidatorJWKSBase("http://localhost:8000")
+
+	buildValidatorConfig := func(jwksBase string) *auth.TokenValidatorConfig {
+		validatorConfig := &auth.TokenValidatorConfig{
+			IssuerURL: iamIssuerURL,
+		}
+		if jwksBase != "" {
+			validatorConfig.JWKSURL = strings.TrimRight(jwksBase, "/") + "/.well-known/jwks.json"
+		}
+		return validatorConfig
+	}
+
+	initializeTokenValidator := func() (*auth.TokenValidator, error) {
+		if len(validatorJWKSBases) == 0 {
+			return nil, fmt.Errorf("no IAM JWKS base URLs configured")
+		}
+
+		initErrors := make([]string, 0, len(validatorJWKSBases))
+		for _, jwksBase := range validatorJWKSBases {
+			candidateConfig := buildValidatorConfig(jwksBase)
+			initializedValidator, initErr := auth.NewTokenValidator(candidateConfig)
+			if initErr == nil {
+				log.Printf("✅ IAM token validator JWKS source: %s/.well-known/jwks.json", strings.TrimRight(jwksBase, "/"))
+				return initializedValidator, nil
+			}
+			initErrors = append(initErrors, fmt.Sprintf("%s: %v", jwksBase, initErr))
+		}
+
+		return nil, fmt.Errorf("all IAM JWKS endpoints failed: %s", strings.Join(initErrors, " | "))
+	}
+
 	var tokenValidatorMu sync.RWMutex
-	tokenValidator, err := auth.NewTokenValidator(keycloakConfig)
+	tokenValidator, err := initializeTokenValidator()
 	if err != nil {
-		log.Printf("⚠️  Keycloak initialization failed at startup: %v", err)
-		log.Printf("⚠️  Auth-protected APIs will return 503 until Keycloak becomes reachable")
+		log.Printf("⚠️  IAM token validator initialization failed at startup: %v", err)
+		log.Printf("⚠️  Auth-protected APIs will return 503 until IAM JWKS becomes reachable")
 		tokenValidator = nil
 	}
 
@@ -101,14 +167,14 @@ func main() {
 			return tokenValidator
 		}
 
-		initializedValidator, initErr := auth.NewTokenValidator(keycloakConfig)
+		initializedValidator, initErr := initializeTokenValidator()
 		if initErr != nil {
-			log.Printf("⚠️  Keycloak still unavailable: %v", initErr)
+			log.Printf("⚠️  IAM token validator still unavailable: %v", initErr)
 			return nil
 		}
 
 		tokenValidator = initializedValidator
-		log.Printf("✅ Keycloak token validator initialized after startup")
+		log.Printf("✅ IAM token validator initialized after startup")
 		return tokenValidator
 	}
 
@@ -122,6 +188,19 @@ func main() {
 
 	// Create tables
 	createTables(conns)
+
+	// ====================================
+	// IAM SYSTEM INITIALIZATION
+	// ====================================
+	iamSystem, iamErr := iampkg.NewSystem(conns.PostgreSQL, conns.Etcd, iampkg.Config{
+		IssuerURL: strings.TrimSpace(os.Getenv("IAM_ISSUER_URL")),
+	})
+	if iamErr != nil {
+		log.Printf("⚠️  IAM system initialization failed: %v", iamErr)
+		log.Println("⚠️  IAM endpoints will not be available. Ensure PostgreSQL and etcd are connected.")
+	} else {
+		log.Println("✅ IAM system initialized")
+	}
 
 	// Create Gin router
 	router := gin.Default()
@@ -138,11 +217,14 @@ func main() {
 		allowedOriginSet[candidate] = struct{}{}
 	}
 
+	// Always include canonical frontend URL when provided.
+	addAllowedOrigin(os.Getenv("PUBLIC_FRONTEND_URL"))
+
 	for _, candidate := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
 		addAllowedOrigin(candidate)
 	}
 	if len(allowedOriginSet) == 0 {
-		addAllowedOrigin(os.Getenv("PUBLIC_FRONTEND_URL"))
+		addAllowedOrigin("https://axiomnizam.bitbd.net")
 		addAllowedOrigin("http://localhost:7000")
 		addAllowedOrigin("http://127.0.0.1:7000")
 	}
@@ -257,7 +339,7 @@ func main() {
 		if activeTokenValidator == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "authentication unavailable",
-				"message": "token validation is not available because keycloak initialization failed",
+				"message": "token validation is not available because IAM token validator initialization failed",
 			})
 			c.Abort()
 			return false
@@ -277,7 +359,64 @@ func main() {
 			return false
 		}
 
+		claims, err := activeTokenValidator.ValidateToken(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
+			c.Abort()
+			return false
+		}
+
+		if claims != nil && len(claims.RolesList()) == 0 {
+			configuredSysadminEmail := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
+			claimEmail := strings.ToLower(strings.TrimSpace(claims.Email))
+			if configuredSysadminEmail != "" && claimEmail != "" && claimEmail == configuredSysadminEmail {
+				fallbackRoles := []string{"sysadmin", "system-manager", "admin"}
+				claims.Roles = append([]string{}, fallbackRoles...)
+				claims.RealmAccess.Roles = append([]string{}, fallbackRoles...)
+				log.Printf("⚠️  Applied bootstrap sysadmin role fallback for token subject %s", claimEmail)
+			}
+		}
+
+		principal := strings.TrimSpace(claims.PreferredUsername)
+		if principal == "" {
+			principal = strings.TrimSpace(claims.Email)
+		}
+		if principal == "" {
+			principal = strings.TrimSpace(claims.Sub)
+		}
+		if principal == "" {
+			principal = "token-user"
+		}
+
+		defaultMaxCalls, defaultValidity := rateLimiter.DefaultPolicy()
+		callsLimit := defaultMaxCalls
+
 		allowed, callsRemaining, expiresAt, limitErr := rateLimiter.CheckRateLimit(token)
+		if !allowed && limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
+			// Accept valid IAM/JWT tokens even if they were not issued through /auth/login.
+			policyCalls := defaultMaxCalls
+			policyValidity := defaultValidity
+
+			if claims != nil && strings.TrimSpace(claims.ClientID) != "" && iamSystem != nil && iamSystem.Clients != nil {
+				if clientCfg, clientErr := iamSystem.Clients.GetClient(strings.TrimSpace(claims.ClientID)); clientErr == nil && clientCfg != nil {
+					if clientCfg.RateLimitMaxCalls > 0 {
+						policyCalls = clientCfg.RateLimitMaxCalls
+					}
+					if clientCfg.TokenValidityMinutes > 0 {
+						policyValidity = time.Duration(clientCfg.TokenValidityMinutes) * time.Minute
+					}
+				}
+			}
+
+			rateLimiter.RegisterTokenWithPolicy(token, principal, policyCalls, policyValidity)
+			callsLimit = policyCalls
+			allowed, callsRemaining, expiresAt, limitErr = rateLimiter.CheckRateLimit(token)
+		}
+
+		if trackedLimit, _, tracked := rateLimiter.GetTokenPolicy(token); tracked && trackedLimit > 0 {
+			callsLimit = trackedLimit
+		}
+
 		if !allowed {
 			if limitErr != nil && limitErr.Error() == "token expired" {
 				c.JSON(http.StatusUnauthorized, gin.H{
@@ -285,25 +424,16 @@ func main() {
 					"message":    "your token is no longer valid. please login again to get a new token",
 					"expired_at": expiresAt.Format("2006-01-02 15:04:05"),
 				})
-			} else if limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or unregistered token"})
 			} else {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error":           "api call limit exceeded",
-					"message":         "you have used all 500 api calls allowed per token",
-					"calls_limit":     500,
+					"message":         fmt.Sprintf("you have used all %d api calls allowed for this token", callsLimit),
+					"calls_limit":     callsLimit,
 					"expires_at":      expiresAt.Format("2006-01-02 15:04:05"),
-					"action_required": "login again to get a fresh token with new 500 calls",
+					"action_required": fmt.Sprintf("use a new token to continue with a fresh %d-call quota", callsLimit),
 					"action_endpoint": "/auth/login",
 				})
 			}
-			c.Abort()
-			return false
-		}
-
-		claims, err := activeTokenValidator.ValidateToken(token)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
 			c.Abort()
 			return false
 		}
@@ -313,18 +443,18 @@ func main() {
 		}
 
 		c.Set("user", claims)
-		c.Set("username", claims.PreferredUsername)
+		c.Set("username", principal)
 		c.Set("email", claims.Email)
-		c.Set("roles", claims.RealmAccess.Roles)
+		c.Set("roles", claims.RolesList())
 		c.Set("calls_remaining", callsRemaining)
 		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
 		c.Set("token", token)
 
-		c.Header("X-RateLimit-Limit", "500")
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", callsLimit))
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
-		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", claims.PreferredUsername, callsRemaining)
+		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", principal, callsRemaining)
 		return true
 	}
 
@@ -346,9 +476,20 @@ func main() {
 	authHandler := handlers.NewAuthHandler()
 	authHandler.SetRateLimiter(rateLimiter)
 	authHandler.SetPlatformUserHandler(platformUserHandler)
+	if iamSystem != nil && iamSystem.PGStore != nil {
+		authHandler.SetIdentityProviderStore(iamSystem.PGStore)
+	}
+	if iamSystem != nil && iamSystem.Users != nil {
+		authHandler.SetIAMUserRepository(iamSystem.Users)
+	}
+	if iamSystem != nil && iamSystem.Authorizer != nil {
+		authHandler.SetIAMAuthorizer(iamSystem.Authorizer)
+	}
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)
+	router.GET("/auth/oauth/start", authHandler.OAuthStart)
+	router.GET("/auth/oauth/callback", authHandler.OAuthCallback)
 
 	// Token status endpoints (auth required)
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
@@ -366,7 +507,7 @@ func main() {
 		if claims == nil || !claims.HasRole("admin") {
 			roles := []string{}
 			if claims != nil {
-				roles = claims.RealmAccess.Roles
+				roles = claims.RolesList()
 			}
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":      "forbidden: user does not have 'admin' role",
@@ -387,7 +528,7 @@ func main() {
 		if claims == nil || !(claims.HasRole("admin") || claims.HasRole("system-manager") || claims.HasRole("sysadmin") || claims.HasRole("system_admin") || claims.HasRole("system-admin")) {
 			roles := []string{}
 			if claims != nil {
-				roles = claims.RealmAccess.Roles
+				roles = claims.RolesList()
 			}
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":      "forbidden: user must have one of roles [admin system-manager sysadmin system_admin system-admin]",
@@ -509,12 +650,16 @@ func main() {
 	router.POST("/api/admin/table/create", adminOrSysMiddleware, adminHandler.CreateTable)
 	router.GET("/api/admin/table/list", adminOrSysMiddleware, adminHandler.ListTables)
 
-	// User management endpoints (admin only)
-	router.GET("/api/v1/users", adminOrSysMiddleware, platformUserHandler.ListPlatformUsers)
-	router.GET("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.GetPlatformUser)
-	router.POST("/api/v1/users", adminOrSysMiddleware, platformUserHandler.CreatePlatformUser)
-	router.PUT("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.UpdatePlatformUser)
-	router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
+	// Legacy platform user management endpoints (admin only)
+	if !iamOnlyAuth {
+		router.GET("/api/v1/users", adminOrSysMiddleware, platformUserHandler.ListPlatformUsers)
+		router.GET("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.GetPlatformUser)
+		router.POST("/api/v1/users", adminOrSysMiddleware, platformUserHandler.CreatePlatformUser)
+		router.PUT("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.UpdatePlatformUser)
+		router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
+	} else {
+		log.Println("ℹ️  IAM_ONLY_AUTH=true: legacy /api/v1/users endpoints are disabled; use /iam/admin/users")
+	}
 
 	// API Metrics endpoints (admin only)
 	router.GET("/api/admin/metrics/all", adminOrSysMiddleware, apiMetricsTracker.GetAllAPIMetrics)
@@ -1369,6 +1514,14 @@ func main() {
 		})
 	}
 
+	// ====================================
+	// IAM ROUTES
+	// ====================================
+	if iamSystem != nil {
+		iamSystem.RegisterRoutes(router)
+		log.Println("✅ IAM routes registered")
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
@@ -1390,13 +1543,15 @@ func main() {
 	fmt.Println("  POST /api/admin/table/create     - Create a new table")
 	fmt.Println("  GET  /api/admin/table/list       - List all tables")
 	fmt.Println()
-	fmt.Println("User Management endpoints (admin only):")
-	fmt.Println("  GET    /api/v1/users            - List all platform users")
-	fmt.Println("  GET    /api/v1/users/:id        - Get a platform user")
-	fmt.Println("  POST   /api/v1/users            - Create a platform user")
-	fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
-	fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
-	fmt.Println()
+	if !iamOnlyAuth {
+		fmt.Println("User Management endpoints (admin only):")
+		fmt.Println("  GET    /api/v1/users            - List all platform users")
+		fmt.Println("  GET    /api/v1/users/:id        - Get a platform user")
+		fmt.Println("  POST   /api/v1/users            - Create a platform user")
+		fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
+		fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
+		fmt.Println()
+	}
 	fmt.Println("Dynamic Query endpoints:")
 	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")
 	fmt.Println("       Example: /api/mysql/query?q=SELECT * FROM users&params=1")
@@ -1571,8 +1726,8 @@ func applySecurityGuardrails(cfg *config.Config) {
 		return false
 	}
 
-	if isDefault(cfg.Keycloak.ClientSecret, "", "change-me", "changeme", "default", "keycloak-secret") {
-		addBlocking("KEYCLOAK_CLIENT_SECRET is empty or default-like")
+	if isDefault(cfg.IAM.SysadminPassword, "", "change-me", "changeme", "default", "password", "admin") {
+		addBlocking("IAM_SYSADMIN_PASSWORD is empty or default-like")
 	}
 	if strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")) == "" {
 		addBlocking("DEMO_JWT_SECRET is not set")

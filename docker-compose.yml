@@ -3,6 +3,7 @@ services:
   axiomnizam:
     build: .
     container_name: axiomnizam
+    # image: shafiunmiraz/axiomnizam-axiomnizam:latest
     ports:
       - "8000:8000"
     env_file:
@@ -12,14 +13,19 @@ services:
       OPENCLAW_SQL_ASSISTANT_TOKEN: ${OPENCLAW_SQL_ASSISTANT_TOKEN:-}
       OPENCLAW_SQL_ASSISTANT_MODEL: ${OPENCLAW_SQL_ASSISTANT_MODEL:-openclaw}
       OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS: ${OPENCLAW_SQL_ASSISTANT_TIMEOUT_SECONDS:-20}
+      IAM_SYSADMIN_EMAIL: ${IAM_SYSADMIN_EMAIL:-sysadmin@axiomnizam.local}
+      IAM_SYSADMIN_PASSWORD: ${IAM_SYSADMIN_PASSWORD:-changeme-on-first-login}
+      IAM_INTERNAL_BASE_URL: ${IAM_INTERNAL_BASE_URL:-http://axiomnizam:8000}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
+      PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-https://axiomnizam.bitbd.net}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
     depends_on:
       # - valkey
-      - keycloak
       - etcd
       # - mysql
       # - mariadb
       - postgres
-      - clamav
+      # - clamav
       # - mongodb
       # - percona
       # - firebase
@@ -32,17 +38,16 @@ services:
 
   # Frontend Dashboard
   axiomnizam-frontend:
-    build: ./frontend
-    container_name: axiomnizam-frontend
+    build:
+      context: ./frontend
+    # image: shafiunmiraz/axiomnizam-axiomnizam-frontend:latest
     ports:
       - "7000:7000"
     environment:
-      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-http://localhost:8000}
+      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-https://axiomnizam-platform.bitbd.net}
+      BACKEND_PROXY_URL: ${BACKEND_PROXY_URL:-https://axiomnizam-platform.bitbd.net}
       FRONTEND_PORT: ${FRONTEND_PORT:-7000}
-      KEYCLOAK_URL: ${PUBLIC_IDP_URL:-http://localhost:8080}
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-axiomnizam}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-axiomnizam-frontend}
-      KEYCLOAK_REDIRECT_URI: ${KEYCLOAK_FRONTEND_REDIRECT_URI:-http://localhost:7000/callback}
+      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
     depends_on:
       - axiomnizam
     networks:
@@ -50,130 +55,95 @@ services:
 
   # OpenClaw Gateway (optional) for SQL assistant chat provider
   # Start with: docker compose --profile openclaw up -d openclaw-gateway
-  openclaw-gateway:
-    image: ghcr.io/openclaw/openclaw:latest
-    container_name: openclaw-gateway
-    # profiles:
-    #   - openclaw
-    restart: unless-stopped
-    user: "0:0"
-    depends_on:
-      ollama-init:
-        condition: service_completed_successfully
-    environment:
-      HOME: /home/node
-      NODE_ENV: production
-      OPENCLAW_GATEWAY_BIND: lan
-      OPENCLAW_GATEWAY_PORT: 18789
-      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-dev-openclaw-token}
-      OPENCLAW_SKIP_CANVAS_HOST: "1"
-      OPENCLAW_SKIP_CRON: "1"
-    command:
-      - sh
-      - -lc
-      - |
-        node dist/index.js config set gateway.mode local
-        node dist/index.js config set gateway.bind lan
-        node dist/index.js config set gateway.controlUi.allowedOrigins '["http://localhost:18789","http://127.0.0.1:18789"]' --strict-json
-        node dist/index.js config set gateway.http.endpoints.chatCompletions.enabled true
-        node dist/index.js config set models.providers.ollama.baseUrl ${OPENCLAW_OLLAMA_BASE_URL:-http://ollama:11434}
-        node dist/index.js config set models.providers.ollama.api ollama
-        node dist/index.js config set models.providers.ollama.apiKey ${OLLAMA_API_KEY:-ollama-local}
-        node dist/index.js config set models.providers.ollama.models '[{"id":"tinyllama","name":"TinyLlama","reasoning":false,"input":["text"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":16000,"maxTokens":16000,"compat":{"supportsTools":false}}]' --strict-json
-        node dist/index.js config set agents.defaults.model.primary ${OPENCLAW_OLLAMA_MODEL_REF:-ollama/tinyllama}
-        node dist/index.js gateway --bind lan --port 18789 --allow-unconfigured
-    ports:
-      - "18789:18789"
-    networks:
-      - app-network
-    volumes:
-      - openclaw-config:/home/node/.openclaw
+  # openclaw-gateway:
+  #   image: ghcr.io/openclaw/openclaw:latest
+  #   container_name: openclaw-gateway
+  #   # profiles:
+  #   #   - openclaw
+  #   restart: unless-stopped
+  #   user: "0:0"
+  #   depends_on:
+  #     ollama-init:
+  #       condition: service_completed_successfully
+  #   environment:
+  #     HOME: /home/node
+  #     NODE_ENV: production
+  #     OPENCLAW_GATEWAY_BIND: lan
+  #     OPENCLAW_GATEWAY_PORT: 18789
+  #     OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-dev-openclaw-token}
+  #     OPENCLAW_SKIP_CANVAS_HOST: "1"
+  #     OPENCLAW_SKIP_CRON: "1"
+  #   command:
+  #     - sh
+  #     - -lc
+  #     - |
+  #       node dist/index.js config set gateway.mode local
+  #       node dist/index.js config set gateway.bind lan
+  #       node dist/index.js config set gateway.controlUi.allowedOrigins '["http://localhost:18789","http://127.0.0.1:18789"]' --strict-json
+  #       node dist/index.js config set gateway.http.endpoints.chatCompletions.enabled true
+  #       node dist/index.js config set models.providers.ollama.baseUrl ${OPENCLAW_OLLAMA_BASE_URL:-http://ollama:11434}
+  #       node dist/index.js config set models.providers.ollama.api ollama
+  #       node dist/index.js config set models.providers.ollama.apiKey ${OLLAMA_API_KEY:-ollama-local}
+  #       node dist/index.js config set models.providers.ollama.models '[{"id":"tinyllama","name":"TinyLlama","reasoning":false,"input":["text"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":16000,"maxTokens":16000,"compat":{"supportsTools":false}}]' --strict-json
+  #       node dist/index.js config set agents.defaults.model.primary ${OPENCLAW_OLLAMA_MODEL_REF:-ollama/tinyllama}
+  #       node dist/index.js gateway --bind lan --port 18789 --allow-unconfigured
+  #   ports:
+  #     - "18789:18789"
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - openclaw-config:/home/node/.openclaw
 
   # Ollama model runtime for local OpenClaw provider
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    # profiles:
-    #   - openclaw
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    networks:
-      - app-network
-    volumes:
-      - ollama-data:/root/.ollama
-    command: ["serve"]
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   # profiles:
+  #   #   - openclaw
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   command: ["serve"]
 
   # One-time model bootstrap for OpenClaw default model
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: ollama-init
-    # profiles:
-    #   - openclaw
-    depends_on:
-      - ollama
-    environment:
-      OLLAMA_HOST: ${OPENCLAW_OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_MODEL: ${OPENCLAW_OLLAMA_MODEL_ID:-tinyllama}
-    networks:
-      - app-network
-    restart: "no"
-    entrypoint: ["/bin/sh", "-lc"]
-    command:
-      - |
-        until ollama list >/dev/null 2>&1; do
-          sleep 2
-        done
-        ollama pull "$${OLLAMA_MODEL}"
+  # ollama-init:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama-init
+  #   # profiles:
+  #   #   - openclaw
+  #   depends_on:
+  #     - ollama
+  #   environment:
+  #     OLLAMA_HOST: ${OPENCLAW_OLLAMA_BASE_URL:-http://ollama:11434}
+  #     OLLAMA_MODEL: ${OPENCLAW_OLLAMA_MODEL_ID:-tinyllama}
+  #   networks:
+  #     - app-network
+  #   restart: "no"
+  #   entrypoint: ["/bin/sh", "-lc"]
+  #   command:
+  #     - |
+  #       until ollama list >/dev/null 2>&1; do
+  #         sleep 2
+  #       done
+  #       ollama pull "$${OLLAMA_MODEL}"
 
   # Valkey (Redis alternative)
-  valkey:
-    image: valkey/valkey:latest
-    profiles:
-      - openclaw
-    container_name: valkey
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-    volumes:
-      - valkey-data:/data
-    command: valkey-server --appendonly yes --dir /data
-
-  # Keycloak with PostgreSQL backend
-  keycloak:
-    image: quay.io/keycloak/keycloak:latest
-    container_name: keycloak
-    ports:
-      - "8080:8080"
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-change-this-password}
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: postgres
-      KC_HTTP_ENABLED: ${KC_HTTP_ENABLED:-true}
-      KC_HTTP_RELATIVE_PATH: ${KC_HTTP_RELATIVE_PATH:-/}
-      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN:-http://localhost:8080}
-      KC_HOSTNAME: ${KC_HOSTNAME:-http://localhost:8080}
-      KC_PROXY_HEADERS: xforwarded
-      KC_HOSTNAME_STRICT: "false"
-      KC_HEALTH_ENABLED: "true"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-network
-    command: start-dev
-    volumes:
-      - keycloak-data:/opt/keycloak/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+  # valkey:
+  #   image: valkey/valkey:latest
+  #   profiles:
+  #     - openclaw
+  #   container_name: valkey
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - valkey-data:/data
+  #   command: valkey-server --appendonly yes --dir /data
 
   # etcd
   etcd:
@@ -193,54 +163,54 @@ services:
       - etcd-data:/etcd-data
 
   # Test CLI for Distributed State Store
-  axiomnizamctl:
-    build:
-      context: .
-      dockerfile: Dockerfile.axiomnizamctl
-    profiles:
-      - openclaw
-    container_name: axiomnizamctl
-    networks:
-      - app-network
-    depends_on:
-      - etcd
-    environment:
-      ETCD_ENDPOINT: etcd:2379
-    stdin_open: true
-    tty: true
-    restart: unless-stopped
+  # axiomnizamctl:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.axiomnizamctl
+  #   profiles:
+  #     - openclaw
+  #   container_name: axiomnizamctl
+  #   networks:
+  #     - app-network
+  #   depends_on:
+  #     - etcd
+  #   environment:
+  #     ETCD_ENDPOINT: etcd:2379
+  #   stdin_open: true
+  #   tty: true
+  #   restart: unless-stopped
 
   # MySQL
-  mysql:
-    image: mysql:8.0
-    profiles:
-      - openclaw
-    container_name: mysql8
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: app_db
-    networks:
-      - app-network
-    volumes:
-      - mysql-data:/var/lib/mysql
+  # mysql:
+  #   image: mysql:8.0
+  #   profiles:
+  #     - openclaw
+  #   container_name: mysql8
+  #   ports:
+  #     - "3306:3306"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #     MYSQL_DATABASE: app_db
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
 
   # MariaDB
-  mariadb:
-    image: mariadb:latest
-    profiles:
-      - openclaw
-    container_name: mariadb
-    ports:
-      - "3307:3306"
-    environment:
-      MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: app_db
-    networks:
-      - app-network
-    volumes:
-      - mariadb-data:/var/lib/mysql
+  # mariadb:
+  #   image: mariadb:latest
+  #   profiles:
+  #     - openclaw
+  #   container_name: mariadb
+  #   ports:
+  #     - "3307:3306"
+  #   environment:
+  #     MARIADB_ROOT_PASSWORD: root
+  #     MARIADB_DATABASE: app_db
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - mariadb-data:/var/lib/mysql
 
   # PostgreSQL
   postgres:
@@ -265,132 +235,132 @@ services:
       retries: 10
 
   # MongoDB
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
-    networks:
-      - app-network
-    volumes:
-      - mongodb-data:/data/db
+  # mongodb:
+  #   image: mongo:latest
+  #   container_name: mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: root
+  #     MONGO_INITDB_ROOT_PASSWORD: root
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - mongodb-data:/data/db
 
   # Percona MySQL
-  percona:
-    image: percona:latest
-    container_name: percona
-    ports:
-      - "3308:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: app_db
-    networks:
-      - app-network
-    volumes:
-      - percona-data:/var/lib/mysql
+  # percona:
+  #   image: percona:latest
+  #   container_name: percona
+  #   ports:
+  #     - "3308:3306"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #     MYSQL_DATABASE: app_db
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - percona-data:/var/lib/mysql
 
   # Elasticsearch
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
-    profiles:
-      - openclaw
-    container_name: elasticsearch
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    networks:
-      - app-network
-    volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+  #   profiles:
+  #     - openclaw
+  #   container_name: elasticsearch
+  #   ports:
+  #     - "9200:9200"
+  #     - "9300:9300"
+  #   environment:
+  #     discovery.type: single-node
+  #     xpack.security.enabled: "false"
+  #     ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - elasticsearch-data:/usr/share/elasticsearch/data
 
   # Firebase Emulator Suite
-  firebase:
-    image: node:18
-    profiles:
-      - openclaw
-    container_name: firebase
-    ports:
-      - "4000:4000"
-      - "5000:5000"
-      - "8085:8085"
-      - "9099:9099"
-      - "9150:9150"
-    environment:
-      FIREBASE_DATABASE_EMULATOR_HOST: "firebase:9000"
-      FIRESTORE_EMULATOR_HOST: "firebase:8080"
-      PUBSUB_EMULATOR_HOST: "firebase:8085"
-    networks:
-      - app-network
-    working_dir: /firebase
-    volumes:
-      - firebase-data:/firebase
-    command: >
-      sh -c "
-      apt-get update &&
-      apt-get install -y default-jre &&
-      npm install -g firebase-tools &&
-      mkdir -p /firebase &&
-      cd /firebase &&
-      echo '{
-        \"projectId\": \"test-project\",
-        \"emulators\": {
-          \"auth\": {\"port\": 9099},
-          \"database\": {\"port\": 9000},
-          \"firestore\": {\"port\": 8080},
-          \"pubsub\": {\"port\": 8085},
-          \"hub\": {\"port\": 4400},
-          \"ui\": {\"enabled\": true, \"port\": 4000}
-        }
-      }' > firebase.json &&
-      mkdir -p public &&
-      echo '<html><body><h1>Firebase Emulator Running</h1><p>Firestore: 8080</p><p>Database: 9000</p><p>Auth: 9099</p><p>Pub/Sub: 8085</p><p>UI: 4000</p></body></html>' > public/index.html &&
-      firebase emulators:start --project=test-project
-      "
+  # firebase:
+  #   image: node:18
+  #   profiles:
+  #     - openclaw
+  #   container_name: firebase
+  #   ports:
+  #     - "4000:4000"
+  #     - "5000:5000"
+  #     - "8085:8085"
+  #     - "9099:9099"
+  #     - "9150:9150"
+  #   environment:
+  #     FIREBASE_DATABASE_EMULATOR_HOST: "firebase:9000"
+  #     FIRESTORE_EMULATOR_HOST: "firebase:8080"
+  #     PUBSUB_EMULATOR_HOST: "firebase:8085"
+  #   networks:
+  #     - app-network
+  #   working_dir: /firebase
+  #   volumes:
+  #     - firebase-data:/firebase
+  #   command: >
+  #     sh -c "
+  #     apt-get update &&
+  #     apt-get install -y default-jre &&
+  #     npm install -g firebase-tools &&
+  #     mkdir -p /firebase &&
+  #     cd /firebase &&
+  #     echo '{
+  #       \"projectId\": \"test-project\",
+  #       \"emulators\": {
+  #         \"auth\": {\"port\": 9099},
+  #         \"database\": {\"port\": 9000},
+  #         \"firestore\": {\"port\": 8080},
+  #         \"pubsub\": {\"port\": 8085},
+  #         \"hub\": {\"port\": 4400},
+  #         \"ui\": {\"enabled\": true, \"port\": 4000}
+  #       }
+  #     }' > firebase.json &&
+  #     mkdir -p public &&
+  #     echo '<html><body><h1>Firebase Emulator Running</h1><p>Firestore: 8080</p><p>Database: 9000</p><p>Auth: 9099</p><p>Pub/Sub: 8085</p><p>UI: 4000</p></body></html>' > public/index.html &&
+  #     firebase emulators:start --project=test-project
+  #     "
 
   # Oracle Database
-  oracle:
-    image: container-registry.oracle.com/database/express:latest
-    profiles:
-      - openclaw
-    container_name: oracle
-    ports:
-      - "1521:1521"
-    environment:
-      ORACLE_PASSWORD: oracle123
-      ORACLE_ALLOW_REMOTE: true
-    networks:
-      - app-network
-    volumes:
-      - oracle-data:/opt/oracle/oradata
-    healthcheck:
-      test: ["CMD", "healthcheck.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+  # oracle:
+  #   image: container-registry.oracle.com/database/express:latest
+  #   profiles:
+  #     - openclaw
+  #   container_name: oracle
+  #   ports:
+  #     - "1521:1521"
+  #   environment:
+  #     ORACLE_PASSWORD: oracle123
+  #     ORACLE_ALLOW_REMOTE: true
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - oracle-data:/opt/oracle/oradata
+  #   healthcheck:
+  #     test: ["CMD", "healthcheck.sh"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
 
   # ClamAV Antivirus (SafeGate Scanner)
-  clamav:
-    image: clamav/clamav:latest
-    container_name: clamav
-    ports:
-      - "3310:3310"
-    networks:
-      - app-network
-    volumes:
-      - clamav-data:/var/lib/clamav
-    healthcheck:
-      test: ["CMD", "clamdcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
+  # clamav:
+  #   image: clamav/clamav:latest
+  #   container_name: clamav
+  #   ports:
+  #     - "3310:3310"
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - clamav-data:/var/lib/clamav
+  #   healthcheck:
+  #     test: ["CMD", "clamdcheck"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 120s
 
 networks:
   app-network:
@@ -405,7 +375,6 @@ volumes:
   elasticsearch-data:
   firebase-data:
   oracle-data:
-  keycloak-data:
   valkey-data:
   etcd-data:
   clamav-data:

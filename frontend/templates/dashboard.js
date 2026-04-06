@@ -2,29 +2,16 @@ let autoRefreshInterval = null;
 
 // Get backend URL from template
 const BACKEND_URL = (() => {
-    const elem = document.getElementById('backendURL');
-    let url = 'http://localhost:8000'; // Default fallback
-    
-    if (elem && elem.textContent) {
-        const text = elem.textContent.trim();
-        // Ensure URL has protocol
-        if (text && text.length > 0) {
-            if (text.startsWith('http://') || text.startsWith('https://')) {
-                url = text;
-            } else if (text.startsWith('localhost') || text.startsWith('127.0.0.1')) {
-                url = 'http://' + text;
-            } else {
-                url = text; // Use as-is if it looks complete
-            }
-        }
+    if (typeof window.resolveBackendURL === 'function') {
+        return window.resolveBackendURL();
     }
-    
-    // If contains Docker hostname, replace with localhost
-    if (url.includes('axiomnizam:8000')) {
-        url = url.replace('axiomnizam:8000', 'localhost:8000');
+
+    const value = String(window.BACKEND_URL || '').trim();
+    if (value) {
+        return value.endsWith('/') ? value.slice(0, -1) : value;
     }
-    
-    return url;
+
+    return 'http://localhost:8000';
 })();
 
 console.log('Backend URL:', BACKEND_URL);
@@ -44,7 +31,7 @@ function refreshData() {
 }
 
 function fetchHealth() {
-    const url = BACKEND_URL + '/health';
+    const url = '/api/health';
     console.log('Fetching health from:', url);
     console.log('BACKEND_URL value:', BACKEND_URL);
     
@@ -77,7 +64,7 @@ function fetchHealth() {
 }
 
 function fetchStatus() {
-    const url = BACKEND_URL + '/status';
+    const url = '/api/status';
     console.log('Fetching status from:', url);
     
     fetch(url, { mode: 'cors' })

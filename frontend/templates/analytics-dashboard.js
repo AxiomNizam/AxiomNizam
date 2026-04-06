@@ -3,7 +3,7 @@
 // Chart.js rendering, Widget editor, CSV/XLSX export
 // =====================================================
 
-const BACKEND = window.__backendURL || 'http://localhost:8000';
+const BACKEND = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.__backendURL || window.BACKEND_URL || 'http://localhost:8000');
 let currentDashboardId = '';
 let currentDashboard = null;
 let editMode = false;

@@ -1,4 +1,4 @@
-const VERSION_LINEAGE_API_BASE = window.BACKEND_URL || 'http://localhost:8000';
+const VERSION_LINEAGE_API_BASE = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000');
 
 function versionLineageURL(path) {
     if (!path) return VERSION_LINEAGE_API_BASE;

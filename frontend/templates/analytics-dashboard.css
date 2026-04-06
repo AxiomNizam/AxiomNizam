@@ -701,17 +701,97 @@
 }
 
 @media (max-width: 768px) {
-    .analytics-container { padding: 10px; }
-    .analytics-header { flex-direction: column; align-items: flex-start; }
+    .analytics-container {
+        padding: 10px;
+        min-height: auto;
+    }
+
+    .analytics-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .analytics-header-left,
+    .analytics-header-right {
+        width: 100%;
+    }
+
+    .analytics-header-right {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .analytics-header-right .analytics-btn,
+    .analytics-header-right .analytics-dropdown {
+        width: 100%;
+    }
+
+    .analytics-header-right .analytics-dropdown .analytics-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .analytics-filter-bar,
+    .analytics-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .analytics-filter-item,
+    .analytics-select,
+    .analytics-input {
+        width: 100%;
+    }
+
+    .analytics-widget-header {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .analytics-widget-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
     .analytics-grid {
         grid-template-columns: 1fr;
     }
+
     .analytics-widget,
     .analytics-widget-kpi {
         grid-column: span 1 !important;
     }
+
     .analytics-form-row { flex-direction: column; }
+    .analytics-table { min-width: 640px; }
+    .analytics-modal { width: 95%; max-height: 90dvh; }
     .kpi-value { font-size: 1.4rem; }
+}
+
+@media (max-width: 520px) {
+    .analytics-header-right {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-title {
+        font-size: 1.05rem;
+        white-space: normal;
+    }
+
+    .analytics-desc {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .log-entry {
+        flex-wrap: wrap;
+    }
+
+    .log-time,
+    .log-source {
+        min-width: 0;
+    }
 }
 
 /* Canvas chart sizing */

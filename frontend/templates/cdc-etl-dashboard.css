@@ -93,7 +93,7 @@
 .kpi-card.kpi-success .kpi-value { color: #10b981; }
 .kpi-card.kpi-danger .kpi-value { color: #ef4444; }
 .kpi-card.kpi-warning .kpi-value { color: #f59e0b; }
-.kpi-card.kpi-info .kpi-value { color: #3b82f6; }
+.kpi-card.kpi-info .kpi-value { color: var(--accent-color, #3b82f6); }
 
 /* Pipeline Table */
 .pipeline-table-wrap {
@@ -671,10 +671,63 @@
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .chart-grid { grid-template-columns: 1fr; }
     .connector-grid { grid-template-columns: repeat(2, 1fr); }
-    .cdc-etl-tabs { overflow-x: auto; }
-    .pipeline-table { display: block; overflow-x: auto; }
+    .cdc-etl-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+    }
+    .cdc-etl-tab {
+        white-space: nowrap;
+        padding: 12px 14px;
+        font-size: 13px;
+    }
+    .pipeline-table-wrap { overflow-x: auto; }
+    .pipeline-table {
+        display: table;
+        min-width: 720px;
+    }
+    .pipeline-table-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .pipeline-table-header .btn-create {
+        width: 100%;
+        justify-content: center;
+    }
     .connector-toolbar { flex-direction: column; align-items: stretch; }
     .connector-toolbar-left { flex-direction: column; }
+    .connector-toolbar-left > * { width: 100%; }
     .connector-form-span-2 { grid-column: span 1; }
     .advanced-grid { grid-template-columns: 1fr; }
+    .cdc-etl-modal {
+        width: 95%;
+        max-height: 90dvh;
+        padding: 18px;
+    }
+}
+
+@media (max-width: 520px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+    .connector-grid { grid-template-columns: 1fr; }
+
+    .cdc-etl-tab {
+        padding: 11px 12px;
+        font-size: 12px;
+    }
+
+    .cdc-etl-modal {
+        width: calc(100vw - 12px);
+        max-height: calc(100dvh - 12px);
+        padding: 14px;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .modal-actions .btn-cancel,
+    .modal-actions .btn-submit {
+        width: 100%;
+    }
 }

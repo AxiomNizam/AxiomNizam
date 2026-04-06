@@ -13,6 +13,7 @@ type TokenUsage struct {
 	IssuedAt       time.Time
 	LastUsedAt     time.Time
 	MaxCallsPerDay int64 // 500 calls per token
+	TokenValidity  time.Duration
 }
 
 // RateLimiter manages rate limiting and token validity
@@ -39,15 +40,28 @@ func NewRateLimiter(maxCalls int64, tokenValidityMinutes int) *RateLimiter {
 
 // RegisterToken registers a new token for tracking
 func (rl *RateLimiter) RegisterToken(token string, username string) {
+	rl.RegisterTokenWithPolicy(token, username, rl.maxCalls, rl.tokenValidity)
+}
+
+// RegisterTokenWithPolicy registers a token using custom limits and validity.
+func (rl *RateLimiter) RegisterTokenWithPolicy(token string, username string, maxCalls int64, tokenValidity time.Duration) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+
+	if maxCalls <= 0 {
+		maxCalls = rl.maxCalls
+	}
+	if tokenValidity <= 0 {
+		tokenValidity = rl.tokenValidity
+	}
 
 	rl.tokens[token] = &TokenUsage{
 		Username:       username,
 		CallCount:      0,
 		IssuedAt:       time.Now(),
 		LastUsedAt:     time.Now(),
-		MaxCallsPerDay: rl.maxCalls,
+		MaxCallsPerDay: maxCalls,
+		TokenValidity:  tokenValidity,
 	}
 }
 
@@ -63,7 +77,11 @@ func (rl *RateLimiter) CheckRateLimit(token string) (bool, int64, time.Time, err
 	}
 
 	// Check if token has expired
-	expiresAt := usage.IssuedAt.Add(rl.tokenValidity)
+	validity := usage.TokenValidity
+	if validity <= 0 {
+		validity = rl.tokenValidity
+	}
+	expiresAt := usage.IssuedAt.Add(validity)
 	if time.Now().After(expiresAt) {
 		return false, 0, expiresAt, fmt.Errorf("token expired")
 	}
@@ -105,7 +123,11 @@ func (rl *RateLimiter) GetTokenStats(token string) (map[string]interface{}, erro
 		return nil, fmt.Errorf("token not found")
 	}
 
-	expiresAt := usage.IssuedAt.Add(rl.tokenValidity)
+	validity := usage.TokenValidity
+	if validity <= 0 {
+		validity = rl.tokenValidity
+	}
+	expiresAt := usage.IssuedAt.Add(validity)
 	isExpired := time.Now().After(expiresAt)
 
 	return map[string]interface{}{
@@ -116,7 +138,7 @@ func (rl *RateLimiter) GetTokenStats(token string) (map[string]interface{}, erro
 		"issued_at":       usage.IssuedAt.Format(time.RFC3339),
 		"expires_at":      expiresAt.Format(time.RFC3339),
 		"is_expired":      isExpired,
-		"time_remaining":  expiresAt.Sub(time.Now()).String(),
+		"time_remaining":  time.Until(expiresAt).String(),
 		"last_used":       usage.LastUsedAt.Format(time.RFC3339),
 	}, nil
 }
@@ -139,7 +161,11 @@ func (rl *RateLimiter) cleanupExpiredTokens() {
 
 		now := time.Now()
 		for token, usage := range rl.tokens {
-			expiresAt := usage.IssuedAt.Add(rl.tokenValidity)
+			validity := usage.TokenValidity
+			if validity <= 0 {
+				validity = rl.tokenValidity
+			}
+			expiresAt := usage.IssuedAt.Add(validity)
 			if now.After(expiresAt) {
 				delete(rl.tokens, token)
 			}
@@ -158,7 +184,11 @@ func (rl *RateLimiter) GetActiveTokenCount() int {
 	now := time.Now()
 
 	for _, usage := range rl.tokens {
-		expiresAt := usage.IssuedAt.Add(rl.tokenValidity)
+		validity := usage.TokenValidity
+		if validity <= 0 {
+			validity = rl.tokenValidity
+		}
+		expiresAt := usage.IssuedAt.Add(validity)
 		if now.Before(expiresAt) {
 			count++
 		}
@@ -180,7 +210,11 @@ func (rl *RateLimiter) GetAllTokenStats() map[string]interface{} {
 	tokenList := make([]map[string]interface{}, 0)
 
 	for _, usage := range rl.tokens {
-		expiresAt := usage.IssuedAt.Add(rl.tokenValidity)
+		validity := usage.TokenValidity
+		if validity <= 0 {
+			validity = rl.tokenValidity
+		}
+		expiresAt := usage.IssuedAt.Add(validity)
 		if now.Before(expiresAt) {
 			activeTokens++
 			totalCalls += usage.CallCount
@@ -200,4 +234,29 @@ func (rl *RateLimiter) GetAllTokenStats() map[string]interface{} {
 	stats["tokens"] = tokenList
 
 	return stats
+}
+
+// GetTokenPolicy returns the configured policy for a tracked token.
+func (rl *RateLimiter) GetTokenPolicy(token string) (int64, time.Duration, bool) {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	usage, exists := rl.tokens[token]
+	if !exists {
+		return 0, 0, false
+	}
+
+	validity := usage.TokenValidity
+	if validity <= 0 {
+		validity = rl.tokenValidity
+	}
+
+	return usage.MaxCallsPerDay, validity, true
+}
+
+// DefaultPolicy returns default rate-limit values.
+func (rl *RateLimiter) DefaultPolicy() (int64, time.Duration) {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+	return rl.maxCalls, rl.tokenValidity
 }

@@ -4,26 +4,43 @@
     <!-- Header -->
     <div class="manager-header">
         <div class="header-left">
-            <h1>System Manager</h1>
-            <p class="subtitle">System Monitoring & Control Center</p>
+            <h1 style="font-family: var(--font-heading); font-weight: 700; letter-spacing: -0.5px;">System Manager</h1>
+            <p class="subtitle" style="margin-top: 4px;">System Monitoring & Control Center</p>
         </div>
-        
-        <div class="header-stats" id="sysManagerHeaderStats">
-            <div class="stat-box">
-                <span class="stat-label">Rate Limit</span>
-                <span class="stat-value">5 / 100</span>
+
+        <div class="header-center" style="display: flex; gap: 24px; align-items: center; flex: 2; justify-content: center;">
+            <div id="tokenCopyShortcut" style="display: none; min-width: 110px;">
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <button
+                        id="copyApiTokenBtn"
+                        class="btn-secondary"
+                        type="button"
+                        onclick="copyAuthTokenForPostman()"
+                        style="padding: 8px 16px; white-space: nowrap; border-radius: 8px; font-weight: 500; box-shadow: var(--shadow-sm);"
+                    >
+                        Copy Token
+                    </button>
+                    <div id="copyTokenStatus" style="margin-top: 6px; font-size: 0.75rem; color: var(--text-secondary); font-weight: 500;">Ready</div>
+                </div>
             </div>
-            <div class="stat-box">
-                <span class="stat-label">Token Time</span>
-                <span class="stat-value" id="sysTokenExpiry">1h 15m</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-label">Current IP</span>
-                <span class="stat-value" id="sysCurrentIP">...</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-label">Uptime</span>
-                <span class="stat-value" style="color: var(--primary-color);">99.9%</span>
+
+            <div class="header-stats" id="sysManagerHeaderStats" style="margin: 0; min-width: 400px; flex: 1;">
+                <div class="stat-box">
+                    <span class="stat-label">Rate Limit</span>
+                    <span class="stat-value">5 / 100</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Token Time</span>
+                    <span class="stat-value" id="sysTokenExpiry">1h 15m</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Current IP</span>
+                    <span class="stat-value" id="sysCurrentIP">...</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Uptime</span>
+                    <span class="stat-value" style="color: var(--primary-color);">99.9%</span>
+                </div>
             </div>
         </div>
 
@@ -159,55 +176,103 @@
 
     <!-- Monitoring Tab -->
     <div id="monitoring" class="tab-content">
-        <div class="monitoring-section">
-            <h3>Performance Monitoring</h3>
-            <div class="chart-container">
-                <div class="chart-item">
-                    <h4>Request Rate</h4>
-                    <div class="chart-placeholder">📈 Chart visualization area</div>
+        <div class="monitoring-section monitoring-dashboards">
+            <div class="section-header">
+                <div>
+                    <h3>Monitoring Dashboards</h3>
+                    <p class="monitoring-subtitle">Detailed metrics from API Builder, IAM realms and clients, and user management.</p>
                 </div>
-                <div class="chart-item">
-                    <h4>Response Times</h4>
-                    <div class="chart-placeholder">📊 Chart visualization area</div>
+                <div class="monitoring-header-actions">
+                    <label for="monitoringRealmFilter" class="monitoring-filter-label">Realm</label>
+                    <select id="monitoringRealmFilter" class="monitoring-filter-select" onchange="handleMonitoringRealmFilterChange()">
+                        <option value="">All realms</option>
+                    </select>
+                    <button class="btn-secondary" onclick="loadMonitoringDashboards()">Refresh Metrics</button>
                 </div>
             </div>
 
-            <div class="metrics-table">
-                <h4>Detailed Metrics</h4>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            <th>Current</th>
-                            <th>Average</th>
-                            <th>Peak</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="metricsBody">
-                        <tr>
-                            <td>API Response Time</td>
-                            <td>45ms</td>
-                            <td>52ms</td>
-                            <td>120ms</td>
-                            <td><span class="status-ok">✓ Good</span></td>
-                        </tr>
-                        <tr>
-                            <td>Database Query Time</td>
-                            <td>12ms</td>
-                            <td>15ms</td>
-                            <td>45ms</td>
-                            <td><span class="status-ok">✓ Good</span></td>
-                        </tr>
-                        <tr>
-                            <td>Error Rate</td>
-                            <td>0.1%</td>
-                            <td>0.15%</td>
-                            <td>0.5%</td>
-                            <td><span class="status-ok">✓ Low</span></td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="monitoring-kpi-grid" id="monitoringKPIGrid">
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">API Calls</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">API Success</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">Realms</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">Active Users</div></div>
+                <div class="summary-card"><div class="sc-value">--</div><div class="sc-label">Active Sessions</div></div>
+            </div>
+
+            <div class="metrics-table monitoring-dashboard-block">
+                <div class="metrics-section-header">
+                    <h4>API Builder Metrics Dashboard</h4>
+                    <span class="status-badge status-analyzed" id="apiBuilderMetricsUpdatedAt">Loading...</span>
+                </div>
+                <div class="monitoring-mini-cards" id="apiBuilderMetricCards"></div>
+                <div class="table-responsive">
+                    <table class="admin-table compact monitoring-detail-table">
+                        <thead>
+                            <tr>
+                                <th>API</th>
+                                <th>Endpoint</th>
+                                <th>Calls</th>
+                                <th>Trend (Calls)</th>
+                                <th>Success</th>
+                                <th>Errors</th>
+                                <th>Avg Duration</th>
+                                <th>Last Called</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apiBuilderMetricsBody">
+                            <tr><td colspan="9" class="monitoring-loading-cell">Loading API Builder metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="metrics-table monitoring-dashboard-block">
+                <div class="metrics-section-header">
+                    <h4>Realm Client Metrics Dashboard</h4>
+                    <span class="status-badge status-analyzed" id="realmClientMetricsUpdatedAt">Loading...</span>
+                </div>
+                <div class="monitoring-mini-cards" id="realmClientMetricCards"></div>
+                <div class="table-responsive">
+                    <table class="admin-table compact monitoring-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Realm</th>
+                                <th>Users</th>
+                                <th>Clients</th>
+                                <th>Active Clients</th>
+                                <th>Roles</th>
+                                <th>Active Sessions</th>
+                                <th>Recent Events</th>
+                            </tr>
+                        </thead>
+                        <tbody id="realmClientMetricsBody">
+                            <tr><td colspan="7" class="monitoring-loading-cell">Loading realm and client metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="metrics-table monitoring-dashboard-block">
+                <div class="metrics-section-header">
+                    <h4>User Metrics Dashboard</h4>
+                    <span class="status-badge status-analyzed" id="userMetricsUpdatedAt">Loading...</span>
+                </div>
+                <div class="monitoring-mini-cards" id="userMetricCards"></div>
+                <div class="table-responsive">
+                    <table class="admin-table compact monitoring-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userMetricsBody">
+                            <tr><td colspan="3" class="monitoring-loading-cell">Loading user metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -262,13 +327,18 @@
     <!-- Users Tab -->
     <div id="users" class="tab-content">
         <div class="databases-section">
-            <div class="section-header">
-                <h3>User Management</h3>
-                <button class="btn-primary" onclick="loadUsers()">Refresh</button>
-            </div>
-
-            <div class="database-controls">
-                <button class="btn-secondary" onclick="openCreateUserModal()">+ Create User</button>
+            <div class="section-header" style="align-items:flex-start;gap:10px;">
+                <div>
+                    <h3 style="margin:0;">IAM User Management</h3>
+                    <p style="margin:6px 0 0 0;color:var(--text-secondary);font-size:0.9em;">
+                        Role source: IAM role bindings (<code>/iam/admin/role-bindings</code>). Keycloak realm/client roles are interpreted from token claims at login.
+                    </p>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button class="btn-primary" onclick="loadUsers()">Refresh</button>
+                    <button class="btn-secondary" onclick="openCreateIAMUserModal()">+ Create IAM User</button>
+                    <button class="btn-secondary" onclick="openIAMAdminConsole()">Open IAM Console</button>
+                </div>
             </div>
 
             <div class="database-grid" id="userList">
@@ -284,14 +354,14 @@
                 <h3>Admin Console</h3>
                 <button class="btn-secondary" onclick="window.open('/admin', '_blank')">Open In New Tab</button>
             </div>
-            <p style="margin: 0 0 12px 0; color: var(--text-secondary, #94a3b8);">
+            <p style="margin: 0 0 12px 0; color: var(--text-secondary);">
                 Full admin features are available below while keeping all system-manager tools in this dashboard.
             </p>
             <iframe
                 id="systemManagerAdminFrame"
                 src="/admin"
                 title="Admin Console"
-                style="width:100%;min-height:78vh;border:1px solid var(--border-color, #334155);border-radius:12px;background:var(--card-bg, #1e293b);"
+                style="width:100%;min-height:78vh;border:1px solid var(--border-color);border-radius:12px;background:var(--card-bg);"
             ></iframe>
         </div>
     </div>
@@ -427,13 +497,13 @@
 
 <!-- Create Database Modal -->
 <div id="createDbModal" class="modal-overlay" style="display:none;">
-    <div class="modal-box" style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 30px; width: 450px; max-width: 90vw; position: relative;">
-        <button class="modal-close-btn" onclick="closeCreateDbModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-primary, #f8fafc);font-size:1.5em;cursor:pointer;">&times;</button>
+    <div class="modal-box" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; width: 450px; max-width: 90vw; position: relative; box-shadow: var(--shadow-lg);">
+        <button class="modal-close-btn" onclick="closeCreateDbModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-muted);font-size:1.5em;cursor:pointer;transition:color 0.2s;">&times;</button>
         <h3 style="margin-top:0;margin-bottom:20px;">🗄️ Create New Database</h3>
         <form onsubmit="submitCreateDatabase(event)">
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
-                <select id="newDbType" onchange="populateCreateDbServers()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
+                <label for="newDbType" style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
+                <select id="newDbType" onchange="populateCreateDbServers()" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;" required>
                     <option value="">Select Type</option>
                     <option value="mysql">MySQL</option>
                     <option value="postgres">PostgreSQL</option>
@@ -442,8 +512,8 @@
                 </select>
             </div>
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Database Server</label>
-                <select id="newDbServer" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;">
+                <label for="newDbServer" style="display:block;margin-bottom:6px;font-weight:600;">Database Server</label>
+                <select id="newDbServer" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;">
                     <option value="">Default server for selected database type</option>
                 </select>
                 <div style="margin-top:8px;display:flex;justify-content:flex-end;">
@@ -451,8 +521,8 @@
                 </div>
             </div>
             <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Database Name</label>
-                <input type="text" id="newDbName" placeholder="my_database" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required pattern="^[a-zA-Z_][a-zA-Z0-9_]*$" title="Only letters, numbers and underscores allowed">
+                <label for="newDbName" style="display:block;margin-bottom:6px;font-weight:600;">Database Name</label>
+                <input type="text" id="newDbName" placeholder="my_database" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;" required pattern="^[a-zA-Z_][a-zA-Z0-9_]*$" title="Only letters, numbers and underscores allowed">
             </div>
             <div style="display:flex;gap:10px;justify-content:flex-end;">
                 <button type="button" class="btn-secondary" onclick="closeCreateDbModal()">Cancel</button>
@@ -465,18 +535,18 @@
 
 <!-- Connect Database Server Modal -->
 <div id="connectDbServerModal" class="modal-overlay" style="display:none;">
-    <div class="modal-box" style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 30px; width: 520px; max-width: 92vw; position: relative;">
-        <button class="modal-close-btn" onclick="closeConnectDbServerModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-primary, #f8fafc);font-size:1.5em;cursor:pointer;">&times;</button>
+    <div class="modal-box" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; width: 520px; max-width: 92vw; position: relative; box-shadow: var(--shadow-lg);">
+        <button class="modal-close-btn" onclick="closeConnectDbServerModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-muted);font-size:1.5em;cursor:pointer;transition:color 0.2s;">&times;</button>
         <h3 style="margin-top:0;margin-bottom:20px;">🔌 Connect Database Server</h3>
         <form onsubmit="submitConnectDbServer(event)">
             <div style="margin-bottom:14px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Server Name</label>
-                <input type="text" id="serverName" placeholder="e.g. reporting-east" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+                <label for="serverName" style="display:block;margin-bottom:6px;font-weight:600;">Server Name</label>
+                <input type="text" id="serverName" placeholder="e.g. reporting-east" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;" required>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
-                    <select id="serverDbType" onchange="updateConnectServerPortDefault()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
+                    <label for="serverDbType" style="display:block;margin-bottom:6px;font-weight:600;">Database Type</label>
+                    <select id="serverDbType" onchange="updateConnectServerPortDefault()" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;" required>
                         <option value="mysql">MySQL</option>
                         <option value="postgres">PostgreSQL</option>
                         <option value="mariadb">MariaDB</option>
@@ -484,32 +554,32 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Port</label>
-                    <input type="number" id="serverPort" placeholder="3306" min="1" max="65535" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+                    <label for="serverPort" style="display:block;margin-bottom:6px;font-weight:600;">Port</label>
+                    <input type="number" id="serverPort" placeholder="3306" min="1" max="65535" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;" required>
                 </div>
             </div>
             <div style="margin-bottom:14px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Host</label>
-                <input type="text" id="serverHost" placeholder="127.0.0.1" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+                <label for="serverHost" style="display:block;margin-bottom:6px;font-weight:600;">Host</label>
+                <input type="text" id="serverHost" placeholder="127.0.0.1" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;" required>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Username</label>
-                    <input type="text" id="serverUsername" placeholder="root" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+                    <label for="serverUsername" style="display:block;margin-bottom:6px;font-weight:600;">Username</label>
+                    <input type="text" id="serverUsername" placeholder="root" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;" required>
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Password</label>
-                    <input type="password" id="serverPassword" placeholder="Password" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;">
+                    <label for="serverPassword" style="display:block;margin-bottom:6px;font-weight:600;">Password</label>
+                    <input type="password" id="serverPassword" placeholder="Password" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;">
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">Default DB</label>
-                    <input type="text" id="serverDefaultDatabase" placeholder="mysql or postgres" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;">
+                    <label for="serverDefaultDatabase" style="display:block;margin-bottom:6px;font-weight:600;">Default DB</label>
+                    <input type="text" id="serverDefaultDatabase" placeholder="mysql or postgres" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;">
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:6px;font-weight:600;">SSL Mode (Postgres)</label>
-                    <select id="serverSSLMode" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;">
+                    <label for="serverSSLMode" style="display:block;margin-bottom:6px;font-weight:600;">SSL Mode (Postgres)</label>
+                    <select id="serverSSLMode" style="width:100%;padding:10px 12px; transition:border-color 0.2s;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;">
                         <option value="disable">disable</option>
                         <option value="require">require</option>
                         <option value="verify-ca">verify-ca</option>
@@ -526,76 +596,46 @@
     </div>
 </div>
 
-<!-- Create User Modal -->
-<div id="createUserModal" class="modal-overlay" style="display:none;">
-    <div class="modal-box" style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 30px; width: 450px; max-width: 90vw; position: relative;">
-        <button class="modal-close-btn" onclick="closeCreateUserModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-primary, #f8fafc);font-size:1.5em;cursor:pointer;">&times;</button>
-        <h3 style="margin-top:0;margin-bottom:20px;">👤 Create New User</h3>
-        <form onsubmit="submitCreateUser(event)">
+<!-- Create IAM User Modal -->
+<div id="createIAMUserModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; width: 520px; max-width: 92vw; position: relative; box-shadow: var(--shadow-lg);">
+        <button class="modal-close-btn" onclick="closeCreateIAMUserModal()" style="position:absolute;top:16px;right:20px;background:none;border:none;color:var(--text-muted);font-size:1.5em;cursor:pointer;transition:color 0.2s;">&times;</button>
+        <h3 style="margin-top:0;margin-bottom:20px;font-family:var(--font-heading);">👤 Create IAM User</h3>
+        <form onsubmit="submitCreateIAMUser(event)">
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Username</label>
-                <input type="text" id="newUserName" placeholder="johndoe" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required pattern="^[a-zA-Z0-9_.-]+$" title="Only letters, numbers, dots, hyphens and underscores">
+                <label for="createIAMUserEmail" style="display:block;margin-bottom:8px;font-weight:600;font-size:0.95em;color:var(--text-secondary);">Email</label>
+                <input type="email" id="createIAMUserEmail" placeholder="user@example.com" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;transition:border-color 0.2s;" required>
             </div>
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Email</label>
-                <input type="email" id="newUserEmail" placeholder="john@example.com" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
+                <label for="createIAMUserDisplayName" style="display:block;margin-bottom:8px;font-weight:600;font-size:0.95em;color:var(--text-secondary);">Display Name</label>
+                <input type="text" id="createIAMUserDisplayName" placeholder="John Doe" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;transition:border-color 0.2s;">
             </div>
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Password</label>
-                <input type="password" id="newUserPassword" placeholder="Minimum 8 characters" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required minlength="8">
+                <label for="createIAMUserPassword" style="display:block;margin-bottom:8px;font-weight:600;font-size:0.95em;color:var(--text-secondary);">Password</label>
+                <input type="password" id="createIAMUserPassword" placeholder="Minimum 8 characters" minlength="8" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;box-sizing:border-box;transition:border-color 0.2s;" required>
             </div>
             <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Role</label>
-                <select id="newUserRole" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
-                    <option value="user">Normal User (View Only)</option>
-                    <option value="manager">Manager (Modify APIs & Dashboards)</option>
-                    <option value="admin">Admin (Full Access)</option>
+                <label for="createIAMUserRole" style="display:block;margin-bottom:8px;font-weight:600;font-size:0.95em;color:var(--text-secondary);">Primary Access Role</label>
+                <select id="createIAMUserRole" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--dark-bg);color:var(--text-primary);font-size:1em;transition:border-color 0.2s;" required>
+                    <option value="user">user</option>
                 </select>
             </div>
-            <div style="display:flex;gap:10px;justify-content:flex-end;">
-                <button type="button" class="btn-secondary" onclick="closeCreateUserModal()">Cancel</button>
-                <button type="submit" class="btn-primary" id="createUserBtn">Create User</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;padding:12px;background:var(--dark-bg);border-radius:8px;border:1px solid var(--border-color);">
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.95em;color:var(--text-primary);cursor:pointer;">
+                    <input type="checkbox" id="createIAMUserActive" style="width:16px;height:16px;accent-color:var(--primary-color);" checked>
+                    Active account
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.95em;color:var(--text-primary);cursor:pointer;">
+                    <input type="checkbox" id="createIAMUserEmailVerified" style="width:16px;height:16px;accent-color:var(--primary-color);">
+                    Email verified
+                </label>
+            </div>
+            <div style="display:flex;gap:12px;justify-content:flex-end;">
+                <button type="button" class="btn-secondary" onclick="closeCreateIAMUserModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="createIAMUserBtn">Create User</button>
             </div>
         </form>
-        <div id="createUserResult" style="margin-top:16px;display:none;padding:12px;border-radius:8px;"></div>
-    </div>
-</div>
-
-<!-- Edit User Modal -->
-<div id="editUserModal" class="modal-overlay" style="display:none;">
-    <div class="modal-box" style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 12px; padding: 30px; width: 450px; max-width: 90vw; position: relative;">
-        <button class="modal-close-btn" onclick="closeEditUserModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-primary, #f8fafc);font-size:1.5em;cursor:pointer;">&times;</button>
-        <h3 style="margin-top:0;margin-bottom:20px;">✏️ Edit User</h3>
-        <form onsubmit="submitEditUser(event)">
-            <input type="hidden" id="editUserId">
-            <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Username</label>
-                <input type="text" id="editUserName" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-secondary, #94a3b8);font-size:1em;box-sizing:border-box;" readonly>
-            </div>
-            <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Email</label>
-                <input type="email" id="editUserEmail" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;box-sizing:border-box;" required>
-            </div>
-            <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Role</label>
-                <select id="editUserRole" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;" required>
-                    <option value="user">Normal User (View Only)</option>
-                    <option value="manager">Manager (Modify APIs & Dashboards)</option>
-                    <option value="admin">Admin (Full Access)</option>
-                </select>
-            </div>
-            <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:6px;font-weight:600;">Status</label>
-                <select id="editUserStatus" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color, #334155);background:var(--bg-primary, #0f172a);color:var(--text-primary, #f8fafc);font-size:1em;">
-                    <option value="active">Active</option>
-                    <option value="disabled">Disabled</option>
-                </select>
-            </div>
-            <div style="display:flex;gap:10px;justify-content:flex-end;">
-                <button type="button" class="btn-secondary" onclick="closeEditUserModal()">Cancel</button>
-                <button type="submit" class="btn-primary" id="editUserBtn">Save Changes</button>
-            </div>
-        </form>
+        <div id="createIAMUserResult" style="margin-top:16px;display:none;padding:12px;border-radius:8px;"></div>
     </div>
 </div>
 
@@ -606,24 +646,53 @@
     justify-content: center; z-index: 9999;
 }
 .user-card {
-    background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155);
+    background: var(--card-bg); border: 1px solid var(--border-color);
     border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: var(--shadow-sm); transition: var(--transition);
+}
+.user-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-color);
+}
+.user-card .role-chip-row {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 4px 0;
 }
 .user-card .user-role-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 600;
+    display: inline-block; padding: 4px 12px; border-radius: 8px; font-size: 0.75rem; 
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
 }
 .role-admin { background: rgba(239,68,68,0.2); color: #ef4444; }
+.role-sysadmin,
+.role-system-manager { background: rgba(245,158,11,0.2); color: #f59e0b; }
 .role-manager { background: rgba(59,130,246,0.2); color: #3b82f6; }
 .role-user { background: rgba(16,185,129,0.2); color: #10b981; }
-.user-card-actions { display: flex; gap: 8px; margin-top: 8px; }
-.user-card-actions button { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85em; }
-.btn-edit { background: rgba(59,130,246,0.2); color: #3b82f6; }
-.btn-edit:hover { background: rgba(59,130,246,0.3); }
-.btn-delete { background: rgba(239,68,68,0.2); color: #ef4444; }
-.btn-delete:hover { background: rgba(239,68,68,0.3); }
+.role-default { background: rgba(148,163,184,0.2); color: #94a3b8; }
+.user-card .user-role-actions {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.user-card .user-role-actions span {
+    font-weight: 500;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.user-card .user-role-actions select {
+    min-width: 150px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-primary);
+}
 </style>
 
-<script src="/static/system-manager.js"></script>
+<script src="/static/system-manager.js?v=20260406-3"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP
@@ -689,3 +758,5 @@
     });
 </script>
 {{ end }}
+
+

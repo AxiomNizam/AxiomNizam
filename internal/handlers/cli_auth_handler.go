@@ -1,57 +1,76 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
 )
 
-// CLIAuthHandler handles authentication requests from the CLI
+// CLIAuthHandler handles authentication requests from the CLI.
 type CLIAuthHandler struct {
-	mu     sync.RWMutex
-	users  map[string]*CLIUser // username -> user
-	tokens map[string]string   // token -> username
-	jwtKey []byte
+	iamBaseURL string
+	httpClient *http.Client
 }
 
-// CLIUser represents a user for CLI auth
-type CLIUser struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Password string `json:"-"`
-	Role     string `json:"role"`
-}
-
-// NewCLIAuthHandler creates a new CLI auth handler with default admin user
+// NewCLIAuthHandler creates a CLI auth adapter backed by IAM endpoints.
 func NewCLIAuthHandler() *CLIAuthHandler {
-	h := &CLIAuthHandler{
-		users:  make(map[string]*CLIUser),
-		tokens: make(map[string]string),
-		jwtKey: []byte("axiom-nizam-secret-key-change-in-production"),
+	baseURL := strings.TrimSpace(os.Getenv("IAM_INTERNAL_BASE_URL"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
 	}
-
-	// Register default admin user
-	h.users["admin"] = &CLIUser{
-		ID:       uuid.New().String(),
-		Name:     "Admin",
-		Email:    "admin@axiom-nizam.io",
-		Username: "admin",
-		Password: "admin",
-		Role:     "admin",
+	if baseURL == "" {
+		baseURL = defaultIAMInternalBaseURL()
 	}
+	baseURL = normalizeIAMBaseURL(baseURL)
 
-	return h
+	return &CLIAuthHandler{
+		iamBaseURL: baseURL,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
-// Login handles CLI login requests
+func (h *CLIAuthHandler) pickPrimaryRole(roles []string) string {
+	resolved := "user"
+	for _, role := range roles {
+		r := strings.ToLower(strings.TrimSpace(role))
+		switch {
+		case r == "system-manager" || r == "system_manager" || r == "system-admin" || r == "sysadmin":
+			return "system-manager"
+		case strings.Contains(r, "admin") && !strings.Contains(r, "account"):
+			resolved = "admin"
+		case (r == "manager" || r == "api-manager" || r == "api_manager") && resolved == "user":
+			resolved = "manager"
+		}
+	}
+	return resolved
+}
+
+func (h *CLIAuthHandler) callWhoAmI(token string) (map[string]interface{}, int, error) {
+	req, err := http.NewRequest(http.MethodGet, h.iamBaseURL+"/iam/auth/whoami", nil)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(token))
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, http.StatusBadGateway, err
+	}
+	defer resp.Body.Close()
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, http.StatusBadGateway, err
+	}
+	return body, resp.StatusCode, nil
+}
+
+// Login handles CLI login requests.
 func (h *CLIAuthHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
@@ -63,105 +82,132 @@ func (h *CLIAuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	h.mu.RLock()
-	user, exists := h.users[req.Username]
-	h.mu.RUnlock()
-
-	if !exists || user.Password != req.Password {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
+	identifier := resolveIAMLoginIdentifier(req.Username)
+	if identifier == "" || strings.TrimSpace(req.Password) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
 		return
 	}
 
-	// Generate JWT token
-	claims := jwt.MapClaims{
-		"sub":      user.ID,
-		"username": user.Username,
-		"name":     user.Name,
-		"email":    user.Email,
-		"role":     user.Role,
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
-		"iat":      time.Now().Unix(),
-	}
+	payload, _ := json.Marshal(map[string]string{
+		"email":    identifier,
+		"password": req.Password,
+	})
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(h.jwtKey)
+	resp, err := h.httpClient.Post(h.iamBaseURL+"/iam/auth/login", "application/json", bytes.NewReader(payload))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to reach IAM login endpoint"})
+		return
+	}
+	defer resp.Body.Close()
+
+	var loginResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresAt   string `json:"expires_at"`
+		ExpiresIn   int    `json:"expires_in"`
+		User        struct {
+			DisplayName string `json:"display_name"`
+			Email       string `json:"email"`
+		} `json:"user"`
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to parse IAM login response"})
 		return
 	}
 
-	h.mu.Lock()
-	h.tokens[tokenString] = user.Username
-	h.mu.Unlock()
+	if resp.StatusCode != http.StatusOK || strings.TrimSpace(loginResp.AccessToken) == "" {
+		errMsg := strings.TrimSpace(loginResp.Error)
+		if errMsg == "" {
+			errMsg = "invalid username or password"
+		}
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errMsg})
+		return
+	}
+
+	expiresAt := strings.TrimSpace(loginResp.ExpiresAt)
+	if expiresAt == "" && loginResp.ExpiresIn > 0 {
+		expiresAt = time.Now().Add(time.Duration(loginResp.ExpiresIn) * time.Second).Format(time.RFC3339)
+	}
+
+	name := strings.TrimSpace(loginResp.User.DisplayName)
+	if name == "" {
+		name = strings.TrimSpace(req.Username)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token":     tokenString,
-		"expiresAt": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+		"token":     loginResp.AccessToken,
+		"expiresAt": expiresAt,
 		"user": gin.H{
-			"name":  user.Name,
-			"email": user.Email,
+			"name":  name,
+			"email": loginResp.User.Email,
 		},
 	})
 }
 
-// Verify verifies an API key or token
+// Verify verifies a bearer token by calling IAM whoami.
 func (h *CLIAuthHandler) Verify(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 	if authHeader == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
 		return
 	}
 
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-
-	h.mu.RLock()
-	username, exists := h.tokens[tokenStr]
-	h.mu.RUnlock()
-
-	if !exists {
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	whoami, status, err := h.callWhoAmI(token)
+	if err != nil || status != http.StatusOK {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
 
-	h.mu.RLock()
-	user := h.users[username]
-	h.mu.RUnlock()
+	name, _ := whoami["display_name"].(string)
+	email, _ := whoami["email"].(string)
+	if strings.TrimSpace(name) == "" {
+		name = email
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{
-			"name":  user.Name,
-			"email": user.Email,
+			"name":  name,
+			"email": email,
 		},
 	})
 }
 
-// WhoAmI returns current user info
+// WhoAmI returns current user info.
 func (h *CLIAuthHandler) WhoAmI(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 	if authHeader == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
 		return
 	}
 
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-
-	h.mu.RLock()
-	username, exists := h.tokens[tokenStr]
-	h.mu.RUnlock()
-
-	if !exists {
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	whoami, status, err := h.callWhoAmI(token)
+	if err != nil || status != http.StatusOK {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
 
-	h.mu.RLock()
-	user := h.users[username]
-	h.mu.RUnlock()
+	userID, _ := whoami["user_id"].(string)
+	name, _ := whoami["display_name"].(string)
+	email, _ := whoami["email"].(string)
+	if strings.TrimSpace(name) == "" {
+		name = email
+	}
+
+	roles := make([]string, 0)
+	if rawRoles, ok := whoami["roles"].([]interface{}); ok {
+		for _, r := range rawRoles {
+			if rs, ok := r.(string); ok {
+				roles = append(roles, rs)
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":    user.ID,
-		"name":  user.Name,
-		"email": user.Email,
-		"role":  user.Role,
+		"id":    userID,
+		"name":  name,
+		"email": email,
+		"role":  h.pickPrimaryRole(roles),
 	})
 }

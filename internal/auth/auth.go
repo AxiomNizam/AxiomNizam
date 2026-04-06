@@ -18,39 +18,49 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// RealmAccess contains realm-level roles from Keycloak
+// RealmAccess contains realm-style roles (legacy compatibility).
 type RealmAccess struct {
 	Roles []string `json:"roles"`
 }
 
-// Claims represents JWT claims from Keycloak
+// Claims represents JWT claims from IAM/OIDC tokens.
 type Claims struct {
 	Sub               string                 `json:"sub"`
 	PreferredUsername string                 `json:"preferred_username"`
 	Email             string                 `json:"email"`
+	DisplayName       string                 `json:"display_name,omitempty"`
 	Name              string                 `json:"name"`
+	ClientID          string                 `json:"client_id,omitempty"`
+	Roles             []string               `json:"roles,omitempty"`
 	RealmAccess       RealmAccess            `json:"realm_access"`
 	ResourceAccess    map[string]interface{} `json:"resource_access"`
 	jwt.RegisteredClaims
 }
 
-// HasRole checks if the claims contain a specific role
-func (c *Claims) HasRole(role string) bool {
-	if c == nil {
-		return false
-	}
-	targetRole := strings.ToLower(strings.TrimSpace(role))
-	if targetRole == "" {
-		return false
-	}
+func normalizeRole(role string) string {
+	return strings.ToLower(strings.TrimSpace(role))
+}
 
-	for _, r := range c.RealmAccess.Roles {
-		if strings.ToLower(strings.TrimSpace(r)) == targetRole {
-			return true
+func (c *Claims) collectRoles() []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, 8)
+	add := func(values []string) {
+		for _, v := range values {
+			n := normalizeRole(v)
+			if n == "" {
+				continue
+			}
+			if _, ok := seen[n]; ok {
+				continue
+			}
+			seen[n] = struct{}{}
+			out = append(out, n)
 		}
 	}
 
-	// Keycloak often stores app-specific roles under resource_access.<client>.roles.
+	add(c.Roles)
+	add(c.RealmAccess.Roles)
+
 	for _, clientAccessRaw := range c.ResourceAccess {
 		clientAccess, ok := clientAccessRaw.(map[string]interface{})
 		if !ok {
@@ -64,29 +74,92 @@ func (c *Claims) HasRole(role string) bool {
 
 		switch typedRoles := rolesRaw.(type) {
 		case []interface{}:
+			vals := make([]string, 0, len(typedRoles))
 			for _, rr := range typedRoles {
-				if roleStr, ok := rr.(string); ok && strings.ToLower(strings.TrimSpace(roleStr)) == targetRole {
-					return true
+				if roleStr, ok := rr.(string); ok {
+					vals = append(vals, roleStr)
 				}
 			}
+			add(vals)
 		case []string:
-			for _, roleStr := range typedRoles {
-				if strings.ToLower(strings.TrimSpace(roleStr)) == targetRole {
-					return true
-				}
-			}
+			add(typedRoles)
+		}
+	}
+
+	return out
+}
+
+// RolesList returns normalized roles from both IAM and legacy claim formats.
+func (c *Claims) RolesList() []string {
+	if c == nil {
+		return nil
+	}
+	return c.collectRoles()
+}
+
+func (c *Claims) applyCompatibility() {
+	if c == nil {
+		return
+	}
+
+	roles := c.collectRoles()
+	if len(roles) > 0 {
+		c.Roles = roles
+		c.RealmAccess.Roles = roles
+	}
+
+	if strings.TrimSpace(c.PreferredUsername) == "" {
+		switch {
+		case strings.TrimSpace(c.DisplayName) != "":
+			c.PreferredUsername = strings.TrimSpace(c.DisplayName)
+		case strings.TrimSpace(c.Name) != "":
+			c.PreferredUsername = strings.TrimSpace(c.Name)
+		case strings.TrimSpace(c.Email) != "":
+			c.PreferredUsername = strings.TrimSpace(c.Email)
+		default:
+			c.PreferredUsername = strings.TrimSpace(c.Sub)
+		}
+	}
+
+	if strings.TrimSpace(c.Name) == "" {
+		c.Name = c.PreferredUsername
+	}
+}
+
+// HasRole checks if the claims contain a specific role
+func (c *Claims) HasRole(role string) bool {
+	if c == nil {
+		return false
+	}
+	targetRole := normalizeRole(role)
+	if targetRole == "" {
+		return false
+	}
+
+	for _, r := range c.collectRoles() {
+		if normalizeRole(r) == targetRole {
+			return true
 		}
 	}
 
 	return false
 }
 
-// KeycloakConfig holds Keycloak configuration
-type KeycloakConfig struct {
+// TokenValidatorConfig holds IAM/OIDC token validator configuration.
+type TokenValidatorConfig struct {
+	// IssuerURL is the URL that hosts OIDC discovery and JWKS, e.g. http://localhost:8000.
+	IssuerURL string
+	// JWKSURL overrides the JWKS endpoint when discovery URL is not used.
+	JWKSURL string
+
+	// Legacy compatibility fields.
 	ServerURL string
 	Realm     string
 	ClientID  string
 }
+
+// IAMConfig is an alias for the token validator configuration.
+type IAMConfig = TokenValidatorConfig
 
 // JWKS represents the JSON Web Key Set
 type JWKS struct {
@@ -102,22 +175,26 @@ type JWK struct {
 	E   string `json:"e"`
 }
 
-// TokenValidator validates JWT tokens from Keycloak
+// TokenValidator validates JWT tokens from IAM/OIDC JWKS.
 type TokenValidator struct {
-	config       *KeycloakConfig
+	config       *TokenValidatorConfig
 	publicKeys   map[string]*rsa.PublicKey
 	publicKeysMu sync.RWMutex
 	lastFetch    time.Time
 }
 
 // NewTokenValidator creates a new token validator
-func NewTokenValidator(config *KeycloakConfig) (*TokenValidator, error) {
+func NewTokenValidator(config *TokenValidatorConfig) (*TokenValidator, error) {
+	if config == nil {
+		config = &TokenValidatorConfig{}
+	}
+
 	tv := &TokenValidator{
 		config:     config,
 		publicKeys: make(map[string]*rsa.PublicKey),
 	}
 
-	// Fetch JWKS from Keycloak
+	// Fetch JWKS from IAM/OIDC provider
 	if err := tv.refreshPublicKeys(); err != nil {
 		return nil, err
 	}
@@ -125,10 +202,27 @@ func NewTokenValidator(config *KeycloakConfig) (*TokenValidator, error) {
 	return tv, nil
 }
 
-// refreshPublicKeys fetches the public keys from Keycloak
+// refreshPublicKeys fetches the public keys from the configured JWKS endpoint.
 func (tv *TokenValidator) refreshPublicKeys() error {
-	jwksURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/certs",
-		tv.config.ServerURL, tv.config.Realm)
+	jwksURL := strings.TrimSpace(tv.config.JWKSURL)
+	if jwksURL == "" {
+		issuerURL := strings.TrimRight(strings.TrimSpace(tv.config.IssuerURL), "/")
+		if issuerURL != "" {
+			jwksURL = issuerURL + "/.well-known/jwks.json"
+		}
+	}
+
+	// Fallback for explicit server URL without issuer metadata.
+	if jwksURL == "" {
+		serverURL := strings.TrimRight(strings.TrimSpace(tv.config.ServerURL), "/")
+		if serverURL != "" {
+			jwksURL = serverURL + "/.well-known/jwks.json"
+		}
+	}
+
+	if jwksURL == "" {
+		return fmt.Errorf("token validator: JWKS endpoint is not configured")
+	}
 
 	resp, err := http.Get(jwksURL)
 	if err != nil {
@@ -162,7 +256,7 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 	}
 
 	tv.lastFetch = time.Now()
-	log.Printf("✅ Loaded %d public keys from Keycloak", len(tv.publicKeys))
+	log.Printf("✅ Loaded %d public keys from IAM/OIDC JWKS", len(tv.publicKeys))
 	return nil
 }
 
@@ -211,8 +305,21 @@ func (tv *TokenValidator) ValidateDemoToken(tokenString string) (*Claims, error)
 	if v, ok := mapClaims["preferred_username"].(string); ok {
 		claims.PreferredUsername = v
 	}
+	if v, ok := mapClaims["display_name"].(string); ok {
+		claims.DisplayName = v
+	}
+	if v, ok := mapClaims["name"].(string); ok {
+		claims.Name = v
+	}
 	if v, ok := mapClaims["email"].(string); ok {
 		claims.Email = v
+	}
+	if rawRoles, ok := mapClaims["roles"].([]interface{}); ok {
+		for _, r := range rawRoles {
+			if s, ok := r.(string); ok {
+				claims.Roles = append(claims.Roles, s)
+			}
+		}
 	}
 	if ra, ok := mapClaims["realm_access"].(map[string]interface{}); ok {
 		if roles, ok := ra["roles"].([]interface{}); ok {
@@ -223,10 +330,11 @@ func (tv *TokenValidator) ValidateDemoToken(tokenString string) (*Claims, error)
 			}
 		}
 	}
+	claims.applyCompatibility()
 	return claims, nil
 }
 
-// ValidateToken validates a JWT token (Keycloak RSA first, demo HMAC fallback)
+// ValidateToken validates a JWT token (JWKS RSA first, demo HMAC fallback).
 func (tv *TokenValidator) ValidateToken(tokenString string) (*Claims, error) {
 	// Parse the token
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{},
@@ -281,6 +389,8 @@ func (tv *TokenValidator) ValidateToken(tokenString string) (*Claims, error) {
 	if claims.ExpiresAt != nil && time.Now().Unix() > claims.ExpiresAt.Unix() {
 		return nil, fmt.Errorf("token has expired")
 	}
+
+	claims.applyCompatibility()
 
 	return claims, nil
 }
