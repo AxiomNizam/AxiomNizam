@@ -1,25 +1,60 @@
 // System Manager JS
 const BACKEND_URL = (() => {
-    if (typeof window.resolveBackendURL === 'function') {
-        return window.resolveBackendURL();
+    function normalizeURL(raw) {
+        var value = String(raw || '').trim();
+        if (!value) return '';
+        if (value.length > 1 && value.endsWith('/')) {
+            value = value.slice(0, -1);
+        }
+        return value;
     }
 
-    var url = String(window.BACKEND_URL || '').trim();
-    if (!url) {
-        var browserHost = String(window.location.hostname || '').toLowerCase();
-        if (browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0') {
-            var protocol = window.location.protocol || 'https:';
-            if (browserHost.indexOf('axiomnizam.') === 0) {
-                return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
-            }
-            return protocol + '//' + browserHost;
+    function parseHostname(rawURL) {
+        try {
+            return new URL(rawURL).hostname.toLowerCase();
+        } catch (_) {
+            return '';
         }
-        return 'http://localhost:8000';
     }
-    if (url.length > 1 && url.endsWith('/')) {
-        return url.slice(0, -1);
+
+    function isLocalOrInternalHost(hostname) {
+        if (!hostname) return true;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '::1') return true;
+        if (hostname === 'axiomnizam' || hostname.endsWith('.local')) return true;
+        return hostname.indexOf('.') === -1;
     }
-    return url;
+
+    function inferPublicBackendURL() {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        if (!browserHost || browserHost === 'localhost' || browserHost === '127.0.0.1' || browserHost === '0.0.0.0') {
+            return '';
+        }
+        var protocol = window.location.protocol || 'https:';
+        if (browserHost.indexOf('axiomnizam.') === 0) {
+            return protocol + '//axiomnizam-platform.' + browserHost.substring('axiomnizam.'.length);
+        }
+        return protocol + '//' + browserHost;
+    }
+
+    if (typeof window.resolveBackendURL === 'function') {
+        var resolved = normalizeURL(window.resolveBackendURL());
+        if (resolved) {
+            return resolved;
+        }
+    }
+
+    var url = normalizeURL(window.BACKEND_URL || '');
+    if (url) {
+        var browserHost = String(window.location.hostname || '').toLowerCase();
+        var browserIsPublic = browserHost && browserHost !== 'localhost' && browserHost !== '127.0.0.1' && browserHost !== '0.0.0.0';
+        var backendHost = parseHostname(url);
+        if (browserIsPublic && isLocalOrInternalHost(backendHost)) {
+            return inferPublicBackendURL() || url;
+        }
+        return url;
+    }
+
+    return inferPublicBackendURL() || 'http://localhost:8000';
 })();
 
 console.log('System Manager - Backend URL:', BACKEND_URL);
