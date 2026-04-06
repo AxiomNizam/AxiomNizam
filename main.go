@@ -482,6 +482,9 @@ func main() {
 	if iamSystem != nil && iamSystem.Users != nil {
 		authHandler.SetIAMUserRepository(iamSystem.Users)
 	}
+	if iamSystem != nil && iamSystem.Authorizer != nil {
+		authHandler.SetIAMAuthorizer(iamSystem.Authorizer)
+	}
 	router.POST("/auth/login", authHandler.Login)
 	router.POST("/auth/refresh", authHandler.RefreshToken)
 	router.GET("/auth/validate", authHandler.ValidateToken)

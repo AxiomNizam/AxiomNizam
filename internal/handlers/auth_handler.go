@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/auth"
+	iamauthz "example.com/axiomnizam/internal/iam/authz"
 	iamidentity "example.com/axiomnizam/internal/iam/identity"
 	iammodels "example.com/axiomnizam/internal/iam/models"
 	"example.com/axiomnizam/internal/iam/pgstore"
@@ -33,6 +34,7 @@ type AuthHandler struct {
 	platformUsers *PlatformUserHandler
 	idpStore      *pgstore.Store
 	iamUsers      *iamstorage.PostgresUserRepository
+	iamAuthorizer *iamauthz.Authorizer
 	httpClient    *http.Client
 }
 
@@ -82,6 +84,11 @@ func (h *AuthHandler) SetIdentityProviderStore(store *pgstore.Store) {
 // SetIAMUserRepository wires IAM user repository into OAuth provisioning flow.
 func (h *AuthHandler) SetIAMUserRepository(repo *iamstorage.PostgresUserRepository) {
 	h.iamUsers = repo
+}
+
+// SetIAMAuthorizer wires IAM role resolver into OAuth provisioning flow.
+func (h *AuthHandler) SetIAMAuthorizer(authorizer *iamauthz.Authorizer) {
+	h.iamAuthorizer = authorizer
 }
 
 // getEnv gets environment variable with fallback
@@ -983,6 +990,30 @@ func (h *AuthHandler) ensureIAMFederatedUser(username, email, displayName string
 	return nil
 }
 
+func (h *AuthHandler) resolveIAMFederatedRole(username, email string) string {
+	if h.iamUsers == nil || h.iamAuthorizer == nil {
+		return ""
+	}
+
+	resolvedEmail := resolveFederatedEmail(username, email)
+	if resolvedEmail == "" {
+		return ""
+	}
+
+	user, err := h.iamUsers.GetByEmail(resolvedEmail)
+	if err != nil || user == nil {
+		return ""
+	}
+
+	roleNames, err := h.iamAuthorizer.GetUserRoleNames(user.ID)
+	if err != nil || len(roleNames) == 0 {
+		return ""
+	}
+
+	resolved := strings.ToLower(strings.TrimSpace(resolvePrimaryRole(roleNames)))
+	return resolved
+}
+
 // LoginRequest is the request payload for login
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
@@ -1276,7 +1307,7 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	role := "user"
+	role := strings.ToLower(strings.TrimSpace(h.resolveIAMFederatedRole(username, identity.Email)))
 	if h.platformUsers != nil {
 		persistedUser, persistErr := h.platformUsers.EnsureFederatedUser(username, identity.Email, "user")
 		if persistErr != nil {
@@ -1290,16 +1321,16 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 				return
 			}
 			persistedRole := strings.ToLower(strings.TrimSpace(persistedUser.Role))
-			if persistedRole != "" {
+			if (role == "" || role == "user") && persistedRole != "" {
 				role = persistedRole
 			}
 		}
 	}
 
-	if role == "user" {
+	if role == "" || role == "user" {
 		role = deriveOAuthRole(username, identity.Email, identity.DisplayName)
 	}
-	if role != "admin" && role != "manager" && role != "user" {
+	if role != "system-manager" && role != "admin" && role != "manager" && role != "user" {
 		role = "user"
 	}
 
