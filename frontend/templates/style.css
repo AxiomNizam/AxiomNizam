@@ -4,69 +4,69 @@
     box-sizing: border-box;
 }
 
-/* Default Dark Theme (Classic Modern Deep Slate & Green) */
+/* Default Dark Theme (Classic Modern Deep Slate & Emerald) */
 :root, [data-theme="dark"] {
     --font-heading: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Cascadia Code', 'Consolas', var(--font-mono);
-    --primary-color: #008C63;
-    --primary-dark: #004D38;
-    --primary-light: #239F40;
-    --secondary-color: #D8172B;
-    --primary-rgb: 0, 140, 99;
-    --secondary-rgb: 216, 23, 43;
-    --success-color: #239F40;
-    --warning-color: #EAC15F;
-    --danger-color: #F42A41;
-    --dark-bg: #111A16;     /* Deep slate with slight green tint */
-    --darker-bg: #0A0F0D;
-    --light-bg: #1B2923;
-    --card-bg: #16221D;
-    --border-color: #2C4035;
-    --text-primary: #F0F4F2;
-    --text-secondary: #C8DACA;
-    --text-muted: #8AA492;
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.6);
-    --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    --primary-color: #10B981;
+    --primary-dark: #047857;
+    --primary-light: #34D399;
+    --secondary-color: #F43F5E;
+    --primary-rgb: 16, 185, 129;
+    --secondary-rgb: 244, 63, 94;
+    --success-color: #10B981;
+    --warning-color: #F59E0B;
+    --danger-color: #EF4444;
+    --dark-bg: #0F172A;     /* Sleek slate 900 */
+    --darker-bg: #020617;   /* Sleek slate 950 */
+    --light-bg: #1E293B;    /* Sleek slate 800 */
+    --card-bg: #1E293B;
+    --border-color: #334155;
+    --text-primary: #F8FAFC;
+    --text-secondary: #CBD5E1;
+    --text-muted: #94A3B8;
+    --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Light Theme (Classic Modern Light) */
 [data-theme="light"] {
-    --primary-color: #006A4E;
-    --primary-dark: #004D38;
-    --primary-light: #239F40;
-    --secondary-color: #C21A2A;
-    --primary-rgb: 0, 106, 78;
-    --secondary-rgb: 194, 26, 42;
-    --success-color: #008C63;
-    --warning-color: #B2822B;
-    --danger-color: #D8172B;
-    --dark-bg: #EAEFEC;     /* Soft sage/mint off-white */
-    --darker-bg: #F4F7F5;
-    --light-bg: #DCE3DE;
+    --primary-color: #059669;
+    --primary-dark: #047857;
+    --primary-light: #10B981;
+    --secondary-color: #E11D48;
+    --primary-rgb: 5, 150, 105;
+    --secondary-rgb: 225, 29, 72;
+    --success-color: #059669;
+    --warning-color: #D97706;
+    --danger-color: #DC2626;
+    --dark-bg: #F1F5F9;     /* Soft slate 100 off-white */
+    --darker-bg: #F8FAFC;
+    --light-bg: #E2E8F0;
     --card-bg: #FFFFFF;
-    --border-color: #C8DACA;
-    --text-primary: #0A1C16;
-    --text-secondary: #2C4A3C;
-    --text-muted: #5D7C6B;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
-    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.2);
-    --transition: all 0.3s ease;
+    --border-color: #CBD5E1;
+    --text-primary: #0F172A;
+    --text-secondary: #334155;
+    --text-muted: #64748B;
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Default System Theme */
 [data-theme="default"] {
-    --primary-color: #0f4c81;
-    --primary-dark: #0b365c;
-    --primary-light: #3f83c6;
-    --secondary-color: #0f766e;
-    --primary-rgb: 15, 76, 129;
-    --secondary-rgb: 15, 118, 110;
-    --success-color: #0f9d58;
-    --warning-color: #ca8a04;
+    --primary-color: #0284C7;
+    --primary-dark: #0369A1;
+    --primary-light: #38BDF8;
+    --secondary-color: #0D9488;
+    --primary-rgb: 2, 132, 199;
+    --secondary-rgb: 13, 148, 136;
+    --success-color: #059669;
+    --warning-color: #D97706;
     --danger-color: #d14343;
     --dark-bg: #122033;
     --darker-bg: #0b1726;
@@ -830,33 +830,52 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Modal */
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 .modal {
     display: none;
     position: fixed;
     z-index: 2000;
     left: 0;
     top: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     justify-content: center;
     align-items: center;
-    animation: fadeIn 0.2s ease;
+    animation: fadeInOverlay 0.2s ease forwards;
 }
 
 .modal.show {
     display: flex;
 }
 
+@keyframes modalScaleUp {
+    from { transform: scale(0.95) translateY(10px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
 .modal-content {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: var(--shadow-lg);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg), 0 20px 40px rgba(0, 0, 0, 0.4);
     max-width: 600px;
     width: 90%;
-    max-height: 80vh;
+    max-height: 85vh;
     overflow-y: auto;
+    animation: modalScaleUp 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+/* Allow login modal to not be scaled down statically */
+.login-page-shell .modal-content {
+    transform: scale(1) translateY(0);
+    animation: none;
 }
 
 .response-modal {
@@ -3356,3 +3375,92 @@ body {
 .tab-btn.active .tab-icon svg {
     stroke: var(--primary-color);
 }
+
+/* Enhanced Login Styles */
+.enhanced-login-card {
+    border-radius: 20px;
+    background: var(--card-bg);
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+}
+.login-header-enhanced {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-bottom: none;
+    padding: 40px 20px 10px;
+    gap: 16px;
+}
+.login-brand-icon {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.2), rgba(var(--primary-rgb), 0.05));
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-light);
+    box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.15);
+}
+.enhanced-input-group label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.input-with-icon .input-icon {
+    position: absolute;
+    left: 14px;
+    color: var(--text-muted);
+    transition: color 0.3s ease;
+}
+.input-with-icon input {
+    padding-left: 42px !important;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+.input-with-icon input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
+}
+.input-with-icon:focus-within .input-icon {
+    color: var(--primary-color);
+}
+.login-btn-enhanced {
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 14px;
+    border-radius: 10px;
+    box-shadow: 0 8px 16px rgba(var(--primary-rgb), 0.25);
+}
+.login-btn-enhanced:hover {
+    box-shadow: 0 8px 24px rgba(var(--primary-rgb), 0.4);
+}
+.idp-mock-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+    border-radius: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.idp-mock-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.05);
+}
+
