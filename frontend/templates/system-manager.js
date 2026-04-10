@@ -1118,7 +1118,7 @@ function loadDatabases() {
                 '</div>' +
                 '<div class="db-info-row">' +
                 '<span class="db-info-label">Status</span>' +
-                '<span class="db-info-value" style="color: ' + (isConnected ? '#10b981' : '#ef4444') + '">' +
+                '<span class="db-info-value" style="color: ' + (isConnected ? 'var(--status-connected)' : 'var(--status-disconnected)') + '">' +
                 (isConnected ? '✓ Connected' : '✗ Disconnected') + '</span>' +
                 '</div>' +
                 '<div class="db-info-row">' +
@@ -1195,11 +1195,11 @@ function loadConnectedServers() {
             var html = '';
             servers.forEach(function(server) {
                 var isConnected = server.connected === true;
-                var statusColor = isConnected ? '#10b981' : '#ef4444';
+                var statusColor = isConnected ? 'var(--status-connected)' : 'var(--status-disconnected)';
                 var statusText = isConnected ? '✓ Connected' : '✗ Disconnected';
                 var sourceLabel = server.source === 'default' ? 'Default' : 'Custom';
-                var sourceBadgeColor = server.source === 'default' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)';
-                var sourceBadgeTextColor = server.source === 'default' ? '#818cf8' : '#10b981';
+                var sourceBadgeColor = server.source === 'default' ? 'var(--badge-indigo-bg)' : 'var(--badge-green-bg)';
+                var sourceBadgeTextColor = server.source === 'default' ? 'var(--badge-indigo-text)' : 'var(--badge-green-text)';
                 var isCustom = server.source !== 'default';
 
                 var serverApis = getApisForServer(apis, server.key, server.db_type);
@@ -1233,7 +1233,7 @@ function loadConnectedServers() {
                     '</div>' +
                     '<div class="db-info-row">' +
                         '<span class="db-info-label">APIs</span>' +
-                        '<span class="db-info-value" style="color:' + (apiCount > 0 ? '#818cf8' : 'var(--text-muted)') + ';cursor:help;">' +
+                        '<span class="db-info-value" style="color:' + (apiCount > 0 ? 'var(--badge-indigo-text)' : 'var(--text-muted)') + ';cursor:help;">' +
                         apiCount + ' API' + (apiCount !== 1 ? 's' : '') + ' connected' +
                         '</span>' +
                     '</div>';
@@ -1270,9 +1270,9 @@ function showServerApiTooltip(event, elem) {
         } else {
             var rows = '';
             serverApis.forEach(function(api) {
-                var statusColor = api.status === 'active' ? '#10b981' : '#f59e0b';
+                var statusColor = api.status === 'active' ? 'var(--status-connected)' : 'var(--warning-color)';
                 rows += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-color);">' +
-                    '<span style="font-weight:600;min-width:46px;text-align:center;font-size:0.8em;padding:2px 6px;border-radius:4px;background:rgba(99,102,241,0.12);color:#818cf8;">' + escapeHtml(api.method || 'GET') + '</span>' +
+                    '<span style="font-weight:600;min-width:46px;text-align:center;font-size:0.8em;padding:2px 6px;border-radius:4px;background:var(--badge-indigo-bg);color:var(--badge-indigo-text);">' + escapeHtml(api.method || 'GET') + '</span>' +
                     '<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(api.path || '') + '">' + escapeHtml(api.name || api.path || api.id) + '</span>' +
                     '<span style="width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0;" title="' + escapeHtml(api.status || '') + '"></span>' +
                     '</div>';
@@ -1907,8 +1907,8 @@ function renderUsers(users) {
         var email = u.email || '';
         var displayName = u.display_name || (email ? email.split('@')[0] : 'Unknown');
         var createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
-        var statusColor = u.active ? '#10b981' : '#ef4444';
-        var verifyColor = u.email_verified ? '#10b981' : '#f59e0b';
+        var statusColor = u.active ? 'var(--status-connected)' : 'var(--status-disconnected)';
+        var verifyColor = u.email_verified ? 'var(--status-connected)' : 'var(--warning-color)';
         var roleNames = getUserRolesForCard(u);
         var primaryRole = resolvePrimaryRole(roleNames);
 

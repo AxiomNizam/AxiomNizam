@@ -30,31 +30,45 @@
     --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
     --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Semantic status colors */
+    --status-connected: #10b981;
+    --status-disconnected: #ef4444;
+    --badge-indigo-text: #818cf8;
+    --badge-green-text: #10b981;
+    --badge-indigo-bg: rgba(99,102,241,0.15);
+    --badge-green-bg: rgba(16,185,129,0.15);
 }
 
 /* Light Theme (Classic Modern Light) */
 [data-theme="light"] {
     --primary-color: #008C63;
     --primary-dark: #006B4D;
-    --primary-light: #239F40;
-    --secondary-color: #F43F5E;
+    --primary-light: #0A7A52;
+    --secondary-color: #E11D48;
     --primary-rgb: 0, 140, 99;
-    --secondary-rgb: 244, 63, 94;
+    --secondary-rgb: 225, 29, 72;
     --success-color: #008C63;
-    --warning-color: #F59E0B;
-    --danger-color: #EF4444;
-    --dark-bg: #E6EEEA;
-    --darker-bg: #F0F6F3;
-    --light-bg: #D9E4DF;
+    --warning-color: #D97706;
+    --danger-color: #DC2626;
+    --dark-bg: #EEF2F0;
+    --darker-bg: #E4EAE7;
+    --light-bg: #F6F9F8;
     --card-bg: #FFFFFF;
-    --border-color: #CAD5CF;
+    --border-color: #B8C4BD;
     --text-primary: #1B2922;
-    --text-secondary: #42524A;
-    --text-muted: #708278;
-    --shadow-sm: 0 1px 3px 0 rgba(0, 140, 99, 0.04);
-    --shadow-md: 0 4px 8px -2px rgba(0, 140, 99, 0.08);
-    --shadow-lg: 0 12px 24px -6px rgba(0, 140, 99, 0.12);
+    --text-secondary: #3A4D44;
+    --text-muted: #5F7168;
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 12px 24px -6px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Semantic status colors (darker for white backgrounds) */
+    --status-connected: #047857;
+    --status-disconnected: #DC2626;
+    --badge-indigo-text: #4F46E5;
+    --badge-green-text: #047857;
+    --badge-indigo-bg: rgba(79,70,229,0.1);
+    --badge-green-bg: rgba(4,120,87,0.1);
 }
 
 /* Default System Theme */
@@ -2526,6 +2540,228 @@ code {
     border: 1px solid var(--border-color);
 }
 [data-theme="light"] .status-analyzed, [data-theme="light"] .badge-default { background: rgba(0,0,0,0.05); }
+
+/* ========== Light Theme Comprehensive Overrides ========== */
+
+/* Buttons: ensure visibility against white card backgrounds */
+[data-theme="light"] .btn-secondary {
+    background: #FFFFFF;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .btn-secondary:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #FFFFFF;
+    box-shadow: 0 2px 6px rgba(0, 140, 99, 0.2);
+}
+[data-theme="light"] .btn-primary {
+    box-shadow: 0 1px 3px rgba(0, 140, 99, 0.25);
+}
+[data-theme="light"] .btn-primary:hover {
+    box-shadow: 0 4px 12px rgba(0, 140, 99, 0.3);
+}
+[data-theme="light"] .btn-warning {
+    background: #D97706;
+    box-shadow: 0 1px 3px rgba(217, 119, 6, 0.2);
+}
+[data-theme="light"] .btn-danger {
+    background: #DC2626;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.2);
+}
+
+/* Form controls: inputs, selects, textareas inside any container */
+[data-theme="light"] .form-group input,
+[data-theme="light"] .form-group select,
+[data-theme="light"] .form-group textarea,
+[data-theme="light"] .form-control,
+[data-theme="light"] .modal-box input,
+[data-theme="light"] .modal-box select,
+[data-theme="light"] .modal-box textarea,
+[data-theme="light"] .modal-content input,
+[data-theme="light"] .modal-content select,
+[data-theme="light"] .modal-content textarea,
+[data-theme="light"] .modal-overlay input,
+[data-theme="light"] .modal-overlay select,
+[data-theme="light"] .modal-overlay textarea {
+    background: #FFFFFF !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .form-group input:focus,
+[data-theme="light"] .form-group select:focus,
+[data-theme="light"] .form-group textarea:focus,
+[data-theme="light"] .form-control:focus,
+[data-theme="light"] .modal-box input:focus,
+[data-theme="light"] .modal-box select:focus,
+[data-theme="light"] .modal-box textarea:focus,
+[data-theme="light"] .modal-content input:focus,
+[data-theme="light"] .modal-content select:focus,
+[data-theme="light"] .modal-content textarea:focus,
+[data-theme="light"] .modal-overlay input:focus,
+[data-theme="light"] .modal-overlay select:focus,
+[data-theme="light"] .modal-overlay textarea:focus {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 3px rgba(0, 140, 99, 0.12), inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Cards and content blocks */
+[data-theme="light"] .overview-card,
+[data-theme="light"] .database-item,
+[data-theme="light"] .operation-card,
+[data-theme="light"] .chart-item,
+[data-theme="light"] .metrics-table,
+[data-theme="light"] .overview-section-large,
+[data-theme="light"] .operation-log,
+[data-theme="light"] .logs-viewer {
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Service items inside overview cards */
+[data-theme="light"] .service-item {
+    background: var(--light-bg);
+}
+
+/* Summary cards (monitoring KPIs) */
+[data-theme="light"] .summary-card {
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Modal */
+[data-theme="light"] .modal-content {
+    border: 1px solid var(--border-color);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .modal-overlay > .modal-box,
+[data-theme="light"] .modal-box {
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+}
+
+/* Table overrides */
+[data-theme="light"] .admin-table thead th {
+    background: var(--dark-bg);
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-color);
+}
+[data-theme="light"] .admin-table tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.025);
+}
+[data-theme="light"] .admin-table tbody tr:hover {
+    background: rgba(0, 140, 99, 0.06);
+}
+[data-theme="light"] .admin-table code {
+    background: var(--dark-bg);
+}
+
+/* Tab navigation */
+[data-theme="light"] .tab-navigation {
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+[data-theme="light"] .tab-btn.active {
+    box-shadow: 0 4px 12px rgba(0, 140, 99, 0.15);
+}
+
+/* API cards */
+[data-theme="light"] .api-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .api-card:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .api-endpoint {
+    background: var(--dark-bg);
+}
+
+/* Code & command output blocks */
+[data-theme="light"] .cp-output {
+    background: var(--dark-bg);
+    border-color: var(--border-color);
+}
+
+/* Status badges */
+[data-theme="light"] .service-status.running {
+    background: rgba(0, 140, 99, 0.12);
+}
+[data-theme="light"] .service-status.stopped {
+    background: rgba(220, 38, 38, 0.1);
+}
+
+/* Nav header & manager header */
+[data-theme="light"] .admin-header,
+[data-theme="light"] .manager-header {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* Btn-sm */
+[data-theme="light"] .btn-sm {
+    background: #FFFFFF;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .btn-sm:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* CP cards, sections */
+[data-theme="light"] .cp-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .cp-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Create API modal */
+[data-theme="light"] .create-api-modal .modal-inner {
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+}
+
+/* Body background */
+[data-theme="light"] body,
+[data-theme="light"] {
+    background: linear-gradient(135deg, #F6F9F8 0%, #EEF2F0 100%);
+}
+
+/* Role badges: darken text colors for readability on white backgrounds */
+[data-theme="light"] .role-admin { background: rgba(220,38,38,0.12); color: #DC2626; }
+[data-theme="light"] .role-sysadmin,
+[data-theme="light"] .role-system-manager { background: rgba(180,83,9,0.12); color: #B45309; }
+[data-theme="light"] .role-manager { background: rgba(37,99,235,0.12); color: #2563EB; }
+[data-theme="light"] .role-user { background: rgba(4,120,87,0.12); color: #047857; }
+[data-theme="light"] .role-default { background: rgba(100,116,139,0.12); color: #64748B; }
+
+/* Database server cards and items */
+[data-theme="light"] .database-controls .btn-secondary {
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Monitoring filter controls */
+[data-theme="light"] .monitoring-filter-select {
+    background: #FFFFFF !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Section headers text */
+[data-theme="light"] .section-header h3 {
+    color: var(--text-primary);
+}
+
+/* Connected server cards */
+[data-theme="light"] .database-grid .database-item {
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+}
+
+/* ========== End Light Theme Overrides ========== */
 
 /* Small buttons */
 .btn-sm {
