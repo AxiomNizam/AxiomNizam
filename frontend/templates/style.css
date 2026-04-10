@@ -9,26 +9,26 @@
     --font-heading: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Cascadia Code', 'Consolas', var(--font-mono);
-    --primary-color: #10B981;
-    --primary-dark: #047857;
-    --primary-light: #34D399;
+    --primary-color: #008C63;
+    --primary-dark: #004D38;
+    --primary-light: #239F40;
     --secondary-color: #F43F5E;
-    --primary-rgb: 16, 185, 129;
+    --primary-rgb: 0, 140, 99;
     --secondary-rgb: 244, 63, 94;
-    --success-color: #10B981;
+    --success-color: #008C63;
     --warning-color: #F59E0B;
     --danger-color: #EF4444;
-    --dark-bg: #0F172A;     /* Sleek slate 900 */
-    --darker-bg: #020617;   /* Sleek slate 950 */
-    --light-bg: #1E293B;    /* Sleek slate 800 */
-    --card-bg: #1E293B;
-    --border-color: #334155;
+    --dark-bg: #0A0F0D;     /* Signature Axiom Dark */
+    --darker-bg: #050806;   /* Signature Axiom Darker */
+    --light-bg: #0F1612;    /* Signature Axiom Light */
+    --card-bg: #0F1612;
+    --border-color: #1A241F;
     --text-primary: #F8FAFC;
     --text-secondary: #CBD5E1;
     --text-muted: #94A3B8;
     --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
