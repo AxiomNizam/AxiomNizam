@@ -408,6 +408,32 @@ func (r *EtcdRefreshTokenRepository) RevokeAllForUser(userID string) error {
 	return nil
 }
 
+func (r *EtcdRefreshTokenRepository) RevokeBySessionID(sessionID string) error {
+	trimmedSessionID := strings.TrimSpace(sessionID)
+	if trimmedSessionID == "" {
+		return nil
+	}
+
+	entries, err := r.store.list(prefixRefresh)
+	if err != nil {
+		return err
+	}
+
+	for _, data := range entries {
+		var rt oauth.RefreshTokenRecord
+		if err := json.Unmarshal(data, &rt); err != nil {
+			continue
+		}
+		if strings.TrimSpace(rt.SessionID) == trimmedSessionID && !rt.Revoked {
+			rt.Revoked = true
+			updated, _ := json.Marshal(rt)
+			_ = r.store.put(prefixRefresh+rt.ID, updated, time.Until(rt.ExpiresAt))
+		}
+	}
+
+	return nil
+}
+
 // ── Role Repository (etcd) ──
 
 // EtcdRoleRepository persists IAM roles in etcd.

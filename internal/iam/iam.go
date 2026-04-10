@@ -349,6 +349,7 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 
 	// ── Self-service (authenticated) ──
 	router.GET("/iam/auth/whoami", iamAuth, h.WhoAmI)
+	router.POST("/iam/auth/logout", iamAuth, h.Logout)
 
 	// ── OAuth2 Endpoints (authenticated user initiates, public token endpoint) ──
 	router.GET("/oauth/authorize", iamAuth, h.Authorize)

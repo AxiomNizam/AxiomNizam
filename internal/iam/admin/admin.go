@@ -2,7 +2,9 @@ package admin
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -35,19 +37,54 @@ const (
 	maxClientTokenValidityMinutes = 10080 // 7 days
 )
 
+type userRepository interface {
+	Create(user *identity.User) error
+	GetByID(id string) (*identity.User, error)
+	GetByEmail(email string) (*identity.User, error)
+	Update(user *identity.User) error
+	Delete(id string) error
+	List() ([]*identity.User, error)
+}
+
+type sessionRepository interface {
+	Create(s *authn.Session) error
+	GetByID(id string) (*authn.Session, error)
+	RevokeByUserID(userID string) error
+	Revoke(sessionID string) error
+}
+
+type refreshTokenRepository interface {
+	StoreRefreshToken(rt *oauth.RefreshTokenRecord) error
+	GetRefreshToken(jti string) (*oauth.RefreshTokenRecord, error)
+	RevokeRefreshToken(jti string) error
+	RevokeAllForUser(userID string) error
+	RevokeBySessionID(sessionID string) error
+}
+
+type authorizerService interface {
+	GetUserRoleNames(userID string) ([]string, error)
+	AssignRole(userID, roleID string) (*authz.RoleBinding, error)
+	RevokeRole(bindingID string) error
+}
+
+type authenticatorService interface {
+	Authenticate(identifier, password string) (*identity.User, error)
+	CreateSession(userID, ip, userAgent string, ttl time.Duration) (*authn.Session, error)
+}
+
 // Handler bundles all sysadmin (master-realm) API endpoints.
 type Handler struct {
-	users        *storage.PostgresUserRepository
+	users        userRepository
 	clients      *storage.EtcdClientRepository
 	roles        *storage.EtcdRoleRepository
 	bindings     *storage.EtcdRoleBindingRepository
-	sessions     *storage.EtcdSessionRepository
-	refreshRepo  *storage.EtcdRefreshTokenRepository
+	sessions     sessionRepository
+	refreshRepo  refreshTokenRepository
 	revokedStore *storage.EtcdRevokedTokenStore
 	codeRepo     *storage.EtcdCodeRepository
-	authorizer   *authz.Authorizer
+	authorizer   authorizerService
 	issuer       *token.Issuer
-	authn        *authn.Authenticator
+	authn        authenticatorService
 }
 
 // NewHandler creates the admin handler.
@@ -648,6 +685,101 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, pair)
+}
+
+// Logout revokes the current access token, bound session, and active refresh token(s).
+func (h *Handler) Logout(c *gin.Context) {
+	claims := iammw.GetClaims(c)
+	if claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	accessTokenRevoked := false
+	if h.revokedStore != nil && strings.TrimSpace(claims.ID) != "" {
+		ttl := time.Hour
+		if claims.ExpiresAt != nil {
+			ttl = time.Until(claims.ExpiresAt.Time)
+			if ttl <= 0 {
+				ttl = time.Minute
+			}
+		}
+		if err := h.revokedStore.Revoke(strings.TrimSpace(claims.ID), ttl); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke access token"})
+			return
+		}
+		accessTokenRevoked = true
+	}
+
+	sessionID := strings.TrimSpace(claims.SessionID)
+	sessionRevoked := false
+	if sessionID != "" {
+		if h.sessions == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "session storage not initialised"})
+			return
+		}
+		if err := h.sessions.Revoke(sessionID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke session"})
+			return
+		}
+		sessionRevoked = true
+	}
+
+	refreshRevoked := false
+	providedRefreshToken := strings.TrimSpace(req.RefreshToken)
+	if providedRefreshToken != "" {
+		refreshClaims, record, err := h.validateRefreshTokenRecord(providedRefreshToken, claims.ClientID)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+			return
+		}
+
+		if strings.TrimSpace(refreshClaims.Subject) != strings.TrimSpace(claims.Sub) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token does not belong to current user"})
+			return
+		}
+
+		if sessionID != "" {
+			recordSessionID := strings.TrimSpace(record.SessionID)
+			if recordSessionID != "" && recordSessionID != sessionID {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token does not belong to current session"})
+				return
+			}
+		}
+
+		if err := h.refreshRepo.RevokeRefreshToken(strings.TrimSpace(refreshClaims.ID)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke refresh token"})
+			return
+		}
+		refreshRevoked = true
+	}
+
+	if !refreshRevoked && sessionID != "" {
+		if h.refreshRepo == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "refresh token storage not initialised"})
+			return
+		}
+		if err := h.refreshRepo.RevokeBySessionID(sessionID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke session refresh tokens"})
+			return
+		}
+		refreshRevoked = true
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":                 "ok",
+		"access_token_revoked":   accessTokenRevoked,
+		"session_revoked":        sessionRevoked,
+		"refresh_tokens_revoked": refreshRevoked,
+	})
 }
 
 // WhoAmI returns the currently authenticated user's info.

@@ -98,6 +98,7 @@ type RefreshTokenRepository interface {
 	GetRefreshToken(jti string) (*RefreshTokenRecord, error)
 	RevokeRefreshToken(jti string) error
 	RevokeAllForUser(userID string) error
+	RevokeBySessionID(sessionID string) error
 }
 
 const (

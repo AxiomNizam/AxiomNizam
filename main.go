@@ -501,7 +501,8 @@ func main() {
 	router.GET("/auth/oauth/start", authHandler.OAuthStart)
 	router.GET("/auth/oauth/callback", authHandler.OAuthCallback)
 
-	// Token status endpoints (auth required)
+	// Protected auth endpoints (auth required)
+	router.POST("/auth/logout", authMiddleware, authHandler.Logout)
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
 	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
 
@@ -697,6 +698,7 @@ func main() {
 	// ====================================
 	cliAuth := handlers.NewCLIAuthHandler()
 	router.POST("/api/v1/auth/login", cliAuth.Login)
+	router.POST("/api/v1/auth/logout", authHandler.Logout)
 	router.GET("/api/v1/auth/verify", cliAuth.Verify)
 	router.GET("/api/v1/auth/whoami", cliAuth.WhoAmI)
 
