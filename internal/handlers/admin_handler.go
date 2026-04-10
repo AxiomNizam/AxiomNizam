@@ -771,3 +771,192 @@ func defaultPortForDBType(dbType string) int {
 		return 3306
 	}
 }
+
+// UpdateDatabaseServer updates connection details for a custom database server, reconnects, and persists.
+func (h *AdminHandler) UpdateDatabaseServer(c *gin.Context) {
+	serverKey := c.Param("key")
+	if serverKey == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server key is required"})
+		return
+	}
+
+	h.mu.RLock()
+	existing, exists := h.serverMeta[serverKey]
+	h.mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, models.Response{Status: "error", Error: fmt.Sprintf("server '%s' not found", serverKey)})
+		return
+	}
+	if existing.Source == "default" {
+		c.JSON(http.StatusForbidden, models.Response{Status: "error", Error: "default servers cannot be edited"})
+		return
+	}
+
+	var req ConnectDatabaseServerRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: fmt.Sprintf("Invalid request: %v", err)})
+		return
+	}
+
+	serverName := strings.TrimSpace(req.ServerName)
+	dbType := strings.ToLower(strings.TrimSpace(req.DBType))
+	host := strings.TrimSpace(req.Host)
+	if serverName == "" || host == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server_name and host are required"})
+		return
+	}
+	if dbType != "mysql" && dbType != "mariadb" && dbType != "percona" && dbType != "postgres" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "db_type must be mysql, mariadb, percona, or postgres"})
+		return
+	}
+
+	port := req.Port
+	if port <= 0 {
+		port = defaultPortForDBType(dbType)
+	}
+
+	defaultDB := strings.TrimSpace(req.DefaultDatabase)
+	if defaultDB == "" {
+		if dbType == "postgres" {
+			defaultDB = "postgres"
+		} else {
+			defaultDB = "mysql"
+		}
+	}
+
+	// Close old connection
+	h.mu.RLock()
+	if oldDB, ok := h.connections[serverKey]; ok && oldDB != nil {
+		if sqlDB, err := oldDB.DB(); err == nil {
+			sqlDB.Close()
+		}
+	}
+	h.mu.RUnlock()
+
+	var (
+		db  *gorm.DB
+		err error
+	)
+
+	switch dbType {
+	case "mysql", "mariadb", "percona":
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", req.Username, req.Password, host, port, defaultDB)
+		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	case "postgres":
+		sslMode := strings.TrimSpace(req.SSLMode)
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", host, req.Username, req.Password, defaultDB, port, sslMode)
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	}
+
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to open DB connection: %v", err)})
+		return
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to initialize DB connection: %v", err)})
+		return
+	}
+	if err := sqlDB.Ping(); err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to connect to database server: %v", err)})
+		return
+	}
+
+	h.mu.Lock()
+	h.connections[serverKey] = db
+	h.connectionTypes[serverKey] = dbType
+	h.serverMeta[serverKey] = DatabaseServerInfo{
+		Key:       serverKey,
+		Name:      serverName,
+		DBType:    dbType,
+		Host:      host,
+		Port:      port,
+		Source:    "custom",
+		Connected: true,
+	}
+	h.mu.Unlock()
+
+	if h.primaryDB != nil {
+		rec := DatabaseServerRecord{
+			ServerKey:       serverKey,
+			ServerName:      serverName,
+			DBType:          dbType,
+			Host:            host,
+			Port:            port,
+			Username:        req.Username,
+			Password:        req.Password,
+			DefaultDatabase: defaultDB,
+			SSLMode:         strings.TrimSpace(req.SSLMode),
+		}
+		if err := h.primaryDB.Where("server_key = ?", serverKey).Assign(rec).FirstOrCreate(&rec).Error; err != nil {
+			log.Printf("⚠️ Updated server %s in memory but failed to persist: %v", serverKey, err)
+		}
+	}
+
+	log.Printf("✅ Updated custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Database server updated",
+		"server": gin.H{
+			"key":       serverKey,
+			"name":      serverName,
+			"db_type":   dbType,
+			"host":      host,
+			"port":      port,
+			"source":    "custom",
+			"connected": true,
+		},
+	})
+}
+
+// DeleteDatabaseServer removes a custom database server connection and deletes the persisted record.
+func (h *AdminHandler) DeleteDatabaseServer(c *gin.Context) {
+	serverKey := c.Param("key")
+	if serverKey == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server key is required"})
+		return
+	}
+
+	h.mu.RLock()
+	existing, exists := h.serverMeta[serverKey]
+	h.mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, models.Response{Status: "error", Error: fmt.Sprintf("server '%s' not found", serverKey)})
+		return
+	}
+	if existing.Source == "default" {
+		c.JSON(http.StatusForbidden, models.Response{Status: "error", Error: "default servers cannot be deleted"})
+		return
+	}
+
+	// Close the connection
+	h.mu.Lock()
+	if db, ok := h.connections[serverKey]; ok && db != nil {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+	}
+	delete(h.connections, serverKey)
+	delete(h.connectionTypes, serverKey)
+	delete(h.serverMeta, serverKey)
+	h.mu.Unlock()
+
+	// Remove persisted record
+	if h.primaryDB != nil {
+		if err := h.primaryDB.Where("server_key = ?", serverKey).Delete(&DatabaseServerRecord{}).Error; err != nil {
+			log.Printf("⚠️ Removed server %s from memory but failed to delete from DB: %v", serverKey, err)
+		}
+	}
+
+	log.Printf("🗑️ Deleted custom DB server key=%s", serverKey)
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": fmt.Sprintf("Database server '%s' deleted", serverKey),
+	})
+}
