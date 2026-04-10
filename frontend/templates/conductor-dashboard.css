@@ -24,7 +24,7 @@
     display: block;
     font-size: 1.8rem;
     font-weight: 700;
-    color: var(--accent-color, #00d4ff);
+    color: var(--primary-color);
 }
 .conductor-stats .stat-label {
     display: block;
@@ -63,8 +63,8 @@
     color: var(--text-color, #fff);
 }
 .tab-btn.active {
-    color: var(--accent-color, #00d4ff);
-    border-bottom-color: var(--accent-color, #00d4ff);
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
 }
 
 /* Tab content */
@@ -134,11 +134,11 @@
     font-weight: 600;
     text-transform: uppercase;
 }
-.status-active   { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+.status-active   { background: rgba(var(--primary-rgb), 0.15); color: var(--primary-color); }
 .status-paused   { background: rgba(255, 193, 7, 0.15);  color: #ffc107; }
 .status-stopped  { background: rgba(108, 117, 125, 0.15); color: #6c757d; }
 .status-error    { background: rgba(255, 77, 77, 0.15);  color: #ff4d4d; }
-.status-sent     { background: rgba(0, 212, 255, 0.15);  color: #00d4ff; }
+.status-sent     { background: rgba(var(--primary-rgb), 0.15);  color: var(--primary-color); }
 .status-acked    { background: rgba(40, 167, 69, 0.15);  color: #28a745; }
 .status-pending  { background: rgba(255, 193, 7, 0.15);  color: #ffc107; }
 .status-dlq      { background: rgba(255, 77, 77, 0.15);  color: #ff4d4d; }
@@ -173,7 +173,7 @@
 
 /* Buttons */
 .btn-primary {
-    background: var(--accent-color, #00d4ff);
+    background: var(--primary-color);
     color: #000;
     border: none;
     padding: 8px 20px;
@@ -257,7 +257,7 @@
 }
 .form-input:focus {
     outline: none;
-    border-color: var(--accent-color, #00d4ff);
+    border-color: var(--primary-color);
 }
 .form-textarea {
     font-family: 'SF Mono', 'Fira Code', monospace;
