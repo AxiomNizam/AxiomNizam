@@ -240,32 +240,32 @@ services:
       retries: 10
 
   # MongoDB
-  # mongodb:
-  #   image: mongo:latest
-  #   container_name: mongodb
-  #   ports:
-  #     - "27017:27017"
-  #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: root
-  #     MONGO_INITDB_ROOT_PASSWORD: root
-  #   networks:
-  #     - app-network
-  #   volumes:
-  #     - mongodb-data:/data/db
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    networks:
+      - app-network
+    volumes:
+      - mongodb-data:/data/db
 
   # Percona MySQL
-  # percona:
-  #   image: percona:latest
-  #   container_name: percona
-  #   ports:
-  #     - "3308:3306"
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: root
-  #     MYSQL_DATABASE: app_db
-  #   networks:
-  #     - app-network
-  #   volumes:
-  #     - percona-data:/var/lib/mysql
+  percona:
+    image: percona:latest
+    container_name: percona
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_db
+    networks:
+      - app-network
+    volumes:
+      - percona-data:/var/lib/mysql
 
   # Elasticsearch
   # elasticsearch:
@@ -351,21 +351,21 @@ services:
   #     retries: 3
 
   # ClamAV Antivirus (SafeGate Scanner)
-  # clamav:
-  #   image: clamav/clamav:latest
-  #   container_name: clamav
-  #   ports:
-  #     - "3310:3310"
-  #   networks:
-  #     - app-network
-  #   volumes:
-  #     - clamav-data:/var/lib/clamav
-  #   healthcheck:
-  #     test: ["CMD", "clamdcheck"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 5
-  #     start_period: 120s
+  clamav:
+    image: clamav/clamav:latest
+    container_name: clamav
+    ports:
+      - "3310:3310"
+    networks:
+      - app-network
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
 
   # RabbitMQ with Management UI
   rabbitmq:
