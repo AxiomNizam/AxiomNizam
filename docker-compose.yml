@@ -22,7 +22,7 @@ services:
       IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
       PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-https://axiomnizam.bitbd.net}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://axiom:axiom@rabbitmq:5672/}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
     depends_on:
       # - valkey
@@ -375,8 +375,8 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-axiom}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-axiom}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
     networks:
       - app-network

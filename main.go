@@ -47,6 +47,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -198,6 +199,18 @@ func main() {
 
 	// Create tables
 	createTables(conns)
+
+	// Connect to the train database (separate PostgreSQL database)
+	var trainDB *gorm.DB
+	trainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=train port=%s sslmode=%s",
+		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
+		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
+	if db, err := gorm.Open(postgres.Open(trainDSN), &gorm.Config{}); err == nil {
+		trainDB = db
+		log.Println("✅ Train database (PostgreSQL) connected")
+	} else {
+		log.Printf("⚠️  Train database connection failed: %v — train GIS APIs will be unavailable", err)
+	}
 
 	// ====================================
 	// IAM SYSTEM INITIALIZATION
@@ -1049,6 +1062,24 @@ func main() {
 		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)
 		gisSpecAPI.GET("/:type", gisSpecHandler.GetDashboard)
 		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
+	}
+
+	// GIS Train/Railway dashboard (backed by PostgreSQL train database)
+	if trainDB != nil {
+		trainHandler := handlers.NewGISTrainHandler(trainDB)
+		trainAPI := router.Group("/api/v1/gis/trains", authMiddleware)
+		{
+			trainAPI.GET("", trainHandler.ListTrains)
+			trainAPI.GET("/search", trainHandler.SearchTrains)
+			trainAPI.GET("/stations", trainHandler.ListStations)
+			trainAPI.GET("/stations/:code", trainHandler.GetStation)
+			trainAPI.GET("/stats", trainHandler.GetTrainStats)
+			trainAPI.GET("/dashboard", trainHandler.GetTrainDashboard)
+			trainAPI.GET("/dashboard/summary", trainHandler.GetTrainDashboardSummary)
+			trainAPI.GET("/:id", trainHandler.GetTrain)
+			trainAPI.GET("/:id/route", trainHandler.GetTrainRoute)
+		}
+		log.Println("✅ Train GIS dashboard routes registered")
 	}
 
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)

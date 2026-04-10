@@ -4,11 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+// isConfigError returns true if the error is a configuration/client problem, not a server error.
+func isConfigError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "not configured") || strings.Contains(msg, "unsupported backend")
+}
 
 // Handler serves the conductor REST + WebSocket API.
 type Handler struct {
@@ -39,7 +46,11 @@ func (h *Handler) CreateProducer(c *gin.Context) {
 	}
 	p, err := h.mgr.CreateProducer(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if isConfigError(err) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, p)
@@ -117,7 +128,11 @@ func (h *Handler) CreateConsumer(c *gin.Context) {
 	}
 	cons, err := h.mgr.CreateConsumer(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if isConfigError(err) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, cons)

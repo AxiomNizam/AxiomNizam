@@ -42,6 +42,7 @@ func NewGISSpecializedHandler() *GISSpecializedHandler {
 	h.seedSatellite()
 	h.seedAirplane()
 	h.seedShip()
+	h.seedTrainPlaceholder()
 	return h
 }
 
@@ -112,6 +113,8 @@ func categorizeScope(key string) string {
 	switch key {
 	case "agriculture", "industries", "medical":
 		return "domestic"
+	case "train":
+		return "railway"
 	default:
 		return "international"
 	}
@@ -662,4 +665,23 @@ func (h *GISSpecializedHandler) seedShip() {
 		},
 	}
 	h.dashboards["ship"] = d
+}
+
+// seedTrainPlaceholder adds a train dashboard metadata entry.
+// Actual data is served from PostgreSQL via GISTrainHandler.
+func (h *GISSpecializedHandler) seedTrainPlaceholder() {
+	d := &GISDashboardData{
+		Type:        "train",
+		Title:       "Railway Network Dashboard",
+		Description: "Train routes, stations, and schedules — live data from PostgreSQL train database. Full API at /api/v1/gis/trains",
+		MapCenter:   [2]float64{22.5, 82.0},
+		DefaultZoom: 5,
+		MaxBounds:   [2][2]float64{{6, 65}, {38, 98}},
+		Config: map[string]interface{}{
+			"data_source": "postgresql",
+			"database":    "train",
+			"api_base":    "/api/v1/gis/trains",
+		},
+	}
+	h.dashboards["train"] = d
 }

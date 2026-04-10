@@ -107,11 +107,11 @@ func (m *Manager) CreateProducer(req *CreateProducerRequest) (*Producer, error) 
 			return nil, fmt.Errorf("rabbitmq backend not configured")
 		}
 		if err := m.rabbitmq.Connect(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("rabbitmq connection failed: %w — check RABBITMQ_URL and that the broker is reachable", err)
 		}
 		if p.Exchange != "" {
 			if err := m.rabbitmq.EnsureExchange(p.Exchange, "topic"); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("rabbitmq exchange setup failed: %w", err)
 			}
 		}
 	case BackendKafka:
