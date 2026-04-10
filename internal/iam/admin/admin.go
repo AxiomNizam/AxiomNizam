@@ -18,6 +18,7 @@ import (
 	"example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
@@ -350,6 +351,170 @@ func extractClientCredentials(c *gin.Context, req *oauth.TokenRequest) (string, 
 	return clientID, clientSecret, nil
 }
 
+func firstNonEmptyAudience(aud jwt.ClaimStrings) string {
+	for _, candidate := range aud {
+		trimmed := strings.TrimSpace(candidate)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func (h *Handler) persistRefreshToken(rawToken, userID, clientID, scope, sessionID string) error {
+	if h.refreshRepo == nil {
+		return fmt.Errorf("refresh token storage not initialised")
+	}
+
+	claims, err := h.issuer.ValidateRefreshToken(rawToken)
+	if err != nil {
+		return fmt.Errorf("refresh token validation failed: %w", err)
+	}
+
+	jti := strings.TrimSpace(claims.ID)
+	if jti == "" {
+		return fmt.Errorf("refresh token is missing jti")
+	}
+
+	subject := strings.TrimSpace(userID)
+	tokenSubject := strings.TrimSpace(claims.Subject)
+	if subject == "" {
+		subject = tokenSubject
+	}
+	if subject == "" {
+		return fmt.Errorf("refresh token subject is missing")
+	}
+	if tokenSubject != "" && subject != tokenSubject {
+		return fmt.Errorf("refresh token subject mismatch")
+	}
+
+	storedClientID := strings.TrimSpace(clientID)
+	tokenClientID := firstNonEmptyAudience(claims.Audience)
+	if storedClientID != tokenClientID {
+		return fmt.Errorf("refresh token client mismatch")
+	}
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(h.issuer.RefreshTokenTTL)
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time.UTC()
+	}
+	if expiresAt.Before(now) {
+		return fmt.Errorf("refresh token already expired")
+	}
+
+	return h.refreshRepo.StoreRefreshToken(&oauth.RefreshTokenRecord{
+		ID:        jti,
+		UserID:    subject,
+		ClientID:  storedClientID,
+		SessionID: strings.TrimSpace(sessionID),
+		Scope:     strings.TrimSpace(scope),
+		ExpiresAt: expiresAt,
+		Revoked:   false,
+	})
+}
+
+func (h *Handler) issueAndStoreTokenPair(input token.IssueInput, accessTTL time.Duration) (*token.TokenPair, error) {
+	pair, err := h.issuer.IssueTokenPairWithAccessTTL(input, accessTTL)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.persistRefreshToken(pair.RefreshToken, input.Sub, input.ClientID, input.Scope, input.SessionID); err != nil {
+		return nil, err
+	}
+
+	return pair, nil
+}
+
+func (h *Handler) validateRefreshTokenRecord(rawToken, expectedClientID string) (*jwt.RegisteredClaims, *oauth.RefreshTokenRecord, error) {
+	claims, err := h.issuer.ValidateRefreshToken(rawToken)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if h.refreshRepo == nil {
+		return nil, nil, fmt.Errorf("refresh token storage not initialised")
+	}
+
+	jti := strings.TrimSpace(claims.ID)
+	if jti == "" {
+		return nil, nil, fmt.Errorf("refresh token is missing jti")
+	}
+
+	record, err := h.refreshRepo.GetRefreshToken(jti)
+	if err != nil {
+		return nil, nil, err
+	}
+	if record == nil {
+		return nil, nil, fmt.Errorf("refresh token not found")
+	}
+	if record.Revoked {
+		return nil, nil, fmt.Errorf("refresh token revoked")
+	}
+
+	now := time.Now().UTC()
+	if claims.ExpiresAt == nil || now.After(claims.ExpiresAt.Time.UTC()) {
+		return nil, nil, fmt.Errorf("refresh token expired")
+	}
+	if now.After(record.ExpiresAt.UTC()) {
+		return nil, nil, fmt.Errorf("refresh token record expired")
+	}
+
+	storedSubject := strings.TrimSpace(record.UserID)
+	tokenSubject := strings.TrimSpace(claims.Subject)
+	if storedSubject == "" || tokenSubject == "" || storedSubject != tokenSubject {
+		return nil, nil, fmt.Errorf("refresh token subject mismatch")
+	}
+
+	storedClientID := strings.TrimSpace(record.ClientID)
+	tokenClientID := firstNonEmptyAudience(claims.Audience)
+	if storedClientID != tokenClientID {
+		return nil, nil, fmt.Errorf("refresh token audience mismatch")
+	}
+
+	expected := strings.TrimSpace(expectedClientID)
+	if expected != "" && storedClientID != expected {
+		return nil, nil, fmt.Errorf("refresh token client mismatch")
+	}
+
+	return claims, record, nil
+}
+
+func (h *Handler) ensureSessionIsActive(sessionID string) error {
+	trimmedSessionID := strings.TrimSpace(sessionID)
+	if trimmedSessionID == "" {
+		return nil
+	}
+
+	if h.sessions == nil {
+		return fmt.Errorf("session storage not initialised")
+	}
+
+	session, err := h.sessions.GetByID(trimmedSessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil || !session.Active {
+		return fmt.Errorf("session not active")
+	}
+
+	now := time.Now().UTC()
+	if now.After(session.ExpiresAt.UTC()) {
+		_ = h.sessions.Revoke(trimmedSessionID)
+		return fmt.Errorf("session expired")
+	}
+
+	if h.issuer.RefreshTokenTTL > 0 {
+		session.ExpiresAt = now.Add(h.issuer.RefreshTokenTTL)
+		if err := h.sessions.Create(session); err != nil {
+			return fmt.Errorf("failed to extend session: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // ═══════════════════════════════════════════════
 // AUTH ENDPOINTS (public)
 // ═══════════════════════════════════════════════
@@ -379,19 +544,31 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 	roleNames = normalizeRoleNames(roleNames)
 
-	// Create session
-	session, err := h.authn.CreateSession(user.ID, c.ClientIP(), c.GetHeader("User-Agent"), h.issuer.AccessTokenTTL+time.Hour)
-	if err != nil {
-		log.Printf("⚠️  IAM: session creation failed: %v", err)
+	// Bind refresh token lifecycle to a server-side login session.
+	sessionTTL := h.issuer.RefreshTokenTTL
+	if sessionTTL <= 0 {
+		sessionTTL = h.issuer.AccessTokenTTL + time.Hour
 	}
 
-	sessionID := ""
-	if session != nil {
-		sessionID = session.ID
+	session, err := h.authn.CreateSession(user.ID, c.ClientIP(), c.GetHeader("User-Agent"), sessionTTL)
+	if err != nil || session == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create login session"})
+		return
 	}
 
-	pair, err := h.issuer.IssueTokenPair(user.ID, user.Email, user.DisplayName, "openid profile email roles", "", sessionID, roleNames)
+	sessionID := session.ID
+	pair, err := h.issueAndStoreTokenPair(token.IssueInput{
+		Sub:         user.ID,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Scope:       "openid profile email roles",
+		ClientID:    "",
+		SessionID:   sessionID,
+		Roles:       roleNames,
+	}, h.issuer.AccessTokenTTL)
 	if err != nil {
+		_ = h.sessions.Revoke(sessionID)
+		log.Printf("⚠️  IAM: login token issue/store failed for user=%s: %v", user.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
 		return
 	}
@@ -422,23 +599,50 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	claims, err := h.issuer.ValidateRefreshToken(req.RefreshToken)
+	claims, record, err := h.validateRefreshTokenRecord(req.RefreshToken, "")
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
 		return
 	}
+	if err := h.ensureSessionIsActive(record.SessionID); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "login session has expired or been revoked"})
+		return
+	}
 
 	// Look up user to ensure still active
-	user, err := h.users.GetByID(claims.Subject)
+	userID := strings.TrimSpace(claims.Subject)
+	if userID == "" {
+		userID = strings.TrimSpace(record.UserID)
+	}
+	user, err := h.users.GetByID(userID)
 	if err != nil || user == nil || !user.Active {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user account not found or disabled"})
 		return
 	}
 
 	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
+	scope := strings.TrimSpace(record.Scope)
+	if scope == "" {
+		scope = "openid profile email roles"
+	}
 
-	pair, err := h.issuer.IssueTokenPair(user.ID, user.Email, user.DisplayName, "openid profile email roles", "", "", roleNames)
+	if err := h.refreshRepo.RevokeRefreshToken(claims.ID); err != nil {
+		log.Printf("⚠️  IAM: refresh token revoke failed for user=%s jti=%s: %v", user.ID, claims.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token refresh failed"})
+		return
+	}
+
+	pair, err := h.issueAndStoreTokenPair(token.IssueInput{
+		Sub:         user.ID,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Scope:       scope,
+		ClientID:    strings.TrimSpace(record.ClientID),
+		SessionID:   strings.TrimSpace(record.SessionID),
+		Roles:       roleNames,
+	}, h.issuer.AccessTokenTTL)
 	if err != nil {
+		log.Printf("⚠️  IAM: refresh token rotation failed for user=%s: %v", user.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token re-issuance failed"})
 		return
 	}
@@ -1417,17 +1621,22 @@ func (h *Handler) handleAuthorizationCodeGrant(c *gin.Context, req *oauth.TokenR
 
 	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
 	accessTTL := resolvedClientAccessTokenTTL(client, h.issuer.AccessTokenTTL)
+	grantedScope := strings.TrimSpace(codeRecord.Scope)
+	if grantedScope == "" {
+		grantedScope = "openid profile email roles"
+	}
 
-	pair, err := h.issuer.IssueTokenPairWithAccessTTL(token.IssueInput{
+	pair, err := h.issueAndStoreTokenPair(token.IssueInput{
 		Sub:         user.ID,
 		Email:       user.Email,
 		DisplayName: user.DisplayName,
-		Scope:       codeRecord.Scope,
+		Scope:       grantedScope,
 		ClientID:    req.ClientID,
 		SessionID:   "",
 		Roles:       roleNames,
 	}, accessTTL)
 	if err != nil {
+		log.Printf("⚠️  IAM: auth code token issue/store failed for user=%s client=%s: %v", user.ID, req.ClientID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
 		return
 	}
@@ -1456,13 +1665,21 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 		return
 	}
 
-	claims, err := h.issuer.ValidateRefreshToken(req.RefreshToken)
+	claims, record, err := h.validateRefreshTokenRecord(req.RefreshToken, strings.TrimSpace(req.ClientID))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
 		return
 	}
+	if err := h.ensureSessionIsActive(record.SessionID); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "login session has expired or been revoked"})
+		return
+	}
 
-	user, err := h.users.GetByID(claims.Subject)
+	userID := strings.TrimSpace(claims.Subject)
+	if userID == "" {
+		userID = strings.TrimSpace(record.UserID)
+	}
+	user, err := h.users.GetByID(userID)
 	if err != nil || user == nil || !user.Active {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found or disabled"})
 		return
@@ -1470,22 +1687,37 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 
 	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
 
-	scope := req.Scope
+	scope := strings.TrimSpace(record.Scope)
 	if scope == "" {
 		scope = "openid profile email roles"
 	}
+	requestedScope := strings.TrimSpace(req.Scope)
+	if requestedScope != "" {
+		if err := oauth.ValidateScopes(oauth.ParseScopes(scope), oauth.ParseScopes(requestedScope)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		scope = requestedScope
+	}
 	accessTTL := resolvedClientAccessTokenTTL(client, h.issuer.AccessTokenTTL)
 
-	pair, err := h.issuer.IssueTokenPairWithAccessTTL(token.IssueInput{
+	if err := h.refreshRepo.RevokeRefreshToken(claims.ID); err != nil {
+		log.Printf("⚠️  IAM: oauth refresh token revoke failed for user=%s client=%s jti=%s: %v", user.ID, req.ClientID, claims.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token refresh failed"})
+		return
+	}
+
+	pair, err := h.issueAndStoreTokenPair(token.IssueInput{
 		Sub:         user.ID,
 		Email:       user.Email,
 		DisplayName: user.DisplayName,
 		Scope:       scope,
-		ClientID:    req.ClientID,
-		SessionID:   "",
+		ClientID:    strings.TrimSpace(req.ClientID),
+		SessionID:   strings.TrimSpace(record.SessionID),
 		Roles:       roleNames,
 	}, accessTTL)
 	if err != nil {
+		log.Printf("⚠️  IAM: oauth refresh token rotation failed for user=%s client=%s: %v", user.ID, req.ClientID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token re-issuance failed"})
 		return
 	}
