@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/static/analytics-dashboard.css">
     <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
     <link rel="stylesheet" href="/static/netintel-dashboard.css">
+    <link rel="stylesheet" href="/static/conductor-dashboard.css">
     <link rel="stylesheet" href="/static/platform-console.css">
     <!-- Leaflet.js for GIS maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
@@ -146,6 +147,10 @@
                         <span class="nav-icon"><svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
                         <span>NetIntel</span>
                     </a>
+                    <a href="/conductor" class="nav-link {{ if eq .page "conductor-dashboard" }}active{{ end }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+                        <span>Conductor</span>
+                    </a>
 
                     <div class="nav-dropdown" id="nav-more-wrap">
                         <button
@@ -236,6 +241,8 @@
                 {{ template "version-lineage-dashboard" . }}
             {{ else if eq .pageName "iam-admin" }}
                 {{ template "iam-admin" . }}
+            {{ else if eq .pageName "conductor-dashboard" }}
+                {{ template "conductor-dashboard" . }}
             {{ end }}
         </main>
 

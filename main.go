@@ -19,6 +19,7 @@ import (
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
+	"example.com/axiomnizam/internal/conductor"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/database"
 	"example.com/axiomnizam/internal/eventbus"
@@ -918,6 +919,17 @@ func main() {
 		streamSubscriptionsAPI.POST("", adminOrSysMiddleware, streamHandler.Subscribe)
 		streamSubscriptionsAPI.DELETE("/:id", adminOrSysMiddleware, streamHandler.Unsubscribe)
 	}
+
+	// Conductor (RabbitMQ / Kafka producer & consumer management)
+	conductorCfg := conductor.Config{
+		RabbitMQURL:  os.Getenv("RABBITMQ_URL"),
+		KafkaBrokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
+	}
+	if conductorCfg.KafkaBrokers[0] == "" {
+		conductorCfg.KafkaBrokers = nil
+	}
+	conductorMgr := conductor.NewManager(conductorCfg)
+	conductor.RegisterRoutes(router, conductorMgr, authMiddleware, adminOrSysMiddleware)
 
 	// Tenants
 	tenantAPI := router.Group("/api/v1/tenants", authMiddleware)

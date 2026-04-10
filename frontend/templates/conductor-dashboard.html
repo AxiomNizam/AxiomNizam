@@ -1,0 +1,164 @@
+{{ define "conductor-dashboard" }}
+<div class="conductor-dashboard" id="conductorApp">
+    <!-- Header Stats -->
+    <div class="conductor-stats" id="conductorStats">
+        <div class="stat-card"><span class="stat-value" id="statProducers">0</span><span class="stat-label">Producers</span></div>
+        <div class="stat-card"><span class="stat-value" id="statConsumers">0</span><span class="stat-label">Consumers</span></div>
+        <div class="stat-card"><span class="stat-value" id="statSent">0</span><span class="stat-label">Sent</span></div>
+        <div class="stat-card"><span class="stat-value" id="statReceived">0</span><span class="stat-label">Received</span></div>
+        <div class="stat-card"><span class="stat-value" id="statAcked">0</span><span class="stat-label">Acked</span></div>
+        <div class="stat-card"><span class="stat-value" id="statFailed">0</span><span class="stat-label">Failed</span></div>
+        <div class="stat-card stat-dlq"><span class="stat-value" id="statDLQ">0</span><span class="stat-label">DLQ</span></div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="conductor-tabs">
+        <button class="tab-btn active" data-tab="producers" onclick="switchTab('producers')">Producers</button>
+        <button class="tab-btn" data-tab="consumers" onclick="switchTab('consumers')">Consumers</button>
+        <button class="tab-btn" data-tab="messages" onclick="switchTab('messages')">Messages</button>
+        <button class="tab-btn" data-tab="dlq" onclick="switchTab('dlq')">Dead Letter Queue</button>
+        <button class="tab-btn" data-tab="stream" onclick="switchTab('stream')">Live Stream</button>
+        <button class="tab-btn" data-tab="publish" onclick="switchTab('publish')">Publish</button>
+    </div>
+
+    <!-- Producers Tab -->
+    <div class="tab-content active" id="tab-producers">
+        <div class="tab-header">
+            <h2>Producers</h2>
+            <button class="btn-primary" onclick="showCreateProducerModal()">+ New Producer</button>
+        </div>
+        <div class="conductor-table-wrap">
+            <table class="conductor-table">
+                <thead>
+                    <tr><th>Name</th><th>Backend</th><th>Exchange / Topic</th><th>Routing Key</th><th>Status</th><th>Sent</th><th>Last Sent</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="producersBody"><tr><td colspan="8" class="empty-row">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Consumers Tab -->
+    <div class="tab-content" id="tab-consumers">
+        <div class="tab-header">
+            <h2>Consumers</h2>
+            <button class="btn-primary" onclick="showCreateConsumerModal()">+ New Consumer</button>
+        </div>
+        <div class="conductor-table-wrap">
+            <table class="conductor-table">
+                <thead>
+                    <tr><th>Name</th><th>Backend</th><th>Queue / Topic</th><th>Group</th><th>Status</th><th>Received</th><th>Acked</th><th>Failed</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="consumersBody"><tr><td colspan="9" class="empty-row">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Messages Tab -->
+    <div class="tab-content" id="tab-messages">
+        <div class="tab-header">
+            <h2>Recent Messages</h2>
+            <button class="btn-secondary" onclick="loadMessages()">Refresh</button>
+        </div>
+        <div class="conductor-table-wrap">
+            <table class="conductor-table">
+                <thead>
+                    <tr><th>ID</th><th>Producer</th><th>Status</th><th>Content Type</th><th>Timestamp</th><th>Body</th></tr>
+                </thead>
+                <tbody id="messagesBody"><tr><td colspan="6" class="empty-row">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- DLQ Tab -->
+    <div class="tab-content" id="tab-dlq">
+        <div class="tab-header">
+            <h2>Dead Letter Queue</h2>
+            <button class="btn-secondary" onclick="loadDLQ()">Refresh</button>
+        </div>
+        <div class="conductor-table-wrap">
+            <table class="conductor-table">
+                <thead>
+                    <tr><th>ID</th><th>Consumer</th><th>Original Queue</th><th>Error</th><th>Retries</th><th>Dead Lettered At</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="dlqBody"><tr><td colspan="7" class="empty-row">No dead-lettered messages</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Live Stream Tab -->
+    <div class="tab-content" id="tab-stream">
+        <div class="tab-header">
+            <h2>Live Stream</h2>
+            <div>
+                <span class="stream-indicator" id="streamIndicator">● Disconnected</span>
+                <button class="btn-primary" id="streamToggle" onclick="toggleStream()">Connect</button>
+            </div>
+        </div>
+        <div class="stream-container" id="streamContainer">
+            <div class="stream-empty">Click "Connect" to start live streaming messages</div>
+        </div>
+    </div>
+
+    <!-- Publish Tab -->
+    <div class="tab-content" id="tab-publish">
+        <div class="tab-header"><h2>Publish Message</h2></div>
+        <div class="publish-form">
+            <div class="form-group">
+                <label>Producer</label>
+                <select id="publishProducer" class="form-input"></select>
+            </div>
+            <div class="form-group">
+                <label>Routing Key (optional)</label>
+                <input type="text" id="publishRoutingKey" class="form-input" placeholder="e.g. orders.created">
+            </div>
+            <div class="form-group">
+                <label>Correlation ID (optional)</label>
+                <input type="text" id="publishCorrelationId" class="form-input" placeholder="e.g. req-12345">
+            </div>
+            <div class="form-group">
+                <label>Body (JSON)</label>
+                <textarea id="publishBody" class="form-input form-textarea" rows="8" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <button class="btn-primary" onclick="publishMessage()">Publish</button>
+            <div id="publishResult" class="publish-result"></div>
+        </div>
+    </div>
+
+    <!-- Create Producer Modal -->
+    <div class="modal-overlay" id="createProducerModal" style="display:none">
+        <div class="modal">
+            <div class="modal-header"><h3>Create Producer</h3><button class="modal-close" onclick="closeModal('createProducerModal')">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label>Name</label><input type="text" id="prodName" class="form-input" placeholder="my-producer"></div>
+                <div class="form-group"><label>Backend</label><select id="prodBackend" class="form-input"><option value="rabbitmq">RabbitMQ</option><option value="kafka">Kafka</option><option value="memory">Memory</option></select></div>
+                <div class="form-group"><label>Exchange (RabbitMQ) / Topic (Kafka)</label><input type="text" id="prodExchange" class="form-input" placeholder="my-exchange or my-topic"></div>
+                <div class="form-group"><label>Routing Key</label><input type="text" id="prodRoutingKey" class="form-input" placeholder="my.routing.key"></div>
+                <div class="form-group"><label>Content Type</label><input type="text" id="prodContentType" class="form-input" value="application/json"></div>
+                <div class="form-group"><label><input type="checkbox" id="prodPersistent" checked> Persistent</label></div>
+            </div>
+            <div class="modal-footer"><button class="btn-primary" onclick="createProducer()">Create</button><button class="btn-secondary" onclick="closeModal('createProducerModal')">Cancel</button></div>
+        </div>
+    </div>
+
+    <!-- Create Consumer Modal -->
+    <div class="modal-overlay" id="createConsumerModal" style="display:none">
+        <div class="modal">
+            <div class="modal-header"><h3>Create Consumer</h3><button class="modal-close" onclick="closeModal('createConsumerModal')">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label>Name</label><input type="text" id="consName" class="form-input" placeholder="my-consumer"></div>
+                <div class="form-group"><label>Backend</label><select id="consBackend" class="form-input"><option value="rabbitmq">RabbitMQ</option><option value="kafka">Kafka</option><option value="memory">Memory</option></select></div>
+                <div class="form-group"><label>Queue (RabbitMQ) / Topic (Kafka)</label><input type="text" id="consQueue" class="form-input" placeholder="my-queue or my-topic"></div>
+                <div class="form-group"><label>Exchange (bind to)</label><input type="text" id="consExchange" class="form-input" placeholder="my-exchange"></div>
+                <div class="form-group"><label>Routing Key</label><input type="text" id="consRoutingKey" class="form-input" placeholder="#"></div>
+                <div class="form-group"><label>Consumer Group</label><input type="text" id="consGroup" class="form-input" placeholder="my-group"></div>
+                <div class="form-group"><label>Prefetch Count</label><input type="number" id="consPrefetch" class="form-input" value="10"></div>
+                <div class="form-group"><label>Max Retries</label><input type="number" id="consMaxRetries" class="form-input" value="3"></div>
+                <div class="form-group"><label><input type="checkbox" id="consDLQ" checked> Enable DLQ</label></div>
+            </div>
+            <div class="modal-footer"><button class="btn-primary" onclick="createConsumer()">Create</button><button class="btn-secondary" onclick="closeModal('createConsumerModal')">Cancel</button></div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/conductor-dashboard.js"></script>
+{{ end }}

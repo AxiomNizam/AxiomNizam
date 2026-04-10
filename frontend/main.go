@@ -149,6 +149,7 @@ func main() {
 	router.GET("/analytics", analyticsHandler)
 	router.GET("/cdc-etl", cdcEtlHandler)
 	router.GET("/netintel", netintelHandler)
+	router.GET("/conductor", conductorHandler)
 	router.GET("/governance", requireFrontendRoles("admin", "system-manager"), governanceHandler)
 	router.GET("/operations-center", requireFrontendRoles("admin", "system-manager", "manager"), operationsCenterHandler)
 	router.GET("/lineage-version", requireFrontendRoles("admin", "system-manager"), versionLineageHandler)
@@ -171,7 +172,8 @@ func main() {
 	fmt.Printf("📊 Analytics Dashboard: http://localhost:%s/analytics\n", port)
 	fmt.Printf("🔄 CDC/ETL Dashboard: http://localhost:%s/cdc-etl\n", port)
 	fmt.Printf("📡 Network Intelligence: http://localhost:%s/netintel\n", port)
-	fmt.Printf("🏛️ Governance Console: http://localhost:%s/governance\n", port)
+	fmt.Printf("� Conductor: http://localhost:%s/conductor\n", port)
+	fmt.Printf("�🏛️ Governance Console: http://localhost:%s/governance\n", port)
 	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
 	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
 	fmt.Printf("� IAM Admin Console: http://localhost:%s/iam-admin\n", port)
@@ -462,6 +464,26 @@ func iamAdminHandler(c *gin.Context) {
 		"title":      "AxiomNizam - IAM Admin Console",
 		"pageName":   "iam-admin",
 		"page":       "iam-admin",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// conductorHandler serves the conductor dashboard
+func conductorHandler(c *gin.Context) {
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Conductor"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Conductor",
+		"pageName":   "conductor-dashboard",
+		"page":       "conductor-dashboard",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,
