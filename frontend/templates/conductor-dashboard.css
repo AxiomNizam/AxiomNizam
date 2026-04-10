@@ -205,7 +205,7 @@
     justify-content: center;
     z-index: 1000;
 }
-.modal {
+.conductor-modal {
     background: var(--bg-color, #0f0f23);
     border: 1px solid var(--border-color, #2a2a4a);
     border-radius: 14px;
@@ -357,5 +357,5 @@
     .conductor-stats .stat-card { min-width: 80px; flex: 1 1 calc(33% - 8px); }
     .conductor-tabs { gap: 0; }
     .tab-btn { padding: 8px 12px; font-size: 0.8rem; }
-    .modal { width: 95vw; }
+    .conductor-modal { width: 95vw; }
 }
