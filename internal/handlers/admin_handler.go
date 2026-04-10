@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
@@ -19,20 +20,42 @@ import (
 var dbIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 var serverKeySanitizer = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
+// DatabaseServerRecord is a GORM model for persisting custom database server connections.
+type DatabaseServerRecord struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	ServerKey       string    `gorm:"uniqueIndex;not null" json:"server_key"`
+	ServerName      string    `gorm:"not null" json:"server_name"`
+	DBType          string    `gorm:"not null" json:"db_type"`
+	Host            string    `gorm:"not null" json:"host"`
+	Port            int       `gorm:"not null" json:"port"`
+	Username        string    `gorm:"not null" json:"username"`
+	Password        string    `gorm:"not null" json:"password"`
+	DefaultDatabase string    `json:"default_database"`
+	SSLMode         string    `json:"ssl_mode"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+func (DatabaseServerRecord) TableName() string {
+	return "database_servers"
+}
+
 // AdminHandler handles admin operations like database and table creation
 type AdminHandler struct {
 	mu              sync.RWMutex
 	connections     map[string]*gorm.DB
 	connectionTypes map[string]string
 	serverMeta      map[string]DatabaseServerInfo
+	primaryDB       *gorm.DB // primary DB for persisting server configs
 }
 
-// NewAdminHandler creates a new admin handler
-func NewAdminHandler(connections map[string]*gorm.DB) *AdminHandler {
+// NewAdminHandler creates a new admin handler. primaryDB is used to persist custom server connections (may be nil).
+func NewAdminHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *AdminHandler {
 	h := &AdminHandler{
 		connections:     connections,
 		connectionTypes: make(map[string]string, len(connections)),
 		serverMeta:      make(map[string]DatabaseServerInfo, len(connections)),
+		primaryDB:       primaryDB,
 	}
 
 	for key, db := range connections {
@@ -48,7 +71,81 @@ func NewAdminHandler(connections map[string]*gorm.DB) *AdminHandler {
 		}
 	}
 
+	// Auto-migrate persistence table and restore saved connections
+	if primaryDB != nil {
+		if err := primaryDB.AutoMigrate(&DatabaseServerRecord{}); err != nil {
+			log.Printf("⚠️ Failed to migrate database_servers table: %v", err)
+		} else {
+			h.restoreSavedServers()
+		}
+	}
+
 	return h
+}
+
+// restoreSavedServers reconnects previously persisted custom database servers.
+func (h *AdminHandler) restoreSavedServers() {
+	var records []DatabaseServerRecord
+	if err := h.primaryDB.Find(&records).Error; err != nil {
+		log.Printf("⚠️ Failed to load saved database servers: %v", err)
+		return
+	}
+
+	for _, rec := range records {
+		var (
+			db  *gorm.DB
+			err error
+		)
+
+		switch rec.DBType {
+		case "mysql", "mariadb", "percona":
+			dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", rec.Username, rec.Password, rec.Host, rec.Port, rec.DefaultDatabase)
+			db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		case "postgres":
+			sslMode := rec.SSLMode
+			if sslMode == "" {
+				sslMode = "disable"
+			}
+			dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", rec.Host, rec.Username, rec.Password, rec.DefaultDatabase, rec.Port, sslMode)
+			db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		default:
+			log.Printf("⚠️ Skipping saved server %s: unsupported db_type %s", rec.ServerKey, rec.DBType)
+			continue
+		}
+
+		connected := true
+		if err != nil {
+			log.Printf("⚠️ Could not reconnect saved server %s (%s): %v", rec.ServerKey, rec.DBType, err)
+			connected = false
+		} else if sqlDB, dbErr := db.DB(); dbErr != nil || sqlDB.Ping() != nil {
+			log.Printf("⚠️ Saved server %s (%s) not reachable, will show as disconnected", rec.ServerKey, rec.DBType)
+			connected = false
+		}
+
+		h.mu.Lock()
+		if connected {
+			h.connections[rec.ServerKey] = db
+		}
+		h.connectionTypes[rec.ServerKey] = rec.DBType
+		h.serverMeta[rec.ServerKey] = DatabaseServerInfo{
+			Key:       rec.ServerKey,
+			Name:      rec.ServerName,
+			DBType:    rec.DBType,
+			Host:      rec.Host,
+			Port:      rec.Port,
+			Source:    "custom",
+			Connected: connected,
+		}
+		h.mu.Unlock()
+
+		if connected {
+			log.Printf("✅ Restored saved DB server key=%s name=%s type=%s host=%s:%d", rec.ServerKey, rec.ServerName, rec.DBType, rec.Host, rec.Port)
+		}
+	}
+
+	if len(records) > 0 {
+		log.Printf("✅ Loaded %d saved database server(s)", len(records))
+	}
 }
 
 // CreateDatabaseRequest represents a request to create a database
@@ -293,6 +390,26 @@ func (h *AdminHandler) ConnectDatabaseServer(c *gin.Context) {
 		Connected: true,
 	}
 	h.mu.Unlock()
+
+	// Persist to database so it survives restarts
+	if h.primaryDB != nil {
+		rec := DatabaseServerRecord{
+			ServerKey:       serverKey,
+			ServerName:      serverName,
+			DBType:          dbType,
+			Host:            host,
+			Port:            port,
+			Username:        req.Username,
+			Password:        req.Password,
+			DefaultDatabase: defaultDB,
+			SSLMode:         strings.TrimSpace(req.SSLMode),
+		}
+		if err := h.primaryDB.Where("server_key = ?", serverKey).Assign(rec).FirstOrCreate(&rec).Error; err != nil {
+			log.Printf("⚠️ Connected server %s but failed to persist: %v", serverKey, err)
+		} else {
+			log.Printf("💾 Persisted custom DB server key=%s", serverKey)
+		}
+	}
 
 	log.Printf("✅ Connected custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
 	c.JSON(http.StatusCreated, gin.H{

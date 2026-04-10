@@ -173,6 +173,23 @@
                 <div class="loading">Loading databases...</div>
             </div>
         </div>
+
+        <!-- Connected Database Servers -->
+        <div class="databases-section" style="margin-top: 24px;">
+            <div class="section-header">
+                <h3>Connected Database Servers</h3>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-secondary" onclick="openConnectDbServerModal()">+ Connect Server</button>
+                    <button class="btn-primary" onclick="loadConnectedServers()">Refresh</button>
+                </div>
+            </div>
+            <p style="margin: 0 0 12px 0; color: var(--text-secondary); font-size: 0.9em;">
+                All connected database servers (default and custom). Custom connections are persisted and restored on restart.
+            </p>
+            <div class="database-grid" id="connectedServersList">
+                <div class="loading">Loading connected servers...</div>
+            </div>
+        </div>
     </div>
 
     <!-- Monitoring Tab -->

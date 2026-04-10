@@ -293,7 +293,7 @@ func main() {
 		"percona":  conns.Percona,
 		"oracle":   conns.Oracle,
 	}
-	adminHandler := handlers.NewAdminHandler(dbConnections)
+	adminHandler := handlers.NewAdminHandler(dbConnections, conns.PostgreSQL)
 
 	// User management handler
 	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)

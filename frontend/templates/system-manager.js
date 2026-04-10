@@ -197,6 +197,7 @@ window.addEventListener('DOMContentLoaded', function() {
     loadStatusData();
     loadDatabases();
     loadDatabaseServers();
+    loadConnectedServers();
     loadMonitoringDashboards();
     setInterval(loadStatusData, 30000);
 });
@@ -221,6 +222,7 @@ function switchManagerTab(tabName) {
     
     if (tabName === 'databases') {
         loadDatabases();
+        loadConnectedServers();
     }
     if (tabName === 'users') {
         loadUsers();
@@ -1135,6 +1137,73 @@ function loadDatabases() {
 
 function refreshDatabases() {
     loadDatabases();
+    loadConnectedServers();
+}
+
+function loadConnectedServers() {
+    var container = document.getElementById('connectedServersList');
+    if (!container) return;
+
+    fetch(BACKEND_URL + '/api/admin/database/servers', {
+        headers: getAuthHeaders()
+    })
+    .then(function(response) {
+        return response.text().then(function(text) {
+            var payload = {};
+            try { payload = text ? JSON.parse(text) : {}; } catch (e) { payload = {}; }
+            if (!response.ok) throw new Error((payload && payload.error) || 'Request failed');
+            return payload;
+        });
+    })
+    .then(function(data) {
+        var servers = data.servers || [];
+        if (servers.length === 0) {
+            container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">No database servers connected</div>';
+            return;
+        }
+
+        var html = '';
+        servers.forEach(function(server) {
+            var isConnected = server.connected === true;
+            var statusColor = isConnected ? '#10b981' : '#ef4444';
+            var statusText = isConnected ? '✓ Connected' : '✗ Disconnected';
+            var sourceLabel = server.source === 'default' ? 'Default' : 'Custom';
+            var sourceBadgeColor = server.source === 'default' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)';
+            var sourceBadgeTextColor = server.source === 'default' ? '#818cf8' : '#10b981';
+
+            html += '<div class="database-item">' +
+                '<div class="db-info-row">' +
+                    '<span class="db-info-label">Server</span>' +
+                    '<span class="db-info-value" style="font-weight:600;">' + escapeHtml(server.name || server.key) + '</span>' +
+                '</div>' +
+                '<div class="db-info-row">' +
+                    '<span class="db-info-label">Key</span>' +
+                    '<span class="db-info-value" style="font-family:monospace;font-size:0.85em;">' + escapeHtml(server.key) + '</span>' +
+                '</div>' +
+                '<div class="db-info-row">' +
+                    '<span class="db-info-label">Type</span>' +
+                    '<span class="db-info-value">' + (server.db_type || 'unknown').toUpperCase() + '</span>' +
+                '</div>' +
+                '<div class="db-info-row">' +
+                    '<span class="db-info-label">Host</span>' +
+                    '<span class="db-info-value">' + escapeHtml(server.host || '-') + (server.port ? ':' + server.port : '') + '</span>' +
+                '</div>' +
+                '<div class="db-info-row">' +
+                    '<span class="db-info-label">Status</span>' +
+                    '<span class="db-info-value" style="color:' + statusColor + ';">' + statusText + '</span>' +
+                '</div>' +
+                '<div class="db-info-row">' +
+                    '<span class="db-info-label">Source</span>' +
+                    '<span class="db-info-value"><span style="background:' + sourceBadgeColor + ';color:' + sourceBadgeTextColor + ';padding:2px 8px;border-radius:8px;font-size:0.8em;">' + sourceLabel + '</span></span>' +
+                '</div>' +
+                '</div>';
+        });
+
+        container.innerHTML = html;
+    })
+    .catch(function(err) {
+        container.innerHTML = '<div style="color: #ef4444; padding: 12px;">Failed to load connected servers: ' + escapeHtml(err.message) + '</div>';
+    });
 }
 
 function createDatabase() {
@@ -1320,6 +1389,7 @@ function submitConnectDbServer(event) {
 
             addOperationLog('Connected database server: ' + payload.server_name + ' (' + payload.db_type + ')', 'success');
             loadDatabaseServers();
+            loadConnectedServers();
 
             var newDbType = document.getElementById('newDbType');
             if (newDbType && !newDbType.value) {
