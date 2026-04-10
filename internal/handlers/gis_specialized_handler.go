@@ -113,7 +113,7 @@ func categorizeScope(key string) string {
 	switch key {
 	case "agriculture", "industries", "medical":
 		return "domestic"
-	case "train":
+	case "train", "bd-train":
 		return "railway"
 	default:
 		return "international"
@@ -670,9 +670,9 @@ func (h *GISSpecializedHandler) seedShip() {
 // seedTrainPlaceholder adds a train dashboard metadata entry.
 // Actual data is served from PostgreSQL via GISTrainHandler.
 func (h *GISSpecializedHandler) seedTrainPlaceholder() {
-	d := &GISDashboardData{
+	h.dashboards["train"] = &GISDashboardData{
 		Type:        "train",
-		Title:       "Railway Network Dashboard",
+		Title:       "Indian Railway Network Dashboard",
 		Description: "Train routes, stations, and schedules — live data from PostgreSQL train database. Full API at /api/v1/gis/trains",
 		MapCenter:   [2]float64{22.5, 82.0},
 		DefaultZoom: 5,
@@ -680,8 +680,22 @@ func (h *GISSpecializedHandler) seedTrainPlaceholder() {
 		Config: map[string]interface{}{
 			"data_source": "postgresql",
 			"database":    "train",
+			"country":     "IN",
 			"api_base":    "/api/v1/gis/trains",
 		},
 	}
-	h.dashboards["train"] = d
+	h.dashboards["bd-train"] = &GISDashboardData{
+		Type:        "bd-train",
+		Title:       "Bangladesh Railway Network Dashboard",
+		Description: "Train routes, stations, trips and fares — live data from PostgreSQL bd-train database. Full API at /api/v1/gis/bd-trains",
+		MapCenter:   [2]float64{23.6850, 90.3563},
+		DefaultZoom: 7,
+		MaxBounds:   [2][2]float64{{20.5, 87.5}, {26.7, 92.8}},
+		Config: map[string]interface{}{
+			"data_source": "postgresql",
+			"database":    "bd-train",
+			"country":     "BD",
+			"api_base":    "/api/v1/gis/bd-trains",
+		},
+	}
 }

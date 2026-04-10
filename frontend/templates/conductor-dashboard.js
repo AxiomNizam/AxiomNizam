@@ -312,7 +312,8 @@
 
     function connectStream() {
         var base = window.resolveBackendURL();
-        wsURL = base.replace(/^http/, 'ws') + '/ws/conductor';
+        var token = localStorage.getItem('auth_token') || '';
+        wsURL = base.replace(/^http/, 'ws') + '/ws/conductor' + (token ? '?token=' + encodeURIComponent(token) : '');
         try {
             streamWS = new WebSocket(wsURL);
         } catch(e) {

@@ -200,16 +200,28 @@ func main() {
 	// Create tables
 	createTables(conns)
 
-	// Connect to the train database (separate PostgreSQL database)
+	// Connect to the train database (separate PostgreSQL database — Indian Railways)
 	var trainDB *gorm.DB
 	trainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=train port=%s sslmode=%s",
 		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
 		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
 	if db, err := gorm.Open(postgres.Open(trainDSN), &gorm.Config{}); err == nil {
 		trainDB = db
-		log.Println("✅ Train database (PostgreSQL) connected")
+		log.Println("✅ Train database (PostgreSQL/India) connected")
 	} else {
-		log.Printf("⚠️  Train database connection failed: %v — train GIS APIs will be unavailable", err)
+		log.Printf("⚠️  Train database connection failed: %v — Indian train GIS APIs will be unavailable", err)
+	}
+
+	// Connect to the bd-train database (Bangladesh Railways)
+	var bdTrainDB *gorm.DB
+	bdTrainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=bd-train port=%s sslmode=%s",
+		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
+		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
+	if db, err := gorm.Open(postgres.Open(bdTrainDSN), &gorm.Config{}); err == nil {
+		bdTrainDB = db
+		log.Println("✅ BD-Train database (PostgreSQL/Bangladesh) connected")
+	} else {
+		log.Printf("⚠️  BD-Train database connection failed: %v — Bangladesh train GIS APIs will be unavailable", err)
 	}
 
 	// ====================================
@@ -369,6 +381,13 @@ func main() {
 		}
 
 		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			// WebSocket connections cannot send custom headers from browsers;
+			// accept token as a query parameter for upgrade requests.
+			if qToken := strings.TrimSpace(c.Query("token")); qToken != "" {
+				authHeader = "Bearer " + qToken
+			}
+		}
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
 			c.Abort()
@@ -1064,7 +1083,7 @@ func main() {
 		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
 	}
 
-	// GIS Train/Railway dashboard (backed by PostgreSQL train database)
+	// GIS Train/Railway dashboard — Indian Railways (PostgreSQL train database)
 	if trainDB != nil {
 		trainHandler := handlers.NewGISTrainHandler(trainDB)
 		trainAPI := router.Group("/api/v1/gis/trains", authMiddleware)
@@ -1079,7 +1098,27 @@ func main() {
 			trainAPI.GET("/:id", trainHandler.GetTrain)
 			trainAPI.GET("/:id/route", trainHandler.GetTrainRoute)
 		}
-		log.Println("✅ Train GIS dashboard routes registered")
+		log.Println("✅ Indian Railway GIS routes registered")
+	}
+
+	// GIS Train/Railway dashboard — Bangladesh Railways (PostgreSQL bd-train database)
+	if bdTrainDB != nil {
+		bdTrainHandler := handlers.NewGISBDTrainHandler(bdTrainDB)
+		bdTrainAPI := router.Group("/api/v1/gis/bd-trains", authMiddleware)
+		{
+			bdTrainAPI.GET("", bdTrainHandler.ListTrains)
+			bdTrainAPI.GET("/search", bdTrainHandler.SearchTrains)
+			bdTrainAPI.GET("/stations", bdTrainHandler.ListStations)
+			bdTrainAPI.GET("/stations/:name", bdTrainHandler.GetStation)
+			bdTrainAPI.GET("/stats", bdTrainHandler.GetStats)
+			bdTrainAPI.GET("/trips", bdTrainHandler.ListTrips)
+			bdTrainAPI.GET("/trips/:id/seats", bdTrainHandler.GetTripSeats)
+			bdTrainAPI.GET("/dashboard", bdTrainHandler.GetDashboard)
+			bdTrainAPI.GET("/dashboard/summary", bdTrainHandler.GetDashboardSummary)
+			bdTrainAPI.GET("/:id", bdTrainHandler.GetTrain)
+			bdTrainAPI.GET("/:id/route", bdTrainHandler.GetTrainRoute)
+		}
+		log.Println("✅ Bangladesh Railway GIS routes registered")
 	}
 
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
