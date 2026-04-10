@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }}</title>
     <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/style.css?v=20260318-9">
-    <link rel="stylesheet" href="/static/responsive.css?v=20260318-9">
+    <link rel="stylesheet" href="/static/style.css?v=20260410-1">
+    <link rel="stylesheet" href="/static/responsive.css?v=20260410-1">
     <link rel="stylesheet" href="/static/gis-dashboard.css">
     <link rel="stylesheet" href="/static/analytics-dashboard.css">
     <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
@@ -103,7 +103,7 @@
 <body>
     <div class="app-container">
         <!-- Navigation Bar -->
-        {{ if not .embedded }}
+        {{ if and (not .embedded) (not .hideChrome) }}
         <nav class="navbar">
             <div class="nav-container">
                 <div class="nav-logo">
@@ -208,7 +208,7 @@
                     </div>
                     <button class="btn-logout" onclick="logout()">Logout</button>
                     {{ else }}
-                    <button class="btn-login" onclick="openLoginModal()">Login</button>
+                    <button class="btn-login" onclick="window.location.href='/login'">Login</button>
                     {{ end }}
                 </div>
             </div>
@@ -216,8 +216,10 @@
         {{ end }}
 
         <!-- Main Content -->
-        <main class="main-content">
-            {{ if eq .pageName "public-dashboard" }}
+        <main class="main-content{{ if .hideChrome }} login-main-content{{ end }}">
+            {{ if eq .pageName "login" }}
+                {{ template "login" . }}
+            {{ else if eq .pageName "public-dashboard" }}
                 {{ template "public-dashboard" . }}
             {{ else if eq .pageName "admin" }}
                 {{ template "admin" . }}
@@ -247,7 +249,7 @@
         </main>
 
         <!-- Footer -->
-        {{ if not .embedded }}
+        {{ if and (not .embedded) (not .hideChrome) }}
         <footer class="footer">
             <div class="footer-content">
                 <p>&copy; 2026 AxiomNizam - All Rights Reserved</p>
@@ -259,37 +261,6 @@
             </div>
         </footer>
         {{ end }}
-    </div>
-
-    <!-- Login Modal -->
-    <div id="loginModal" class="modal">
-        <div class="modal-content login-modal">
-            <div class="modal-header">
-                <h2>🔐 Login</h2>
-                <button class="modal-close" onclick="closeLoginModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form onsubmit="handleLogin(event)">
-                    <div class="form-group">
-                        <label for="username">Username</label>
-                        <input type="text" id="username" name="username" placeholder="Enter username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" name="password" placeholder="Enter password" required>
-                    </div>
-                    <button type="submit" class="btn-primary btn-large">Login</button>
-                </form>
-
-                <div class="idp-divider"><span>or continue with</span></div>
-
-                <div id="idpButtonsContainer" class="idp-buttons">
-                    <!-- Dynamically loaded identity provider buttons -->
-                </div>
-
-                <p class="login-hint">AxiomNizam IAM — Roles: sysadmin | admin | manager | user</p>
-            </div>
-        </div>
     </div>
 
     <!-- Response Modal -->
@@ -305,7 +276,7 @@
         </div>
     </div>
 
-    <script src="/static/auth.js?v=20260405-2"></script>
+    <script src="/static/auth.js?v=20260410-1"></script>
     <script>
 
         // Theme management
@@ -601,9 +572,9 @@
             initMobileNavInteractions();
             initTabNavigationScrollUX();
 
-            {{ if .forceLogin }}
-            openLoginModal();
-            {{ end }}
+            if (document.getElementById('idpButtonsContainer')) {
+                loadIdentityProviderButtons();
+            }
         });
 
         window.addEventListener('storage', function(event) {
@@ -615,15 +586,6 @@
                 applyRoleNavVisibility();
             }
         });
-
-        function openLoginModal() {
-            document.getElementById('loginModal').style.display = 'flex';
-            loadIdentityProviderButtons();
-        }
-
-        function closeLoginModal() {
-            document.getElementById('loginModal').style.display = 'none';
-        }
 
         function closeResponseModal() {
             document.getElementById('responseModal').style.display = 'none';
@@ -809,10 +771,6 @@
                 closeMobileNav();
             }
 
-            const modal = document.getElementById('loginModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
         };
 
         window.addEventListener('keydown', function(event) {

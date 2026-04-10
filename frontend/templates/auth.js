@@ -343,9 +343,7 @@ function handleLogin(event) {
         console.log('👤 User role:', userRole, '(server role:', normalizeRole(data.role || ''), ', user.roles:', (data.user && data.user.roles) || [], ')');
         localStorage.setItem('userRole', userRole);
         setAuthCookies(authToken, userRole, userName);
-        
-        closeLoginModal();
-        
+
         // Redirect based on user role
         if (userRole === 'system-manager') {
             window.location.href = '/system-manager';

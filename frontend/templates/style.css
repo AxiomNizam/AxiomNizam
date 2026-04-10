@@ -352,6 +352,39 @@ h1, h2, h3, h4, h5, h6 {
     width: 100%;
 }
 
+.main-content.login-main-content {
+    max-width: 100%;
+    margin: 0;
+    padding: clamp(24px, 4vw, 56px) 18px;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at 12% 15%, rgba(var(--primary-rgb), 0.18), transparent 38%),
+        radial-gradient(circle at 90% 82%, rgba(var(--secondary-rgb), 0.14), transparent 34%),
+        linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 45%, var(--light-bg) 100%);
+}
+
+.login-page-shell {
+    width: min(460px, 100%);
+}
+
+.login-page-card {
+    width: 100%;
+    max-height: none;
+}
+
+.login-page-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 16px;
+}
+
+.login-page-form {
+    margin-bottom: 12px;
+}
+
 /* Common Sections */
 .section {
     background: var(--card-bg);

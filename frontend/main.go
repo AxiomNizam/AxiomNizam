@@ -213,17 +213,31 @@ func dashboardHandler(c *gin.Context) {
 // loginHandler serves login-focused entrypoint for unauthenticated users.
 func loginHandler(c *gin.Context) {
 	setNoCacheHeaders(c)
+
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+	if strings.TrimSpace(authToken) != "" {
+		role := c.GetHeader("X-User-Role")
+		if role == "" {
+			role, _ = c.Cookie("userRole")
+		}
+		c.Redirect(http.StatusFound, defaultPathForRole(role))
+		return
+	}
+
 	health, _ := fetchHealth()
 	c.HTML(http.StatusOK, "layout.html", gin.H{
 		"title":       "AxiomNizam - Login",
-		"pageName":    "public-dashboard",
-		"page":        "public-dashboard",
+		"pageName":    "login",
+		"page":        "login",
 		"isAuth":      false,
 		"userName":    "Guest",
 		"backendURL":  backendURL,
 		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
 		"health":      health,
-		"forceLogin":  true,
+		"hideChrome":  true,
 	})
 }
 
