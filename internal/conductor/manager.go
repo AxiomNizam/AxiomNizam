@@ -7,11 +7,14 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // Manager orchestrates producers, consumers, and message flow across backends.
 type Manager struct {
 	mu sync.RWMutex
+	db *gorm.DB
 
 	rabbitmq *RabbitMQBackend
 	kafka    *KafkaBackend
@@ -125,6 +128,7 @@ func (m *Manager) CreateProducer(req *CreateProducerRequest) (*Producer, error) 
 	}
 
 	m.producers[id] = p
+	m.saveProducer(p)
 	return p, nil
 }
 
@@ -178,6 +182,7 @@ func (m *Manager) UpdateProducer(id string, req *CreateProducerRequest) (*Produc
 	}
 	p.Config = req.Config
 	p.UpdatedAt = time.Now()
+	m.saveProducer(p)
 	return p, nil
 }
 
@@ -196,6 +201,7 @@ func (m *Manager) DeleteProducer(id string) error {
 		}
 	}
 	delete(m.producers, id)
+	m.deleteProducerDB(id)
 	return nil
 }
 
@@ -209,6 +215,7 @@ func (m *Manager) PauseProducer(id string) (*Producer, error) {
 	}
 	p.Status = StatusPaused
 	p.UpdatedAt = time.Now()
+	m.saveProducer(p)
 	return p, nil
 }
 
@@ -222,6 +229,7 @@ func (m *Manager) ResumeProducer(id string) (*Producer, error) {
 	}
 	p.Status = StatusActive
 	p.UpdatedAt = time.Now()
+	m.saveProducer(p)
 	return p, nil
 }
 
@@ -287,6 +295,7 @@ func (m *Manager) CreateConsumer(req *CreateConsumerRequest) (*Consumer, error) 
 	}
 
 	m.consumers[id] = c
+	m.saveConsumer(c)
 	return c, nil
 }
 
@@ -331,6 +340,7 @@ func (m *Manager) DeleteConsumer(id string) error {
 		}
 	}
 	delete(m.consumers, id)
+	m.deleteConsumerDB(id)
 	return nil
 }
 
@@ -354,6 +364,7 @@ func (m *Manager) PauseConsumer(id string) (*Consumer, error) {
 	}
 	c.Status = StatusPaused
 	c.UpdatedAt = time.Now()
+	m.saveConsumer(c)
 	return c, nil
 }
 
@@ -383,6 +394,7 @@ func (m *Manager) ResumeConsumer(id string) (*Consumer, error) {
 	}
 	c.Status = StatusActive
 	c.UpdatedAt = time.Now()
+	m.saveConsumer(c)
 	return c, nil
 }
 

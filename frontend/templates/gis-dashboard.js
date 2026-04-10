@@ -72,6 +72,8 @@ const DASH_THEMES = {
     agriculture: { icon: '🌾', title: 'AGRICULTURE',  accent: '#2ecc71', legendTitle: 'Rice Production (MT)' },
     industries:  { icon: '🏭', title: 'INDUSTRIES',   accent: '#e74c3c', legendTitle: 'Industrial Output (Cr)' },
     medical:     { icon: '🏥', title: 'MEDICAL',      accent: '#e74c3c', legendTitle: 'EPI Coverage %' },
+    train:       { icon: '🚂', title: 'TRAIN (INDIA)', accent: '#f59e0b', legendTitle: 'Train Routes' },
+    'bd-train':  { icon: '🚂', title: 'TRAIN (BD)',    accent: '#06b6d4', legendTitle: 'Train Routes' },
     satellite:   { icon: '🛰️', title: 'SATELLITE',    accent: '#00bcd4', legendTitle: 'Orbit Type' },
     airplane:    { icon: '✈️', title: 'AIRPLANE',      accent: '#ff5722', legendTitle: 'Traffic Density' },
     ship:        { icon: '🚢', title: 'SHIP',          accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
@@ -85,12 +87,16 @@ const MARKER_EMOJIS = {
     satellite:   { satellite: '🛰️', constellation: '✨', navigation: '📡', weather: '🌤️', ground_station: '📻', launch_site: '🚀', earth_observation: '🌍' },
     airplane:    { airport: '✈️', aircraft: '🛩️' },
     ship:        { port: '⚓', canal: '🌊', strait: '🌊', vessel: '🚢' },
+    train:       { train: '🚂', station: '🚉' },
+    'bd-train':  { train: '🚂', station: '🚉' },
 };
 
 // Map configurations per scope
 const MAP_CONFIG = {
     domestic:      { center: [23.6850, 90.3563], zoom: 7, maxBounds: [[18, 85], [28, 96]], minZoom: 5 },
     international: { center: [20, 0], zoom: 2, maxBounds: [[-85, -180], [85, 180]], minZoom: 2 },
+    train:         { center: [22.5, 82.0], zoom: 5, maxBounds: [[6, 65], [38, 98]], minZoom: 4 },
+    'bd-train':    { center: [23.6850, 90.3563], zoom: 7, maxBounds: [[20.5, 87.5], [26.7, 92.8]], minZoom: 5 },
 };
 
 // =============================================
@@ -171,6 +177,7 @@ function initMap() {
 // =============================================
 
 function getDashScope() {
+    if (currentDashType === 'train' || currentDashType === 'bd-train') return currentDashType;
     return (currentDashType === 'general' || currentDashType === 'agriculture' || currentDashType === 'industries' || currentDashType === 'medical') ? 'domestic' : 'international';
 }
 
@@ -248,6 +255,33 @@ async function loadGISData() {
 
             updateSummaryCards(summary);
             renderDashDescription('Population, divisions, districts and points of interest across Bangladesh');
+        } else if (currentDashType === 'train' || currentDashType === 'bd-train') {
+            // Use dedicated train dashboard endpoints
+            var trainBase = currentDashType === 'train' ? '/trains' : '/bd-trains';
+            const res = await fetch(GIS_API + trainBase + '/dashboard', {
+                headers: buildAuthHeaders(false)
+            });
+            if (!res.ok) throw new Error('Train Dashboard API failed: ' + res.status);
+            const data = await res.json();
+
+            gisState.layers = data.layers || [];
+            gisState.regions = data.regions || [];
+            gisState.markers = data.markers || [];
+            gisState.datasets = data.datasets || [];
+            gisState.dashboardConfig = data.config || {};
+
+            const summary = {
+                totalLayers: gisState.layers.length,
+                totalRegions: gisState.regions.length,
+                totalMarkers: gisState.markers.length,
+                totalDatasets: gisState.datasets.length,
+                regionsByType: {},
+            };
+            gisState.regions.forEach(r => {
+                summary.regionsByType[r.type] = (summary.regionsByType[r.type] || 0) + 1;
+            });
+            updateSummaryCards(summary);
+            renderDashDescription(data.description || '');
         } else {
             // Use specialized dashboard endpoint
             const res = await fetch(GIS_API + '/dashboards/' + encodeURIComponent(currentDashType), {

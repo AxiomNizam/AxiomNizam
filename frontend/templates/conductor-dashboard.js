@@ -356,7 +356,7 @@
         document.getElementById('streamToggle').textContent = 'Disconnect';
         document.getElementById('streamContainer').innerHTML = '';
 
-        var es = new EventSource(API + '/stream');
+        var es = new EventSource(API + '/stream' + (localStorage.getItem('auth_token') ? '?token=' + encodeURIComponent(localStorage.getItem('auth_token')) : ''));
         window._conductorSSE = es;
         es.onmessage = function(event) {
             try {

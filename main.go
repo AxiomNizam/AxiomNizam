@@ -965,6 +965,7 @@ func main() {
 		conductorCfg.KafkaBrokers = nil
 	}
 	conductorMgr := conductor.NewManager(conductorCfg)
+	conductorMgr.InitPersistence(conns.PostgreSQL)
 	conductor.RegisterRoutes(router, conductorMgr, authMiddleware, adminOrSysMiddleware)
 
 	// Tenants
