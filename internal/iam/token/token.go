@@ -3,8 +3,10 @@ package token
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -104,7 +106,7 @@ func NewIssuer(issuerURL string) (*Issuer, error) {
 		RefreshTokenTTL: defaultRefreshTTL,
 	}
 
-	if keyPEM := os.Getenv("IAM_RSA_PRIVATE_KEY"); keyPEM != "" {
+	if keyPEM := normalizeInlinePEM(os.Getenv("IAM_RSA_PRIVATE_KEY")); strings.TrimSpace(keyPEM) != "" {
 		block, _ := pem.Decode([]byte(keyPEM))
 		if block == nil {
 			return nil, errors.New("IAM_RSA_PRIVATE_KEY: invalid PEM")
@@ -140,8 +142,35 @@ func NewIssuer(issuerURL string) (*Issuer, error) {
 		iss.publicKey = &priv.PublicKey
 	}
 
-	iss.kid = uuid.New().String()[:8]
+	iss.kid = deriveKID(iss.publicKey)
+	if iss.kid == "" {
+		iss.kid = uuid.New().String()[:8]
+	}
 	return iss, nil
+}
+
+func normalizeInlinePEM(raw string) string {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" {
+		return ""
+	}
+	normalized = strings.ReplaceAll(normalized, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\\n", "\n")
+	if !strings.HasSuffix(normalized, "\n") {
+		normalized += "\n"
+	}
+	return normalized
+}
+
+func deriveKID(pub *rsa.PublicKey) string {
+	if pub == nil || pub.N == nil {
+		return ""
+	}
+
+	material := append([]byte{}, pub.N.Bytes()...)
+	material = append(material, byte(pub.E>>24), byte(pub.E>>16), byte(pub.E>>8), byte(pub.E))
+	sum := sha256.Sum256(material)
+	return hex.EncodeToString(sum[:8])
 }
 
 // IssueTokenPair creates a signed access and refresh token pair.

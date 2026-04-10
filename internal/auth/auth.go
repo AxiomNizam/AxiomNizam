@@ -260,7 +260,10 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 	return nil
 }
 
-var demoJWTSecret = loadDemoJWTSecret()
+var (
+	demoJWTSecretMu sync.RWMutex
+	demoJWTSecret   = loadDemoJWTSecret()
+)
 
 func loadDemoJWTSecret() string {
 	if secret := strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")); secret != "" {
@@ -281,7 +284,22 @@ func loadDemoJWTSecret() string {
 
 // DemoJWTSecret returns the HMAC secret used for demo account tokens.
 func DemoJWTSecret() string {
+	demoJWTSecretMu.RLock()
+	defer demoJWTSecretMu.RUnlock()
 	return demoJWTSecret
+}
+
+// SetDemoJWTSecret overrides the demo token signing secret at runtime.
+func SetDemoJWTSecret(secret string) bool {
+	trimmed := strings.TrimSpace(secret)
+	if trimmed == "" {
+		return false
+	}
+
+	demoJWTSecretMu.Lock()
+	demoJWTSecret = trimmed
+	demoJWTSecretMu.Unlock()
+	return true
 }
 
 // ValidateDemoToken validates an HMAC-signed demo token
