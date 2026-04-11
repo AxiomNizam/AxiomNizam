@@ -4180,6 +4180,18 @@ body {
     margin-bottom: 24px;
 }
 
+.signup-google-section {
+    margin-bottom: 14px;
+}
+
+.signup-google-btn {
+    font-weight: 600;
+}
+
+.signup-divider {
+    margin: 0 0 20px;
+}
+
 .signup-card .form-group {
     margin-bottom: 16px;
 }
