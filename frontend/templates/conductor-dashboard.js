@@ -22,11 +22,32 @@
         setTimeout(function() { if (item.parentNode) item.parentNode.removeChild(item); }, 4000);
     }
 
+    function readCookie(name) {
+        try {
+            var key = name + '=';
+            var cookies = (document.cookie || '').split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var c = cookies[i].trim();
+                if (c.indexOf(key) === 0) {
+                    return decodeURIComponent(c.substring(key.length));
+                }
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    function resolveAuthToken() {
+        var token = '';
+        try {
+            token = localStorage.getItem('authToken') || localStorage.getItem('auth_token') || '';
+        } catch (e) {}
+        if (token) return token;
+        return readCookie('authToken') || readCookie('auth_token') || '';
+    }
+
     // ---- Auth & API helpers with error handling ----
     function authHeaders() {
-        var token = '';
-        try { token = document.cookie.split(';').map(function(c){return c.trim();}).find(function(c){return c.startsWith('authToken=');}) || ''; } catch(e){}
-        if (token) token = token.split('=')[1] || '';
+        var token = resolveAuthToken();
         var headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = 'Bearer ' + token;
         return headers;
@@ -745,7 +766,7 @@
 
     function connectStream() {
         var base = window.resolveBackendURL();
-        var token = localStorage.getItem('auth_token') || '';
+        var token = resolveAuthToken();
         wsURL = base.replace(/^http/, 'ws') + '/ws/conductor' + (token ? '?token=' + encodeURIComponent(token) : '');
         try {
             streamWS = new WebSocket(wsURL);
@@ -789,7 +810,8 @@
         document.getElementById('streamToggle').textContent = 'Disconnect';
         document.getElementById('streamContainer').innerHTML = '';
 
-        var es = new EventSource(API + '/stream' + (localStorage.getItem('auth_token') ? '?token=' + encodeURIComponent(localStorage.getItem('auth_token')) : ''));
+        var token = resolveAuthToken();
+        var es = new EventSource(API + '/stream' + (token ? '?token=' + encodeURIComponent(token) : ''));
         window._conductorSSE = es;
         es.onmessage = function(event) {
             try {
