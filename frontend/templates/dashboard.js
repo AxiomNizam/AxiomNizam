@@ -110,15 +110,34 @@ function initFeatureSearch() {
 
     var categories = document.querySelectorAll('.feature-category');
     var allCards = document.querySelectorAll('.feature-card');
+    var chips = document.querySelectorAll('.hero-search-chip');
+
+    function normalizeQuery(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function syncChipState(queryValue) {
+        var normalized = normalizeQuery(queryValue);
+        chips.forEach(function(chip) {
+            var chipValue = normalizeQuery(chip.getAttribute('data-search-term') || chip.textContent);
+            chip.classList.toggle('active', !!normalized && chipValue === normalized);
+        });
+    }
 
     function runFilter() {
-        var raw = input.value.trim().toLowerCase();
-        clearBtn.style.display = raw ? 'flex' : 'none';
+        var raw = normalizeQuery(input.value);
+        if (clearBtn) {
+            clearBtn.style.display = raw ? 'flex' : 'none';
+        }
+        syncChipState(raw);
 
         if (!raw) {
             allCards.forEach(function(c) { c.classList.remove('search-hidden', 'search-highlight'); });
             categories.forEach(function(cat) { cat.classList.remove('search-hidden'); });
-            countEl.textContent = '';
+            if (countEl) {
+                countEl.classList.remove('empty');
+                countEl.textContent = 'Type to filter all platform capabilities';
+            }
             return;
         }
 
@@ -155,16 +174,55 @@ function initFeatureSearch() {
             }
         });
 
-        countEl.textContent = matchCount + ' feature' + (matchCount !== 1 ? 's' : '') + ' found';
+        if (countEl) {
+            if (matchCount > 0) {
+                countEl.classList.remove('empty');
+                countEl.textContent = matchCount + ' feature' + (matchCount !== 1 ? 's' : '') + ' found';
+            } else {
+                countEl.classList.add('empty');
+                countEl.textContent = 'No features found. Try broader keywords like API, data, policy, or analytics.';
+            }
+        }
     }
 
     input.addEventListener('input', runFilter);
 
-    clearBtn.addEventListener('click', function() {
-        input.value = '';
-        runFilter();
-        input.focus();
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            input.value = '';
+            runFilter();
+            input.focus();
+        });
+    }
+
+    chips.forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            var searchTerm = (chip.getAttribute('data-search-term') || chip.textContent || '').trim();
+            if (!searchTerm) return;
+            input.value = searchTerm;
+            runFilter();
+            input.focus();
+        });
     });
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key !== '/' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+        var target = event.target;
+        var isEditable = target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable
+        );
+        if (isEditable) return;
+
+        event.preventDefault();
+        input.focus();
+        input.select();
+    });
+
+    runFilter();
 }
 
 window.addEventListener('DOMContentLoaded', function() {

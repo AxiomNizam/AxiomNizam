@@ -42,7 +42,16 @@
                 <div class="hero-search-box">
                     <svg class="hero-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     <input type="text" id="featureSearch" class="hero-search-input" placeholder="Search features — API Builder, CDC, GraphQL, GIS, IAM..." autocomplete="off" spellcheck="false">
+                    <span class="hero-search-shortcut" aria-hidden="true">/</span>
                     <button type="button" id="featureSearchClear" class="hero-search-clear" style="display:none;" aria-label="Clear search">&times;</button>
+                </div>
+                <div class="hero-search-suggestions" id="featureSearchSuggestions" aria-label="Search quick picks">
+                    <button type="button" class="hero-search-chip" data-search-term="API Builder">API Builder</button>
+                    <button type="button" class="hero-search-chip" data-search-term="GraphQL">GraphQL</button>
+                    <button type="button" class="hero-search-chip" data-search-term="CDC">CDC</button>
+                    <button type="button" class="hero-search-chip" data-search-term="GIS">GIS</button>
+                    <button type="button" class="hero-search-chip" data-search-term="IAM">IAM</button>
+                    <button type="button" class="hero-search-chip" data-search-term="NetIntel">NetIntel</button>
                 </div>
                 <div id="featureSearchCount" class="hero-search-count"></div>
             </div>
@@ -494,5 +503,5 @@
     <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
 </div>
 
-<script src="/static/dashboard.js?v=20260411-landing2"></script>
+<script src="/static/dashboard.js?v=20260411-landing3"></script>
 {{ end }}
