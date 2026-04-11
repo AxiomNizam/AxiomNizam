@@ -165,3 +165,21 @@ type ConductorStats struct {
 	DLQSize        int   `json:"dlqSize"`
 	ActiveMessages int   `json:"activeMessages"`
 }
+
+// BackendConnection represents a live backend connection status.
+type BackendConnection struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`   // "rabbitmq", "kafka"
+	Status    string `json:"status"` // "connected", "disconnected", "error"
+	URL       string `json:"url"`    // display-safe URL (no passwords)
+	Error     string `json:"error,omitempty"`
+	Producers int    `json:"producers"`
+	Consumers int    `json:"consumers"`
+}
+
+// ConnectBackendRequest is the REST body for connecting a new backend.
+type ConnectBackendRequest struct {
+	Type    string   `json:"type" binding:"required"` // "rabbitmq", "kafka"
+	URL     string   `json:"url,omitempty"`           // RabbitMQ AMQP URL
+	Brokers []string `json:"brokers,omitempty"`       // Kafka broker list
+}

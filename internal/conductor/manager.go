@@ -607,6 +607,171 @@ func (m *Manager) GetStats() *ConductorStats {
 	return s
 }
 
+// ---------------------------------------------------------------
+// Connection Management
+// ---------------------------------------------------------------
+
+// maskURL redacts passwords from URLs for display.
+func maskURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	idx := 0
+	for i := 0; i < len(raw)-2; i++ {
+		if raw[i] == ':' && raw[i+1] == '/' && raw[i+2] == '/' {
+			idx = i + 3
+			break
+		}
+	}
+	if idx == 0 {
+		return raw
+	}
+	atIdx := -1
+	for i := idx; i < len(raw); i++ {
+		if raw[i] == '@' {
+			atIdx = i
+			break
+		}
+	}
+	if atIdx < 0 {
+		return raw
+	}
+	return raw[:idx] + "***:***@" + raw[atIdx+1:]
+}
+
+// GetConnections returns the status of all configured backends.
+func (m *Manager) GetConnections() []BackendConnection {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var conns []BackendConnection
+
+	rmqProducers, rmqConsumers := 0, 0
+	kafkaProducers, kafkaConsumers := 0, 0
+	for _, p := range m.producers {
+		switch p.Backend {
+		case BackendRabbitMQ:
+			rmqProducers++
+		case BackendKafka:
+			kafkaProducers++
+		}
+	}
+	for _, c := range m.consumers {
+		switch c.Backend {
+		case BackendRabbitMQ:
+			rmqConsumers++
+		case BackendKafka:
+			kafkaConsumers++
+		}
+	}
+
+	rmq := BackendConnection{
+		ID:        "rabbitmq",
+		Type:      "rabbitmq",
+		Status:    "disconnected",
+		Producers: rmqProducers,
+		Consumers: rmqConsumers,
+	}
+	if m.rabbitmq != nil {
+		rmq.URL = maskURL(m.rabbitmq.url)
+		m.rabbitmq.mu.RLock()
+		if m.rabbitmq.conn != nil && !m.rabbitmq.conn.IsClosed() {
+			rmq.Status = "connected"
+		}
+		m.rabbitmq.mu.RUnlock()
+	}
+	conns = append(conns, rmq)
+
+	kfk := BackendConnection{
+		ID:        "kafka",
+		Type:      "kafka",
+		Status:    "disconnected",
+		Producers: kafkaProducers,
+		Consumers: kafkaConsumers,
+	}
+	if m.kafka != nil {
+		kfk.URL = fmt.Sprintf("%v", m.kafka.brokers)
+		kfk.Status = "connected"
+	}
+	conns = append(conns, kfk)
+
+	return conns
+}
+
+// ConnectBackend dynamically connects or reconnects a backend.
+func (m *Manager) ConnectBackend(req *ConnectBackendRequest) (*BackendConnection, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch req.Type {
+	case BackendRabbitMQ:
+		url := req.URL
+		if url == "" {
+			return nil, fmt.Errorf("url is required for rabbitmq")
+		}
+		if m.rabbitmq != nil {
+			m.rabbitmq.Close()
+		}
+		m.rabbitmq = NewRabbitMQBackend(url)
+		if err := m.rabbitmq.Connect(); err != nil {
+			return &BackendConnection{
+				ID:     "rabbitmq",
+				Type:   "rabbitmq",
+				Status: "error",
+				URL:    maskURL(url),
+				Error:  err.Error(),
+			}, err
+		}
+		return &BackendConnection{
+			ID:     "rabbitmq",
+			Type:   "rabbitmq",
+			Status: "connected",
+			URL:    maskURL(url),
+		}, nil
+
+	case BackendKafka:
+		if len(req.Brokers) == 0 {
+			return nil, fmt.Errorf("brokers list is required for kafka")
+		}
+		if m.kafka != nil {
+			m.kafka.Close()
+		}
+		m.kafka = NewKafkaBackend(req.Brokers)
+		return &BackendConnection{
+			ID:     "kafka",
+			Type:   "kafka",
+			Status: "connected",
+			URL:    fmt.Sprintf("%v", req.Brokers),
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported backend type: %s", req.Type)
+	}
+}
+
+// DisconnectBackend disconnects a backend.
+func (m *Manager) DisconnectBackend(backendType string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch backendType {
+	case BackendRabbitMQ:
+		if m.rabbitmq != nil {
+			m.rabbitmq.Close()
+			m.rabbitmq = nil
+		}
+		return nil
+	case BackendKafka:
+		if m.kafka != nil {
+			m.kafka.Close()
+			m.kafka = nil
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported backend type: %s", backendType)
+	}
+}
+
 // ListMessages returns recent messages.
 func (m *Manager) ListMessages(limit int) []*Message {
 	m.mu.RLock()

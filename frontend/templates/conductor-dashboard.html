@@ -15,6 +15,7 @@
     <div class="conductor-tabs">
         <button class="tab-btn active" data-tab="producers" onclick="switchTab('producers')">Producers</button>
         <button class="tab-btn" data-tab="consumers" onclick="switchTab('consumers')">Consumers</button>
+        <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Connections</button>
         <button class="tab-btn" data-tab="messages" onclick="switchTab('messages')">Messages</button>
         <button class="tab-btn" data-tab="dlq" onclick="switchTab('dlq')">Dead Letter Queue</button>
         <button class="tab-btn" data-tab="stream" onclick="switchTab('stream')">Live Stream</button>
@@ -51,6 +52,15 @@
                 <tbody id="consumersBody"><tr><td colspan="9" class="empty-row">Loading...</td></tr></tbody>
             </table>
         </div>
+    </div>
+
+    <!-- Connections Tab -->
+    <div class="tab-content" id="tab-connections">
+        <div class="tab-header">
+            <h2>Backend Connections</h2>
+            <button class="btn-primary" onclick="showConnectModal()">+ Connect Backend</button>
+        </div>
+        <div id="connectionsGrid" class="connections-grid"></div>
     </div>
 
     <!-- Messages Tab -->
@@ -129,9 +139,9 @@
         <div class="conductor-modal">
             <div class="modal-header"><h3>Create Producer</h3><button class="modal-close" onclick="closeModal('createProducerModal')">&times;</button></div>
             <div class="modal-body">
-                <div class="form-group"><label>Name</label><input type="text" id="prodName" class="form-input" placeholder="my-producer"></div>
-                <div class="form-group"><label>Backend</label><select id="prodBackend" class="form-input"><option value="rabbitmq">RabbitMQ</option><option value="kafka">Kafka</option><option value="memory">Memory</option></select></div>
-                <div class="form-group"><label>Exchange (RabbitMQ) / Topic (Kafka)</label><input type="text" id="prodExchange" class="form-input" placeholder="my-exchange or my-topic"></div>
+                <div class="form-group"><label>Name <span class="required">*</span></label><input type="text" id="prodName" class="form-input" placeholder="my-producer"></div>
+                <div class="form-group"><label>Backend <span class="required">*</span></label><select id="prodBackend" class="form-input" onchange="onProducerBackendChange()"></select><small class="field-hint" id="prodBackendHint"></small></div>
+                <div class="form-group"><label id="prodExchangeLabel">Exchange / Topic</label><input type="text" id="prodExchange" class="form-input" placeholder="my-exchange or my-topic"></div>
                 <div class="form-group"><label>Routing Key</label><input type="text" id="prodRoutingKey" class="form-input" placeholder="my.routing.key"></div>
                 <div class="form-group"><label>Content Type</label><input type="text" id="prodContentType" class="form-input" value="application/json"></div>
                 <div class="form-group"><label><input type="checkbox" id="prodPersistent" checked> Persistent</label></div>
@@ -145,9 +155,9 @@
         <div class="conductor-modal">
             <div class="modal-header"><h3>Create Consumer</h3><button class="modal-close" onclick="closeModal('createConsumerModal')">&times;</button></div>
             <div class="modal-body">
-                <div class="form-group"><label>Name</label><input type="text" id="consName" class="form-input" placeholder="my-consumer"></div>
-                <div class="form-group"><label>Backend</label><select id="consBackend" class="form-input"><option value="rabbitmq">RabbitMQ</option><option value="kafka">Kafka</option><option value="memory">Memory</option></select></div>
-                <div class="form-group"><label>Queue (RabbitMQ) / Topic (Kafka)</label><input type="text" id="consQueue" class="form-input" placeholder="my-queue or my-topic"></div>
+                <div class="form-group"><label>Name <span class="required">*</span></label><input type="text" id="consName" class="form-input" placeholder="my-consumer"></div>
+                <div class="form-group"><label>Backend <span class="required">*</span></label><select id="consBackend" class="form-input" onchange="onConsumerBackendChange()"></select><small class="field-hint" id="consBackendHint"></small></div>
+                <div class="form-group"><label id="consQueueLabel">Queue / Topic</label><input type="text" id="consQueue" class="form-input" placeholder="my-queue or my-topic"></div>
                 <div class="form-group"><label>Exchange (bind to)</label><input type="text" id="consExchange" class="form-input" placeholder="my-exchange"></div>
                 <div class="form-group"><label>Routing Key</label><input type="text" id="consRoutingKey" class="form-input" placeholder="#"></div>
                 <div class="form-group"><label>Consumer Group</label><input type="text" id="consGroup" class="form-input" placeholder="my-group"></div>
@@ -166,7 +176,7 @@
             <div class="modal-body">
                 <input type="hidden" id="editProdId">
                 <div class="form-group"><label>Name</label><input type="text" id="editProdName" class="form-input"></div>
-                <div class="form-group"><label>Exchange (RabbitMQ) / Topic (Kafka)</label><input type="text" id="editProdExchange" class="form-input"></div>
+                <div class="form-group"><label>Exchange / Topic</label><input type="text" id="editProdExchange" class="form-input"></div>
                 <div class="form-group"><label>Routing Key</label><input type="text" id="editProdRoutingKey" class="form-input"></div>
                 <div class="form-group"><label>Content Type</label><input type="text" id="editProdContentType" class="form-input"></div>
                 <div class="form-group"><label><input type="checkbox" id="editProdPersistent"> Persistent</label></div>
@@ -182,7 +192,7 @@
             <div class="modal-body">
                 <input type="hidden" id="editConsId">
                 <div class="form-group"><label>Name</label><input type="text" id="editConsName" class="form-input"></div>
-                <div class="form-group"><label>Queue (RabbitMQ) / Topic (Kafka)</label><input type="text" id="editConsQueue" class="form-input"></div>
+                <div class="form-group"><label>Queue / Topic</label><input type="text" id="editConsQueue" class="form-input"></div>
                 <div class="form-group"><label>Exchange (bind to)</label><input type="text" id="editConsExchange" class="form-input"></div>
                 <div class="form-group"><label>Routing Key</label><input type="text" id="editConsRoutingKey" class="form-input"></div>
                 <div class="form-group"><label>Consumer Group</label><input type="text" id="editConsGroup" class="form-input"></div>
@@ -194,29 +204,82 @@
         </div>
     </div>
 
-    <!-- Metrics Tooltip -->
-    <div id="metricsTooltip" class="metrics-tooltip" style="display:none"></div>
+    <!-- Connect Backend Modal -->
+    <div class="modal-overlay" id="connectBackendModal" style="display:none">
+        <div class="conductor-modal">
+            <div class="modal-header"><h3>Connect Backend</h3><button class="modal-close" onclick="closeModal('connectBackendModal')">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label>Backend Type <span class="required">*</span></label>
+                    <select id="connectType" class="form-input" onchange="onConnectTypeChange()">
+                        <option value="rabbitmq">🐰 RabbitMQ</option>
+                        <option value="kafka">📨 Apache Kafka</option>
+                    </select>
+                </div>
+                <div class="form-group" id="connectURLGroup">
+                    <label>AMQP URL <span class="required">*</span></label>
+                    <input type="text" id="connectURL" class="form-input" placeholder="amqp://user:password@host:5672/">
+                    <small class="field-hint">e.g. amqp://guest:guest@rabbitmq:5672/</small>
+                </div>
+                <div class="form-group" id="connectBrokersGroup" style="display:none">
+                    <label>Broker List <span class="required">*</span> (comma-separated)</label>
+                    <input type="text" id="connectBrokers" class="form-input" placeholder="kafka:9092,kafka2:9092">
+                    <small class="field-hint">e.g. kafka:9092</small>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn-primary" onclick="connectBackend()">Connect</button><button class="btn-secondary" onclick="closeModal('connectBackendModal')">Cancel</button></div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="conductorToast" class="conductor-toast"></div>
 </div>
 
 <style>
-.metrics-tooltip {
-    position: fixed;
-    z-index: 9999;
-    background: var(--bg-primary, #1a1a2e);
-    border: 1px solid var(--border-color, #333);
-    border-radius: 8px;
-    padding: 12px 16px;
-    font-size: 13px;
-    color: var(--text-primary, #e0e0e0);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    pointer-events: none;
-    min-width: 180px;
-}
-.metrics-tooltip .tt-title { font-weight: 600; margin-bottom: 8px; font-size: 14px; }
-.metrics-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; }
-.metrics-tooltip .tt-label { color: var(--text-muted, #888); }
-.metrics-tooltip .tt-value { font-weight: 600; }
+/* Connection cards */
+.connections-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 12px; }
+.conn-card { border: 1px solid var(--border-color, #333); border-radius: 12px; padding: 20px; background: var(--card-bg, #1e1e2e); }
+.conn-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.conn-card-type { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.conn-card-status { font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.3px; }
+.conn-card-status.connected { background: rgba(34,197,94,0.15); color: #22c55e; }
+.conn-card-status.disconnected { background: rgba(156,163,175,0.15); color: #9ca3af; }
+.conn-card-status.error { background: rgba(239,68,68,0.15); color: #ef4444; }
+.conn-card-url { font-size: 0.82rem; color: var(--text-muted, #888); margin-bottom: 12px; font-family: monospace; word-break: break-all; }
+.conn-card-stats { display: flex; gap: 16px; margin-bottom: 14px; }
+.conn-card-stat { text-align: center; }
+.conn-card-stat-value { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
+.conn-card-stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; }
+.conn-card-actions { display: flex; gap: 8px; }
+.conn-card-actions button { flex: 1; }
+
+/* API-builder style hover panel for producers/consumers */
+.conductor-name-with-hover { position: relative; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
+.conductor-name-text { font-weight: 600; }
+.conductor-hover-trigger { display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(var(--primary-rgb, 99,102,241), 0.35); background: rgba(var(--primary-rgb, 99,102,241), 0.12); color: var(--primary-light, #818cf8); border-radius: 999px; padding: 3px 10px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; cursor: pointer; transition: all 0.2s ease; }
+.conductor-hover-trigger:hover { background: rgba(var(--primary-rgb, 99,102,241), 0.25); border-color: var(--primary-color, #6366f1); }
+.conductor-hover-panel { position: absolute; left: 0; top: calc(100% + 8px); width: 300px; max-width: 72vw; border: 1px solid var(--border-color, #333); border-radius: 10px; background: var(--card-bg, #1e1e2e); box-shadow: 0 14px 26px rgba(2,6,23,0.3); padding: 12px; display: none; z-index: 100; pointer-events: none; }
+.conductor-name-with-hover:hover .conductor-hover-panel,
+.conductor-name-with-hover:focus-within .conductor-hover-panel { display: block; pointer-events: auto; }
+.conductor-hover-title { font-size: 0.76rem; font-weight: 700; color: var(--text-secondary, #a0a0a0); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+.conductor-hover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.conductor-hover-metric-item { border: 1px solid rgba(var(--primary-rgb, 99,102,241), 0.2); border-radius: 8px; padding: 6px; background: rgba(var(--primary-rgb, 99,102,241), 0.08); }
+.conductor-hover-metric-label { font-size: 0.66rem; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.35px; }
+.conductor-hover-metric-value { margin-top: 3px; font-size: 0.82rem; font-weight: 600; color: var(--text-primary, #e0e0e0); }
+.conductor-hover-footnote { margin-top: 8px; font-size: 0.72rem; color: var(--text-secondary, #a0a0a0); }
+@media (max-width: 768px) { .conductor-hover-panel { left: auto; right: 0; width: min(280px, 88vw); } }
+
+/* Toast */
+.conductor-toast { position: fixed; bottom: 24px; right: 24px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.conductor-toast-item { padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; pointer-events: auto; animation: toastIn 0.3s ease; max-width: 380px; }
+.conductor-toast-item.success { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #22c55e; }
+.conductor-toast-item.error { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #ef4444; }
+.conductor-toast-item.info { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); color: #3b82f6; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Form helpers */
+.required { color: #ef4444; }
+.field-hint { display: block; margin-top: 4px; font-size: 0.75rem; color: var(--text-muted, #888); }
 </style>
 
-<script src="/static/conductor-dashboard.js"></script>
+<script src="/static/conductor-dashboard.js?v=20260411"></script>
 {{ end }}
