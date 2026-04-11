@@ -371,7 +371,7 @@ function logout() {
     localStorage.removeItem('userRole');
     localStorage.removeItem('refreshToken');
     clearAuthCookies();
-    window.location.href = '/login';
+    window.location.href = '/';
 }
 
 // Decode JWT token and extract user role
