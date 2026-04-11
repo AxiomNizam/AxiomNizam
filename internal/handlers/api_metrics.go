@@ -43,51 +43,53 @@ func NewAPIMetricsTracker(redisClient *redis.Client) *APIMetricsTracker {
 
 // RecordAPICall records a call to an API endpoint
 func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode int, duration time.Duration) {
-	if t == nil || t.redisClient == nil {
+	if t == nil {
 		return
 	}
 
 	key := fmt.Sprintf("api_metric:%s:%s", method, endpoint)
 	durationMs := duration.Milliseconds()
 
-	// Increment total calls
-	t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:calls", key))
+	if t.redisClient != nil {
+		// Increment total calls
+		t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:calls", key))
 
-	// Track status code
-	t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:status:%d", key, statusCode))
+		// Track status code
+		t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:status:%d", key, statusCode))
 
-	// Track duration
-	t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:total_duration", key))
-	t.redisClient.Set(context.Background(), fmt.Sprintf("%s:duration", key), durationMs, 0)
+		// Track duration
+		t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:total_duration", key))
+		t.redisClient.Set(context.Background(), fmt.Sprintf("%s:duration", key), durationMs, 0)
 
-	// Update max duration
-	maxKey := fmt.Sprintf("%s:max_duration", key)
-	currentMax := t.redisClient.Get(context.Background(), maxKey).Val()
-	if currentMax == "" {
-		t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
-	} else {
-		var currentMaxMs int64
-		fmt.Sscanf(currentMax, "%d", &currentMaxMs)
-		if durationMs > currentMaxMs {
+		// Update max duration
+		maxKey := fmt.Sprintf("%s:max_duration", key)
+		currentMax := t.redisClient.Get(context.Background(), maxKey).Val()
+		if currentMax == "" {
 			t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
+		} else {
+			var currentMaxMs int64
+			fmt.Sscanf(currentMax, "%d", &currentMaxMs)
+			if durationMs > currentMaxMs {
+				t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
+			}
 		}
-	}
 
-	// Update min duration
-	minKey := fmt.Sprintf("%s:min_duration", key)
-	currentMin := t.redisClient.Get(context.Background(), minKey).Val()
-	if currentMin == "" {
-		t.redisClient.Set(context.Background(), minKey, durationMs, 0)
-	} else {
-		var currentMinMs int64
-		fmt.Sscanf(currentMin, "%d", &currentMinMs)
-		if durationMs < currentMinMs {
+		// Update min duration
+		minKey := fmt.Sprintf("%s:min_duration", key)
+		currentMin := t.redisClient.Get(context.Background(), minKey).Val()
+		if currentMin == "" {
 			t.redisClient.Set(context.Background(), minKey, durationMs, 0)
+		} else {
+			var currentMinMs int64
+			fmt.Sscanf(currentMin, "%d", &currentMinMs)
+			if durationMs < currentMinMs {
+				t.redisClient.Set(context.Background(), minKey, durationMs, 0)
+			}
 		}
-	}
 
-	// Update last called timestamp
-	t.redisClient.Set(context.Background(), fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
+		// Update last called timestamp
+		t.redisClient.Set(context.Background(), fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
+	}
 
 	// Track in local cache for quick access
 	t.mu.Lock()
@@ -127,23 +129,47 @@ func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode in
 	t.mu.Unlock()
 }
 
+func (t *APIMetricsTracker) localMetricsSnapshot() []APIMetric {
+	if t == nil {
+		return []APIMetric{}
+	}
+
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	metrics := make([]APIMetric, 0, len(t.localMetrics))
+	for _, m := range t.localMetrics {
+		metrics = append(metrics, *m)
+	}
+
+	sort.Slice(metrics, func(i, j int) bool {
+		if metrics[i].Endpoint == metrics[j].Endpoint {
+			return metrics[i].Method < metrics[j].Method
+		}
+		return metrics[i].Endpoint < metrics[j].Endpoint
+	})
+
+	return metrics
+}
+
 // GetAllMetrics retrieves all API metrics
 func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
-	if t == nil || t.redisClient == nil {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
-		metrics := make([]APIMetric, 0, len(t.localMetrics))
-		for _, m := range t.localMetrics {
-			metrics = append(metrics, *m)
-		}
-		return metrics, nil
+	if t == nil {
+		return []APIMetric{}, nil
+	}
+
+	if t.redisClient == nil {
+		return t.localMetricsSnapshot(), nil
 	}
 
 	// Get all API metric keys from Redis
 	ctx := context.Background()
 	keys, err := t.redisClient.Keys(ctx, "api_metric:*:calls").Result()
 	if err != nil {
-		return nil, err
+		return t.localMetricsSnapshot(), nil
+	}
+	if len(keys) == 0 {
+		return t.localMetricsSnapshot(), nil
 	}
 
 	metrics := make([]APIMetric, 0, len(keys))

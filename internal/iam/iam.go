@@ -1,12 +1,19 @@
 package iam
 
 import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/iam/admin"
 	"example.com/axiomnizam/internal/iam/authn"
 	"example.com/axiomnizam/internal/iam/authz"
@@ -58,6 +65,129 @@ type Config struct {
 	RefreshTokenTTL time.Duration
 }
 
+const (
+	issuerPrivateKeyStoreKey = "iam-rsa-private-key-pem"
+	issuerPrivateKeyEtcdKey  = "iam:bootstrap:rsa-private-key-pem"
+)
+
+func ensureSharedIssuerPrivateKey(pg *gorm.DB, etcd *clientv3.Client) error {
+	configuredInline := strings.TrimSpace(os.Getenv("IAM_RSA_PRIVATE_KEY"))
+	configuredFile := strings.TrimSpace(os.Getenv("IAM_RSA_PRIVATE_KEY_FILE"))
+
+	if configuredInline != "" || configuredFile != "" {
+		resolved := configuredInline
+		if resolved == "" {
+			pemBytes, err := os.ReadFile(configuredFile)
+			if err != nil {
+				return fmt.Errorf("read IAM_RSA_PRIVATE_KEY_FILE for bootstrap: %w", err)
+			}
+			resolved = strings.TrimSpace(string(pemBytes))
+			if resolved == "" {
+				return errors.New("IAM_RSA_PRIVATE_KEY_FILE is empty")
+			}
+			if err := os.Setenv("IAM_RSA_PRIVATE_KEY", resolved); err != nil {
+				return fmt.Errorf("set IAM_RSA_PRIVATE_KEY from IAM_RSA_PRIVATE_KEY_FILE: %w", err)
+			}
+		}
+
+		if pg != nil {
+			stored, err := bootstrapsecrets.Ensure(pg, issuerPrivateKeyStoreKey, func() (string, error) {
+				return resolved, nil
+			})
+			if err != nil {
+				log.Printf("⚠️  failed to seed IAM RSA key into postgres bootstrap store: %v", err)
+			} else if stored != resolved {
+				log.Printf("⚠️  postgres bootstrap IAM RSA key differs from env value; keeping env for current runtime")
+			}
+		}
+
+		return nil
+	}
+
+	if pg != nil {
+		resolved, err := bootstrapsecrets.Ensure(pg, issuerPrivateKeyStoreKey, generateRSAPrivateKeyPEM)
+		if err == nil {
+			if err := os.Setenv("IAM_RSA_PRIVATE_KEY", resolved); err != nil {
+				return fmt.Errorf("set IAM_RSA_PRIVATE_KEY from postgres: %w", err)
+			}
+			return nil
+		}
+		log.Printf("⚠️  postgres bootstrap for IAM RSA key failed, falling back to etcd: %v", err)
+	}
+
+	resolved, err := ensureSharedIssuerPrivateKeyFromEtcd(etcd)
+	if err != nil {
+		return err
+	}
+	if err := os.Setenv("IAM_RSA_PRIVATE_KEY", resolved); err != nil {
+		return fmt.Errorf("set resolved IAM_RSA_PRIVATE_KEY: %w", err)
+	}
+	return nil
+}
+
+func ensureSharedIssuerPrivateKeyFromEtcd(etcd *clientv3.Client) (string, error) {
+	if etcd == nil {
+		return "", errors.New("IAM_RSA_PRIVATE_KEY is not set and neither postgres nor etcd bootstrap store is available")
+	}
+
+	getCtx, getCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	resp, err := etcd.Get(getCtx, issuerPrivateKeyEtcdKey)
+	getCancel()
+	if err != nil {
+		return "", fmt.Errorf("read shared IAM RSA key from etcd: %w", err)
+	}
+	if len(resp.Kvs) > 0 {
+		existing := strings.TrimSpace(string(resp.Kvs[0].Value))
+		if existing == "" {
+			return "", errors.New("shared IAM RSA key exists in etcd but is empty")
+		}
+		return existing, nil
+	}
+
+	candidate, err := generateRSAPrivateKeyPEM()
+	if err != nil {
+		return "", err
+	}
+
+	txnCtx, txnCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	txnResp, err := etcd.Txn(txnCtx).
+		If(clientv3.Compare(clientv3.Version(issuerPrivateKeyEtcdKey), "=", 0)).
+		Then(clientv3.OpPut(issuerPrivateKeyEtcdKey, candidate)).
+		Else(clientv3.OpGet(issuerPrivateKeyEtcdKey)).
+		Commit()
+	txnCancel()
+	if err != nil {
+		return "", fmt.Errorf("persist shared IAM RSA key in etcd: %w", err)
+	}
+
+	resolved := candidate
+	if !txnResp.Succeeded {
+		resolved = ""
+		if len(txnResp.Responses) > 0 {
+			rangeResp := txnResp.Responses[0].GetResponseRange()
+			if rangeResp != nil && len(rangeResp.Kvs) > 0 {
+				resolved = strings.TrimSpace(string(rangeResp.Kvs[0].Value))
+			}
+		}
+		if resolved == "" {
+			return "", errors.New("shared IAM RSA key resolution failed after concurrent bootstrap")
+		}
+	}
+	return resolved, nil
+}
+
+func generateRSAPrivateKeyPEM() (string, error) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", fmt.Errorf("generate IAM RSA key: %w", err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+	if len(pemBytes) == 0 {
+		return "", errors.New("encode IAM RSA key to PEM")
+	}
+	return string(pemBytes), nil
+}
+
 // NewSystem initialises the complete IAM system.
 // Requires a PostgreSQL connection (for users) and an etcd client (for everything else).
 func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config) (*System, error) {
@@ -75,6 +205,9 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config) (*System, error) 
 	}
 	if issuerURL == "" {
 		issuerURL = "http://localhost:8080"
+	}
+	if err := ensureSharedIssuerPrivateKey(pg, etcd); err != nil {
+		return nil, fmt.Errorf("IAM shared issuer key bootstrap: %w", err)
 	}
 
 	issuer, err := token.NewIssuer(issuerURL)
@@ -216,6 +349,7 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 
 	// ── Self-service (authenticated) ──
 	router.GET("/iam/auth/whoami", iamAuth, h.WhoAmI)
+	router.POST("/iam/auth/logout", iamAuth, h.Logout)
 
 	// ── OAuth2 Endpoints (authenticated user initiates, public token endpoint) ──
 	router.GET("/oauth/authorize", iamAuth, h.Authorize)

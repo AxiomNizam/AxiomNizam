@@ -6,15 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }}</title>
     <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/style.css?v=20260318-9">
-    <link rel="stylesheet" href="/static/responsive.css?v=20260318-9">
-    <link rel="stylesheet" href="/static/gis-dashboard.css">
-    <link rel="stylesheet" href="/static/analytics-dashboard.css">
-    <link rel="stylesheet" href="/static/cdc-etl-dashboard.css">
-    <link rel="stylesheet" href="/static/netintel-dashboard.css">
-    <link rel="stylesheet" href="/static/platform-console.css">
+    <link rel="stylesheet" href="/static/style.css?v=20260410-4">
+    <link rel="stylesheet" href="/static/responsive.css?v=20260410-3">
+    <link rel="stylesheet" href="/static/gis-dashboard.css?v=20260410">
+    <link rel="stylesheet" href="/static/analytics-dashboard.css?v=20260410">
+    <link rel="stylesheet" href="/static/cdc-etl-dashboard.css?v=20260410">
+    <link rel="stylesheet" href="/static/netintel-dashboard.css?v=20260410">
+    <link rel="stylesheet" href="/static/conductor-dashboard.css?v=20260410-1">
+    <link rel="stylesheet" href="/static/platform-console.css?v=20260410">
     <!-- Leaflet.js for GIS maps -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css?v=20260410" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <!-- Chart.js for Analytics dashboard -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -102,7 +103,7 @@
 <body>
     <div class="app-container">
         <!-- Navigation Bar -->
-        {{ if not .embedded }}
+        {{ if and (not .embedded) (not .hideChrome) }}
         <nav class="navbar">
             <div class="nav-container">
                 <div class="nav-logo">
@@ -145,6 +146,10 @@
                     <a href="/netintel" class="nav-link {{ if eq .page "netintel-dashboard" }}active{{ end }}">
                         <span class="nav-icon"><svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
                         <span>NetIntel</span>
+                    </a>
+                    <a href="/conductor" class="nav-link {{ if eq .page "conductor-dashboard" }}active{{ end }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+                        <span>Conductor</span>
                     </a>
 
                     <div class="nav-dropdown" id="nav-more-wrap">
@@ -194,16 +199,23 @@
                 
                 <div class="nav-right" id="primary-actions">
                     <div class="theme-switcher">
-                        <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="toggleTheme()">🌙</button>
+                        <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="toggleTheme()" style="display: inline-flex; align-items: center; justify-content: center;">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="#60A5FA" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        </button>
                     </div>
                     {{ if .isAuth }}
                     <div class="user-info">
-                        <span class="user-icon">👤</span>
+                        <span class="user-icon">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="#757575" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                        </span>
                         <span class="user-name">{{ .userName }}</span>
                     </div>
                     <button class="btn-logout" onclick="logout()">Logout</button>
                     {{ else }}
-                    <button class="btn-login" onclick="openLoginModal()">Login</button>
+                    <button class="btn-login" onclick="window.location.href='/login'">Login</button>
                     {{ end }}
                 </div>
             </div>
@@ -211,8 +223,10 @@
         {{ end }}
 
         <!-- Main Content -->
-        <main class="main-content">
-            {{ if eq .pageName "public-dashboard" }}
+        <main class="main-content{{ if .hideChrome }} login-main-content{{ end }}">
+            {{ if eq .pageName "login" }}
+                {{ template "login" . }}
+            {{ else if eq .pageName "public-dashboard" }}
                 {{ template "public-dashboard" . }}
             {{ else if eq .pageName "admin" }}
                 {{ template "admin" . }}
@@ -236,11 +250,13 @@
                 {{ template "version-lineage-dashboard" . }}
             {{ else if eq .pageName "iam-admin" }}
                 {{ template "iam-admin" . }}
+            {{ else if eq .pageName "conductor-dashboard" }}
+                {{ template "conductor-dashboard" . }}
             {{ end }}
         </main>
 
         <!-- Footer -->
-        {{ if not .embedded }}
+        {{ if and (not .embedded) (not .hideChrome) }}
         <footer class="footer">
             <div class="footer-content">
                 <p>&copy; 2026 AxiomNizam - All Rights Reserved</p>
@@ -252,37 +268,6 @@
             </div>
         </footer>
         {{ end }}
-    </div>
-
-    <!-- Login Modal -->
-    <div id="loginModal" class="modal">
-        <div class="modal-content login-modal">
-            <div class="modal-header">
-                <h2>🔐 Login</h2>
-                <button class="modal-close" onclick="closeLoginModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form onsubmit="handleLogin(event)">
-                    <div class="form-group">
-                        <label for="username">Username</label>
-                        <input type="text" id="username" name="username" placeholder="Enter username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" name="password" placeholder="Enter password" required>
-                    </div>
-                    <button type="submit" class="btn-primary btn-large">Login</button>
-                </form>
-
-                <div class="idp-divider"><span>or continue with</span></div>
-
-                <div id="idpButtonsContainer" class="idp-buttons">
-                    <!-- Dynamically loaded identity provider buttons -->
-                </div>
-
-                <p class="login-hint">AxiomNizam IAM — Roles: sysadmin | admin | manager | user</p>
-            </div>
-        </div>
     </div>
 
     <!-- Response Modal -->
@@ -298,7 +283,7 @@
         </div>
     </div>
 
-    <script src="/static/auth.js?v=20260405-2"></script>
+    <script src="/static/auth.js?v=20260410-3"></script>
     <script>
 
         // Theme management
@@ -368,11 +353,16 @@
             });
         }
 
+        const THEME_ICONS = {
+            'light': '<svg viewBox="0 0 24 24" width="20" height="20" fill="#FFD700" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>',
+            'dark': '<svg viewBox="0 0 24 24" width="20" height="20" fill="#60A5FA" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>',
+            'default': '<svg viewBox="0 0 24 24" width="20" height="20" fill="#9CA3AF" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>'
+        };
+
         function updateThemeButton(theme) {
             const btn = document.getElementById('themeToggle');
             if (btn) {
-                const icons = { 'dark': '🌙', 'light': '☀️', 'default': '💻' };
-                btn.textContent = icons[theme] || '🌙';
+                btn.innerHTML = THEME_ICONS[theme] || THEME_ICONS['dark'];
             }
         }
 
@@ -594,9 +584,9 @@
             initMobileNavInteractions();
             initTabNavigationScrollUX();
 
-            {{ if .forceLogin }}
-            openLoginModal();
-            {{ end }}
+            if (document.getElementById('idpButtonsContainer')) {
+                loadIdentityProviderButtons();
+            }
         });
 
         window.addEventListener('storage', function(event) {
@@ -608,15 +598,6 @@
                 applyRoleNavVisibility();
             }
         });
-
-        function openLoginModal() {
-            document.getElementById('loginModal').style.display = 'flex';
-            loadIdentityProviderButtons();
-        }
-
-        function closeLoginModal() {
-            document.getElementById('loginModal').style.display = 'none';
-        }
 
         function closeResponseModal() {
             document.getElementById('responseModal').style.display = 'none';
@@ -802,10 +783,6 @@
                 closeMobileNav();
             }
 
-            const modal = document.getElementById('loginModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
         };
 
         window.addEventListener('keydown', function(event) {

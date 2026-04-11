@@ -1689,6 +1689,99 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	})
 }
 
+// Logout handles POST /auth/logout
+// This endpoint proxies logout to IAM and revokes the active access/session/refresh state.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, models.Response{
+			Status: "error",
+			Error:  "No token provided",
+		})
+		return
+	}
+
+	requestBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Invalid request body",
+		})
+		return
+	}
+
+	trimmedRequestBody := strings.TrimSpace(string(requestBody))
+	if trimmedRequestBody != "" && !json.Valid([]byte(trimmedRequestBody)) {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "Invalid JSON body",
+		})
+		return
+	}
+
+	tokenURL := h.iamBaseURL + "/iam/auth/logout"
+	bodyReader := io.Reader(http.NoBody)
+	if trimmedRequestBody != "" {
+		bodyReader = strings.NewReader(trimmedRequestBody)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, tokenURL, bodyReader)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Failed to build logout request",
+		})
+		return
+	}
+	req.Header.Set("Authorization", authHeader)
+	if trimmedRequestBody != "" {
+		req.Header.Set(headerContentType, "application/json")
+	}
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Failed to connect to IAM authentication service: " + err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Status: "error",
+			Error:  "Failed to read logout response: " + err.Error(),
+		})
+		return
+	}
+
+	trimmedResponseBody := strings.TrimSpace(string(responseBody))
+	if trimmedResponseBody == "" {
+		c.Status(resp.StatusCode)
+		return
+	}
+
+	if !json.Valid([]byte(trimmedResponseBody)) {
+		contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
+		summary := summarizeIAMBody(responseBody)
+		log.Printf("⚠️  IAM logout non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		c.JSON(http.StatusBadGateway, models.Response{
+			Status: "error",
+			Error:  fmt.Sprintf("IAM logout service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+		})
+		return
+	}
+
+	contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
+	if contentType == "" {
+		contentType = "application/json"
+	}
+
+	c.Data(resp.StatusCode, contentType, []byte(trimmedResponseBody))
+}
+
 // ValidateToken handles GET /auth/validate
 // This endpoint validates if a token is still valid
 func (h *AuthHandler) ValidateToken(c *gin.Context) {

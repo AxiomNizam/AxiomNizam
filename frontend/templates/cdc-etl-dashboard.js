@@ -199,6 +199,7 @@
                 '<td>' + fmtTime(p.last_run_at) + '</td>' +
                 '<td>' + tagList(p.tags) + '</td>' +
                 '<td class="action-btns">' +
+                    '<button class="action-btn" onclick="editETLPipeline(\'' + escapeHtml(p.id) + '\')" title="Edit">✏️</button>' +
                     '<button class="action-btn" onclick="runETLPipeline(\'' + escapeHtml(p.id) + '\')" title="Run">▶</button>' +
                     '<button class="action-btn" onclick="openCreateModal(\'etl\', \'' + escapeHtml(p.id) + '\')" title="Clone">⧉</button>' +
                     '<button class="action-btn danger" onclick="deleteETLPipeline(\'' + escapeHtml(p.id) + '\')" title="Delete">🗑</button>' +
@@ -301,6 +302,7 @@
                 '<td>' + escapeHtml(p.lag || '—') + '</td>' +
                 '<td>' + tagList(p.tags) + '</td>' +
                 '<td class="action-btns">' +
+                    '<button class="action-btn" onclick="editCDCPipeline(\'' + escapeHtml(p.id) + '\')" title="Edit">✏️</button>' +
                     (p.status !== 'active' ? '<button class="action-btn" onclick="cdcAction(\'' + escapeHtml(p.id) + '\',\'start\')" title="Start">▶</button>' : '') +
                     (p.status === 'active' ? '<button class="action-btn" onclick="cdcAction(\'' + escapeHtml(p.id) + '\',\'pause\')" title="Pause">⏸</button>' : '') +
                     (p.status !== 'stopped' ? '<button class="action-btn" onclick="cdcAction(\'' + escapeHtml(p.id) + '\',\'stop\')" title="Stop">⏹</button>' : '') +
@@ -507,6 +509,10 @@
                 (c.version ? '<div class="connector-meta">v' + escapeHtml(c.version) + '</div>' : '') +
                 (c.description ? '<div class="connector-desc">' + escapeHtml(c.description) + '</div>' : '') +
                 (flags.length ? '<div class="connector-flag-list">' + flags.map(function(flag) { return '<span class="tag">' + escapeHtml(flag) + '</span>'; }).join('') + '</div>' : '') +
+                '<div class="connector-actions" style="margin-top:8px;display:flex;gap:6px;">' +
+                    '<button class="action-btn" onclick="editConnector(\'' + escapeHtml(c.id) + '\')" title="Edit" style="font-size:12px;">✏️ Edit</button>' +
+                    '<button class="action-btn danger" onclick="deleteConnector(\'' + escapeHtml(c.id) + '\')" title="Delete" style="font-size:12px;">🗑</button>' +
+                '</div>' +
             '</div>';
         }).join('');
     }
@@ -778,16 +784,43 @@
         const extractConnector = (document.getElementById('modal-etl-extract-connector').value || '').trim();
         const loadConnector = (document.getElementById('modal-etl-load-connector').value || '').trim();
         const qualityGate = document.getElementById('modal-etl-quality-gate').checked;
+
+        // Gather DB extract config
+        const extractConfig = {};
+        if (DB_CONNECTOR_IDS.indexOf(extractConnector) >= 0) {
+            const host = (document.getElementById('modal-extract-db-host').value || '').trim();
+            const dbName = (document.getElementById('modal-extract-db-name').value || '').trim();
+            const table = (document.getElementById('modal-extract-db-table').value || '').trim();
+            const sql = (document.getElementById('modal-extract-sql').value || '').trim();
+            if (host) extractConfig.host = host;
+            if (dbName) extractConfig.database = dbName;
+            if (table) extractConfig.table = table;
+            if (sql) extractConfig.query = sql;
+        }
+
+        // Gather DB load config
+        const loadConfig = {};
+        if (DB_CONNECTOR_IDS.indexOf(loadConnector) >= 0) {
+            const host = (document.getElementById('modal-load-db-host').value || '').trim();
+            const dbName = (document.getElementById('modal-load-db-name').value || '').trim();
+            const table = (document.getElementById('modal-load-db-table').value || '').trim();
+            const sql = (document.getElementById('modal-load-sql').value || '').trim();
+            if (host) loadConfig.host = host;
+            if (dbName) loadConfig.database = dbName;
+            if (table) loadConfig.table = table;
+            if (sql) loadConfig.query = sql;
+        }
+
         const steps = [
-            { id: 'step-1', name: 'Extract', type: 'extract', connector: extractConnector, config: {}, order: 1 },
+            { id: 'step-1', name: 'Extract', type: 'extract', connector: extractConnector, config: extractConfig, order: 1 },
             { id: 'step-2', name: 'Transform', type: 'transform', connector: '', config: {}, order: 2 }
         ];
         if (qualityGate) {
             steps.push({ id: 'step-3', name: 'Validate', type: 'validate', connector: '', config: {}, order: 3 });
             steps.push({ id: 'step-4', name: 'Deduplicate', type: 'deduplicate', connector: '', config: {}, order: 4 });
-            steps.push({ id: 'step-5', name: 'Load', type: 'load', connector: loadConnector, config: {}, order: 5 });
+            steps.push({ id: 'step-5', name: 'Load', type: 'load', connector: loadConnector, config: loadConfig, order: 5 });
         } else {
-            steps.push({ id: 'step-3', name: 'Load', type: 'load', connector: loadConnector, config: {}, order: 3 });
+            steps.push({ id: 'step-3', name: 'Load', type: 'load', connector: loadConnector, config: loadConfig, order: 3 });
         }
         return steps;
     }
@@ -828,6 +861,9 @@
         populateConnectorDropdowns();
         populateCDCTypeDropdowns();
         populateBlueprintDropdown();
+        // Show/hide DB options based on the default selected connector
+        window.onExtractConnectorChange();
+        window.onLoadConnectorChange();
         document.getElementById('createModal').classList.add('visible');
     };
 
@@ -913,6 +949,131 @@
         await Promise.all([loadETL(), loadCDC(), loadObservability(), loadConnectors(), loadOrchestration()]);
     }
 
+    // ---- DB Extract/Load SQL Query Toggle ----
+    const DB_CONNECTOR_IDS = ['mysql', 'postgres', 'mariadb', 'oracle', 'mongodb'];
+
+    window.onExtractConnectorChange = function() {
+        const sel = document.getElementById('modal-etl-extract-connector');
+        const opts = document.getElementById('modal-extract-db-options');
+        if (!sel || !opts) return;
+        const isDB = DB_CONNECTOR_IDS.indexOf(sel.value) >= 0;
+        opts.style.display = isDB ? 'block' : 'none';
+    };
+
+    window.onLoadConnectorChange = function() {
+        const sel = document.getElementById('modal-etl-load-connector');
+        const opts = document.getElementById('modal-load-db-options');
+        if (!sel || !opts) return;
+        const isDB = DB_CONNECTOR_IDS.indexOf(sel.value) >= 0;
+        opts.style.display = isDB ? 'block' : 'none';
+    };
+
+    // ---- Edit ETL Pipeline ----
+    window.editETLPipeline = function(id) {
+        const p = state.etlPipelines.find(function(x) { return x.id === id; });
+        if (!p) return;
+        document.getElementById('edit-pipeline-id').value = p.id;
+        document.getElementById('edit-pipeline-type').value = 'etl';
+        document.getElementById('edit-pipeline-title').textContent = 'Edit ETL Pipeline';
+        document.getElementById('edit-pipeline-name').value = p.name || '';
+        document.getElementById('edit-pipeline-desc').value = p.description || '';
+        document.getElementById('edit-pipeline-schedule').value = p.schedule || '';
+        document.getElementById('edit-pipeline-schedule-group').style.display = 'block';
+        document.getElementById('edit-pipeline-tags').value = (p.tags || []).join(', ');
+        document.getElementById('editPipelineModal').classList.add('visible');
+    };
+
+    // ---- Edit CDC Pipeline ----
+    window.editCDCPipeline = function(id) {
+        const p = state.cdcPipelines.find(function(x) { return x.id === id; });
+        if (!p) return;
+        document.getElementById('edit-pipeline-id').value = p.id;
+        document.getElementById('edit-pipeline-type').value = 'cdc';
+        document.getElementById('edit-pipeline-title').textContent = 'Edit CDC Pipeline';
+        document.getElementById('edit-pipeline-name').value = p.name || '';
+        document.getElementById('edit-pipeline-desc').value = p.description || '';
+        document.getElementById('edit-pipeline-schedule-group').style.display = 'none';
+        document.getElementById('edit-pipeline-tags').value = (p.tags || []).join(', ');
+        document.getElementById('editPipelineModal').classList.add('visible');
+    };
+
+    window.closeEditPipelineModal = function() {
+        document.getElementById('editPipelineModal').classList.remove('visible');
+    };
+
+    window.submitEditPipeline = async function() {
+        const id = document.getElementById('edit-pipeline-id').value;
+        const type = document.getElementById('edit-pipeline-type').value;
+        const payload = {
+            name: (document.getElementById('edit-pipeline-name').value || '').trim(),
+            description: (document.getElementById('edit-pipeline-desc').value || '').trim(),
+            tags: parseCSVList(document.getElementById('edit-pipeline-tags').value || '')
+        };
+        if (type === 'etl') {
+            payload.schedule = (document.getElementById('edit-pipeline-schedule').value || '').trim();
+        }
+        const url = type === 'etl'
+            ? '/api/v1/etl/pipelines/' + encodeURIComponent(id)
+            : '/api/v1/cdc/pipelines/' + encodeURIComponent(id);
+        const resp = await fetchJSON(url, { method: 'PUT', body: payload });
+        if (!resp) return;
+        showToast('Pipeline updated', false);
+        closeEditPipelineModal();
+        if (type === 'etl') { await loadETL(); } else { await loadCDC(); }
+        await loadObservability();
+    };
+
+    // ---- Edit Connector ----
+    window.editConnector = function(id) {
+        const c = state.etlConnectors.find(function(x) { return x.id === id; });
+        if (!c) return;
+        document.getElementById('edit-connector-id').value = c.id;
+        document.getElementById('edit-connector-name').value = c.name || '';
+        document.getElementById('edit-connector-category').value = c.category || 'database';
+        document.getElementById('edit-connector-icon').value = c.icon || '';
+        document.getElementById('edit-connector-version').value = c.version || '';
+        document.getElementById('edit-connector-supported-as').value = (c.supported_as || []).join(', ');
+        document.getElementById('edit-connector-auth').value = (c.auth_modes || []).join(', ');
+        document.getElementById('edit-connector-description').value = c.description || '';
+        document.getElementById('edit-connector-incremental').checked = !!c.supports_incremental;
+        document.getElementById('edit-connector-schema').checked = !!c.schema_discovery;
+        document.getElementById('edit-connector-cdc').checked = !!c.supports_cdc;
+        document.getElementById('editConnectorModal').classList.add('visible');
+    };
+
+    window.closeEditConnectorModal = function() {
+        document.getElementById('editConnectorModal').classList.remove('visible');
+    };
+
+    window.submitEditConnector = async function() {
+        const id = document.getElementById('edit-connector-id').value;
+        const payload = {
+            name: (document.getElementById('edit-connector-name').value || '').trim(),
+            category: (document.getElementById('edit-connector-category').value || '').trim(),
+            icon: (document.getElementById('edit-connector-icon').value || '').trim(),
+            version: (document.getElementById('edit-connector-version').value || '').trim(),
+            supported_as: parseCSVList(document.getElementById('edit-connector-supported-as').value || ''),
+            auth_modes: parseCSVList(document.getElementById('edit-connector-auth').value || ''),
+            description: (document.getElementById('edit-connector-description').value || '').trim(),
+            supports_incremental: document.getElementById('edit-connector-incremental').checked,
+            schema_discovery: document.getElementById('edit-connector-schema').checked,
+            supports_cdc: document.getElementById('edit-connector-cdc').checked
+        };
+        const resp = await fetchJSON('/api/v1/etl/connectors/' + encodeURIComponent(id), { method: 'PUT', body: payload });
+        if (!resp) return;
+        showToast('Connector updated', false);
+        closeEditConnectorModal();
+        await loadConnectors();
+    };
+
+    window.deleteConnector = async function(id) {
+        if (!confirm('Delete connector ' + id + '?')) return;
+        const resp = await fetchJSON('/api/v1/etl/connectors/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (resp) {
+            await loadConnectors();
+        }
+    };
+
     function bindLocalEvents() {
         const modal = document.getElementById('createModal');
         if (modal) {
@@ -920,6 +1081,18 @@
                 if (evt.target === modal) {
                     closeCreateModal();
                 }
+            });
+        }
+        const editPModal = document.getElementById('editPipelineModal');
+        if (editPModal) {
+            editPModal.addEventListener('click', function(evt) {
+                if (evt.target === editPModal) closeEditPipelineModal();
+            });
+        }
+        const editCModal = document.getElementById('editConnectorModal');
+        if (editCModal) {
+            editCModal.addEventListener('click', function(evt) {
+                if (evt.target === editCModal) closeEditConnectorModal();
             });
         }
     }

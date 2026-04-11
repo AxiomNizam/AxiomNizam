@@ -197,6 +197,7 @@ window.addEventListener('DOMContentLoaded', function() {
     loadStatusData();
     loadDatabases();
     loadDatabaseServers();
+    loadConnectedServers();
     loadMonitoringDashboards();
     setInterval(loadStatusData, 30000);
 });
@@ -221,6 +222,7 @@ function switchManagerTab(tabName) {
     
     if (tabName === 'databases') {
         loadDatabases();
+        loadConnectedServers();
     }
     if (tabName === 'users') {
         loadUsers();
@@ -1116,7 +1118,7 @@ function loadDatabases() {
                 '</div>' +
                 '<div class="db-info-row">' +
                 '<span class="db-info-label">Status</span>' +
-                '<span class="db-info-value" style="color: ' + (isConnected ? '#10b981' : '#ef4444') + '">' +
+                '<span class="db-info-value" style="color: ' + (isConnected ? 'var(--status-connected)' : 'var(--status-disconnected)') + '">' +
                 (isConnected ? '✓ Connected' : '✗ Disconnected') + '</span>' +
                 '</div>' +
                 '<div class="db-info-row">' +
@@ -1135,6 +1137,289 @@ function loadDatabases() {
 
 function refreshDatabases() {
     loadDatabases();
+    loadConnectedServers();
+}
+
+var _cachedBuilderApis = null;
+var _cachedBuilderApisTs = 0;
+
+function fetchBuilderApis(callback) {
+    var now = Date.now();
+    if (_cachedBuilderApis && (now - _cachedBuilderApisTs) < 15000) {
+        callback(_cachedBuilderApis);
+        return;
+    }
+    fetch(BACKEND_URL + '/api/v1/builder/apis', { headers: getAuthHeaders() })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            _cachedBuilderApis = data.apis || [];
+            _cachedBuilderApisTs = Date.now();
+            callback(_cachedBuilderApis);
+        })
+        .catch(function() { callback([]); });
+}
+
+function getApisForServer(apis, serverKey, dbType) {
+    return apis.filter(function(api) {
+        if (api.source_server && api.source_server === serverKey) return true;
+        if (!api.source_server || api.source_server === '' || api.source_server === 'default') {
+            if (api.source_database && api.source_database === dbType) return true;
+        }
+        return false;
+    });
+}
+
+function loadConnectedServers() {
+    var container = document.getElementById('connectedServersList');
+    if (!container) return;
+
+    fetch(BACKEND_URL + '/api/admin/database/servers', {
+        headers: getAuthHeaders()
+    })
+    .then(function(response) {
+        return response.text().then(function(text) {
+            var payload = {};
+            try { payload = text ? JSON.parse(text) : {}; } catch (e) { payload = {}; }
+            if (!response.ok) throw new Error((payload && payload.error) || 'Request failed');
+            return payload;
+        });
+    })
+    .then(function(data) {
+        var servers = data.servers || [];
+        if (servers.length === 0) {
+            container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">No database servers connected</div>';
+            return;
+        }
+
+        fetchBuilderApis(function(apis) {
+            var html = '';
+            servers.forEach(function(server) {
+                var isConnected = server.connected === true;
+                var statusColor = isConnected ? 'var(--status-connected)' : 'var(--status-disconnected)';
+                var statusText = isConnected ? '✓ Connected' : '✗ Disconnected';
+                var sourceLabel = server.source === 'default' ? 'Default' : 'Custom';
+                var sourceBadgeColor = server.source === 'default' ? 'var(--badge-indigo-bg)' : 'var(--badge-green-bg)';
+                var sourceBadgeTextColor = server.source === 'default' ? 'var(--badge-indigo-text)' : 'var(--badge-green-text)';
+                var isCustom = server.source !== 'default';
+
+                var serverApis = getApisForServer(apis, server.key, server.db_type);
+                var apiCount = serverApis.length;
+
+                html += '<div class="database-item" data-server-key="' + escapeHtml(server.key) + '" data-server-dbtype="' + escapeHtml(server.db_type) + '" ' +
+                    'onmouseenter="showServerApiTooltip(event, this)" onmouseleave="hideServerApiTooltip()" onmousemove="moveServerApiTooltip(event)">' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">Server</span>' +
+                        '<span class="db-info-value" style="font-weight:600;">' + escapeHtml(server.name || server.key) + '</span>' +
+                    '</div>' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">Key</span>' +
+                        '<span class="db-info-value" style="font-family:monospace;font-size:0.85em;">' + escapeHtml(server.key) + '</span>' +
+                    '</div>' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">Type</span>' +
+                        '<span class="db-info-value">' + (server.db_type || 'unknown').toUpperCase() + '</span>' +
+                    '</div>' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">Host</span>' +
+                        '<span class="db-info-value">' + escapeHtml(server.host || '-') + (server.port ? ':' + server.port : '') + '</span>' +
+                    '</div>' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">Status</span>' +
+                        '<span class="db-info-value" style="color:' + statusColor + ';">' + statusText + '</span>' +
+                    '</div>' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">Source</span>' +
+                        '<span class="db-info-value"><span style="background:' + sourceBadgeColor + ';color:' + sourceBadgeTextColor + ';padding:2px 8px;border-radius:8px;font-size:0.8em;">' + sourceLabel + '</span></span>' +
+                    '</div>' +
+                    '<div class="db-info-row">' +
+                        '<span class="db-info-label">APIs</span>' +
+                        '<span class="db-info-value" style="color:' + (apiCount > 0 ? 'var(--badge-indigo-text)' : 'var(--text-muted)') + ';cursor:help;">' +
+                        apiCount + ' API' + (apiCount !== 1 ? 's' : '') + ' connected' +
+                        '</span>' +
+                    '</div>';
+
+                if (isCustom) {
+                    html += '<div style="display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color);">' +
+                        '<button class="btn-secondary" style="flex:1;font-size:0.85em;padding:6px 10px;" onclick="event.stopPropagation();openEditDbServerModal(\'' + escapeHtml(server.key) + '\')">✏️ Edit</button>' +
+                        '<button class="btn-danger" style="flex:1;font-size:0.85em;padding:6px 10px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:8px;cursor:pointer;" onclick="event.stopPropagation();deleteDbServer(\'' + escapeHtml(server.key) + '\', \'' + escapeHtml(server.name || server.key) + '\')">🗑️ Delete</button>' +
+                        '</div>';
+                }
+
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+        });
+    })
+    .catch(function(err) {
+        container.innerHTML = '<div style="color: #ef4444; padding: 12px;">Failed to load connected servers: ' + escapeHtml(err.message) + '</div>';
+    });
+}
+
+function showServerApiTooltip(event, elem) {
+    var serverKey = elem.getAttribute('data-server-key');
+    var dbType = elem.getAttribute('data-server-dbtype');
+    var tooltip = document.getElementById('dbServerApiTooltip');
+    var content = document.getElementById('dbServerApiTooltipContent');
+    if (!tooltip || !content) return;
+
+    fetchBuilderApis(function(apis) {
+        var serverApis = getApisForServer(apis, serverKey, dbType);
+        if (serverApis.length === 0) {
+            content.innerHTML = '<div style="color:var(--text-muted);font-style:italic;">No APIs connected to this server</div>';
+        } else {
+            var rows = '';
+            serverApis.forEach(function(api) {
+                var statusColor = api.status === 'active' ? 'var(--status-connected)' : 'var(--warning-color)';
+                rows += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-color);">' +
+                    '<span style="font-weight:600;min-width:46px;text-align:center;font-size:0.8em;padding:2px 6px;border-radius:4px;background:var(--badge-indigo-bg);color:var(--badge-indigo-text);">' + escapeHtml(api.method || 'GET') + '</span>' +
+                    '<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(api.path || '') + '">' + escapeHtml(api.name || api.path || api.id) + '</span>' +
+                    '<span style="width:8px;height:8px;border-radius:50%;background:' + statusColor + ';flex-shrink:0;" title="' + escapeHtml(api.status || '') + '"></span>' +
+                    '</div>';
+            });
+            content.innerHTML = rows;
+        }
+        tooltip.style.display = 'block';
+        moveServerApiTooltip(event);
+    });
+}
+
+function moveServerApiTooltip(event) {
+    var tooltip = document.getElementById('dbServerApiTooltip');
+    if (!tooltip || tooltip.style.display === 'none') return;
+    var x = event.clientX + 16;
+    var y = event.clientY + 12;
+    if (x + 400 > window.innerWidth) x = event.clientX - 400;
+    if (y + 260 > window.innerHeight) y = event.clientY - 260;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+}
+
+function hideServerApiTooltip() {
+    var tooltip = document.getElementById('dbServerApiTooltip');
+    if (tooltip) tooltip.style.display = 'none';
+}
+
+function openEditDbServerModal(serverKey) {
+    var modal = document.getElementById('editDbServerModal');
+    if (!modal) return;
+
+    document.getElementById('editServerKey').value = serverKey;
+    document.getElementById('editServerResult').style.display = 'none';
+
+    // Find server info from cached list
+    fetch(BACKEND_URL + '/api/admin/database/servers', { headers: getAuthHeaders() })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var servers = data.servers || [];
+            var server = servers.find(function(s) { return s.key === serverKey; });
+            if (!server) {
+                alert('Server not found: ' + serverKey);
+                return;
+            }
+            document.getElementById('editServerName').value = server.name || '';
+            document.getElementById('editServerDbType').value = server.db_type || 'mysql';
+            document.getElementById('editServerHost').value = server.host || '';
+            document.getElementById('editServerPort').value = server.port || (server.db_type === 'postgres' ? 5432 : 3306);
+            document.getElementById('editServerUsername').value = '';
+            document.getElementById('editServerPassword').value = '';
+            document.getElementById('editServerDefaultDatabase').value = '';
+            document.getElementById('editServerSSLMode').value = 'disable';
+            modal.style.display = 'flex';
+        });
+}
+
+function closeEditDbServerModal() {
+    var modal = document.getElementById('editDbServerModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function updateEditServerPortDefault() {
+    var dbType = (document.getElementById('editServerDbType').value || '').toLowerCase();
+    var portEl = document.getElementById('editServerPort');
+    if (!portEl) return;
+    portEl.value = dbType === 'postgres' ? 5432 : 3306;
+}
+
+function submitEditDbServer(event) {
+    event.preventDefault();
+    var serverKey = document.getElementById('editServerKey').value;
+    var btn = document.getElementById('editServerBtn');
+    var resultDiv = document.getElementById('editServerResult');
+
+    var payload = {
+        server_name: document.getElementById('editServerName').value.trim(),
+        db_type: document.getElementById('editServerDbType').value,
+        host: document.getElementById('editServerHost').value.trim(),
+        port: parseInt(document.getElementById('editServerPort').value, 10) || 0,
+        username: document.getElementById('editServerUsername').value.trim(),
+        password: document.getElementById('editServerPassword').value,
+        default_database: document.getElementById('editServerDefaultDatabase').value.trim(),
+        ssl_mode: document.getElementById('editServerSSLMode').value
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    resultDiv.style.display = 'none';
+
+    fetch(BACKEND_URL + '/api/admin/database/servers/' + encodeURIComponent(serverKey), {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+    })
+    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+        resultDiv.style.display = 'block';
+
+        if (result.ok) {
+            resultDiv.style.background = 'rgba(16,185,129,0.15)';
+            resultDiv.style.color = '#10b981';
+            resultDiv.textContent = 'Server updated successfully';
+            addOperationLog('Updated database server: ' + payload.server_name, 'success');
+            loadConnectedServers();
+            loadDatabaseServers();
+            setTimeout(function() { closeEditDbServerModal(); }, 600);
+        } else {
+            resultDiv.style.background = 'rgba(239,68,68,0.15)';
+            resultDiv.style.color = '#ef4444';
+            resultDiv.textContent = result.data.error || 'Failed to update server';
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(239,68,68,0.15)';
+        resultDiv.style.color = '#ef4444';
+        resultDiv.textContent = 'Connection error: ' + err.message;
+    });
+}
+
+function deleteDbServer(serverKey, serverName) {
+    if (!confirm('Delete database server "' + serverName + '"?\n\nThis will close the connection and remove the saved configuration. APIs using this server will no longer work.')) {
+        return;
+    }
+
+    fetch(BACKEND_URL + '/api/admin/database/servers/' + encodeURIComponent(serverKey), {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+    })
+    .then(function(response) { return response.json().then(function(d) { return { ok: response.ok, data: d }; }); })
+    .then(function(result) {
+        if (result.ok) {
+            addOperationLog('Deleted database server: ' + serverName, 'success');
+            loadConnectedServers();
+            loadDatabaseServers();
+        } else {
+            alert('Failed to delete server: ' + (result.data.error || 'Unknown error'));
+            addOperationLog('Failed to delete server: ' + (result.data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(function(err) {
+        alert('Connection error: ' + err.message);
+    });
 }
 
 function createDatabase() {
@@ -1320,6 +1605,7 @@ function submitConnectDbServer(event) {
 
             addOperationLog('Connected database server: ' + payload.server_name + ' (' + payload.db_type + ')', 'success');
             loadDatabaseServers();
+            loadConnectedServers();
 
             var newDbType = document.getElementById('newDbType');
             if (newDbType && !newDbType.value) {
@@ -1621,8 +1907,8 @@ function renderUsers(users) {
         var email = u.email || '';
         var displayName = u.display_name || (email ? email.split('@')[0] : 'Unknown');
         var createdAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
-        var statusColor = u.active ? '#10b981' : '#ef4444';
-        var verifyColor = u.email_verified ? '#10b981' : '#f59e0b';
+        var statusColor = u.active ? 'var(--status-connected)' : 'var(--status-disconnected)';
+        var verifyColor = u.email_verified ? 'var(--status-connected)' : 'var(--warning-color)';
         var roleNames = getUserRolesForCard(u);
         var primaryRole = resolvePrimaryRole(roleNames);
 

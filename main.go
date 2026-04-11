@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,7 +17,9 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/auth"
+	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
+	"example.com/axiomnizam/internal/conductor"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/database"
 	"example.com/axiomnizam/internal/eventbus"
@@ -42,6 +46,8 @@ import (
 	"example.com/axiomnizam/internal/workflows"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -180,6 +186,11 @@ func main() {
 
 	// Initialize all connections
 	conns := database.InitConnections(cfg)
+	if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd); secretErr != nil {
+		log.Printf("⚠️  DEMO_JWT_SECRET synchronization failed: %v", secretErr)
+	} else {
+		log.Println("✅ DEMO_JWT_SECRET synchronized for replica-safe token validation")
+	}
 	workflows.ConfigureGlobalPersistence(conns.Etcd)
 	modes.ConfigureGlobalPersistence(conns.Etcd)
 	vectorplus.ConfigureGlobalPersistence(conns.Etcd)
@@ -188,6 +199,30 @@ func main() {
 
 	// Create tables
 	createTables(conns)
+
+	// Connect to the train database (separate PostgreSQL database — Indian Railways)
+	var trainDB *gorm.DB
+	trainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=train port=%s sslmode=%s",
+		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
+		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
+	if db, err := gorm.Open(postgres.Open(trainDSN), &gorm.Config{}); err == nil {
+		trainDB = db
+		log.Println("✅ Train database (PostgreSQL/India) connected")
+	} else {
+		log.Printf("⚠️  Train database connection failed: %v — Indian train GIS APIs will be unavailable", err)
+	}
+
+	// Connect to the bd-train database (Bangladesh Railways)
+	var bdTrainDB *gorm.DB
+	bdTrainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=bd-train port=%s sslmode=%s",
+		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
+		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
+	if db, err := gorm.Open(postgres.Open(bdTrainDSN), &gorm.Config{}); err == nil {
+		bdTrainDB = db
+		log.Println("✅ BD-Train database (PostgreSQL/Bangladesh) connected")
+	} else {
+		log.Printf("⚠️  BD-Train database connection failed: %v — Bangladesh train GIS APIs will be unavailable", err)
+	}
 
 	// ====================================
 	// IAM SYSTEM INITIALIZATION
@@ -283,7 +318,7 @@ func main() {
 		"percona":  conns.Percona,
 		"oracle":   conns.Oracle,
 	}
-	adminHandler := handlers.NewAdminHandler(dbConnections)
+	adminHandler := handlers.NewAdminHandler(dbConnections, conns.PostgreSQL)
 
 	// User management handler
 	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)
@@ -346,6 +381,13 @@ func main() {
 		}
 
 		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			// WebSocket connections cannot send custom headers from browsers;
+			// accept token as a query parameter for upgrade requests.
+			if qToken := strings.TrimSpace(c.Query("token")); qToken != "" {
+				authHeader = "Bearer " + qToken
+			}
+		}
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
 			c.Abort()
@@ -491,7 +533,8 @@ func main() {
 	router.GET("/auth/oauth/start", authHandler.OAuthStart)
 	router.GET("/auth/oauth/callback", authHandler.OAuthCallback)
 
-	// Token status endpoints (auth required)
+	// Protected auth endpoints (auth required)
+	router.POST("/auth/logout", authMiddleware, authHandler.Logout)
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
 	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
 
@@ -643,6 +686,8 @@ func main() {
 	router.GET("/api/admin/database/list", adminOrSysMiddleware, adminHandler.ListDatabases)
 	router.GET("/api/admin/database/servers", adminOrSysMiddleware, adminHandler.ListDatabaseServers)
 	router.POST("/api/admin/database/connect", adminOrSysMiddleware, adminHandler.ConnectDatabaseServer)
+	router.PUT("/api/admin/database/servers/:key", adminOrSysMiddleware, adminHandler.UpdateDatabaseServer)
+	router.DELETE("/api/admin/database/servers/:key", adminOrSysMiddleware, adminHandler.DeleteDatabaseServer)
 	router.GET("/api/admin/certificates/status", adminOrSysMiddleware, certificateHandler.GetCertificateStatus)
 	router.POST("/api/admin/certificates/renew", adminOrSysMiddleware, certificateHandler.RenewCertificate)
 
@@ -687,6 +732,7 @@ func main() {
 	// ====================================
 	cliAuth := handlers.NewCLIAuthHandler()
 	router.POST("/api/v1/auth/login", cliAuth.Login)
+	router.POST("/api/v1/auth/logout", authHandler.Logout)
 	router.GET("/api/v1/auth/verify", cliAuth.Verify)
 	router.GET("/api/v1/auth/whoami", cliAuth.WhoAmI)
 
@@ -910,6 +956,18 @@ func main() {
 		streamSubscriptionsAPI.DELETE("/:id", adminOrSysMiddleware, streamHandler.Unsubscribe)
 	}
 
+	// Conductor (RabbitMQ / Kafka producer & consumer management)
+	conductorCfg := conductor.Config{
+		RabbitMQURL:  os.Getenv("RABBITMQ_URL"),
+		KafkaBrokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
+	}
+	if conductorCfg.KafkaBrokers[0] == "" {
+		conductorCfg.KafkaBrokers = nil
+	}
+	conductorMgr := conductor.NewManager(conductorCfg)
+	conductorMgr.InitPersistence(conns.PostgreSQL)
+	conductor.RegisterRoutes(router, conductorMgr, authMiddleware, adminOrSysMiddleware)
+
 	// Tenants
 	tenantAPI := router.Group("/api/v1/tenants", authMiddleware)
 	{
@@ -1026,6 +1084,44 @@ func main() {
 		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
 	}
 
+	// GIS Train/Railway dashboard — Indian Railways (PostgreSQL train database)
+	if trainDB != nil {
+		trainHandler := handlers.NewGISTrainHandler(trainDB)
+		trainAPI := router.Group("/api/v1/gis/trains", authMiddleware)
+		{
+			trainAPI.GET("", trainHandler.ListTrains)
+			trainAPI.GET("/search", trainHandler.SearchTrains)
+			trainAPI.GET("/stations", trainHandler.ListStations)
+			trainAPI.GET("/stations/:code", trainHandler.GetStation)
+			trainAPI.GET("/stats", trainHandler.GetTrainStats)
+			trainAPI.GET("/dashboard", trainHandler.GetTrainDashboard)
+			trainAPI.GET("/dashboard/summary", trainHandler.GetTrainDashboardSummary)
+			trainAPI.GET("/:id", trainHandler.GetTrain)
+			trainAPI.GET("/:id/route", trainHandler.GetTrainRoute)
+		}
+		log.Println("✅ Indian Railway GIS routes registered")
+	}
+
+	// GIS Train/Railway dashboard — Bangladesh Railways (PostgreSQL bd-train database)
+	if bdTrainDB != nil {
+		bdTrainHandler := handlers.NewGISBDTrainHandler(bdTrainDB)
+		bdTrainAPI := router.Group("/api/v1/gis/bd-trains", authMiddleware)
+		{
+			bdTrainAPI.GET("", bdTrainHandler.ListTrains)
+			bdTrainAPI.GET("/search", bdTrainHandler.SearchTrains)
+			bdTrainAPI.GET("/stations", bdTrainHandler.ListStations)
+			bdTrainAPI.GET("/stations/:name", bdTrainHandler.GetStation)
+			bdTrainAPI.GET("/stats", bdTrainHandler.GetStats)
+			bdTrainAPI.GET("/trips", bdTrainHandler.ListTrips)
+			bdTrainAPI.GET("/trips/:id/seats", bdTrainHandler.GetTripSeats)
+			bdTrainAPI.GET("/dashboard", bdTrainHandler.GetDashboard)
+			bdTrainAPI.GET("/dashboard/summary", bdTrainHandler.GetDashboardSummary)
+			bdTrainAPI.GET("/:id", bdTrainHandler.GetTrain)
+			bdTrainAPI.GET("/:id/route", bdTrainHandler.GetTrainRoute)
+		}
+		log.Println("✅ Bangladesh Railway GIS routes registered")
+	}
+
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
 	analyticsHandler := handlers.NewAnalyticsHandler()
 	analyticsAPI := router.Group("/api/v1/analytics", authMiddleware)
@@ -1055,6 +1151,8 @@ func main() {
 		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
 		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
 		etlAPI.POST("/connectors", adminOrSysMiddleware, cdcEtlHandler.CreateETLConnector)
+		etlAPI.PUT("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLConnector)
+		etlAPI.DELETE("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLConnector)
 		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
 		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
 		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)
@@ -1536,12 +1634,14 @@ func main() {
 	fmt.Println("  ANY  /api/custom/*path        - Execute API Builder runtime APIs")
 	fmt.Println()
 	fmt.Println("Admin endpoints (admin role required):")
-	fmt.Println("  POST /api/admin/database/create  - Create a new database")
-	fmt.Println("  GET  /api/admin/database/list    - List all databases")
-	fmt.Println("  GET  /api/admin/database/servers - List default and connected DB servers")
-	fmt.Println("  POST /api/admin/database/connect - Connect a new DB server")
-	fmt.Println("  POST /api/admin/table/create     - Create a new table")
-	fmt.Println("  GET  /api/admin/table/list       - List all tables")
+	fmt.Println("  POST /api/admin/database/create       - Create a new database")
+	fmt.Println("  GET  /api/admin/database/list         - List all databases")
+	fmt.Println("  GET  /api/admin/database/servers      - List default and connected DB servers")
+	fmt.Println("  POST /api/admin/database/connect      - Connect a new DB server")
+	fmt.Println("  PUT  /api/admin/database/servers/:key - Update a custom DB server")
+	fmt.Println("  DELETE /api/admin/database/servers/:key - Delete a custom DB server")
+	fmt.Println("  POST /api/admin/table/create          - Create a new table")
+	fmt.Println("  GET  /api/admin/table/list            - List all tables")
 	fmt.Println()
 	if !iamOnlyAuth {
 		fmt.Println("User Management endpoints (admin only):")
@@ -1654,6 +1754,115 @@ func createTables(conns *database.Connections) {
 		conns.Oracle.AutoMigrate(&models.User{})
 		log.Println("✅ Oracle table created/migrated")
 	}
+}
+
+const (
+	demoJWTSecretStoreKey = "demo-jwt-secret"
+	demoJWTSecretEtcdKey  = "iam:bootstrap:demo-jwt-secret"
+)
+
+func ensureSharedDemoJWTSecret(pg *gorm.DB, etcd *clientv3.Client) (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")); configured != "" {
+		if pg != nil {
+			resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
+				return configured, nil
+			})
+			if err != nil {
+				log.Printf("⚠️  failed to seed DEMO_JWT_SECRET into postgres bootstrap store: %v", err)
+			} else if resolved != configured {
+				log.Printf("⚠️  postgres bootstrap DEMO_JWT_SECRET differs from env value; keeping env for current runtime")
+			}
+		}
+		auth.SetDemoJWTSecret(configured)
+		return configured, nil
+	}
+
+	if pg != nil {
+		resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
+			return generateBootstrapSecret(48)
+		})
+		if err == nil {
+			if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
+				return "", fmt.Errorf("setting DEMO_JWT_SECRET from postgres: %w", err)
+			}
+			auth.SetDemoJWTSecret(resolved)
+			return resolved, nil
+		}
+		log.Printf("⚠️  postgres bootstrap for DEMO_JWT_SECRET failed, falling back to etcd: %v", err)
+	}
+
+	resolved, err := ensureSharedDemoJWTSecretFromEtcd(etcd)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
+		return "", fmt.Errorf("setting DEMO_JWT_SECRET from etcd: %w", err)
+	}
+	auth.SetDemoJWTSecret(resolved)
+	return resolved, nil
+}
+
+func ensureSharedDemoJWTSecretFromEtcd(etcd *clientv3.Client) (string, error) {
+
+	if etcd == nil {
+		return "", fmt.Errorf("DEMO_JWT_SECRET is not set and neither postgres nor etcd bootstrap store is available")
+	}
+
+	getCtx, getCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	resp, err := etcd.Get(getCtx, demoJWTSecretEtcdKey)
+	getCancel()
+	if err != nil {
+		return "", fmt.Errorf("reading demo token secret from etcd: %w", err)
+	}
+	if len(resp.Kvs) > 0 {
+		secret := strings.TrimSpace(string(resp.Kvs[0].Value))
+		if secret != "" {
+			return secret, nil
+		}
+	}
+
+	candidate, err := generateBootstrapSecret(48)
+	if err != nil {
+		return "", err
+	}
+
+	txnCtx, txnCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	txnResp, err := etcd.Txn(txnCtx).
+		If(clientv3.Compare(clientv3.Version(demoJWTSecretEtcdKey), "=", 0)).
+		Then(clientv3.OpPut(demoJWTSecretEtcdKey, candidate)).
+		Else(clientv3.OpGet(demoJWTSecretEtcdKey)).
+		Commit()
+	txnCancel()
+	if err != nil {
+		return "", fmt.Errorf("persisting demo token secret in etcd: %w", err)
+	}
+
+	resolved := candidate
+	if !txnResp.Succeeded {
+		resolved = ""
+		if len(txnResp.Responses) > 0 {
+			rangeResp := txnResp.Responses[0].GetResponseRange()
+			if rangeResp != nil && len(rangeResp.Kvs) > 0 {
+				resolved = strings.TrimSpace(string(rangeResp.Kvs[0].Value))
+			}
+		}
+		if resolved == "" {
+			return "", fmt.Errorf("demo token secret exists in etcd but value is empty")
+		}
+	}
+
+	return resolved, nil
+}
+
+func generateBootstrapSecret(size int) (string, error) {
+	if size <= 0 {
+		size = 48
+	}
+	random := make([]byte, size)
+	if _, err := rand.Read(random); err != nil {
+		return "", fmt.Errorf("generating bootstrap secret: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(random), nil
 }
 
 func resolveSecurityEnvironment() string {

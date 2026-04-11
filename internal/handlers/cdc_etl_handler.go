@@ -177,6 +177,30 @@ func (h *CDCETLHandler) CreateETLConnector(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "connector": connector})
 }
 
+// UpdateETLConnector PUT /api/v1/etl/connectors/:id
+func (h *CDCETLHandler) UpdateETLConnector(c *gin.Context) {
+	var updates etl.ConnectorType
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+	updated, err := h.etlEngine.UpdateConnector(c.Param("id"), updates)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "connector": updated})
+}
+
+// DeleteETLConnector DELETE /api/v1/etl/connectors/:id
+func (h *CDCETLHandler) DeleteETLConnector(c *gin.Context) {
+	if err := h.etlEngine.DeleteConnector(c.Param("id")); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "connector deleted"})
+}
+
 // GetETLConnectorCatalog GET /api/v1/etl/connectors/catalog
 func (h *CDCETLHandler) GetETLConnectorCatalog(c *gin.Context) {
 	connectors := h.etlEngine.GetConnectors()

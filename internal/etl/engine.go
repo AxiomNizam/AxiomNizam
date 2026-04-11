@@ -234,7 +234,6 @@ func NewEngine(etcd ...*clientv3.Client) *Engine {
 	}
 	e.registerConnectors()
 	if !e.loadState() {
-		e.seedPipelines()
 		e.persistStateLocked()
 	}
 	return e
@@ -358,6 +357,64 @@ func (e *Engine) AddConnector(connector ConnectorType) error {
 	e.connectors = append(e.connectors, connector)
 	e.persistStateLocked()
 	return nil
+}
+
+// UpdateConnector patches an existing connector by ID.
+func (e *Engine) UpdateConnector(id string, updates ConnectorType) (*ConnectorType, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	id = strings.TrimSpace(strings.ToLower(id))
+	for i, c := range e.connectors {
+		if c.ID == id {
+			if updates.Name != "" {
+				e.connectors[i].Name = strings.TrimSpace(updates.Name)
+			}
+			if updates.Category != "" {
+				e.connectors[i].Category = strings.TrimSpace(strings.ToLower(updates.Category))
+			}
+			if updates.Icon != "" {
+				e.connectors[i].Icon = updates.Icon
+			}
+			if updates.Version != "" {
+				e.connectors[i].Version = updates.Version
+			}
+			if updates.Description != "" {
+				e.connectors[i].Description = updates.Description
+			}
+			if len(updates.SupportedAs) > 0 {
+				e.connectors[i].SupportedAs = updates.SupportedAs
+			}
+			if len(updates.AuthModes) > 0 {
+				e.connectors[i].AuthModes = updates.AuthModes
+			}
+			if len(updates.ConfigKeys) > 0 {
+				e.connectors[i].ConfigKeys = updates.ConfigKeys
+			}
+			e.connectors[i].SupportsIncremental = updates.SupportsIncremental
+			e.connectors[i].SchemaDiscovery = updates.SchemaDiscovery
+			e.connectors[i].SupportsCDC = updates.SupportsCDC
+			e.persistStateLocked()
+			return &e.connectors[i], nil
+		}
+	}
+	return nil, fmt.Errorf("connector not found: %s", id)
+}
+
+// DeleteConnector removes a connector by ID.
+func (e *Engine) DeleteConnector(id string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	id = strings.TrimSpace(strings.ToLower(id))
+	for i, c := range e.connectors {
+		if c.ID == id {
+			e.connectors = append(e.connectors[:i], e.connectors[i+1:]...)
+			e.persistStateLocked()
+			return nil
+		}
+	}
+	return fmt.Errorf("connector not found: %s", id)
 }
 
 func (e *Engine) GetOrchestrationCapabilities() []OrchestrationCapability {

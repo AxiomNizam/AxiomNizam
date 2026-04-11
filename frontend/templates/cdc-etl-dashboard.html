@@ -269,9 +269,29 @@
         </div>
         <div class="modal-form-group" id="modal-etl-connector-group">
             <label for="modal-etl-extract-connector">Extract Connector</label>
-            <select id="modal-etl-extract-connector"></select>
+            <select id="modal-etl-extract-connector" onchange="onExtractConnectorChange()"></select>
+            <div id="modal-extract-db-options" style="display:none;margin-top:8px;">
+                <label for="modal-extract-db-host">DB Host</label>
+                <input type="text" id="modal-extract-db-host" placeholder="localhost:5432">
+                <label for="modal-extract-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="modal-extract-db-name" placeholder="mydb">
+                <label for="modal-extract-db-table" style="margin-top:4px;">Table (optional if SQL query used)</label>
+                <input type="text" id="modal-extract-db-table" placeholder="users">
+                <label for="modal-extract-sql" style="margin-top:4px;">SQL Query (optional)</label>
+                <textarea id="modal-extract-sql" rows="3" placeholder="SELECT * FROM users WHERE active = true" style="font-family:monospace;font-size:13px;width:100%;"></textarea>
+            </div>
             <label for="modal-etl-load-connector" style="margin-top:8px;">Load Connector</label>
-            <select id="modal-etl-load-connector"></select>
+            <select id="modal-etl-load-connector" onchange="onLoadConnectorChange()"></select>
+            <div id="modal-load-db-options" style="display:none;margin-top:8px;">
+                <label for="modal-load-db-host">DB Host</label>
+                <input type="text" id="modal-load-db-host" placeholder="localhost:5432">
+                <label for="modal-load-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="modal-load-db-name" placeholder="warehouse_db">
+                <label for="modal-load-db-table" style="margin-top:4px;">Target Table</label>
+                <input type="text" id="modal-load-db-table" placeholder="dim_users">
+                <label for="modal-load-sql" style="margin-top:4px;">SQL Upsert/Insert Query (optional)</label>
+                <textarea id="modal-load-sql" rows="3" placeholder="INSERT INTO dim_users SELECT * FROM staging_users ON CONFLICT (id) DO UPDATE SET ..." style="font-family:monospace;font-size:13px;width:100%;"></textarea>
+            </div>
             <label style="margin-top:8px;"><input type="checkbox" id="modal-etl-quality-gate"> Add Quality Gate (validate + dedupe)</label>
         </div>
         <div class="modal-form-group" id="modal-source-group" style="display:none">
@@ -339,5 +359,91 @@
     </div>
 </div>
 
-<script src="/static/cdc-etl-dashboard.js?v=20260405-2"></script>
+<!-- Edit Pipeline Modal -->
+<div class="cdc-etl-modal-overlay" id="editPipelineModal">
+    <div class="cdc-etl-modal">
+        <h3 id="edit-pipeline-title">Edit Pipeline</h3>
+        <input type="hidden" id="edit-pipeline-id">
+        <input type="hidden" id="edit-pipeline-type">
+        <div class="modal-form-group">
+            <label for="edit-pipeline-name">Name</label>
+            <input type="text" id="edit-pipeline-name">
+        </div>
+        <div class="modal-form-group">
+            <label for="edit-pipeline-desc">Description</label>
+            <textarea id="edit-pipeline-desc"></textarea>
+        </div>
+        <div class="modal-form-group" id="edit-pipeline-schedule-group">
+            <label for="edit-pipeline-schedule">Schedule (cron)</label>
+            <input type="text" id="edit-pipeline-schedule">
+        </div>
+        <div class="modal-form-group">
+            <label for="edit-pipeline-tags">Tags (comma separated)</label>
+            <input type="text" id="edit-pipeline-tags">
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeEditPipelineModal()">Cancel</button>
+            <button class="btn-submit" onclick="submitEditPipeline()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Connector Modal -->
+<div class="cdc-etl-modal-overlay" id="editConnectorModal">
+    <div class="cdc-etl-modal">
+        <h3>Edit Connector</h3>
+        <input type="hidden" id="edit-connector-id">
+        <div class="connector-form-grid">
+            <div class="modal-form-group">
+                <label for="edit-connector-name">Display Name</label>
+                <input type="text" id="edit-connector-name">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-category">Category</label>
+                <select id="edit-connector-category">
+                    <option value="database">Database</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="lakehouse">Lakehouse</option>
+                    <option value="api">API</option>
+                    <option value="stream">Stream</option>
+                    <option value="storage">Storage</option>
+                    <option value="file">File</option>
+                    <option value="queue">Queue</option>
+                    <option value="search">Search</option>
+                </select>
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-icon">Icon</label>
+                <input type="text" id="edit-connector-icon">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-version">Version</label>
+                <input type="text" id="edit-connector-version">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-supported-as">Supported As (comma separated)</label>
+                <input type="text" id="edit-connector-supported-as">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-auth">Auth Modes (comma separated)</label>
+                <input type="text" id="edit-connector-auth">
+            </div>
+            <div class="modal-form-group connector-form-span-2">
+                <label for="edit-connector-description">Description</label>
+                <textarea id="edit-connector-description"></textarea>
+            </div>
+            <div class="connector-flags connector-form-span-2">
+                <label><input type="checkbox" id="edit-connector-incremental"> Supports Incremental</label>
+                <label><input type="checkbox" id="edit-connector-schema"> Schema Discovery</label>
+                <label><input type="checkbox" id="edit-connector-cdc"> Supports CDC</label>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeEditConnectorModal()">Cancel</button>
+            <button class="btn-submit" onclick="submitEditConnector()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/cdc-etl-dashboard.js?v=20260405-3"></script>
 {{ end }}

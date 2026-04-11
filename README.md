@@ -146,6 +146,7 @@ go run main.go
 
 - POST /auth/login
 - POST /auth/refresh
+- POST /auth/logout
 - GET /auth/validate
 - GET /auth/token-status
 - GET /auth/admin/tokens-status

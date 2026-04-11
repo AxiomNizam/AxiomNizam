@@ -47,6 +47,7 @@ type RefreshTokenRecord struct {
 	ID        string    `json:"id"` // jti
 	UserID    string    `json:"user_id"`
 	ClientID  string    `json:"client_id"`
+	SessionID string    `json:"session_id,omitempty"`
 	Scope     string    `json:"scope"`
 	ExpiresAt time.Time `json:"expires_at"`
 	Revoked   bool      `json:"revoked"`
@@ -97,6 +98,7 @@ type RefreshTokenRepository interface {
 	GetRefreshToken(jti string) (*RefreshTokenRecord, error)
 	RevokeRefreshToken(jti string) error
 	RevokeAllForUser(userID string) error
+	RevokeBySessionID(sessionID string) error
 }
 
 const (

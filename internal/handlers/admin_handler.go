@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
@@ -19,20 +20,42 @@ import (
 var dbIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 var serverKeySanitizer = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
+// DatabaseServerRecord is a GORM model for persisting custom database server connections.
+type DatabaseServerRecord struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	ServerKey       string    `gorm:"uniqueIndex;not null" json:"server_key"`
+	ServerName      string    `gorm:"not null" json:"server_name"`
+	DBType          string    `gorm:"not null" json:"db_type"`
+	Host            string    `gorm:"not null" json:"host"`
+	Port            int       `gorm:"not null" json:"port"`
+	Username        string    `gorm:"not null" json:"username"`
+	Password        string    `gorm:"not null" json:"password"`
+	DefaultDatabase string    `json:"default_database"`
+	SSLMode         string    `json:"ssl_mode"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+func (DatabaseServerRecord) TableName() string {
+	return "database_servers"
+}
+
 // AdminHandler handles admin operations like database and table creation
 type AdminHandler struct {
 	mu              sync.RWMutex
 	connections     map[string]*gorm.DB
 	connectionTypes map[string]string
 	serverMeta      map[string]DatabaseServerInfo
+	primaryDB       *gorm.DB // primary DB for persisting server configs
 }
 
-// NewAdminHandler creates a new admin handler
-func NewAdminHandler(connections map[string]*gorm.DB) *AdminHandler {
+// NewAdminHandler creates a new admin handler. primaryDB is used to persist custom server connections (may be nil).
+func NewAdminHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *AdminHandler {
 	h := &AdminHandler{
 		connections:     connections,
 		connectionTypes: make(map[string]string, len(connections)),
 		serverMeta:      make(map[string]DatabaseServerInfo, len(connections)),
+		primaryDB:       primaryDB,
 	}
 
 	for key, db := range connections {
@@ -48,7 +71,81 @@ func NewAdminHandler(connections map[string]*gorm.DB) *AdminHandler {
 		}
 	}
 
+	// Auto-migrate persistence table and restore saved connections
+	if primaryDB != nil {
+		if err := primaryDB.AutoMigrate(&DatabaseServerRecord{}); err != nil {
+			log.Printf("⚠️ Failed to migrate database_servers table: %v", err)
+		} else {
+			h.restoreSavedServers()
+		}
+	}
+
 	return h
+}
+
+// restoreSavedServers reconnects previously persisted custom database servers.
+func (h *AdminHandler) restoreSavedServers() {
+	var records []DatabaseServerRecord
+	if err := h.primaryDB.Find(&records).Error; err != nil {
+		log.Printf("⚠️ Failed to load saved database servers: %v", err)
+		return
+	}
+
+	for _, rec := range records {
+		var (
+			db  *gorm.DB
+			err error
+		)
+
+		switch rec.DBType {
+		case "mysql", "mariadb", "percona":
+			dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", rec.Username, rec.Password, rec.Host, rec.Port, rec.DefaultDatabase)
+			db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		case "postgres":
+			sslMode := rec.SSLMode
+			if sslMode == "" {
+				sslMode = "disable"
+			}
+			dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", rec.Host, rec.Username, rec.Password, rec.DefaultDatabase, rec.Port, sslMode)
+			db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		default:
+			log.Printf("⚠️ Skipping saved server %s: unsupported db_type %s", rec.ServerKey, rec.DBType)
+			continue
+		}
+
+		connected := true
+		if err != nil {
+			log.Printf("⚠️ Could not reconnect saved server %s (%s): %v", rec.ServerKey, rec.DBType, err)
+			connected = false
+		} else if sqlDB, dbErr := db.DB(); dbErr != nil || sqlDB.Ping() != nil {
+			log.Printf("⚠️ Saved server %s (%s) not reachable, will show as disconnected", rec.ServerKey, rec.DBType)
+			connected = false
+		}
+
+		h.mu.Lock()
+		if connected {
+			h.connections[rec.ServerKey] = db
+		}
+		h.connectionTypes[rec.ServerKey] = rec.DBType
+		h.serverMeta[rec.ServerKey] = DatabaseServerInfo{
+			Key:       rec.ServerKey,
+			Name:      rec.ServerName,
+			DBType:    rec.DBType,
+			Host:      rec.Host,
+			Port:      rec.Port,
+			Source:    "custom",
+			Connected: connected,
+		}
+		h.mu.Unlock()
+
+		if connected {
+			log.Printf("✅ Restored saved DB server key=%s name=%s type=%s host=%s:%d", rec.ServerKey, rec.ServerName, rec.DBType, rec.Host, rec.Port)
+		}
+	}
+
+	if len(records) > 0 {
+		log.Printf("✅ Loaded %d saved database server(s)", len(records))
+	}
 }
 
 // CreateDatabaseRequest represents a request to create a database
@@ -293,6 +390,26 @@ func (h *AdminHandler) ConnectDatabaseServer(c *gin.Context) {
 		Connected: true,
 	}
 	h.mu.Unlock()
+
+	// Persist to database so it survives restarts
+	if h.primaryDB != nil {
+		rec := DatabaseServerRecord{
+			ServerKey:       serverKey,
+			ServerName:      serverName,
+			DBType:          dbType,
+			Host:            host,
+			Port:            port,
+			Username:        req.Username,
+			Password:        req.Password,
+			DefaultDatabase: defaultDB,
+			SSLMode:         strings.TrimSpace(req.SSLMode),
+		}
+		if err := h.primaryDB.Where("server_key = ?", serverKey).Assign(rec).FirstOrCreate(&rec).Error; err != nil {
+			log.Printf("⚠️ Connected server %s but failed to persist: %v", serverKey, err)
+		} else {
+			log.Printf("💾 Persisted custom DB server key=%s", serverKey)
+		}
+	}
 
 	log.Printf("✅ Connected custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
 	c.JSON(http.StatusCreated, gin.H{
@@ -653,4 +770,193 @@ func defaultPortForDBType(dbType string) int {
 	default:
 		return 3306
 	}
+}
+
+// UpdateDatabaseServer updates connection details for a custom database server, reconnects, and persists.
+func (h *AdminHandler) UpdateDatabaseServer(c *gin.Context) {
+	serverKey := c.Param("key")
+	if serverKey == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server key is required"})
+		return
+	}
+
+	h.mu.RLock()
+	existing, exists := h.serverMeta[serverKey]
+	h.mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, models.Response{Status: "error", Error: fmt.Sprintf("server '%s' not found", serverKey)})
+		return
+	}
+	if existing.Source == "default" {
+		c.JSON(http.StatusForbidden, models.Response{Status: "error", Error: "default servers cannot be edited"})
+		return
+	}
+
+	var req ConnectDatabaseServerRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: fmt.Sprintf("Invalid request: %v", err)})
+		return
+	}
+
+	serverName := strings.TrimSpace(req.ServerName)
+	dbType := strings.ToLower(strings.TrimSpace(req.DBType))
+	host := strings.TrimSpace(req.Host)
+	if serverName == "" || host == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server_name and host are required"})
+		return
+	}
+	if dbType != "mysql" && dbType != "mariadb" && dbType != "percona" && dbType != "postgres" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "db_type must be mysql, mariadb, percona, or postgres"})
+		return
+	}
+
+	port := req.Port
+	if port <= 0 {
+		port = defaultPortForDBType(dbType)
+	}
+
+	defaultDB := strings.TrimSpace(req.DefaultDatabase)
+	if defaultDB == "" {
+		if dbType == "postgres" {
+			defaultDB = "postgres"
+		} else {
+			defaultDB = "mysql"
+		}
+	}
+
+	// Close old connection
+	h.mu.RLock()
+	if oldDB, ok := h.connections[serverKey]; ok && oldDB != nil {
+		if sqlDB, err := oldDB.DB(); err == nil {
+			sqlDB.Close()
+		}
+	}
+	h.mu.RUnlock()
+
+	var (
+		db  *gorm.DB
+		err error
+	)
+
+	switch dbType {
+	case "mysql", "mariadb", "percona":
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", req.Username, req.Password, host, port, defaultDB)
+		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	case "postgres":
+		sslMode := strings.TrimSpace(req.SSLMode)
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", host, req.Username, req.Password, defaultDB, port, sslMode)
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	}
+
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to open DB connection: %v", err)})
+		return
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to initialize DB connection: %v", err)})
+		return
+	}
+	if err := sqlDB.Ping(); err != nil {
+		c.JSON(http.StatusBadGateway, models.Response{Status: "error", Error: fmt.Sprintf("failed to connect to database server: %v", err)})
+		return
+	}
+
+	h.mu.Lock()
+	h.connections[serverKey] = db
+	h.connectionTypes[serverKey] = dbType
+	h.serverMeta[serverKey] = DatabaseServerInfo{
+		Key:       serverKey,
+		Name:      serverName,
+		DBType:    dbType,
+		Host:      host,
+		Port:      port,
+		Source:    "custom",
+		Connected: true,
+	}
+	h.mu.Unlock()
+
+	if h.primaryDB != nil {
+		rec := DatabaseServerRecord{
+			ServerKey:       serverKey,
+			ServerName:      serverName,
+			DBType:          dbType,
+			Host:            host,
+			Port:            port,
+			Username:        req.Username,
+			Password:        req.Password,
+			DefaultDatabase: defaultDB,
+			SSLMode:         strings.TrimSpace(req.SSLMode),
+		}
+		if err := h.primaryDB.Where("server_key = ?", serverKey).Assign(rec).FirstOrCreate(&rec).Error; err != nil {
+			log.Printf("⚠️ Updated server %s in memory but failed to persist: %v", serverKey, err)
+		}
+	}
+
+	log.Printf("✅ Updated custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Database server updated",
+		"server": gin.H{
+			"key":       serverKey,
+			"name":      serverName,
+			"db_type":   dbType,
+			"host":      host,
+			"port":      port,
+			"source":    "custom",
+			"connected": true,
+		},
+	})
+}
+
+// DeleteDatabaseServer removes a custom database server connection and deletes the persisted record.
+func (h *AdminHandler) DeleteDatabaseServer(c *gin.Context) {
+	serverKey := c.Param("key")
+	if serverKey == "" {
+		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server key is required"})
+		return
+	}
+
+	h.mu.RLock()
+	existing, exists := h.serverMeta[serverKey]
+	h.mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, models.Response{Status: "error", Error: fmt.Sprintf("server '%s' not found", serverKey)})
+		return
+	}
+	if existing.Source == "default" {
+		c.JSON(http.StatusForbidden, models.Response{Status: "error", Error: "default servers cannot be deleted"})
+		return
+	}
+
+	// Close the connection
+	h.mu.Lock()
+	if db, ok := h.connections[serverKey]; ok && db != nil {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+	}
+	delete(h.connections, serverKey)
+	delete(h.connectionTypes, serverKey)
+	delete(h.serverMeta, serverKey)
+	h.mu.Unlock()
+
+	// Remove persisted record
+	if h.primaryDB != nil {
+		if err := h.primaryDB.Where("server_key = ?", serverKey).Delete(&DatabaseServerRecord{}).Error; err != nil {
+			log.Printf("⚠️ Removed server %s from memory but failed to delete from DB: %v", serverKey, err)
+		}
+	}
+
+	log.Printf("🗑️ Deleted custom DB server key=%s", serverKey)
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": fmt.Sprintf("Database server '%s' deleted", serverKey),
+	})
 }
