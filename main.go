@@ -1728,6 +1728,9 @@ func main() {
 		log.Printf("Runtime stop error: %v", err)
 	}
 
+	// Flush conductor stats to DB before exit
+	conductorMgr.Close()
+
 	cancel()
 	log.Println("✅ AxiomNizam stopped")
 }

@@ -65,6 +65,16 @@ func NewManager(cfg Config) *Manager {
 
 // Close shuts down all backends.
 func (m *Manager) Close() {
+	// flush all producer/consumer stats to DB before shutdown
+	m.mu.RLock()
+	for _, p := range m.producers {
+		m.saveProducer(p)
+	}
+	for _, c := range m.consumers {
+		m.saveConsumer(c)
+	}
+	m.mu.RUnlock()
+
 	if m.rabbitmq != nil {
 		m.rabbitmq.Close()
 	}
@@ -495,7 +505,14 @@ func (m *Manager) Publish(_ context.Context, req *PublishRequest) (*Message, err
 	if len(m.messages) > m.maxMessages {
 		m.evictOldMessages()
 	}
+
+	// persist producer stats every 10 messages to avoid DB thrashing
+	shouldPersist := p.MessagesSent%10 == 0
 	m.mu.Unlock()
+
+	if shouldPersist {
+		m.saveProducer(p)
+	}
 
 	return msg, nil
 }
@@ -611,7 +628,6 @@ func (m *Manager) ListMessages(limit int) []*Message {
 func (m *Manager) buildConsumerHandler(c *Consumer) func(*Message) error {
 	return func(msg *Message) error {
 		m.mu.Lock()
-		defer m.mu.Unlock()
 
 		c.MessagesReceived++
 		c.LastReceivedAt = time.Now()
@@ -639,6 +655,14 @@ func (m *Manager) buildConsumerHandler(c *Consumer) func(*Message) error {
 			}
 		} else {
 			c.MessagesAcked++
+		}
+
+		// persist consumer stats every 10 messages to avoid DB thrashing
+		shouldPersist := c.MessagesReceived%10 == 0
+		m.mu.Unlock()
+
+		if shouldPersist {
+			m.saveConsumer(c)
 		}
 
 		return nil
