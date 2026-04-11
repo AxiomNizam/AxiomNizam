@@ -199,6 +199,31 @@
                     <label for="new-connector-config">Config Keys (comma separated)</label>
                     <input type="text" id="new-connector-config" placeholder="account,warehouse,database,role">
                 </div>
+                <div class="connector-credential-section connector-form-span-2">
+                    <div class="connector-credential-title">Database Credential Keys</div>
+                    <div class="connector-credential-grid">
+                        <div class="modal-form-group"><label for="new-connector-db-host">Host Key</label><input type="text" id="new-connector-db-host" placeholder="host"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-port">Port Key</label><input type="text" id="new-connector-db-port" placeholder="port"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-user">User Key</label><input type="text" id="new-connector-db-user" placeholder="username"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-password">Password Key</label><input type="text" id="new-connector-db-password" placeholder="password"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-name">Database Key</label><input type="text" id="new-connector-db-name" placeholder="database"></div>
+                    </div>
+                    <p class="connector-credential-note">Optional key names merged into Config Keys when provided.</p>
+                </div>
+                <div class="connector-credential-section connector-form-span-2">
+                    <div class="connector-credential-title">Other Connector Credential Keys</div>
+                    <div class="connector-credential-grid">
+                        <div class="modal-form-group"><label for="new-connector-cred-api-key">API Key Key</label><input type="text" id="new-connector-cred-api-key" placeholder="api_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-client-id">Client ID Key</label><input type="text" id="new-connector-cred-client-id" placeholder="client_id"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-client-secret">Client Secret Key</label><input type="text" id="new-connector-cred-client-secret" placeholder="client_secret"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-access-key">Access Key Key</label><input type="text" id="new-connector-cred-access-key" placeholder="access_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-secret-key">Secret Key Key</label><input type="text" id="new-connector-cred-secret-key" placeholder="secret_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-token">Token Key</label><input type="text" id="new-connector-cred-token" placeholder="token"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-sasl-user">SASL User Key</label><input type="text" id="new-connector-cred-sasl-user" placeholder="sasl_username"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-sasl-pass">SASL Password Key</label><input type="text" id="new-connector-cred-sasl-pass" placeholder="sasl_password"></div>
+                    </div>
+                    <p class="connector-credential-note">Auth modes are inferred from these fields (for example: password, apikey, oauth2, access_key, sasl, bearer).</p>
+                </div>
                 <div class="modal-form-group connector-form-span-2">
                     <label for="new-connector-description">Description</label>
                     <textarea id="new-connector-description" placeholder="Connector details, usage and constraints"></textarea>
@@ -428,6 +453,33 @@
                 <label for="edit-connector-auth">Auth Modes (comma separated)</label>
                 <input type="text" id="edit-connector-auth">
             </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-config">Config Keys (comma separated)</label>
+                <input type="text" id="edit-connector-config">
+            </div>
+            <div class="connector-credential-section connector-form-span-2">
+                <div class="connector-credential-title">Database Credential Keys</div>
+                <div class="connector-credential-grid">
+                    <div class="modal-form-group"><label for="edit-connector-db-host">Host Key</label><input type="text" id="edit-connector-db-host" placeholder="host"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-port">Port Key</label><input type="text" id="edit-connector-db-port" placeholder="port"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-user">User Key</label><input type="text" id="edit-connector-db-user" placeholder="username"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-password">Password Key</label><input type="text" id="edit-connector-db-password" placeholder="password"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-name">Database Key</label><input type="text" id="edit-connector-db-name" placeholder="database"></div>
+                </div>
+            </div>
+            <div class="connector-credential-section connector-form-span-2">
+                <div class="connector-credential-title">Other Connector Credential Keys</div>
+                <div class="connector-credential-grid">
+                    <div class="modal-form-group"><label for="edit-connector-cred-api-key">API Key Key</label><input type="text" id="edit-connector-cred-api-key" placeholder="api_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-client-id">Client ID Key</label><input type="text" id="edit-connector-cred-client-id" placeholder="client_id"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-client-secret">Client Secret Key</label><input type="text" id="edit-connector-cred-client-secret" placeholder="client_secret"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-access-key">Access Key Key</label><input type="text" id="edit-connector-cred-access-key" placeholder="access_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-secret-key">Secret Key Key</label><input type="text" id="edit-connector-cred-secret-key" placeholder="secret_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-token">Token Key</label><input type="text" id="edit-connector-cred-token" placeholder="token"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-sasl-user">SASL User Key</label><input type="text" id="edit-connector-cred-sasl-user" placeholder="sasl_username"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-sasl-pass">SASL Password Key</label><input type="text" id="edit-connector-cred-sasl-pass" placeholder="sasl_password"></div>
+                </div>
+            </div>
             <div class="modal-form-group connector-form-span-2">
                 <label for="edit-connector-description">Description</label>
                 <textarea id="edit-connector-description"></textarea>
@@ -445,5 +497,5 @@
     </div>
 </div>
 
-<script src="/static/cdc-etl-dashboard.js?v=20260405-3"></script>
+<script src="/static/cdc-etl-dashboard.js?v=20260405-4"></script>
 {{ end }}

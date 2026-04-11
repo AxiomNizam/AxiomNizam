@@ -393,6 +393,35 @@
     font-size: 13px;
     color: var(--text-primary, #333);
 }
+.connector-credential-section {
+    border: 1px dashed var(--border-color, #d6d6d6);
+    border-radius: 10px;
+    padding: 12px;
+    background: rgba(79, 70, 229, 0.04);
+}
+
+.connector-credential-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary, #333);
+    margin-bottom: 8px;
+}
+
+.connector-credential-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.connector-credential-grid .modal-form-group {
+    margin-bottom: 0;
+}
+
+.connector-credential-note {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+}
 
 .feature-grid {
     display: grid;
@@ -699,6 +728,7 @@
     .connector-toolbar-left { flex-direction: column; }
     .connector-toolbar-left > * { width: 100%; }
     .connector-form-span-2 { grid-column: span 1; }
+    .connector-credential-grid { grid-template-columns: 1fr; }
     .advanced-grid { grid-template-columns: 1fr; }
     .cdc-etl-modal {
         width: 95%;

@@ -85,6 +85,129 @@
             .filter(function(item) { return item.length > 0; });
     }
 
+    function mergeUniqueLists() {
+        const out = [];
+        const seen = {};
+        for (let i = 0; i < arguments.length; i++) {
+            const list = arguments[i] || [];
+            list.forEach(function(item) {
+                const value = (item || '').trim();
+                if (!value) return;
+                const key = value.toLowerCase();
+                if (seen[key]) return;
+                seen[key] = true;
+                out.push(value);
+            });
+        }
+        return out;
+    }
+
+    function getInputValue(id) {
+        const el = document.getElementById(id);
+        if (!el) return '';
+        return (el.value || '').trim();
+    }
+
+    function setInputValue(id, value) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = value || '';
+    }
+
+    function collectConnectorCredentialMetadata(prefix) {
+        const keys = {
+            dbHost: getInputValue(prefix + '-connector-db-host'),
+            dbPort: getInputValue(prefix + '-connector-db-port'),
+            dbUser: getInputValue(prefix + '-connector-db-user'),
+            dbPassword: getInputValue(prefix + '-connector-db-password'),
+            dbName: getInputValue(prefix + '-connector-db-name'),
+            apiKey: getInputValue(prefix + '-connector-cred-api-key'),
+            clientId: getInputValue(prefix + '-connector-cred-client-id'),
+            clientSecret: getInputValue(prefix + '-connector-cred-client-secret'),
+            accessKey: getInputValue(prefix + '-connector-cred-access-key'),
+            secretKey: getInputValue(prefix + '-connector-cred-secret-key'),
+            token: getInputValue(prefix + '-connector-cred-token'),
+            saslUser: getInputValue(prefix + '-connector-cred-sasl-user'),
+            saslPass: getInputValue(prefix + '-connector-cred-sasl-pass')
+        };
+
+        const configKeys = mergeUniqueLists([
+            keys.dbHost,
+            keys.dbPort,
+            keys.dbUser,
+            keys.dbPassword,
+            keys.dbName,
+            keys.apiKey,
+            keys.clientId,
+            keys.clientSecret,
+            keys.accessKey,
+            keys.secretKey,
+            keys.token,
+            keys.saslUser,
+            keys.saslPass
+        ]);
+
+        const authModes = [];
+        if (keys.dbUser || keys.dbPassword) authModes.push('password');
+        if (keys.apiKey) authModes.push('apikey');
+        if (keys.clientId || keys.clientSecret) authModes.push('oauth2');
+        if (keys.accessKey || keys.secretKey) authModes.push('access_key');
+        if (keys.saslUser || keys.saslPass) authModes.push('sasl');
+        if (keys.token) authModes.push('bearer');
+
+        return {
+            configKeys: configKeys,
+            authModes: authModes
+        };
+    }
+
+    function findMatchingConnectorKey(configKeys, aliases) {
+        if (!Array.isArray(configKeys) || !Array.isArray(aliases)) return '';
+        for (let i = 0; i < aliases.length; i++) {
+            const alias = aliases[i].toLowerCase();
+            for (let j = 0; j < configKeys.length; j++) {
+                const key = String(configKeys[j] || '');
+                if (key.toLowerCase() === alias) {
+                    return key;
+                }
+            }
+        }
+        return '';
+    }
+
+    function fillConnectorCredentialInputs(prefix, connector) {
+        const configKeys = (connector && connector.config_keys) || [];
+        setInputValue(prefix + '-connector-db-host', findMatchingConnectorKey(configKeys, ['host', 'hostname', 'server', 'endpoint']));
+        setInputValue(prefix + '-connector-db-port', findMatchingConnectorKey(configKeys, ['port']));
+        setInputValue(prefix + '-connector-db-user', findMatchingConnectorKey(configKeys, ['username', 'user', 'uid']));
+        setInputValue(prefix + '-connector-db-password', findMatchingConnectorKey(configKeys, ['password', 'pass', 'pwd']));
+        setInputValue(prefix + '-connector-db-name', findMatchingConnectorKey(configKeys, ['database', 'db', 'dbname', 'service_name']));
+        setInputValue(prefix + '-connector-cred-api-key', findMatchingConnectorKey(configKeys, ['api_key', 'apikey']));
+        setInputValue(prefix + '-connector-cred-client-id', findMatchingConnectorKey(configKeys, ['client_id']));
+        setInputValue(prefix + '-connector-cred-client-secret', findMatchingConnectorKey(configKeys, ['client_secret']));
+        setInputValue(prefix + '-connector-cred-access-key', findMatchingConnectorKey(configKeys, ['access_key']));
+        setInputValue(prefix + '-connector-cred-secret-key', findMatchingConnectorKey(configKeys, ['secret_key']));
+        setInputValue(prefix + '-connector-cred-token', findMatchingConnectorKey(configKeys, ['token', 'bearer_token', 'jwt']));
+        setInputValue(prefix + '-connector-cred-sasl-user', findMatchingConnectorKey(configKeys, ['sasl_username', 'sasl_user']));
+        setInputValue(prefix + '-connector-cred-sasl-pass', findMatchingConnectorKey(configKeys, ['sasl_password', 'sasl_pass']));
+    }
+
+    function resetConnectorCredentialInputs(prefix) {
+        setInputValue(prefix + '-connector-db-host', '');
+        setInputValue(prefix + '-connector-db-port', '');
+        setInputValue(prefix + '-connector-db-user', '');
+        setInputValue(prefix + '-connector-db-password', '');
+        setInputValue(prefix + '-connector-db-name', '');
+        setInputValue(prefix + '-connector-cred-api-key', '');
+        setInputValue(prefix + '-connector-cred-client-id', '');
+        setInputValue(prefix + '-connector-cred-client-secret', '');
+        setInputValue(prefix + '-connector-cred-access-key', '');
+        setInputValue(prefix + '-connector-cred-secret-key', '');
+        setInputValue(prefix + '-connector-cred-token', '');
+        setInputValue(prefix + '-connector-cred-sasl-user', '');
+        setInputValue(prefix + '-connector-cred-sasl-pass', '');
+    }
+
     function fmtNum(n) {
         if (n == null) return '0';
         if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
@@ -603,6 +726,7 @@
     }
 
     window.submitNewConnector = async function() {
+        const credentialMeta = collectConnectorCredentialMetadata('new');
         const payload = {
             id: (document.getElementById('new-connector-id').value || '').trim().toLowerCase(),
             name: (document.getElementById('new-connector-name').value || '').trim(),
@@ -610,8 +734,8 @@
             icon: (document.getElementById('new-connector-icon').value || '').trim() || '🔌',
             version: (document.getElementById('new-connector-version').value || '').trim() || '1.0',
             supported_as: parseCSVList(document.getElementById('new-connector-supported-as').value || 'extract,load'),
-            auth_modes: parseCSVList(document.getElementById('new-connector-auth').value || ''),
-            config_keys: parseCSVList(document.getElementById('new-connector-config').value || ''),
+            auth_modes: mergeUniqueLists(parseCSVList(document.getElementById('new-connector-auth').value || ''), credentialMeta.authModes),
+            config_keys: mergeUniqueLists(parseCSVList(document.getElementById('new-connector-config').value || ''), credentialMeta.configKeys),
             description: (document.getElementById('new-connector-description').value || '').trim(),
             supports_incremental: document.getElementById('new-connector-incremental').checked,
             schema_discovery: document.getElementById('new-connector-schema').checked,
@@ -638,6 +762,7 @@
         document.getElementById('new-connector-incremental').checked = false;
         document.getElementById('new-connector-schema').checked = false;
         document.getElementById('new-connector-cdc').checked = false;
+        resetConnectorCredentialInputs('new');
 
         await loadConnectors();
     };
@@ -1034,10 +1159,12 @@
         document.getElementById('edit-connector-version').value = c.version || '';
         document.getElementById('edit-connector-supported-as').value = (c.supported_as || []).join(', ');
         document.getElementById('edit-connector-auth').value = (c.auth_modes || []).join(', ');
+        document.getElementById('edit-connector-config').value = (c.config_keys || []).join(', ');
         document.getElementById('edit-connector-description').value = c.description || '';
         document.getElementById('edit-connector-incremental').checked = !!c.supports_incremental;
         document.getElementById('edit-connector-schema').checked = !!c.schema_discovery;
         document.getElementById('edit-connector-cdc').checked = !!c.supports_cdc;
+        fillConnectorCredentialInputs('edit', c);
         document.getElementById('editConnectorModal').classList.add('visible');
     };
 
@@ -1047,13 +1174,15 @@
 
     window.submitEditConnector = async function() {
         const id = document.getElementById('edit-connector-id').value;
+        const credentialMeta = collectConnectorCredentialMetadata('edit');
         const payload = {
             name: (document.getElementById('edit-connector-name').value || '').trim(),
             category: (document.getElementById('edit-connector-category').value || '').trim(),
             icon: (document.getElementById('edit-connector-icon').value || '').trim(),
             version: (document.getElementById('edit-connector-version').value || '').trim(),
             supported_as: parseCSVList(document.getElementById('edit-connector-supported-as').value || ''),
-            auth_modes: parseCSVList(document.getElementById('edit-connector-auth').value || ''),
+            auth_modes: mergeUniqueLists(parseCSVList(document.getElementById('edit-connector-auth').value || ''), credentialMeta.authModes),
+            config_keys: mergeUniqueLists(parseCSVList(document.getElementById('edit-connector-config').value || ''), credentialMeta.configKeys),
             description: (document.getElementById('edit-connector-description').value || '').trim(),
             supports_incremental: document.getElementById('edit-connector-incremental').checked,
             schema_discovery: document.getElementById('edit-connector-schema').checked,
