@@ -226,6 +226,8 @@
         <main class="main-content{{ if .hideChrome }} login-main-content{{ end }}">
             {{ if eq .pageName "login" }}
                 {{ template "login" . }}
+            {{ else if eq .pageName "signup" }}
+                {{ template "signup" . }}
             {{ else if eq .pageName "public-dashboard" }}
                 {{ template "public-dashboard" . }}
             {{ else if eq .pageName "admin" }}
@@ -566,7 +568,10 @@
         window.addEventListener('DOMContentLoaded', function() {
             initTheme();
             const token = localStorage.getItem('authToken');
-            if (!token && window.location.pathname !== '/login') {
+            const currentPath = window.location.pathname;
+            // Public pages: /, /signup, /login — don't redirect to login
+            const isPublicPage = currentPath === '/' || currentPath === '/signup' || currentPath === '/login';
+            if (!token && !isPublicPage) {
                 window.location.href = '/login';
             }
 

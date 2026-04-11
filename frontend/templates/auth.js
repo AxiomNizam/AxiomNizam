@@ -163,8 +163,7 @@ function canAccessPath(path, role) {
 }
 
 function isProtectedPath(path) {
-    return path === '/' ||
-        path === '/admin' ||
+    return path === '/admin' ||
         path === '/system-manager' ||
         path === '/manager' ||
         path === '/governance' ||

@@ -1,0 +1,120 @@
+{{ define "signup" }}
+<section class="signup-page-shell">
+    <div class="signup-card">
+        <div class="login-header-enhanced">
+            <div class="login-brand-icon">
+                <img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam Logo" width="34" height="34" style="border-radius: 50%; box-shadow: 0 0 10px rgba(0, 140, 99, 0.4);">
+            </div>
+            <h2>Create your AxiomNizam account</h2>
+        </div>
+
+        <div id="signupFormContainer">
+            <p class="login-page-subtitle">Sign up to access API Builder, Analytics, GIS, CDC/ETL, and the full platform.</p>
+
+            <form id="signupForm" onsubmit="handleSignup(event)">
+                <div class="signup-form-row">
+                    <div class="form-group">
+                        <label for="signupFirstName">First Name</label>
+                        <input type="text" id="signupFirstName" name="first_name" placeholder="First name" required autocomplete="given-name">
+                    </div>
+                    <div class="form-group">
+                        <label for="signupLastName">Last Name</label>
+                        <input type="text" id="signupLastName" name="last_name" placeholder="Last name" required autocomplete="family-name">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" name="email" placeholder="you@example.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="signupUsername">Username</label>
+                    <input type="text" id="signupUsername" name="username" placeholder="Choose a username" required autocomplete="username" minlength="3" pattern="[a-zA-Z0-9._-]+">
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" name="password" placeholder="Minimum 8 characters" required autocomplete="new-password" minlength="8">
+                </div>
+                <div class="form-group">
+                    <label for="signupPasswordConfirm">Confirm Password</label>
+                    <input type="password" id="signupPasswordConfirm" name="password_confirm" placeholder="Re-enter password" required autocomplete="new-password" minlength="8">
+                </div>
+                <button type="submit" class="signup-btn" id="signupBtn">Create Account</button>
+            </form>
+
+            <div class="signup-footer">
+                Already have an account? <a href="/login">Sign in</a>
+            </div>
+        </div>
+
+        <div id="signupSuccess" class="signup-success" style="display:none;">
+            <div class="signup-success-icon">✅</div>
+            <h3>Account Created!</h3>
+            <p>Your account has been created. You can now sign in to access the platform.</p>
+            <a href="/login" class="hero-btn hero-btn-primary" style="display:inline-flex;">Go to Login</a>
+        </div>
+    </div>
+</section>
+
+<script>
+const SIGNUP_BACKEND = (() => {
+    if (typeof window.resolveBackendURL === 'function') return window.resolveBackendURL();
+    const v = String(window.BACKEND_URL || '').trim();
+    if (v) return v.endsWith('/') ? v.slice(0, -1) : v;
+    return 'http://localhost:8000';
+})();
+
+function handleSignup(event) {
+    event.preventDefault();
+
+    const firstName = document.getElementById('signupFirstName').value.trim();
+    const lastName = document.getElementById('signupLastName').value.trim();
+    const email = document.getElementById('signupEmail').value.trim();
+    const username = document.getElementById('signupUsername').value.trim();
+    const password = document.getElementById('signupPassword').value;
+    const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
+
+    if (password !== passwordConfirm) {
+        alert('Passwords do not match.');
+        return;
+    }
+
+    if (password.length < 8) {
+        alert('Password must be at least 8 characters.');
+        return;
+    }
+
+    const btn = document.getElementById('signupBtn');
+    btn.disabled = true;
+    btn.textContent = 'Creating account...';
+
+    fetch(SIGNUP_BACKEND + '/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            first_name: firstName,
+            last_name: lastName,
+            email: email,
+            username: username,
+            password: password
+        })
+    })
+    .then(function(response) {
+        return response.text().then(function(raw) {
+            var data = {};
+            try { data = JSON.parse(raw); } catch(e) { data = { error: raw }; }
+            if (!response.ok) throw new Error(data.error || data.message || 'Signup failed');
+            return data;
+        });
+    })
+    .then(function(data) {
+        document.getElementById('signupFormContainer').style.display = 'none';
+        document.getElementById('signupSuccess').style.display = 'block';
+    })
+    .catch(function(error) {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+        alert('Signup failed: ' + error.message);
+    });
+}
+</script>
+{{ end }}

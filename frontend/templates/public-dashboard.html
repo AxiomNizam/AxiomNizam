@@ -1,71 +1,490 @@
 {{ define "public-dashboard" }}
-<div class="dashboard-container">
-    <!-- Header Section -->
-    <div class="dashboard-header">
-        <div class="header-content">
-            <h1><img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" style="height: 1.2em; vertical-align: bottom; margin-right: 8px;"> AxiomNizam Dashboard</h1>
-            <p class="subtitle">Real-time Backend Status & API Monitor</p>
-        </div>
-    </div>
-
-    <!-- Control Panel -->
-    <div class="control-panel">
-        <div class="control-left">
-            <button onclick="refreshData()" class="btn btn-primary">🔄 Refresh Now</button>
-            <label class="auto-refresh-label">
-                <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()" checked>
-                <span>Auto-refresh every 5 seconds</span>
-            </label>
-        </div>
-        <div class="control-right">
-            <div class="last-update">Last updated: <span id="lastUpdate">-</span></div>
-        </div>
-    </div>
-
-    <!-- Messages Area -->
-    <div id="messages" class="messages-area"></div>
-
-    <!-- Status Cards Grid -->
-    <div class="status-grid">
-        <!-- Health Status Card -->
-        <div class="status-card">
-            <div class="card-header">
-                <h2>💚 Health Status</h2>
+<div class="landing-page">
+    <!-- Hero Section -->
+    <section class="landing-hero">
+        <div class="hero-bg-pattern"></div>
+        <div class="hero-content">
+            <div class="hero-badge">Open Source Data Platform</div>
+            <h1 class="hero-title">
+                <img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" class="hero-logo">
+                AxiomNizam
+            </h1>
+            <p class="hero-subtitle">Enterprise-grade Kubernetes-style Data Control Plane with 50+ integrated modules for API management, real-time analytics, CDC/ETL pipelines, network intelligence, GIS mapping, and full IAM governance.</p>
+            <div class="hero-actions">
+                {{ if .isAuth }}
+                <a href="/admin" class="hero-btn hero-btn-primary">Go to Dashboard</a>
+                {{ else }}
+                <a href="/signup" class="hero-btn hero-btn-primary">Get Started Free</a>
+                <a href="/login" class="hero-btn hero-btn-secondary">Sign In</a>
+                {{ end }}
             </div>
-            <div id="healthContent" class="card-content loading">Loading...</div>
-        </div>
-
-        <!-- Database Connections Card -->
-        <div class="status-card">
-            <div class="card-header">
-                <h2>🗄️ Database Connections</h2>
-            </div>
-            <div id="statusContent" class="card-content loading">Loading...</div>
-        </div>
-
-        <!-- Backend Info Card -->
-        <div class="status-card">
-            <div class="card-header">
-                <h2>📡 Backend URL</h2>
-            </div>
-            <div class="card-content">
-                <div class="backend-url-display" id="backendInfo">-</div>
+            <div class="hero-stats" id="heroStats">
+                <div class="hero-stat">
+                    <span class="hero-stat-value" id="statHealth">
+                        <span class="stat-dot stat-dot-loading"></span>
+                    </span>
+                    <span class="hero-stat-label">Platform Status</span>
+                </div>
+                <div class="hero-stat">
+                    <span class="hero-stat-value">50+</span>
+                    <span class="hero-stat-label">Modules</span>
+                </div>
+                <div class="hero-stat">
+                    <span class="hero-stat-value">200+</span>
+                    <span class="hero-stat-label">API Endpoints</span>
+                </div>
+                <div class="hero-stat">
+                    <span class="hero-stat-value">7+</span>
+                    <span class="hero-stat-label">Databases</span>
+                </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- APIs Section -->
-    <div class="apis-section">
-        <div class="section-header">
-            <h2>📦 Available Runtime APIs</h2>
-            <p>Live API Builder catalog filtered by RBAC and active status</p>
+    <!-- Feature Categories -->
+    <section class="landing-section">
+        <div class="section-inner">
+            <h2 class="section-title">Platform Capabilities</h2>
+            <p class="section-desc">Everything you need to build, manage, and scale your data infrastructure — from API creation to compliance governance.</p>
+
+            <!-- Category: Data Platform & APIs -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">🗄️</span>
+                    <h3 class="category-title">Data Platform & APIs</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔧</div>
+                        <h4>API Builder</h4>
+                        <p>Create REST APIs visually — connect to MySQL, PostgreSQL, MariaDB, MongoDB, Oracle, Firebase with auto-generated CRUD endpoints.</p>
+                        <div class="feature-tags"><span class="tag">REST</span><span class="tag">CRUD</span><span class="tag">Multi-DB</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">◈</div>
+                        <h4>GraphQL Studio</h4>
+                        <p>Build and query GraphQL APIs with interactive playground, schema introspection, and automatic type generation from databases.</p>
+                        <div class="feature-tags"><span class="tag">GraphQL</span><span class="tag">Playground</span><span class="tag">Schema</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">⚡</div>
+                        <h4>Dynamic Queries</h4>
+                        <p>Execute SQL queries across connected databases with schema introspection, batch operations, query logging, and performance analysis.</p>
+                        <div class="feature-tags"><span class="tag">SQL</span><span class="tag">Batch</span><span class="tag">Analytics</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🤖</div>
+                        <h4>SQL AI Assistant</h4>
+                        <p>Natural language to SQL with AI-powered query suggestions, schema-aware completion, and optimization recommendations.</p>
+                        <div class="feature-tags"><span class="tag">AI</span><span class="tag">NLP</span><span class="tag">SQL</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📄</div>
+                        <h4>CSV Upload & Transform</h4>
+                        <p>Upload CSV files and auto-generate dashboards, GIS datasets, and API endpoints with data transformation rules engine.</p>
+                        <div class="feature-tags"><span class="tag">CSV</span><span class="tag">ETL</span><span class="tag">Auto-Gen</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔄</div>
+                        <h4>Data Transformation</h4>
+                        <p>Apply field renaming, type conversion, flattening, and custom rules with preview, batch processing, and import/export support.</p>
+                        <div class="feature-tags"><span class="tag">Transform</span><span class="tag">Rules</span><span class="tag">Preview</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: Real-time Data Processing -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">🔄</span>
+                    <h3 class="category-title">Real-time Data Processing</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/cdc-etl')">
+                        <div class="feature-card-icon">📡</div>
+                        <h4>CDC Pipelines</h4>
+                        <p>Change Data Capture with source/sink connectors, real-time table-level capture, streaming ingestion, and data quality validation.</p>
+                        <div class="feature-tags"><span class="tag">CDC</span><span class="tag">Real-time</span><span class="tag">Streaming</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/cdc-etl')">
+                        <div class="feature-card-icon">🔀</div>
+                        <h4>ETL Pipelines</h4>
+                        <p>Extract-Transform-Load with 20+ connector catalog, orchestration scheduling, blueprints, and observability metrics.</p>
+                        <div class="feature-tags"><span class="tag">ETL</span><span class="tag">20+ Connectors</span><span class="tag">Scheduling</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/conductor')">
+                        <div class="feature-card-icon">🎵</div>
+                        <h4>Message Conductor</h4>
+                        <p>RabbitMQ and Kafka message broker management with producers, consumers, topic management, and real-time monitoring.</p>
+                        <div class="feature-tags"><span class="tag">Kafka</span><span class="tag">RabbitMQ</span><span class="tag">Pub/Sub</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📊</div>
+                        <h4>Event Bus</h4>
+                        <p>Publish/subscribe event streaming with topic management, DLQ support, event replay, filtering, and acknowledgment workflows.</p>
+                        <div class="feature-tags"><span class="tag">Events</span><span class="tag">DLQ</span><span class="tag">Replay</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🌊</div>
+                        <h4>WebSocket Streaming</h4>
+                        <p>Real-time data streaming via WebSockets and Server-Sent Events with subscription management and in-flight handling.</p>
+                        <div class="feature-tags"><span class="tag">WebSocket</span><span class="tag">SSE</span><span class="tag">Real-time</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🪝</div>
+                        <h4>Webhooks</h4>
+                        <p>Event-driven integrations with delivery logging, exponential backoff retry, test capability, and status tracking.</p>
+                        <div class="feature-tags"><span class="tag">Webhooks</span><span class="tag">Retry</span><span class="tag">Events</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: Analytics & Visualization -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">📈</span>
+                    <h3 class="category-title">Analytics & Visualization</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/analytics')">
+                        <div class="feature-card-icon">📊</div>
+                        <h4>Analytics Dashboard</h4>
+                        <p>Custom dashboards with charts, graphs, heatmaps, KPI widgets — reorder layouts, CSV export, and real-time data refresh.</p>
+                        <div class="feature-tags"><span class="tag">Charts</span><span class="tag">KPI</span><span class="tag">Export</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/gis')">
+                        <div class="feature-card-icon">🌍</div>
+                        <h4>GIS Dashboard</h4>
+                        <p>Multi-layer interactive maps with regions, markers, datasets — agriculture, industries, medical, satellite, aircraft, and shipping dashboards.</p>
+                        <div class="feature-tags"><span class="tag">Maps</span><span class="tag">Layers</span><span class="tag">Geo</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/gis')">
+                        <div class="feature-card-icon">🚂</div>
+                        <h4>Railways Intelligence</h4>
+                        <p>Indian Railways & Bangladesh Railways databases with train search, station lookup, route optimization, and trip management.</p>
+                        <div class="feature-tags"><span class="tag">Indian Rail</span><span class="tag">BD Rail</span><span class="tag">Routes</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/netintel')">
+                        <div class="feature-card-icon">🔍</div>
+                        <h4>Network Intelligence</h4>
+                        <p>Log parsing, network topology mapping, heatmap generation, anomaly detection with 5 mode detectors, MAC tracking, and trend forecasting.</p>
+                        <div class="feature-tags"><span class="tag">NetIntel</span><span class="tag">Topology</span><span class="tag">Anomaly</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📈</div>
+                        <h4>API Metrics</h4>
+                        <p>Per-endpoint call counts, response time tracking, error rate monitoring, throughput analysis, and custom metric dashboards.</p>
+                        <div class="feature-tags"><span class="tag">Metrics</span><span class="tag">Latency</span><span class="tag">RPS</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔬</div>
+                        <h4>Query Performance</h4>
+                        <p>Query plan analysis, slow query detection, index recommendations, percentile-based metrics, and performance trend analysis.</p>
+                        <div class="feature-tags"><span class="tag">QPA</span><span class="tag">Slow Queries</span><span class="tag">Indexes</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: Security & Governance -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">🛡️</span>
+                    <h3 class="category-title">Security & Governance</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/iam-admin')">
+                        <div class="feature-card-icon">🔐</div>
+                        <h4>IAM Console</h4>
+                        <p>Full Keycloak integration with multi-realm support, user/client/role management, group hierarchies, and bootstrap admin accounts.</p>
+                        <div class="feature-tags"><span class="tag">Keycloak</span><span class="tag">OIDC</span><span class="tag">Multi-Realm</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">👥</div>
+                        <h4>RBAC System</h4>
+                        <p>Dynamic role creation, fine-grained permissions, role bindings, access request workflow with approval/rejection pipeline.</p>
+                        <div class="feature-tags"><span class="tag">Roles</span><span class="tag">Permissions</span><span class="tag">Approvals</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/governance')">
+                        <div class="feature-card-icon">📋</div>
+                        <h4>Governance Console</h4>
+                        <p>Policy engine with access, admission, compliance, data, lifecycle, and quota policies — automated evaluation and enforcement.</p>
+                        <div class="feature-tags"><span class="tag">Policies</span><span class="tag">Compliance</span><span class="tag">Lifecycle</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📝</div>
+                        <h4>Audit & Compliance</h4>
+                        <p>Complete audit trail (100K+ entries) with SOC2, HIPAA, PCI-DSS compliance scoring, violation tracking, and risk assessment.</p>
+                        <div class="feature-tags"><span class="tag">SOC2</span><span class="tag">HIPAA</span><span class="tag">PCI-DSS</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔒</div>
+                        <h4>Encryption & Certificates</h4>
+                        <p>AES encryption/decryption, key management, secure hashing, certificate lifecycle management with auto-renewal.</p>
+                        <div class="feature-tags"><span class="tag">AES</span><span class="tag">TLS</span><span class="tag">Certs</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🛡️</div>
+                        <h4>Rate Limiting</h4>
+                        <p>Per-user and per-endpoint rate limiting, daily quota tracking, and adaptive throttling for API protection.</p>
+                        <div class="feature-tags"><span class="tag">Rate Limit</span><span class="tag">Quota</span><span class="tag">Throttle</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: Infrastructure & Operations -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">⚙️</span>
+                    <h3 class="category-title">Infrastructure & Operations</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/operations-center')">
+                        <div class="feature-card-icon">🛠️</div>
+                        <h4>Operations Center</h4>
+                        <p>Incident management, operational monitoring, alerting, and job scheduling with distributed state coordination.</p>
+                        <div class="feature-tags"><span class="tag">Incidents</span><span class="tag">Alerts</span><span class="tag">Jobs</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔄</div>
+                        <h4>Workflow Engine</h4>
+                        <p>DAG-based workflow orchestration with step execution, error handling, versioning, execution history, and trigger scheduling.</p>
+                        <div class="feature-tags"><span class="tag">DAG</span><span class="tag">Steps</span><span class="tag">Triggers</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">⏰</div>
+                        <h4>Job Scheduler</h4>
+                        <p>Cron-style job scheduling with execution history, result logging, cancellation, and resource limit management.</p>
+                        <div class="feature-tags"><span class="tag">Cron</span><span class="tag">Jobs</span><span class="tag">Schedule</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📦</div>
+                        <h4>Bulk Operations</h4>
+                        <p>Batch CREATE/UPDATE/DELETE with progress tracking, failure retry, result aggregation, and async operation handling.</p>
+                        <div class="feature-tags"><span class="tag">Batch</span><span class="tag">Async</span><span class="tag">Retry</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🏢</div>
+                        <h4>Multi-Tenancy</h4>
+                        <p>Tenant CRUD, member management, quota management, tenant-specific resource isolation, and billing integration.</p>
+                        <div class="feature-tags"><span class="tag">Tenants</span><span class="tag">Quota</span><span class="tag">Isolation</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🌐</div>
+                        <h4>Distributed Cluster</h4>
+                        <p>Multi-instance coordination, leader election, state synchronization, health monitoring, and etcd-backed state management.</p>
+                        <div class="feature-tags"><span class="tag">Cluster</span><span class="tag">etcd</span><span class="tag">Leader</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: Tracing & Lineage -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">🔬</span>
+                    <h3 class="category-title">Tracing, Lineage & Versioning</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/lineage-version')">
+                        <div class="feature-card-icon">🗺️</div>
+                        <h4>Data Lineage</h4>
+                        <p>Column-level tracking, upstream/downstream flow analysis, data provenance, impact analysis, and graph-based visualization.</p>
+                        <div class="feature-tags"><span class="tag">Lineage</span><span class="tag">Impact</span><span class="tag">Graph</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/lineage-version')">
+                        <div class="feature-card-icon">📌</div>
+                        <h4>Version Control</h4>
+                        <p>Resource snapshots with rollback, version history, diff calculation, semantic versioning, and change metadata tracking.</p>
+                        <div class="feature-tags"><span class="tag">Snapshots</span><span class="tag">Rollback</span><span class="tag">Diff</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔎</div>
+                        <h4>Distributed Tracing</h4>
+                        <p>Trace ingestion, span correlation, service map visualization, operation metrics, and error analysis by service.</p>
+                        <div class="feature-tags"><span class="tag">Traces</span><span class="tag">Spans</span><span class="tag">Service Map</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📖</div>
+                        <h4>API Documentation</h4>
+                        <p>Auto-generated OpenAPI 3.0 specs with Swagger UI, ReDoc, Markdown export, and endpoint catalog from Go structs.</p>
+                        <div class="feature-tags"><span class="tag">OpenAPI</span><span class="tag">Swagger</span><span class="tag">ReDoc</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📤</div>
+                        <h4>Data Export</h4>
+                        <p>Export templates with CSV, JSON, Excel support — streaming export, progress tracking, and large dataset handling.</p>
+                        <div class="feature-tags"><span class="tag">CSV</span><span class="tag">JSON</span><span class="tag">Excel</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">✅</div>
+                        <h4>Data Quality</h4>
+                        <p>Validation rules, quality metrics, anomaly detection, data profiling, and quality scorecards for data governance.</p>
+                        <div class="feature-tags"><span class="tag">Quality</span><span class="tag">Profiling</span><span class="tag">Scorecards</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: Advanced & Emerging -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">🚀</span>
+                    <h3 class="category-title">Advanced & Emerging</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🎨</div>
+                        <h4>Vector Search</h4>
+                        <p>Semantic search with vector embedding storage, similarity scoring, KNN search, and dimension reduction for AI-powered queries.</p>
+                        <div class="feature-tags"><span class="tag">Vectors</span><span class="tag">KNN</span><span class="tag">Semantic</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🧠</div>
+                        <h4>Kubernetes Extensions</h4>
+                        <p>Admission webhooks, CRD registry, scheduler with resource scoring, and policy evaluation framework for K8s-native operations.</p>
+                        <div class="feature-tags"><span class="tag">K8s</span><span class="tag">CRD</span><span class="tag">Webhooks</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔍</div>
+                        <h4>API Scanner</h4>
+                        <p>GraphQL endpoint detection, OpenAPI/Swagger scanning, API capability inference, security checklist, and schema extraction.</p>
+                        <div class="feature-tags"><span class="tag">Scanner</span><span class="tag">Security</span><span class="tag">Discovery</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔗</div>
+                        <h4>Reconciliation Engine</h4>
+                        <p>Kubernetes-style controllers with reconciliation loops, status sync, health monitoring, error recovery, and watch/notify patterns.</p>
+                        <div class="feature-tags"><span class="tag">Reconciler</span><span class="tag">Controllers</span><span class="tag">K8s-style</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📦</div>
+                        <h4>Resource Store</h4>
+                        <p>Kubernetes-style namespaced resources with watchers, event notifications, CRD extensions, and lifecycle management.</p>
+                        <div class="feature-tags"><span class="tag">Resources</span><span class="tag">Namespaces</span><span class="tag">Watch</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🕵️</div>
+                        <h4>Review Flow</h4>
+                        <p>Code and configuration review pipeline with approval workflows, comment tracking, and status management.</p>
+                        <div class="feature-tags"><span class="tag">Reviews</span><span class="tag">Approvals</span><span class="tag">Comments</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category: CLI (axiomnizamctl) -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <span class="category-icon">💻</span>
+                    <h3 class="category-title">CLI — axiomnizamctl</h3>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature-card cli-card">
+                        <div class="feature-card-icon">⌨️</div>
+                        <h4>kubectl-style CLI</h4>
+                        <p>Full resource management with <code>api create/list/get/apply/delete/describe/watch/diff</code> — YAML-first GitOps workflow.</p>
+                        <div class="feature-tags"><span class="tag">kubectl</span><span class="tag">YAML</span><span class="tag">GitOps</span></div>
+                    </div>
+                    <div class="feature-card cli-card">
+                        <div class="feature-card-icon">🔐</div>
+                        <h4>Auth & Config</h4>
+                        <p>Login with credentials/API keys, kubeconfig-style context switching, multi-cluster management, and shell completion.</p>
+                        <div class="feature-tags"><span class="tag">Login</span><span class="tag">Contexts</span><span class="tag">Multi-cluster</span></div>
+                    </div>
+                    <div class="feature-card cli-card">
+                        <div class="feature-card-icon">📋</div>
+                        <h4>Policy & Workflow CLI</h4>
+                        <p>Full policy lifecycle (create/apply/delete), workflow execution with <code>workflow run</code>, logs, and YAML-based definitions.</p>
+                        <div class="feature-tags"><span class="tag">Policies</span><span class="tag">Workflows</span><span class="tag">YAML</span></div>
+                    </div>
+                    <div class="feature-card cli-card">
+                        <div class="feature-card-icon">🔎</div>
+                        <h4>Discovery & Scanning</h4>
+                        <p>API discovery with well-known path probing, subdomain resolution, exposed-file checks, header fingerprinting, and Trivy scanning.</p>
+                        <div class="feature-tags"><span class="tag">Discover</span><span class="tag">Trivy</span><span class="tag">Scanning</span></div>
+                    </div>
+                    <div class="feature-card cli-card">
+                        <div class="feature-card-icon">📡</div>
+                        <h4>DataSource & Jobs</h4>
+                        <p>DataSource connection testing, job management with <code>job list/logs/describe</code>, and event monitoring with <code>events</code>.</p>
+                        <div class="feature-tags"><span class="tag">DataSources</span><span class="tag">Jobs</span><span class="tag">Events</span></div>
+                    </div>
+                    <div class="feature-card cli-card">
+                        <div class="feature-card-icon">🔄</div>
+                        <h4>Diff & Reconcile</h4>
+                        <p>Compare local YAML with remote state using <code>api diff</code>, reconciliation status tracking, and apply-with-diff workflows.</p>
+                        <div class="feature-tags"><span class="tag">Diff</span><span class="tag">Reconcile</span><span class="tag">Apply</span></div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div id="apisContent" class="apis-grid loading">Loading...</div>
-    </div>
+    </section>
+
+    <!-- Database Support -->
+    <section class="landing-section landing-section-alt">
+        <div class="section-inner">
+            <h2 class="section-title">Multi-Database Support</h2>
+            <p class="section-desc">Connect to any database and build APIs, dashboards, and pipelines instantly.</p>
+            <div class="db-grid">
+                <div class="db-card"><div class="db-icon">🐘</div><span>PostgreSQL</span></div>
+                <div class="db-card"><div class="db-icon">🐬</div><span>MySQL</span></div>
+                <div class="db-card"><div class="db-icon">🦭</div><span>MariaDB</span></div>
+                <div class="db-card"><div class="db-icon">🍃</div><span>MongoDB</span></div>
+                <div class="db-card"><div class="db-icon">🔴</div><span>Oracle</span></div>
+                <div class="db-card"><div class="db-icon">🔥</div><span>Firebase</span></div>
+                <div class="db-card"><div class="db-icon">⚡</div><span>Percona</span></div>
+                <div class="db-card"><div class="db-icon">🔎</div><span>Elasticsearch</span></div>
+                <div class="db-card"><div class="db-icon">📦</div><span>etcd</span></div>
+                <div class="db-card"><div class="db-icon">💎</div><span>Valkey (Redis)</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Summary -->
+    <section class="landing-section">
+        <div class="section-inner">
+            <h2 class="section-title">Architecture at a Glance</h2>
+            <div class="arch-grid">
+                <div class="arch-card">
+                    <div class="arch-icon">🏗️</div>
+                    <h4>Kubernetes-style API</h4>
+                    <p>Namespaced resources, watchers, reconcilers, CRD extensions — built on Go with Gin framework.</p>
+                </div>
+                <div class="arch-card">
+                    <div class="arch-icon">🔑</div>
+                    <h4>Keycloak IAM</h4>
+                    <p>JWT authentication, JWKS validation, multi-realm support, OAuth2/OIDC/SAML/LDAP identity providers.</p>
+                </div>
+                <div class="arch-card">
+                    <div class="arch-icon">📊</div>
+                    <h4>50+ Modules</h4>
+                    <p>From API building to compliance — everything is modular, independently deployable, and extensible.</p>
+                </div>
+                <div class="arch-card">
+                    <div class="arch-icon">🐳</div>
+                    <h4>Docker & K8s Ready</h4>
+                    <p>Single binary, Docker Compose, or Kubernetes — fully containerized with health probes and scaling.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="landing-cta">
+        <div class="cta-content">
+            <h2>Ready to explore?</h2>
+            <p>Sign up to access all features — API Builder, Analytics, GIS, CDC/ETL, Network Intelligence, Governance, and more.</p>
+            <div class="hero-actions">
+                {{ if .isAuth }}
+                <a href="/admin" class="hero-btn hero-btn-primary">Go to Dashboard</a>
+                {{ else }}
+                <a href="/signup" class="hero-btn hero-btn-primary">Create Free Account</a>
+                <a href="/login" class="hero-btn hero-btn-secondary">Sign In</a>
+                {{ end }}
+            </div>
+        </div>
+    </section>
 
     <!-- Hidden element to pass backend URL to JS -->
     <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
 </div>
 
-<script src="/static/dashboard.js?v=20260405-2"></script>
+<script src="/static/dashboard.js?v=20260411-landing"></script>
 {{ end }}
