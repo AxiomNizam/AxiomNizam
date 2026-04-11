@@ -287,68 +287,99 @@
 /* Connector Grid */
 .connector-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
     margin-bottom: 24px;
 }
 
 .connector-card {
     background: var(--card-bg, #fff);
     border: 1px solid var(--border-color, #e0e0e0);
-    border-radius: 8px;
-    padding: 16px;
-    text-align: center;
-    transition: box-shadow 0.2s;
+    border-radius: 10px;
+    padding: 14px;
+    text-align: left;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 200px;
 }
 
 .connector-card:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    border-color: rgba(79, 70, 229, 0.24);
 }
 
 .connector-card .connector-icon {
-    font-size: 28px;
-    margin-bottom: 8px;
+    font-size: 24px;
+    margin-bottom: 10px;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(79, 70, 229, 0.09);
 }
 
 .connector-card .connector-name {
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-primary, #333);
+    line-height: 1.25;
 }
 
 .connector-card .connector-type {
     font-size: 11px;
     color: var(--text-secondary, #888);
     text-transform: uppercase;
+    letter-spacing: 0.45px;
+    margin-top: 2px;
 }
 
 .connector-card .connector-meta {
     font-size: 11px;
     color: var(--text-secondary, #777);
-    margin-top: 4px;
+    margin-top: 6px;
 }
 
 .connector-card .connector-desc {
     font-size: 12px;
     color: var(--text-secondary, #777);
     margin-top: 8px;
-    min-height: 32px;
+    line-height: 1.38;
+    min-height: 40px;
 }
 
 .connector-card .connector-flag-list {
-    margin-top: 8px;
+    margin-top: 10px;
     display: flex;
-    justify-content: center;
-    gap: 4px;
+    justify-content: flex-start;
+    gap: 5px;
     flex-wrap: wrap;
+}
+
+.connector-card .connector-actions {
+    margin-top: auto !important;
+    width: 100%;
+    align-items: center;
+}
+
+.connector-card .connector-actions .action-btn {
+    flex: 1 1 auto;
+    white-space: nowrap;
 }
 
 .connector-toolbar {
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 16px;
+    margin-bottom: 18px;
     align-items: center;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 10px;
+    padding: 12px;
 }
 
 .connector-toolbar-left {
@@ -361,10 +392,17 @@
 .connector-toolbar select {
     border: 1px solid var(--border-color, #d6d6d6);
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 9px 11px;
     font-size: 13px;
     background: var(--input-bg, #fff);
     color: var(--text-primary, #222);
+}
+
+.connector-toolbar input:focus,
+.connector-toolbar select:focus {
+    outline: none;
+    border-color: rgba(79, 70, 229, 0.45);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
 .connector-toolbar input {
@@ -373,13 +411,22 @@
 
 .connector-form-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    padding: 16px 20px 6px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    padding: 18px 20px 8px;
+    align-items: start;
 }
 
 .connector-form-span-2 {
-    grid-column: span 2;
+    grid-column: 1 / -1;
+}
+
+.connector-form-grid .modal-form-group {
+    margin-bottom: 0;
+}
+
+.connector-form-grid .modal-form-group textarea {
+    min-height: 86px;
 }
 
 .connector-actions {
@@ -389,27 +436,40 @@
 .connector-flags {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
     font-size: 13px;
     color: var(--text-primary, #333);
 }
+
+.connector-flags label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: rgba(79, 70, 229, 0.05);
+}
+
 .connector-credential-section {
-    border: 1px dashed var(--border-color, #d6d6d6);
+    border: 1px solid var(--border-color, #d9deea);
     border-radius: 10px;
-    padding: 12px;
-    background: rgba(79, 70, 229, 0.04);
+    padding: 13px;
+    background: linear-gradient(180deg, rgba(79, 70, 229, 0.05), rgba(79, 70, 229, 0.02));
 }
 
 .connector-credential-title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary, #333);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
 }
 
 .connector-credential-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 10px;
 }
 
@@ -421,6 +481,10 @@
     margin: 8px 0 0;
     font-size: 12px;
     color: var(--text-secondary, #6b7280);
+}
+
+#panel-connectors .pipeline-table-wrap {
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
 .feature-grid {
@@ -700,6 +764,7 @@
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .chart-grid { grid-template-columns: 1fr; }
     .connector-grid { grid-template-columns: repeat(2, 1fr); }
+    .connector-form-grid { grid-template-columns: 1fr; }
     .cdc-etl-tabs {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -727,7 +792,7 @@
     .connector-toolbar { flex-direction: column; align-items: stretch; }
     .connector-toolbar-left { flex-direction: column; }
     .connector-toolbar-left > * { width: 100%; }
-    .connector-form-span-2 { grid-column: span 1; }
+    .connector-form-span-2 { grid-column: 1 / -1; }
     .connector-credential-grid { grid-template-columns: 1fr; }
     .advanced-grid { grid-template-columns: 1fr; }
     .cdc-etl-modal {
