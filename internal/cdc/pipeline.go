@@ -155,7 +155,6 @@ func NewPipelineEngine(cdc *ChangeDataCapture, etcd ...*clientv3.Client) *Pipeli
 	}
 	pe.registerTypes()
 	if !pe.loadState() {
-		pe.seedPipelines()
 		pe.persistStateLocked()
 	}
 	return pe

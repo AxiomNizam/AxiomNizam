@@ -234,7 +234,6 @@ func NewEngine(etcd ...*clientv3.Client) *Engine {
 	}
 	e.registerConnectors()
 	if !e.loadState() {
-		e.seedPipelines()
 		e.persistStateLocked()
 	}
 	return e
