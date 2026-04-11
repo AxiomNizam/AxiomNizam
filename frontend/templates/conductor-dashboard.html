@@ -104,6 +104,19 @@
                 <button class="btn-primary" id="streamToggle" onclick="toggleStream()">Connect</button>
             </div>
         </div>
+        <div class="stream-graph-card">
+            <div class="stream-graph-header">
+                <h3>Message Trend</h3>
+                <span class="stream-graph-summary" id="streamGraphSummary">Waiting for stream data...</span>
+            </div>
+            <canvas id="streamGraphCanvas" class="stream-graph-canvas" height="180"></canvas>
+            <div class="stream-graph-legend">
+                <span class="stream-legend-item"><i class="stream-legend-dot total"></i>Total</span>
+                <span class="stream-legend-item"><i class="stream-legend-dot sent"></i>Sent</span>
+                <span class="stream-legend-item"><i class="stream-legend-dot acked"></i>Acked</span>
+                <span class="stream-legend-item"><i class="stream-legend-dot failed"></i>Failed</span>
+            </div>
+        </div>
         <div class="stream-container" id="streamContainer">
             <div class="stream-empty">Click "Connect" to start live streaming messages</div>
         </div>
@@ -295,5 +308,5 @@
 .field-hint { display: block; margin-top: 4px; font-size: 0.75rem; color: var(--text-muted, #888); }
 </style>
 
-<script src="/static/conductor-dashboard.js?v=20260411-4"></script>
+<script src="/static/conductor-dashboard.js?v=20260411-5"></script>
 {{ end }}

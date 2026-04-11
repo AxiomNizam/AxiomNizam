@@ -8,6 +8,8 @@
     var cachedProducers = [];
     var cachedConsumers = [];
     var cachedConnections = [];
+    var streamTrendPoints = [];
+    var STREAM_TREND_LIMIT = 30;
 
     // ---- Toast Notification ----
     function showToast(message, type) {
@@ -245,9 +247,11 @@
     }, true);
 
     window.addEventListener('resize', function() {
-        if (!activeHoverHost || !activeHoverPanel) return;
-        var trigger = activeHoverHost.querySelector('.conductor-hover-trigger');
-        if (trigger) positionHoverPanel(activeHoverPanel, trigger);
+        if (activeHoverHost && activeHoverPanel) {
+            var trigger = activeHoverHost.querySelector('.conductor-hover-trigger');
+            if (trigger) positionHoverPanel(activeHoverPanel, trigger);
+        }
+        drawStreamGraph();
     });
 
     // ---- Stats ----
@@ -756,6 +760,145 @@
     };
 
     // ---- Live Stream ----
+    function classifyStreamStatus(status) {
+        var s = String(status || '').toLowerCase();
+        if (s === 'sent') return 'sent';
+        if (s === 'acked' || s === 'delivered') return 'acked';
+        if (s === 'failed' || s === 'dlq' || s === 'error') return 'failed';
+        return '';
+    }
+
+    function summarizeStreamMessages(msgs) {
+        var summary = { total: 0, sent: 0, acked: 0, failed: 0 };
+        if (!Array.isArray(msgs)) return summary;
+        summary.total = msgs.length;
+        msgs.forEach(function(m) {
+            var bucket = classifyStreamStatus(m && m.status);
+            if (bucket === 'sent') summary.sent += 1;
+            if (bucket === 'acked') summary.acked += 1;
+            if (bucket === 'failed') summary.failed += 1;
+        });
+        return summary;
+    }
+
+    function drawLineSeries(ctx, points, key, color, xFor, yFor) {
+        if (!points.length) return;
+        ctx.beginPath();
+        ctx.lineWidth = key === 'total' ? 2.4 : 1.8;
+        ctx.strokeStyle = color;
+        points.forEach(function(p, idx) {
+            var x = xFor(idx);
+            var y = yFor(p[key]);
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        var last = points[points.length - 1];
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.arc(xFor(points.length - 1), yFor(last[key]), 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawStreamGraph() {
+        var canvas = document.getElementById('streamGraphCanvas');
+        if (!canvas || !canvas.getContext) return;
+
+        var width = Math.max(320, Math.floor((canvas.parentElement && canvas.parentElement.clientWidth) || 680));
+        var height = 180;
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+
+        var ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        var pad = { left: 36, right: 12, top: 12, bottom: 24 };
+        var plotW = Math.max(10, width - pad.left - pad.right);
+        var plotH = Math.max(10, height - pad.top - pad.bottom);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        for (var i = 0; i <= 4; i++) {
+            var gy = pad.top + (plotH * i / 4);
+            ctx.beginPath();
+            ctx.moveTo(pad.left, gy);
+            ctx.lineTo(width - pad.right, gy);
+            ctx.stroke();
+        }
+
+        if (!streamTrendPoints.length) {
+            ctx.fillStyle = 'rgba(138,164,146,0.9)';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('No stream data yet', pad.left + 8, pad.top + (plotH / 2));
+            return;
+        }
+
+        var maxVal = 1;
+        streamTrendPoints.forEach(function(p) {
+            maxVal = Math.max(maxVal, p.total, p.sent, p.acked, p.failed);
+        });
+
+        function xFor(idx) {
+            if (streamTrendPoints.length === 1) return pad.left + (plotW / 2);
+            return pad.left + (plotW * idx / (streamTrendPoints.length - 1));
+        }
+        function yFor(val) {
+            return pad.top + plotH - ((val / maxVal) * plotH);
+        }
+
+        drawLineSeries(ctx, streamTrendPoints, 'total', '#14b8a6', xFor, yFor);
+        drawLineSeries(ctx, streamTrendPoints, 'sent', '#3b82f6', xFor, yFor);
+        drawLineSeries(ctx, streamTrendPoints, 'acked', '#22c55e', xFor, yFor);
+        drawLineSeries(ctx, streamTrendPoints, 'failed', '#ef4444', xFor, yFor);
+
+        ctx.fillStyle = 'rgba(136,136,136,0.95)';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('0', pad.left - 6, pad.top + plotH + 4);
+        ctx.fillText(String(maxVal), pad.left - 6, pad.top + 4);
+
+        var first = streamTrendPoints[0];
+        var last = streamTrendPoints[streamTrendPoints.length - 1];
+        ctx.textAlign = 'left';
+        ctx.fillText(first.label, pad.left, pad.top + plotH + 18);
+        ctx.textAlign = 'right';
+        ctx.fillText(last.label, pad.left + plotW, pad.top + plotH + 18);
+    }
+
+    function resetStreamTrendGraph() {
+        streamTrendPoints = [];
+        var summary = document.getElementById('streamGraphSummary');
+        if (summary) summary.textContent = 'Waiting for stream data...';
+        drawStreamGraph();
+    }
+
+    function updateStreamGraph(msgs) {
+        var snapshot = summarizeStreamMessages(msgs);
+        var label = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        streamTrendPoints.push({
+            label: label,
+            total: snapshot.total,
+            sent: snapshot.sent,
+            acked: snapshot.acked,
+            failed: snapshot.failed,
+        });
+        if (streamTrendPoints.length > STREAM_TREND_LIMIT) {
+            streamTrendPoints = streamTrendPoints.slice(streamTrendPoints.length - STREAM_TREND_LIMIT);
+        }
+
+        var summary = document.getElementById('streamGraphSummary');
+        if (summary) {
+            summary.textContent = 'Buffer: ' + snapshot.total + ' | Sent: ' + snapshot.sent + ' | Acked: ' + snapshot.acked + ' | Failed: ' + snapshot.failed;
+        }
+        drawStreamGraph();
+    }
+
     window.toggleStream = function() {
         if (streamConnected) {
             disconnectStream();
@@ -782,13 +925,16 @@
             indicator.className = 'stream-indicator connected';
             document.getElementById('streamToggle').textContent = 'Disconnect';
             document.getElementById('streamContainer').innerHTML = '';
+            resetStreamTrendGraph();
             showToast('Live stream connected', 'success');
         };
 
         streamWS.onmessage = function(event) {
             try {
                 var data = JSON.parse(event.data);
-                renderStreamMessages(data.messages || []);
+                var msgs = data.messages || [];
+                renderStreamMessages(msgs);
+                updateStreamGraph(msgs);
                 if (data.stats) {
                     document.getElementById('statSent').textContent = data.stats.totalSent || 0;
                     document.getElementById('statReceived').textContent = data.stats.totalReceived || 0;
@@ -809,6 +955,7 @@
         indicator.className = 'stream-indicator connected';
         document.getElementById('streamToggle').textContent = 'Disconnect';
         document.getElementById('streamContainer').innerHTML = '';
+        resetStreamTrendGraph();
 
         var token = resolveAuthToken();
         var es = new EventSource(API + '/stream' + (token ? '?token=' + encodeURIComponent(token) : ''));
@@ -817,6 +964,7 @@
             try {
                 var msgs = JSON.parse(event.data);
                 renderStreamMessages(msgs);
+                updateStreamGraph(msgs);
             } catch(e) {}
         };
         es.onerror = function() { disconnectStream(); showToast('Stream connection lost', 'error'); };
@@ -858,6 +1006,7 @@
         if (tab === 'connections') loadConnections();
         if (tab === 'messages') window.loadMessages();
         if (tab === 'dlq') window.loadDLQ();
+        if (tab === 'stream') setTimeout(drawStreamGraph, 0);
     };
 
     window.closeModal = function(id) {
@@ -868,5 +1017,6 @@
     loadStats();
     loadConnections();
     loadProducers();
+    setTimeout(drawStreamGraph, 0);
     setInterval(loadStats, 5000);
 })();
