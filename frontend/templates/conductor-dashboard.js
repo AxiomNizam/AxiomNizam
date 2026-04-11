@@ -121,8 +121,113 @@
             '<button type="button" class="conductor-hover-trigger" tabindex="0" aria-label="View metrics for ' + esc(name) + '"><span class="conductor-hover-trigger-dot" aria-hidden="true"></span>Details</button>' +
             hoverPanel +
         '</div>' +
-        '<small style="color:var(--text-muted)">' + esc(id) + '</small>';
+        '<small class="conductor-name-id">' + esc(id) + '</small>';
     }
+
+    var activeHoverHost = null;
+    var activeHoverPanel = null;
+
+    function closeHoverPanel() {
+        if (!activeHoverHost || !activeHoverPanel) return;
+        activeHoverHost.classList.remove('is-hover-open');
+        activeHoverPanel.style.left = '-9999px';
+        activeHoverPanel.style.top = '-9999px';
+        activeHoverHost = null;
+        activeHoverPanel = null;
+    }
+
+    function positionHoverPanel(panel, trigger) {
+        if (!panel || !trigger) return;
+        panel.style.left = '0px';
+        panel.style.top = '0px';
+
+        var triggerRect = trigger.getBoundingClientRect();
+        var panelRect = panel.getBoundingClientRect();
+        var gutter = 12;
+
+        var left = triggerRect.left;
+        if (left + panelRect.width > window.innerWidth - gutter) {
+            left = window.innerWidth - panelRect.width - gutter;
+        }
+        if (left < gutter) left = gutter;
+
+        var top = triggerRect.bottom + 10;
+        if (top + panelRect.height > window.innerHeight - gutter) {
+            top = Math.max(gutter, triggerRect.top - panelRect.height - 10);
+        }
+
+        panel.style.left = Math.round(left) + 'px';
+        panel.style.top = Math.round(top) + 'px';
+    }
+
+    function openHoverPanelFor(host) {
+        if (!host) return;
+        var trigger = host.querySelector('.conductor-hover-trigger');
+        var panel = host.querySelector('.conductor-hover-panel');
+        if (!trigger || !panel) return;
+
+        if (activeHoverHost && activeHoverHost !== host) {
+            activeHoverHost.classList.remove('is-hover-open');
+        }
+
+        host.classList.add('is-hover-open');
+        positionHoverPanel(panel, trigger);
+        activeHoverHost = host;
+        activeHoverPanel = panel;
+    }
+
+    document.addEventListener('mouseover', function(e) {
+        var host = e.target.closest('.conductor-name-with-hover');
+        if (host) openHoverPanelFor(host);
+    });
+
+    document.addEventListener('mouseout', function(e) {
+        if (!activeHoverHost) return;
+        var host = e.target.closest('.conductor-name-with-hover');
+        if (host !== activeHoverHost) return;
+        if (!e.relatedTarget || !activeHoverHost.contains(e.relatedTarget)) {
+            closeHoverPanel();
+        }
+    });
+
+    document.addEventListener('focusin', function(e) {
+        var host = e.target.closest('.conductor-name-with-hover');
+        if (host) openHoverPanelFor(host);
+    });
+
+    document.addEventListener('click', function(e) {
+        var trigger = e.target.closest('.conductor-hover-trigger');
+        if (trigger) {
+            var host = trigger.closest('.conductor-name-with-hover');
+            if (host === activeHoverHost) {
+                closeHoverPanel();
+            } else {
+                openHoverPanelFor(host);
+            }
+            e.preventDefault();
+            return;
+        }
+
+        if (activeHoverHost && !activeHoverHost.contains(e.target)) {
+            closeHoverPanel();
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeHoverPanel();
+    });
+
+    window.addEventListener('scroll', function() {
+        if (!activeHoverHost || !activeHoverPanel) return;
+        var trigger = activeHoverHost.querySelector('.conductor-hover-trigger');
+        if (trigger) positionHoverPanel(activeHoverPanel, trigger);
+    }, true);
+
+    window.addEventListener('resize', function() {
+        if (!activeHoverHost || !activeHoverPanel) return;
+        var trigger = activeHoverHost.querySelector('.conductor-hover-trigger');
+        if (trigger) positionHoverPanel(activeHoverPanel, trigger);
+    });
 
     // ---- Stats ----
     function loadStats() {
@@ -276,6 +381,7 @@
 
     // ---- Producers ----
     function loadProducers() {
+        closeHoverPanel();
         apiGet('/producers').then(function(data) {
             var prods = data.producers || [];
             cachedProducers = prods;
@@ -409,6 +515,7 @@
 
     // ---- Consumers ----
     function loadConsumers() {
+        closeHoverPanel();
         apiGet('/consumers').then(function(data) {
             var cons = data.consumers || [];
             cachedConsumers = cons;
@@ -718,6 +825,7 @@
 
     // ---- Tabs ----
     window.switchTab = function(tab) {
+        closeHoverPanel();
         document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
         document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
         document.getElementById('tab-' + tab).classList.add('active');
