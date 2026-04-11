@@ -101,8 +101,75 @@ function initScrollAnimations() {
     cards.forEach(function(c) { observer.observe(c); });
 }
 
+// Feature search / filter
+function initFeatureSearch() {
+    var input = document.getElementById('featureSearch');
+    var clearBtn = document.getElementById('featureSearchClear');
+    var countEl = document.getElementById('featureSearchCount');
+    if (!input) return;
+
+    var categories = document.querySelectorAll('.feature-category');
+    var allCards = document.querySelectorAll('.feature-card');
+
+    function runFilter() {
+        var raw = input.value.trim().toLowerCase();
+        clearBtn.style.display = raw ? 'flex' : 'none';
+
+        if (!raw) {
+            allCards.forEach(function(c) { c.classList.remove('search-hidden', 'search-highlight'); });
+            categories.forEach(function(cat) { cat.classList.remove('search-hidden'); });
+            countEl.textContent = '';
+            return;
+        }
+
+        var terms = raw.split(/\s+/);
+        var matchCount = 0;
+
+        categories.forEach(function(cat) {
+            var cards = cat.querySelectorAll('.feature-card');
+            var catVisible = 0;
+
+            cards.forEach(function(card) {
+                var title = (card.querySelector('h4') || {}).textContent || '';
+                var desc = (card.querySelector('p') || {}).textContent || '';
+                var tags = '';
+                card.querySelectorAll('.tag').forEach(function(t) { tags += ' ' + t.textContent; });
+                var haystack = (title + ' ' + desc + ' ' + tags).toLowerCase();
+
+                var match = terms.every(function(term) { return haystack.indexOf(term) !== -1; });
+                if (match) {
+                    card.classList.remove('search-hidden');
+                    card.classList.add('search-highlight');
+                    catVisible++;
+                    matchCount++;
+                } else {
+                    card.classList.add('search-hidden');
+                    card.classList.remove('search-highlight');
+                }
+            });
+
+            if (catVisible === 0) {
+                cat.classList.add('search-hidden');
+            } else {
+                cat.classList.remove('search-hidden');
+            }
+        });
+
+        countEl.textContent = matchCount + ' feature' + (matchCount !== 1 ? 's' : '') + ' found';
+    }
+
+    input.addEventListener('input', runFilter);
+
+    clearBtn.addEventListener('click', function() {
+        input.value = '';
+        runFilter();
+        input.focus();
+    });
+}
+
 window.addEventListener('DOMContentLoaded', function() {
     replaceLandingEmojiIcons();
     fetchLandingHealth();
     initScrollAnimations();
+    initFeatureSearch();
 });

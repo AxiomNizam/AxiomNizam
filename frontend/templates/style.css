@@ -3882,6 +3882,98 @@ body {
     50% { opacity: 0.4; }
 }
 
+/* Hero Search */
+.hero-search {
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.hero-search-box {
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+}
+
+.hero-search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    color: rgba(255,255,255,0.5);
+    pointer-events: none;
+}
+
+.hero-search-input {
+    width: 100%;
+    padding: 14px 44px 14px 48px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(8px);
+    box-sizing: border-box;
+}
+
+.hero-search-input::placeholder {
+    color: rgba(255,255,255,0.45);
+}
+
+.hero-search-input:focus {
+    border-color: rgba(255,255,255,0.45);
+    background: rgba(255,255,255,0.12);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.hero-search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    font-size: 1.2rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    line-height: 1;
+}
+
+.hero-search-clear:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.hero-search-count {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.65);
+    min-height: 1.2em;
+}
+
+/* Feature search visibility */
+.feature-card.search-hidden,
+.feature-category.search-hidden {
+    display: none !important;
+}
+
+.feature-card.search-highlight {
+    box-shadow: 0 0 0 2px var(--primary-color), 0 4px 16px rgba(0,140,99,0.25);
+}
+
 /* Sections */
 .landing-section {
     padding: 64px 24px;
