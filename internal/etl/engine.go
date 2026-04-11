@@ -552,6 +552,31 @@ func (e *Engine) UpdatePipeline(id string, updates map[string]interface{}) error
 		}
 		p.Tags = tags
 	}
+	if stepsRaw, ok := updates["steps"]; ok {
+		if payload, err := json.Marshal(stepsRaw); err == nil {
+			var steps []Step
+			if err := json.Unmarshal(payload, &steps); err == nil {
+				normalized := make([]Step, 0, len(steps))
+				for i := range steps {
+					step := steps[i]
+					if strings.TrimSpace(step.ID) == "" {
+						step.ID = fmt.Sprintf("step-%d", i+1)
+					}
+					if strings.TrimSpace(step.Name) == "" {
+						step.Name = fmt.Sprintf("Step %d", i+1)
+					}
+					if step.Order <= 0 {
+						step.Order = i + 1
+					}
+					if step.Config == nil {
+						step.Config = map[string]interface{}{}
+					}
+					normalized = append(normalized, step)
+				}
+				p.Steps = normalized
+			}
+		}
+	}
 	if cfg, ok := updates["config"].(map[string]interface{}); ok {
 		p.Config = cfg
 	}

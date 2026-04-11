@@ -9,6 +9,7 @@
     const state = {
         currentTab: 'etl',
         createType: 'etl',
+        currentEditingETLPipelineId: '',
         chartInstances: {},
         etlPipelines: [],
         etlRuns: [],
@@ -19,6 +20,8 @@
         blueprints: [],
         capabilities: []
     };
+
+    const DB_CONNECTOR_IDS = ['mysql', 'postgres', 'mariadb', 'oracle', 'mongodb'];
 
     function buildHeaders(includeContentType) {
         const headers = {};
@@ -206,6 +209,182 @@
         setInputValue(prefix + '-connector-cred-token', '');
         setInputValue(prefix + '-connector-cred-sasl-user', '');
         setInputValue(prefix + '-connector-cred-sasl-pass', '');
+    }
+
+    function toMaybeInt(value) {
+        const raw = (value || '').trim();
+        if (!raw) return null;
+        const num = parseInt(raw, 10);
+        return isNaN(num) ? raw : num;
+    }
+
+    function isDatabaseLikeConnector(connectorID) {
+        const id = (connectorID || '').trim().toLowerCase();
+        if (!id) return false;
+        if (DB_CONNECTOR_IDS.indexOf(id) >= 0) return true;
+        const connector = state.etlConnectors.find(function(c) { return (c.id || '').toLowerCase() === id; });
+        if (!connector) return false;
+        const category = (connector.category || '').toLowerCase();
+        return category === 'database' || category === 'warehouse' || category === 'lakehouse';
+    }
+
+    function collectRuntimeStepConfig(prefix) {
+        const cfg = {};
+
+        const host = getInputValue(prefix + '-db-host');
+        const port = toMaybeInt(getInputValue(prefix + '-db-port'));
+        const dbUser = getInputValue(prefix + '-db-user');
+        const dbPassword = getInputValue(prefix + '-db-password');
+        const dbName = getInputValue(prefix + '-db-name');
+        const dbTable = getInputValue(prefix + '-db-table');
+        const sql = getInputValue(prefix + '-sql');
+
+        if (host) cfg.host = host;
+        if (port !== null) cfg.port = port;
+        if (dbUser) cfg.username = dbUser;
+        if (dbPassword) cfg.password = dbPassword;
+        if (dbName) cfg.database = dbName;
+        if (dbTable) cfg.table = dbTable;
+        if (sql) cfg.query = sql;
+
+        const apiKey = getInputValue(prefix + '-cred-api-key');
+        const token = getInputValue(prefix + '-cred-token');
+        const clientID = getInputValue(prefix + '-cred-client-id');
+        const clientSecret = getInputValue(prefix + '-cred-client-secret');
+        const accessKey = getInputValue(prefix + '-cred-access-key');
+        const secretKey = getInputValue(prefix + '-cred-secret-key');
+        const username = getInputValue(prefix + '-cred-username');
+        const password = getInputValue(prefix + '-cred-password');
+        const saslUsername = getInputValue(prefix + '-cred-sasl-user');
+        const saslPassword = getInputValue(prefix + '-cred-sasl-pass');
+
+        if (apiKey) cfg.api_key = apiKey;
+        if (token) cfg.token = token;
+        if (clientID) cfg.client_id = clientID;
+        if (clientSecret) cfg.client_secret = clientSecret;
+        if (accessKey) cfg.access_key = accessKey;
+        if (secretKey) cfg.secret_key = secretKey;
+        if (username) cfg.username = username;
+        if (password) cfg.password = password;
+        if (saslUsername) cfg.sasl_username = saslUsername;
+        if (saslPassword) cfg.sasl_password = saslPassword;
+
+        return cfg;
+    }
+
+    function fillRuntimeStepConfig(prefix, config) {
+        const cfg = config || {};
+        setInputValue(prefix + '-db-host', cfg.host || cfg.hostname || cfg.server || '');
+        setInputValue(prefix + '-db-port', cfg.port != null ? String(cfg.port) : '');
+        setInputValue(prefix + '-db-user', cfg.username || cfg.user || '');
+        setInputValue(prefix + '-db-password', cfg.password || cfg.pass || '');
+        setInputValue(prefix + '-db-name', cfg.database || cfg.db || cfg.dbname || cfg.service_name || '');
+        setInputValue(prefix + '-db-table', cfg.table || '');
+        setInputValue(prefix + '-sql', cfg.query || '');
+        setInputValue(prefix + '-cred-api-key', cfg.api_key || cfg.apikey || '');
+        setInputValue(prefix + '-cred-token', cfg.token || cfg.bearer_token || cfg.jwt || '');
+        setInputValue(prefix + '-cred-client-id', cfg.client_id || '');
+        setInputValue(prefix + '-cred-client-secret', cfg.client_secret || '');
+        setInputValue(prefix + '-cred-access-key', cfg.access_key || '');
+        setInputValue(prefix + '-cred-secret-key', cfg.secret_key || '');
+        setInputValue(prefix + '-cred-username', cfg.username || cfg.user || '');
+        setInputValue(prefix + '-cred-password', cfg.password || cfg.pass || '');
+        setInputValue(prefix + '-cred-sasl-user', cfg.sasl_username || cfg.sasl_user || '');
+        setInputValue(prefix + '-cred-sasl-pass', cfg.sasl_password || cfg.sasl_pass || '');
+    }
+
+    function resetRuntimeStepConfig(prefix) {
+        setInputValue(prefix + '-db-host', '');
+        setInputValue(prefix + '-db-port', '');
+        setInputValue(prefix + '-db-user', '');
+        setInputValue(prefix + '-db-password', '');
+        setInputValue(prefix + '-db-name', '');
+        setInputValue(prefix + '-db-table', '');
+        setInputValue(prefix + '-sql', '');
+        setInputValue(prefix + '-cred-api-key', '');
+        setInputValue(prefix + '-cred-token', '');
+        setInputValue(prefix + '-cred-client-id', '');
+        setInputValue(prefix + '-cred-client-secret', '');
+        setInputValue(prefix + '-cred-access-key', '');
+        setInputValue(prefix + '-cred-secret-key', '');
+        setInputValue(prefix + '-cred-username', '');
+        setInputValue(prefix + '-cred-password', '');
+        setInputValue(prefix + '-cred-sasl-user', '');
+        setInputValue(prefix + '-cred-sasl-pass', '');
+    }
+
+    function updateCredentialOptionVisibility(connectorID, dbOptionsID, otherCredOptionsID) {
+        const dbOpts = document.getElementById(dbOptionsID);
+        const otherCredOpts = document.getElementById(otherCredOptionsID);
+        const isDB = isDatabaseLikeConnector(connectorID);
+        if (dbOpts) dbOpts.style.display = isDB ? 'block' : 'none';
+        if (otherCredOpts) otherCredOpts.style.display = isDB ? 'none' : 'block';
+    }
+
+    function populateEditConnectorDropdowns() {
+        const extractEl = document.getElementById('edit-etl-extract-connector');
+        const loadEl = document.getElementById('edit-etl-load-connector');
+        if (extractEl) {
+            const extractOpts = state.etlConnectors.filter(function(c) {
+                return (c.supported_as || []).indexOf('extract') >= 0 || (c.supported_as || []).indexOf('both') >= 0;
+            });
+            extractEl.innerHTML = extractOpts.map(function(c) {
+                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml((c.icon || '🔌') + ' ' + c.name) + '</option>';
+            }).join('');
+        }
+        if (loadEl) {
+            const loadOpts = state.etlConnectors.filter(function(c) {
+                return (c.supported_as || []).indexOf('load') >= 0 || (c.supported_as || []).indexOf('both') >= 0;
+            });
+            loadEl.innerHTML = loadOpts.map(function(c) {
+                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml((c.icon || '🔌') + ' ' + c.name) + '</option>';
+            }).join('');
+        }
+    }
+
+    function buildUpdatedETLStepsForEdit(pipeline) {
+        const src = pipeline || {};
+        const steps = JSON.parse(JSON.stringify(src.steps || []));
+        const extractConnector = (document.getElementById('edit-etl-extract-connector').value || '').trim();
+        const loadConnector = (document.getElementById('edit-etl-load-connector').value || '').trim();
+
+        let extractIdx = -1;
+        for (let i = 0; i < steps.length; i++) {
+            if ((steps[i].type || '').toLowerCase() === 'extract') {
+                extractIdx = i;
+                break;
+            }
+        }
+        if (extractIdx === -1) {
+            steps.unshift({ id: 'step-extract', name: 'Extract', type: 'extract', connector: extractConnector, config: {}, order: 1 });
+            extractIdx = 0;
+        }
+
+        let loadIdx = -1;
+        for (let i = steps.length - 1; i >= 0; i--) {
+            if ((steps[i].type || '').toLowerCase() === 'load') {
+                loadIdx = i;
+                break;
+            }
+        }
+        if (loadIdx === -1) {
+            steps.push({ id: 'step-load', name: 'Load', type: 'load', connector: loadConnector, config: {}, order: steps.length + 1 });
+            loadIdx = steps.length - 1;
+        }
+
+        steps[extractIdx].connector = extractConnector;
+        steps[extractIdx].config = collectRuntimeStepConfig('edit-extract');
+        steps[loadIdx].connector = loadConnector;
+        steps[loadIdx].config = collectRuntimeStepConfig('edit-load');
+
+        steps.forEach(function(step, idx) {
+            if (!step.id) step.id = 'step-' + (idx + 1);
+            if (!step.name) step.name = 'Step ' + (idx + 1);
+            step.order = idx + 1;
+            if (!step.config) step.config = {};
+        });
+
+        return steps;
     }
 
     function fmtNum(n) {
@@ -888,6 +1067,9 @@
             const hasValidate = (bp.steps || []).some(function(s) { return s.type === 'validate' || s.type === 'deduplicate'; });
             qualityFlagEl.checked = hasValidate;
         }
+
+        window.onExtractConnectorChange();
+        window.onLoadConnectorChange();
     };
 
     function buildETLSteps() {
@@ -910,31 +1092,8 @@
         const loadConnector = (document.getElementById('modal-etl-load-connector').value || '').trim();
         const qualityGate = document.getElementById('modal-etl-quality-gate').checked;
 
-        // Gather DB extract config
-        const extractConfig = {};
-        if (DB_CONNECTOR_IDS.indexOf(extractConnector) >= 0) {
-            const host = (document.getElementById('modal-extract-db-host').value || '').trim();
-            const dbName = (document.getElementById('modal-extract-db-name').value || '').trim();
-            const table = (document.getElementById('modal-extract-db-table').value || '').trim();
-            const sql = (document.getElementById('modal-extract-sql').value || '').trim();
-            if (host) extractConfig.host = host;
-            if (dbName) extractConfig.database = dbName;
-            if (table) extractConfig.table = table;
-            if (sql) extractConfig.query = sql;
-        }
-
-        // Gather DB load config
-        const loadConfig = {};
-        if (DB_CONNECTOR_IDS.indexOf(loadConnector) >= 0) {
-            const host = (document.getElementById('modal-load-db-host').value || '').trim();
-            const dbName = (document.getElementById('modal-load-db-name').value || '').trim();
-            const table = (document.getElementById('modal-load-db-table').value || '').trim();
-            const sql = (document.getElementById('modal-load-sql').value || '').trim();
-            if (host) loadConfig.host = host;
-            if (dbName) loadConfig.database = dbName;
-            if (table) loadConfig.table = table;
-            if (sql) loadConfig.query = sql;
-        }
+        const extractConfig = collectRuntimeStepConfig('modal-extract');
+        const loadConfig = collectRuntimeStepConfig('modal-load');
 
         const steps = [
             { id: 'step-1', name: 'Extract', type: 'extract', connector: extractConnector, config: extractConfig, order: 1 },
@@ -952,6 +1111,7 @@
 
     window.openCreateModal = function(type) {
         state.createType = type;
+        state.currentEditingETLPipelineId = '';
         document.getElementById('modal-title').textContent = type === 'etl' ? 'Create ETL Pipeline' : 'Create CDC Pipeline';
 
         document.getElementById('modal-schedule-group').style.display = type === 'etl' ? 'block' : 'none';
@@ -979,6 +1139,8 @@
         document.getElementById('modal-depends-past').checked = false;
         document.getElementById('modal-tags').value = '';
         document.getElementById('modal-etl-quality-gate').checked = true;
+        resetRuntimeStepConfig('modal-extract');
+        resetRuntimeStepConfig('modal-load');
 
         const bpSel = document.getElementById('modal-blueprint');
         if (bpSel) bpSel.value = '';
@@ -1074,29 +1236,36 @@
         await Promise.all([loadETL(), loadCDC(), loadObservability(), loadConnectors(), loadOrchestration()]);
     }
 
-    // ---- DB Extract/Load SQL Query Toggle ----
-    const DB_CONNECTOR_IDS = ['mysql', 'postgres', 'mariadb', 'oracle', 'mongodb'];
-
+    // ---- DB/API Runtime Credential Option Toggle ----
     window.onExtractConnectorChange = function() {
         const sel = document.getElementById('modal-etl-extract-connector');
-        const opts = document.getElementById('modal-extract-db-options');
-        if (!sel || !opts) return;
-        const isDB = DB_CONNECTOR_IDS.indexOf(sel.value) >= 0;
-        opts.style.display = isDB ? 'block' : 'none';
+        if (!sel) return;
+        updateCredentialOptionVisibility(sel.value, 'modal-extract-db-options', 'modal-extract-other-cred-options');
     };
 
     window.onLoadConnectorChange = function() {
         const sel = document.getElementById('modal-etl-load-connector');
-        const opts = document.getElementById('modal-load-db-options');
-        if (!sel || !opts) return;
-        const isDB = DB_CONNECTOR_IDS.indexOf(sel.value) >= 0;
-        opts.style.display = isDB ? 'block' : 'none';
+        if (!sel) return;
+        updateCredentialOptionVisibility(sel.value, 'modal-load-db-options', 'modal-load-other-cred-options');
+    };
+
+    window.onEditExtractConnectorChange = function() {
+        const sel = document.getElementById('edit-etl-extract-connector');
+        if (!sel) return;
+        updateCredentialOptionVisibility(sel.value, 'edit-extract-db-options', 'edit-extract-other-cred-options');
+    };
+
+    window.onEditLoadConnectorChange = function() {
+        const sel = document.getElementById('edit-etl-load-connector');
+        if (!sel) return;
+        updateCredentialOptionVisibility(sel.value, 'edit-load-db-options', 'edit-load-other-cred-options');
     };
 
     // ---- Edit ETL Pipeline ----
     window.editETLPipeline = function(id) {
         const p = state.etlPipelines.find(function(x) { return x.id === id; });
         if (!p) return;
+        state.currentEditingETLPipelineId = p.id;
         document.getElementById('edit-pipeline-id').value = p.id;
         document.getElementById('edit-pipeline-type').value = 'etl';
         document.getElementById('edit-pipeline-title').textContent = 'Edit ETL Pipeline';
@@ -1105,6 +1274,24 @@
         document.getElementById('edit-pipeline-schedule').value = p.schedule || '';
         document.getElementById('edit-pipeline-schedule-group').style.display = 'block';
         document.getElementById('edit-pipeline-tags').value = (p.tags || []).join(', ');
+
+        const etlGroup = document.getElementById('edit-pipeline-etl-connector-group');
+        if (etlGroup) etlGroup.style.display = 'block';
+        populateEditConnectorDropdowns();
+
+        const steps = p.steps || [];
+        const extractStep = steps.find(function(s) { return (s.type || '').toLowerCase() === 'extract'; });
+        const loadStep = steps.slice().reverse().find(function(s) { return (s.type || '').toLowerCase() === 'load'; });
+
+        const extractSel = document.getElementById('edit-etl-extract-connector');
+        const loadSel = document.getElementById('edit-etl-load-connector');
+        if (extractSel && extractStep && extractStep.connector) extractSel.value = extractStep.connector;
+        if (loadSel && loadStep && loadStep.connector) loadSel.value = loadStep.connector;
+
+        fillRuntimeStepConfig('edit-extract', extractStep ? extractStep.config : {});
+        fillRuntimeStepConfig('edit-load', loadStep ? loadStep.config : {});
+        window.onEditExtractConnectorChange();
+        window.onEditLoadConnectorChange();
         document.getElementById('editPipelineModal').classList.add('visible');
     };
 
@@ -1112,6 +1299,7 @@
     window.editCDCPipeline = function(id) {
         const p = state.cdcPipelines.find(function(x) { return x.id === id; });
         if (!p) return;
+        state.currentEditingETLPipelineId = '';
         document.getElementById('edit-pipeline-id').value = p.id;
         document.getElementById('edit-pipeline-type').value = 'cdc';
         document.getElementById('edit-pipeline-title').textContent = 'Edit CDC Pipeline';
@@ -1119,10 +1307,13 @@
         document.getElementById('edit-pipeline-desc').value = p.description || '';
         document.getElementById('edit-pipeline-schedule-group').style.display = 'none';
         document.getElementById('edit-pipeline-tags').value = (p.tags || []).join(', ');
+        const etlGroup = document.getElementById('edit-pipeline-etl-connector-group');
+        if (etlGroup) etlGroup.style.display = 'none';
         document.getElementById('editPipelineModal').classList.add('visible');
     };
 
     window.closeEditPipelineModal = function() {
+        state.currentEditingETLPipelineId = '';
         document.getElementById('editPipelineModal').classList.remove('visible');
     };
 
@@ -1136,6 +1327,8 @@
         };
         if (type === 'etl') {
             payload.schedule = (document.getElementById('edit-pipeline-schedule').value || '').trim();
+            const current = state.etlPipelines.find(function(p) { return p.id === id; });
+            payload.steps = buildUpdatedETLStepsForEdit(current || {});
         }
         const url = type === 'etl'
             ? '/api/v1/etl/pipelines/' + encodeURIComponent(id)
