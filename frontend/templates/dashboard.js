@@ -23,6 +23,34 @@ function readLandingCookie(name) {
     return '';
 }
 
+const LANDING_SVG_ICONS = {
+    category: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>',
+    feature: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"></path></svg>',
+    database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"></path></svg>',
+    architecture: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="8.5" y="14" width="7" height="7" rx="1.5"></rect><path d="M10 6.5h4"></path><path d="M12 10v4"></path></svg>'
+};
+
+function replaceLandingEmojiIcons() {
+    const landingRoot = document.querySelector('.landing-page');
+    if (!landingRoot) return;
+
+    const iconTargets = [
+        ['.category-icon', LANDING_SVG_ICONS.category],
+        ['.feature-card-icon', LANDING_SVG_ICONS.feature],
+        ['.db-icon', LANDING_SVG_ICONS.database],
+        ['.arch-icon', LANDING_SVG_ICONS.architecture]
+    ];
+
+    iconTargets.forEach(function(pair) {
+        const selector = pair[0];
+        const svg = pair[1];
+        landingRoot.querySelectorAll(selector).forEach(function(node) {
+            node.innerHTML = svg;
+            node.setAttribute('aria-hidden', 'true');
+        });
+    });
+}
+
 // Gate feature access behind auth
 function requireAuth(targetPath) {
     if (isAuthenticated()) {
@@ -74,6 +102,7 @@ function initScrollAnimations() {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+    replaceLandingEmojiIcons();
     fetchLandingHealth();
     initScrollAnimations();
 });

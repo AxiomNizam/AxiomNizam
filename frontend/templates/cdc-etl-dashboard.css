@@ -487,21 +487,21 @@
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
-.feature-grid {
+.cdc-etl-dashboard .feature-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
     gap: 14px;
     margin-bottom: 20px;
 }
 
-.feature-card {
+.cdc-etl-dashboard .feature-card {
     border: 1px solid var(--border-color, #e0e0e0);
     border-radius: 10px;
     background: var(--card-bg, #fff);
     padding: 14px;
 }
 
-.feature-category {
+.cdc-etl-dashboard .feature-category {
     display: inline-block;
     font-size: 10px;
     font-weight: 700;
@@ -513,12 +513,12 @@
     background: rgba(0, 140, 99, 0.1);
 }
 
-.feature-card h4 {
+.cdc-etl-dashboard .feature-card h4 {
     margin: 8px 0 6px;
     font-size: 15px;
 }
 
-.feature-card p {
+.cdc-etl-dashboard .feature-card p {
     margin: 0;
     font-size: 13px;
     color: var(--text-secondary, #6b7280);
@@ -572,7 +572,7 @@
 }
 
 /* Section titles */
-.section-title {
+.cdc-etl-dashboard .section-title {
     font-size: 16px;
     font-weight: 600;
     margin: 0 0 16px 0;
