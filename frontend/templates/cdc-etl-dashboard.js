@@ -861,6 +861,9 @@
         populateConnectorDropdowns();
         populateCDCTypeDropdowns();
         populateBlueprintDropdown();
+        // Show/hide DB options based on the default selected connector
+        window.onExtractConnectorChange();
+        window.onLoadConnectorChange();
         document.getElementById('createModal').classList.add('visible');
     };
 
