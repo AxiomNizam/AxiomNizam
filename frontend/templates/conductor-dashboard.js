@@ -118,7 +118,7 @@
     function nameWithHover(name, id, hoverPanel) {
         return '<div class="conductor-name-with-hover">' +
             '<span class="conductor-name-text">' + esc(name) + '</span>' +
-            '<span class="conductor-hover-trigger" tabindex="0">Metrics</span>' +
+            '<button type="button" class="conductor-hover-trigger" tabindex="0" aria-label="View metrics for ' + esc(name) + '"><span class="conductor-hover-trigger-dot" aria-hidden="true"></span>Details</button>' +
             hoverPanel +
         '</div>' +
         '<small style="color:var(--text-muted)">' + esc(id) + '</small>';
