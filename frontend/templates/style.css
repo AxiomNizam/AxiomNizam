@@ -3913,8 +3913,8 @@ body {
     width: 100%;
     padding: 14px 44px 14px 48px;
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(0,140,99,0.4);
+    background: rgba(0,140,99,0.1);
     color: #fff;
     font-size: 1rem;
     font-family: inherit;
@@ -3929,9 +3929,9 @@ body {
 }
 
 .hero-search-input:focus {
-    border-color: rgba(255,255,255,0.45);
-    background: rgba(255,255,255,0.12);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    border-color: rgba(0,140,99,0.7);
+    background: rgba(0,140,99,0.15);
+    box-shadow: 0 4px 20px rgba(0,140,99,0.15);
 }
 
 .hero-search-clear {
