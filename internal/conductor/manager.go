@@ -186,6 +186,38 @@ func (m *Manager) UpdateProducer(id string, req *CreateProducerRequest) (*Produc
 	return p, nil
 }
 
+// UpdateConsumer patches a consumer.
+func (m *Manager) UpdateConsumer(id string, req *CreateConsumerRequest) (*Consumer, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.consumers[id]
+	if !ok {
+		return nil, fmt.Errorf("consumer not found: %s", id)
+	}
+	if req.Name != "" {
+		c.Name = req.Name
+	}
+	if req.Queue != "" {
+		c.Queue = req.Queue
+	}
+	if req.Exchange != "" {
+		c.Exchange = req.Exchange
+	}
+	if req.RoutingKey != "" {
+		c.RoutingKey = req.RoutingKey
+	}
+	if req.Topic != "" {
+		c.Topic = req.Topic
+	}
+	if req.ConsumerGroup != "" {
+		c.ConsumerGroup = req.ConsumerGroup
+	}
+	c.Config = req.Config
+	c.UpdatedAt = time.Now()
+	m.saveConsumer(c)
+	return c, nil
+}
+
 // DeleteProducer removes a producer.
 func (m *Manager) DeleteProducer(id string) error {
 	m.mu.Lock()

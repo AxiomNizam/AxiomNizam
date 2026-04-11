@@ -1151,6 +1151,8 @@ func main() {
 		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
 		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
 		etlAPI.POST("/connectors", adminOrSysMiddleware, cdcEtlHandler.CreateETLConnector)
+		etlAPI.PUT("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLConnector)
+		etlAPI.DELETE("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLConnector)
 		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
 		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
 		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)

@@ -162,6 +162,21 @@ func (h *Handler) DeleteConsumer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "consumer deleted"})
 }
 
+// UpdateConsumer PATCH /api/v1/conductor/consumers/:id
+func (h *Handler) UpdateConsumer(c *gin.Context) {
+	var req CreateConsumerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	cons, err := h.mgr.UpdateConsumer(c.Param("id"), &req)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, cons)
+}
+
 // PauseConsumer POST /api/v1/conductor/consumers/:id/pause
 func (h *Handler) PauseConsumer(c *gin.Context) {
 	cons, err := h.mgr.PauseConsumer(c.Param("id"))
@@ -331,6 +346,7 @@ func RegisterRoutes(router *gin.Engine, mgr *Manager, authMiddleware, adminMiddl
 		api.POST("/consumers", adminMiddleware, h.CreateConsumer)
 		api.GET("/consumers", h.ListConsumers)
 		api.GET("/consumers/:id", h.GetConsumer)
+		api.PATCH("/consumers/:id", adminMiddleware, h.UpdateConsumer)
 		api.DELETE("/consumers/:id", adminMiddleware, h.DeleteConsumer)
 		api.POST("/consumers/:id/pause", adminMiddleware, h.PauseConsumer)
 		api.POST("/consumers/:id/resume", adminMiddleware, h.ResumeConsumer)
