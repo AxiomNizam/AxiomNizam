@@ -764,8 +764,33 @@
 /* Data Tabs */
 .gis-data-tabs {
     display: flex;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 2px solid transparent;
     flex-shrink: 0;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.22s ease, border-color 0.2s ease;
+}
+
+.gis-data-panel:hover .gis-data-tabs,
+.gis-data-panel:focus-within .gis-data-tabs {
+    max-height: 56px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    border-bottom-color: var(--border-color);
+}
+
+@media (hover: none) {
+    .gis-data-tabs {
+        max-height: 56px;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+        border-bottom-color: var(--border-color);
+    }
 }
 
 .gis-data-tab {
