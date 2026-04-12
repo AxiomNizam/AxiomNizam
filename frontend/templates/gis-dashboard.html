@@ -199,17 +199,6 @@
                 <button class="gis-tool-btn" onclick="locateUser()" title="My Location"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-dot"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/></svg></button>
             </div>
 
-            <!-- Legend -->
-            <div class="gis-legend" id="gisLegend">
-                <button type="button" class="gis-legend-header" onclick="toggleLegend()" aria-label="Toggle legend">
-                    <span id="legendTitle">Population</span>
-                    <span class="legend-toggle" id="legendToggle"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg></span>
-                </button>
-                <div class="gis-legend-body" id="legendBody">
-                    <!-- Populated by JS -->
-                </div>
-            </div>
-
             <!-- Coordinates & Zoom -->
             <div class="gis-map-info">
                 <span id="mapCoords">0.0000, 0.0000</span>
@@ -232,6 +221,17 @@
             <button class="gis-data-tab active" onclick="switchDataTab('properties')" id="tabProperties">Properties</button>
             <button class="gis-data-tab" onclick="switchDataTab('data')" id="tabData">Data Table</button>
             <button class="gis-data-tab" onclick="switchDataTab('stats')" id="tabStats">Statistics</button>
+        </div>
+
+        <!-- Legend (moved from map overlay into panel) -->
+        <div class="gis-legend" id="gisLegend">
+            <button type="button" class="gis-legend-header" onclick="toggleLegend()" aria-label="Toggle legend">
+                <span id="legendTitle">Population</span>
+                <span class="legend-toggle" id="legendToggle"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg></span>
+            </button>
+            <div class="gis-legend-body" id="legendBody">
+                <!-- Populated by JS -->
+            </div>
         </div>
 
         <!-- Properties Panel -->
