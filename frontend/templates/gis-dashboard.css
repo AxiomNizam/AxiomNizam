@@ -127,6 +127,16 @@
     font-size: 12px;
     padding: 0;
     font-family: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.gis-sidebar:hover .gis-sidebar-toggle,
+.gis-sidebar:focus-within .gis-sidebar-toggle,
+.gis-sidebar.collapsed .gis-sidebar-toggle {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .gis-sidebar.collapsed .gis-sidebar-toggle .toggle-icon {
@@ -642,7 +652,12 @@
 .gis-data-panel.collapsed {
     width: 0;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
+    border-left: none;
+}
+
+.gis-data-panel.collapsed > :not(.gis-data-panel-toggle) {
+    display: none;
 }
 
 .gis-data-panel-toggle {
@@ -664,6 +679,16 @@
     font-size: 12px;
     padding: 0;
     font-family: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.gis-data-panel:hover .gis-data-panel-toggle,
+.gis-data-panel:focus-within .gis-data-panel-toggle,
+.gis-data-panel.collapsed .gis-data-panel-toggle {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .gis-data-panel.collapsed .gis-data-panel-toggle #dataPanelToggleIcon {
@@ -699,6 +724,12 @@
         pointer-events: auto;
         transform: translateY(0);
         border-bottom-color: var(--border-color);
+    }
+
+    .gis-sidebar-toggle,
+    .gis-data-panel-toggle {
+        opacity: 1;
+        pointer-events: auto;
     }
 }
 
