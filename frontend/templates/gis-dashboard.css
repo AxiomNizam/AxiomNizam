@@ -1094,6 +1094,27 @@
     color: #ef4444;
 }
 
+.gis-json-editor {
+    width: 100%;
+    min-height: 150px;
+    resize: vertical;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--dark-bg);
+    color: var(--text-primary);
+    padding: 10px;
+    font-family: var(--font-mono, Consolas, monospace);
+    font-size: 12px;
+    line-height: 1.45;
+    margin-bottom: 8px;
+}
+
+.gis-json-editor:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
+}
+
 .stat-row {
     display: flex;
     justify-content: space-between;

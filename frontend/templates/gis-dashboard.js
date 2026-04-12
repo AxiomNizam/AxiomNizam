@@ -73,6 +73,7 @@ let gisState = {
     activeQueryShape: null,
     drawHandlers: {},
     savedViews: [],
+    importedGeoJsonLayer: null,
 };
 
 // Dashboard theme configurations
@@ -301,6 +302,11 @@ function clearMapLayers() {
     gisState.activeDataset = null;
     gisState.selectedRegion = null;
     gisState.mapSearchIndex = [];
+
+    if (gisState.importedGeoJsonLayer) {
+        gisMap.removeLayer(gisState.importedGeoJsonLayer);
+        gisState.importedGeoJsonLayer = null;
+    }
 }
 
 // =============================================
@@ -1929,6 +1935,244 @@ async function applyViewState(state) {
     syncClusterToggleUI();
     updateShareLinkPreview();
     setTimeout(() => gisMap.invalidateSize(), 120);
+}
+
+function buildCurrentGISJsonPayload() {
+    return {
+        schema: 'axiomnizam-gis-json-v1',
+        exportedAt: new Date().toISOString(),
+        dashboardType: currentDashType,
+        summary: {
+            layerCount: gisState.layers.length,
+            regionCount: gisState.regions.length,
+            markerCount: gisState.markers.length,
+            datasetCount: gisState.datasets.length,
+        },
+        viewState: collectCurrentViewState(),
+        layers: gisState.layers,
+        regions: gisState.regions,
+        markers: gisState.markers,
+        datasets: gisState.datasets,
+        activeDataset: gisState.activeDataset || null,
+    };
+}
+
+function loadCurrentDataAsGISJson() {
+    const editor = document.getElementById('gisJsonEditor');
+    if (!editor) return;
+
+    const payload = buildCurrentGISJsonPayload();
+    editor.value = JSON.stringify(payload, null, 2);
+    setGISJsonStatus('Loaded current GIS data into JSON editor.', false);
+}
+
+function validateGISJson() {
+    const parsed = parseGISJsonEditorInput();
+    if (!parsed) return false;
+
+    const normalized = normalizeToGeoJSON(parsed);
+    if (normalized) {
+        const count = (normalized.features || []).length;
+        setGISJsonStatus('Valid JSON. Convertible to GeoJSON with ' + count + ' feature(s).', false);
+    } else {
+        setGISJsonStatus('Valid JSON, but no recognizable GIS structures found.', true);
+    }
+
+    return true;
+}
+
+function importGISJsonToMap() {
+    const parsed = parseGISJsonEditorInput();
+    if (!parsed) return;
+
+    const geo = normalizeToGeoJSON(parsed);
+    if (!geo || !Array.isArray(geo.features) || geo.features.length === 0) {
+        setGISJsonStatus('Import failed: no GeoJSON features found in provided JSON.', true);
+        return;
+    }
+
+    clearGISJsonLayer();
+
+    gisState.importedGeoJsonLayer = L.geoJSON(geo, {
+        style: function () {
+            return { color: '#0ea5e9', weight: 2, fillOpacity: 0.12 };
+        },
+        pointToLayer: function (_feature, latlng) {
+            return L.circleMarker(latlng, {
+                radius: 5,
+                color: '#0ea5e9',
+                fillColor: '#22d3ee',
+                fillOpacity: 0.8,
+                weight: 2,
+            });
+        },
+        onEachFeature: function (feature, layer) {
+            if (!feature || !feature.properties) return;
+            const keys = Object.keys(feature.properties).slice(0, 8);
+            if (keys.length === 0) return;
+            const lines = keys.map(k => '<strong>' + k + '</strong>: ' + String(feature.properties[k]));
+            layer.bindPopup(lines.join('<br>'));
+        },
+    }).addTo(gisMap);
+
+    const bounds = gisState.importedGeoJsonLayer.getBounds();
+    if (bounds && bounds.isValid()) {
+        gisMap.fitBounds(bounds, { padding: [22, 22], maxZoom: 13 });
+    }
+
+    setGISJsonStatus('Imported ' + geo.features.length + ' feature(s) to map.', false);
+}
+
+function clearGISJsonLayer() {
+    if (gisState.importedGeoJsonLayer) {
+        gisMap.removeLayer(gisState.importedGeoJsonLayer);
+        gisState.importedGeoJsonLayer = null;
+        setGISJsonStatus('Cleared imported GIS JSON layer.', false);
+    }
+}
+
+function downloadGISJson() {
+    const editor = document.getElementById('gisJsonEditor');
+    const raw = editor ? editor.value.trim() : '';
+
+    let payload = null;
+    if (raw) {
+        try {
+            payload = JSON.parse(raw);
+        } catch (_) {
+            setGISJsonStatus('Cannot download: JSON editor contains invalid JSON.', true);
+            return;
+        }
+    } else {
+        payload = buildCurrentGISJsonPayload();
+    }
+
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'gis-' + currentDashType + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    setGISJsonStatus('GIS JSON downloaded.', false);
+}
+
+function parseGISJsonEditorInput() {
+    const editor = document.getElementById('gisJsonEditor');
+    if (!editor) return null;
+
+    const raw = (editor.value || '').trim();
+    if (!raw) {
+        setGISJsonStatus('JSON editor is empty.', true);
+        return null;
+    }
+
+    try {
+        return JSON.parse(raw);
+    } catch (err) {
+        setGISJsonStatus('Invalid JSON: ' + err.message, true);
+        return null;
+    }
+}
+
+function normalizeToGeoJSON(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+
+    if (payload.type === 'FeatureCollection' && Array.isArray(payload.features)) {
+        return payload;
+    }
+
+    if (payload.type === 'Feature') {
+        return { type: 'FeatureCollection', features: [payload] };
+    }
+
+    if (payload.type && ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection'].includes(payload.type)) {
+        return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: payload, properties: {} }] };
+    }
+
+    if (payload.geojson && typeof payload.geojson === 'object') {
+        return normalizeToGeoJSON(payload.geojson);
+    }
+
+    const features = [];
+
+    if (Array.isArray(payload.markers)) {
+        payload.markers.forEach(marker => {
+            if (!marker || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) return;
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [marker.lng, marker.lat] },
+                properties: {
+                    source: 'marker',
+                    id: marker.id || '',
+                    name: marker.name || '',
+                    category: marker.category || '',
+                    ...(marker.properties || {}),
+                },
+            });
+        });
+    }
+
+    if (Array.isArray(payload.regions)) {
+        payload.regions.forEach(region => {
+            if (region && region.geojson && typeof region.geojson === 'object') {
+                const regionGeo = normalizeToGeoJSON(region.geojson);
+                if (regionGeo && Array.isArray(regionGeo.features)) {
+                    regionGeo.features.forEach(f => {
+                        features.push({
+                            type: 'Feature',
+                            geometry: f.geometry,
+                            properties: {
+                                source: 'region',
+                                id: region.id || '',
+                                name: region.name || '',
+                                regionType: region.type || '',
+                                ...(region.properties || {}),
+                                ...(f.properties || {}),
+                            },
+                        });
+                    });
+                }
+                return;
+            }
+
+            if (!region || !Array.isArray(region.center) || region.center.length < 2) return;
+            const lat = Number(region.center[0]);
+            const lng = Number(region.center[1]);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [lng, lat] },
+                properties: {
+                    source: 'region-center',
+                    id: region.id || '',
+                    name: region.name || '',
+                    regionType: region.type || '',
+                    ...(region.properties || {}),
+                },
+            });
+        });
+    }
+
+    if (Array.isArray(payload.features)) {
+        payload.features.forEach(feature => {
+            if (feature && feature.type === 'Feature' && feature.geometry) {
+                features.push(feature);
+            }
+        });
+    }
+
+    if (features.length === 0) return null;
+    return { type: 'FeatureCollection', features: features };
+}
+
+function setGISJsonStatus(message, isError) {
+    const box = document.getElementById('gisJsonStatus');
+    if (!box) return;
+    box.textContent = message;
+    box.classList.toggle('error', !!isError);
 }
 
 // =============================================

@@ -320,11 +320,24 @@
                         <button class="gis-btn gis-btn-sm" onclick="copyShareableLink()">Copy Link</button>
                     </div>
                 </section>
+
+                <section class="gis-tool-section">
+                    <h4>GIS JSON Tool</h4>
+                    <div class="gis-inline-actions">
+                        <button class="gis-btn gis-btn-sm" onclick="loadCurrentDataAsGISJson()">Load Current JSON</button>
+                        <button class="gis-btn gis-btn-sm" onclick="validateGISJson()">Validate</button>
+                        <button class="gis-btn gis-btn-sm" onclick="importGISJsonToMap()">Import to Map</button>
+                        <button class="gis-btn gis-btn-sm" onclick="clearGISJsonLayer()">Clear Imported</button>
+                        <button class="gis-btn gis-btn-sm" onclick="downloadGISJson()">Download JSON</button>
+                    </div>
+                    <textarea id="gisJsonEditor" class="gis-json-editor" spellcheck="false" placeholder="Paste GeoJSON or Axiom GIS JSON here"></textarea>
+                    <div class="gis-query-result" id="gisJsonStatus">Ready. Load current JSON or paste your own.</div>
+                </section>
             </div>
         </div>
     </aside>
 </div>
 </div>
 
-<script src="/static/gis-dashboard.js?v=20260412-4"></script>
+<script src="/static/gis-dashboard.js?v=20260412-5"></script>
 {{ end }}
