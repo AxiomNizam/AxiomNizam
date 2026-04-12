@@ -109,6 +109,7 @@ const MAP_CONFIG = {
 document.addEventListener('DOMContentLoaded', function () {
     initMap();
     initExplorerUX();
+    syncWorkspacePanelsToggle();
     loadGISData();
 });
 
@@ -189,6 +190,35 @@ function initExplorerUX() {
             closeAllMenus();
         }
     });
+}
+
+function toggleWorkspacePanels() {
+    const hub = document.getElementById('gisHubContainer');
+    if (!hub) return;
+
+    const willExpand = hub.classList.contains('tools-collapsed');
+    hub.classList.toggle('tools-collapsed');
+
+    if (willExpand) {
+        const sidebar = document.getElementById('gisSidebar');
+        if (sidebar) sidebar.classList.remove('collapsed');
+    }
+
+    syncWorkspacePanelsToggle();
+    setTimeout(() => {
+        if (gisMap) gisMap.invalidateSize();
+    }, 280);
+}
+
+function syncWorkspacePanelsToggle() {
+    const hub = document.getElementById('gisHubContainer');
+    const btn = document.getElementById('gisMoreWorkspaceBtn');
+    if (!hub || !btn) return;
+
+    const expanded = !hub.classList.contains('tools-collapsed');
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    btn.textContent = expanded ? 'Hide Panels' : 'More';
+    btn.title = expanded ? 'Hide panels and summary' : 'Show panels and summary';
 }
 
 // =============================================

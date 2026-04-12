@@ -426,6 +426,31 @@
     border-bottom: 1px solid var(--border-color);
     overflow-x: auto;
     flex-shrink: 0;
+    max-height: 86px;
+    transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease, border-color 0.2s ease;
+}
+
+.gis-hub-container.tools-collapsed .gis-summary-bar {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-color: transparent;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.gis-hub-container.tools-collapsed .gis-sidebar {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    border-right: none;
+    overflow: hidden;
+}
+
+.gis-hub-container.tools-collapsed .gis-sidebar-toggle {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .gis-summary-card {
@@ -1239,6 +1264,23 @@
     gap: 6px;
 }
 
+.gis-type-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+}
+
+.gis-more-workspace-btn {
+    min-width: 96px;
+    justify-content: center;
+}
+
+.gis-more-workspace-btn[aria-expanded="true"] {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
 .gis-type-group-label {
     font-size: 11px;
     font-weight: 600;
@@ -1324,5 +1366,13 @@
     }
     .gis-type-group-label {
         font-size: 10px;
+    }
+
+    .gis-type-actions {
+        margin-left: 0;
+    }
+
+    .gis-more-workspace-btn {
+        min-width: 84px;
     }
 }
