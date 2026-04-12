@@ -518,26 +518,6 @@ function renderLayers() {
         `;
         container.appendChild(item);
     });
-
-    // Add base map selector
-    const baseItem = document.createElement('div');
-    baseItem.className = 'gis-layer-item gis-layer-base';
-    baseItem.innerHTML = `<span class="layer-section-title">Base Maps</span>`;
-    container.appendChild(baseItem);
-
-    Object.keys(gisState.baseLayers).forEach(name => {
-        const item = document.createElement('div');
-        item.className = 'gis-layer-item';
-        const isActive = gisMap.hasLayer(gisState.baseLayers[name]);
-        item.innerHTML = `
-            <label class="gis-layer-label">
-                <input type="radio" name="baseMap" ${isActive ? 'checked' : ''} 
-                    onchange="switchBaseMap('${name}')">
-                <span class="layer-name">${name}</span>
-            </label>
-        `;
-        container.appendChild(item);
-    });
 }
 
 function getLayerIcon(type) {
