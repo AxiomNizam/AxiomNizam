@@ -40,10 +40,10 @@
     <!-- Main GIS Dashboard Area -->
     <div class="gis-container">
         <!-- Left Sidebar: Filters & Layers -->
-        <aside class="gis-sidebar" id="gisSidebar">
-            <div class="gis-sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+        <aside class="gis-sidebar" id="gisSidebar" aria-label="GIS filters and layers">
+            <button type="button" class="gis-sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" aria-label="Toggle left sidebar">
                 <span class="toggle-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg></span>
-            </div>
+            </button>
 
             <!-- Dashboard Info -->
             <div class="gis-panel gis-dashboard-info" id="dashboardInfoPanel">
@@ -61,16 +61,22 @@
                 <div class="gis-panel-header">
                     <span class="panel-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg></span>
                     <h3>DATA FILTERS</h3>
+                    <button class="gis-more-dot" onclick="togglePanelMenu(event, 'filtersMenu')" title="More filter actions" aria-label="More filter actions">...</button>
                 </div>
+            <div class="gis-panel-menu" id="filtersMenu">
+                <button onclick="runPanelAction('filters-apply')">Apply Filters</button>
+                <button onclick="runPanelAction('filters-clear')">Clear Filters</button>
+                <button onclick="runPanelAction('filters-markers')">Focus Markers</button>
+            </div>
             <div class="gis-panel-body">
                 <div class="gis-filter-group">
-                    <label><span class="filter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span> Division</label>
+                    <label for="filterDivision"><span class="filter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span> Division</label>
                     <select id="filterDivision" onchange="applyFilters()">
                         <option value="">All Divisions</option>
                     </select>
                 </div>
                 <div class="gis-filter-group">
-                    <label><span class="filter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-building-2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></span> Region Type</label>
+                    <label for="filterRegionType"><span class="filter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-building-2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></span> Region Type</label>
                     <select id="filterRegionType" onchange="applyFilters()">
                         <option value="">All Types</option>
                         <option value="division">Division</option>
@@ -79,7 +85,7 @@
                     </select>
                 </div>
                 <div class="gis-filter-group">
-                    <label><span class="filter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bar-chart-2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg></span> Dataset</label>
+                    <label for="filterDataset"><span class="filter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bar-chart-2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg></span> Dataset</label>
                     <select id="filterDataset" onchange="switchDataset()">
                     </select>
                 </div>
@@ -99,6 +105,12 @@
             <div class="gis-panel-header">
                 <span class="panel-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-dot"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/></svg></span>
                 <h3>LAYERS</h3>
+                <button class="gis-more-dot" onclick="togglePanelMenu(event, 'layersMenu')" title="More layer actions" aria-label="More layer actions">...</button>
+            </div>
+            <div class="gis-panel-menu" id="layersMenu">
+                <button onclick="runPanelAction('layers-show-all')">Show All Layers</button>
+                <button onclick="runPanelAction('layers-hide-all')">Hide All Layers</button>
+                <button onclick="runPanelAction('layers-default-basemap')">Reset Base Map</button>
             </div>
             <div class="gis-panel-body" id="layersList">
                 <!-- Populated by JS -->
@@ -110,6 +122,11 @@
             <div class="gis-panel-header">
                 <span class="panel-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-layout-grid"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span>
                 <h3>DIVISIONS</h3>
+                <button class="gis-more-dot" onclick="togglePanelMenu(event, 'regionsMenu')" title="More region actions" aria-label="More region actions">...</button>
+            </div>
+            <div class="gis-panel-menu" id="regionsMenu">
+                <button onclick="runPanelAction('regions-fit-all')">Fit All Regions</button>
+                <button onclick="runPanelAction('regions-reset-view')">Reset Region View</button>
             </div>
             <div class="gis-panel-body">
                 <div class="gis-division-grid" id="divisionGrid">
@@ -171,6 +188,29 @@
         <div class="gis-map-wrapper">
             <div id="gisMap" class="gis-map"></div>
 
+            <!-- Explorer Toolbar -->
+            <div class="gis-explorer-toolbar" id="gisExplorerToolbar">
+                <div class="gis-explorer-search">
+                    <input type="text" id="mapQuickSearch" class="gis-map-search" list="mapQuickSearchList" placeholder="Search place, station or lat,lng" onkeydown="handleMapSearchKey(event)" aria-label="Search map features">
+                    <datalist id="mapQuickSearchList"></datalist>
+                    <button class="gis-btn gis-btn-sm" onclick="searchMapFeature()">Go</button>
+                </div>
+                <div class="gis-explorer-actions">
+                    <button class="gis-chip-btn" onclick="fitVisibleData()" title="Fit map to visible content">Fit View</button>
+                    <button class="gis-chip-btn" onclick="focusMarkersOnly()" title="Focus only marker layer">Focus Markers</button>
+                    <button class="gis-chip-btn" id="labelToggleBtn" onclick="toggleRegionLabels()" title="Toggle region labels">Labels On</button>
+                    <div class="gis-menu-wrap">
+                        <button class="gis-chip-btn gis-more-dot-chip" onclick="togglePanelMenu(event, 'mapToolsMenu')" title="More map tools" aria-label="More map tools">...</button>
+                        <div class="gis-panel-menu map-menu" id="mapToolsMenu">
+                            <button onclick="toggleMeasure(); closeAllMenus()">Measure Distance</button>
+                            <button onclick="locateUser(); closeAllMenus()">Find My Location</button>
+                            <button onclick="resetMapView(); closeAllMenus()">Reset View</button>
+                            <button onclick="toggleFullscreen(); closeAllMenus()">Fullscreen</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Map Controls Overlay -->
             <div class="gis-map-tools">
                 <button class="gis-tool-btn" onclick="gisMap.zoomIn()" title="Zoom In">+</button>
@@ -184,10 +224,10 @@
 
             <!-- Legend -->
             <div class="gis-legend" id="gisLegend">
-                <div class="gis-legend-header" onclick="toggleLegend()">
+                <button type="button" class="gis-legend-header" onclick="toggleLegend()" aria-label="Toggle legend">
                     <span id="legendTitle">Population</span>
                     <span class="legend-toggle" id="legendToggle"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg></span>
-                </div>
+                </button>
                 <div class="gis-legend-body" id="legendBody">
                     <!-- Populated by JS -->
                 </div>
@@ -205,10 +245,10 @@
     </div>
 
     <!-- Right Sidebar: Properties & Data Table -->
-    <aside class="gis-data-panel" id="gisDataPanel">
-        <div class="gis-data-panel-toggle" onclick="toggleDataPanel()">
+    <aside class="gis-data-panel" id="gisDataPanel" aria-label="GIS properties and data panel">
+        <button type="button" class="gis-data-panel-toggle" onclick="toggleDataPanel()" aria-label="Toggle right data panel">
             <span class="toggle-icon" id="dataPanelToggleIcon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right"><path d="m9 18 6-6-6-6"/></svg></span>
-        </div>
+        </button>
 
         <!-- Tab buttons -->
         <div class="gis-data-tabs">
@@ -224,7 +264,7 @@
                 <p>Click on a region or marker to view properties</p>
             </div>
             <div class="gis-properties-content" id="propertiesContent" style="display:none;">
-                <h3 id="propTitle"></h3>
+                <h3 id="propTitle">Selected Feature</h3>
                 <div class="gis-prop-grid" id="propGrid">
                     <!-- Populated by JS -->
                 </div>
@@ -242,7 +282,7 @@
             </div>
             <div class="gis-table-wrapper" id="tableWrapper">
                 <table class="gis-table" id="dataTable">
-                    <thead id="dataTableHead"></thead>
+                    <thead id="dataTableHead"><tr><th>Loading</th></tr></thead>
                     <tbody id="dataTableBody"></tbody>
                 </table>
             </div>
@@ -262,5 +302,5 @@
 </div>
 </div>
 
-<script src="/static/gis-dashboard.js?v=20260405-2"></script>
+<script src="/static/gis-dashboard.js?v=20260412-1"></script>
 {{ end }}

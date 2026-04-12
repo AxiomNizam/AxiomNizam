@@ -64,6 +64,9 @@ let gisState = {
     measureLine: null,
     baseLayers: {},
     dashboardConfig: {},
+    labelsVisible: true,
+    mapSearchIndex: [],
+    temporarySearchMarker: null,
 };
 
 // Dashboard theme configurations
@@ -105,6 +108,7 @@ const MAP_CONFIG = {
 
 document.addEventListener('DOMContentLoaded', function () {
     initMap();
+    initExplorerUX();
     loadGISData();
 });
 
@@ -172,6 +176,21 @@ function initMap() {
     });
 }
 
+function initExplorerUX() {
+    document.addEventListener('click', function (event) {
+        if (event.target.closest('.gis-menu-wrap') || event.target.closest('.gis-more-dot')) {
+            return;
+        }
+        closeAllMenus();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            closeAllMenus();
+        }
+    });
+}
+
 // =============================================
 // Dashboard Type Switching
 // =============================================
@@ -184,6 +203,7 @@ function getDashScope() {
 function switchDashboardType(type) {
     if (type === currentDashType) return;
     currentDashType = type;
+    closeAllMenus();
 
     // Update type bar button states
     document.querySelectorAll('.gis-type-btn').forEach(b => b.classList.remove('active'));
@@ -227,6 +247,7 @@ function clearMapLayers() {
     gisState.datasets = [];
     gisState.activeDataset = null;
     gisState.selectedRegion = null;
+    gisState.mapSearchIndex = [];
 }
 
 // =============================================
@@ -316,6 +337,8 @@ async function loadGISData() {
         renderMarkersOnMap();
         populateFilterDropdowns();
         populateDatasetSelector();
+        buildMapQuickSearchIndex();
+        syncLabelToggleButton();
 
         if (gisState.datasets.length > 0) {
             loadDataset(gisState.datasets[0].id);
@@ -665,6 +688,7 @@ function renderRegionsOnMap() {
             fillColor: color,
             fillOpacity: 0.3,
         });
+        circle.__regionName = region.name;
 
         circle.bindTooltip(region.name, {
             permanent: scope === 'domestic',
@@ -696,6 +720,7 @@ function renderRegionsOnMap() {
             fillColor: getValueColor(val),
             fillOpacity: 0.4,
         });
+        circle.__regionName = region.name;
 
         circle.bindTooltip(region.name, { direction: 'top' });
         circle.on('click', () => showRegionProperties(region));
@@ -703,6 +728,8 @@ function renderRegionsOnMap() {
         if (secondaryLayerVisible) circle.addTo(gisMap);
         gisState.districtPolygons[region.id] = circle;
     });
+
+    applyRegionLabelMode();
 
     renderLegend();
 }
@@ -738,7 +765,7 @@ function getValueColor(val) {
 
 function renderLegend() {
     const body = document.getElementById('legendBody');
-    const titleEl = document.querySelector('.gis-legend h4');
+    const titleEl = document.getElementById('legendTitle');
     if (!body) return;
     body.innerHTML = '';
 
@@ -1236,9 +1263,288 @@ function addMeasurePoint(latlng) {
     }
 }
 
+function handleMapSearchKey(event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    searchMapFeature();
+}
+
+function searchMapFeature() {
+    const input = document.getElementById('mapQuickSearch');
+    if (!input) return;
+    const query = (input.value || '').trim();
+    if (!query) return;
+
+    const coordMatch = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (coordMatch) {
+        const lat = Number(coordMatch[1]);
+        const lng = Number(coordMatch[2]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            placeTemporaryCoordinateMarker(lat, lng, 'Coordinate');
+            gisMap.flyTo([lat, lng], Math.max(10, gisMap.getZoom()), { duration: 0.9 });
+        }
+        return;
+    }
+
+    const normalized = query.toLowerCase();
+    let match = gisState.mapSearchIndex.find(item => item.nameLower === normalized);
+    if (!match) {
+        match = gisState.mapSearchIndex.find(item => item.nameLower.startsWith(normalized));
+    }
+    if (!match) {
+        match = gisState.mapSearchIndex.find(item => item.nameLower.includes(normalized));
+    }
+    if (!match) {
+        input.classList.add('search-miss');
+        setTimeout(() => input.classList.remove('search-miss'), 500);
+        return;
+    }
+
+    if (match.kind === 'region' && match.ref) {
+        const scope = getDashScope();
+        gisMap.flyTo(match.ref.center, scope === 'domestic' ? 10 : 5, { duration: 0.9 });
+        showRegionProperties(match.ref);
+        return;
+    }
+
+    if (match.kind === 'marker' && match.ref) {
+        gisMap.flyTo([match.ref.lat, match.ref.lng], Math.max(9, gisMap.getZoom()), { duration: 0.9 });
+        showMarkerProperties(match.ref);
+    }
+}
+
+function buildMapQuickSearchIndex() {
+    const list = [];
+    const datalist = document.getElementById('mapQuickSearchList');
+    const seen = new Set();
+
+    gisState.regions.forEach(region => {
+        if (!region || !region.name) return;
+        const key = 'region:' + region.name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push({ kind: 'region', ref: region, nameLower: region.name.toLowerCase() });
+    });
+
+    gisState.markers.forEach(marker => {
+        if (!marker || !marker.name) return;
+        const key = 'marker:' + marker.name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push({ kind: 'marker', ref: marker, nameLower: marker.name.toLowerCase() });
+    });
+
+    gisState.mapSearchIndex = list;
+
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    list.slice(0, 250).forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.ref.name;
+        datalist.appendChild(opt);
+    });
+}
+
+function placeTemporaryCoordinateMarker(lat, lng, label) {
+    if (gisState.temporarySearchMarker) {
+        gisMap.removeLayer(gisState.temporarySearchMarker);
+    }
+    gisState.temporarySearchMarker = L.circleMarker([lat, lng], {
+        radius: 7,
+        color: '#f59e0b',
+        fillColor: '#f59e0b',
+        fillOpacity: 0.75,
+        weight: 2,
+    }).addTo(gisMap).bindPopup(label + ': ' + lat.toFixed(5) + ', ' + lng.toFixed(5));
+    gisState.temporarySearchMarker.openPopup();
+}
+
+function fitVisibleData() {
+    const bounds = L.latLngBounds([]);
+
+    Object.values(gisState.divisionPolygons).forEach(layer => {
+        if (gisMap.hasLayer(layer)) bounds.extend(layer.getBounds());
+    });
+    Object.values(gisState.districtPolygons).forEach(layer => {
+        if (gisMap.hasLayer(layer)) bounds.extend(layer.getBounds());
+    });
+
+    if (gisState.markerGroup && gisMap.hasLayer(gisState.markerGroup)) {
+        gisState.markerGroup.eachLayer(layer => {
+            if (layer.getLatLng) bounds.extend(layer.getLatLng());
+        });
+    }
+
+    if (bounds.isValid()) {
+        gisMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 12 });
+    } else {
+        resetMapView();
+    }
+}
+
+function focusMarkersOnly() {
+    Object.values(gisState.divisionPolygons).forEach(layer => gisMap.removeLayer(layer));
+    Object.values(gisState.districtPolygons).forEach(layer => gisMap.removeLayer(layer));
+
+    gisState.layers.forEach(layer => {
+        if (layer.type === 'marker') {
+            layer.visible = true;
+        }
+        if (layer.type === 'geojson' || layer.type === 'heatmap') {
+            layer.visible = false;
+        }
+    });
+
+    if (gisState.markerGroup) {
+        gisState.markerGroup.addTo(gisMap);
+    }
+
+    renderLayers();
+    fitVisibleData();
+}
+
+function toggleRegionLabels() {
+    gisState.labelsVisible = !gisState.labelsVisible;
+    applyRegionLabelMode();
+    syncLabelToggleButton();
+}
+
+function applyRegionLabelMode() {
+    const apply = function (layer) {
+        if (!layer) return;
+        if (gisState.labelsVisible) {
+            if (!layer.getTooltip() && layer.__regionName) {
+                layer.bindTooltip(layer.__regionName, {
+                    permanent: true,
+                    direction: 'center',
+                    className: 'gis-division-label',
+                });
+            }
+            return;
+        }
+        if (layer.getTooltip()) {
+            layer.unbindTooltip();
+        }
+    };
+
+    Object.values(gisState.divisionPolygons).forEach(apply);
+}
+
+function syncLabelToggleButton() {
+    const btn = document.getElementById('labelToggleBtn');
+    if (!btn) return;
+    btn.textContent = gisState.labelsVisible ? 'Labels On' : 'Labels Off';
+    btn.classList.toggle('active', gisState.labelsVisible);
+}
+
+function setAllLayersVisibility(visible) {
+    gisState.layers.forEach(layer => {
+        layer.visible = visible;
+    });
+
+    Object.values(gisState.divisionPolygons).forEach(layer => {
+        if (visible) {
+            layer.addTo(gisMap);
+        } else {
+            gisMap.removeLayer(layer);
+        }
+    });
+
+    Object.values(gisState.districtPolygons).forEach(layer => {
+        if (visible) {
+            layer.addTo(gisMap);
+        } else {
+            gisMap.removeLayer(layer);
+        }
+    });
+
+    if (gisState.markerGroup) {
+        if (visible) {
+            gisState.markerGroup.addTo(gisMap);
+        } else {
+            gisMap.removeLayer(gisState.markerGroup);
+        }
+    }
+
+    renderLayers();
+}
+
 // =============================================
 // UI Panels
 // =============================================
+
+function togglePanelMenu(event, menuId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const menu = document.getElementById(menuId);
+    if (!menu) return;
+
+    const willOpen = !menu.classList.contains('open');
+    closeAllMenus();
+
+    if (willOpen) {
+        menu.classList.add('open');
+        if (event && event.currentTarget) {
+            event.currentTarget.classList.add('active');
+        }
+    }
+}
+
+function closeAllMenus() {
+    document.querySelectorAll('.gis-panel-menu.open').forEach(menu => menu.classList.remove('open'));
+    document.querySelectorAll('.gis-more-dot.active, .gis-more-dot-chip.active').forEach(btn => btn.classList.remove('active'));
+}
+
+function runPanelAction(action) {
+    switch (action) {
+        case 'filters-apply':
+            applyFilters();
+            break;
+        case 'filters-clear':
+            clearFilters();
+            break;
+        case 'filters-markers':
+            focusMarkersOnly();
+            break;
+        case 'layers-show-all':
+            setAllLayersVisibility(true);
+            break;
+        case 'layers-hide-all':
+            setAllLayersVisibility(false);
+            break;
+        case 'layers-default-basemap':
+            switchBaseMap('CartoDB Light');
+            renderLayers();
+            break;
+        case 'regions-fit-all':
+            fitAllPrimaryRegions();
+            break;
+        case 'regions-reset-view':
+            resetMapView();
+            break;
+        default:
+            break;
+    }
+    closeAllMenus();
+}
+
+function fitAllPrimaryRegions() {
+    const types = getPrimaryRegionTypes();
+    const bounds = L.latLngBounds([]);
+
+    gisState.regions
+        .filter(region => types.includes(region.type) && Array.isArray(region.center))
+        .forEach(region => bounds.extend(region.center));
+
+    if (bounds.isValid()) {
+        gisMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 10 });
+    } else {
+        resetMapView();
+    }
+}
 
 function toggleSidebar() {
     const sidebar = document.getElementById('gisSidebar');
@@ -1263,14 +1569,16 @@ function switchDataTab(tabName) {
 }
 
 function toggleLegend() {
+    const legend = document.getElementById('gisLegend');
     const body = document.getElementById('legendBody');
-    const icon = document.getElementById('legendToggle');
+    if (!body || !legend) return;
+
     if (body.style.display === 'none') {
         body.style.display = 'block';
-        icon.textContent = '▾';
+        legend.classList.remove('collapsed');
     } else {
         body.style.display = 'none';
-        icon.textContent = '▸';
+        legend.classList.add('collapsed');
     }
 }
 

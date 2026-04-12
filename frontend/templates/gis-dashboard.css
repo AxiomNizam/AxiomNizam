@@ -125,6 +125,8 @@
     z-index: 11;
     color: var(--text-secondary);
     font-size: 12px;
+    padding: 0;
+    font-family: inherit;
 }
 
 .gis-sidebar.collapsed .gis-sidebar-toggle .toggle-icon {
@@ -134,6 +136,7 @@
 /* ----- Sidebar Panels ----- */
 .gis-panel {
     border-bottom: 1px solid var(--border-color);
+    position: relative;
 }
 
 .gis-panel-header {
@@ -146,6 +149,73 @@
     letter-spacing: 1px;
     color: var(--text-muted);
     text-transform: uppercase;
+}
+
+.gis-panel-header h3 {
+    flex: 1;
+}
+
+.gis-more-dot {
+    min-width: 26px;
+    height: 26px;
+    border: 1px solid var(--border-color);
+    background: var(--darker-bg);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.gis-panel:hover .gis-more-dot,
+.gis-more-dot.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.gis-more-dot:hover,
+.gis-more-dot.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
+.gis-panel-menu {
+    position: absolute;
+    right: 16px;
+    top: 44px;
+    min-width: 180px;
+    display: none;
+    flex-direction: column;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: var(--shadow-md);
+    z-index: 30;
+    overflow: hidden;
+}
+
+.gis-panel-menu.open {
+    display: flex;
+}
+
+.gis-panel-menu button {
+    background: transparent;
+    border: none;
+    text-align: left;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.gis-panel-menu button:hover {
+    background: var(--gis-overlay-soft);
+    color: var(--text-primary);
 }
 
 .gis-panel-header .panel-icon {
@@ -392,7 +462,7 @@
 /* Map Controls */
 .gis-map-tools {
     position: absolute;
-    top: 12px;
+    top: 78px;
     left: 12px;
     z-index: 1000;
     display: flex;
@@ -403,6 +473,97 @@
     box-shadow: var(--shadow-md);
     padding: 4px;
     border: 1px solid var(--border-color);
+}
+
+/* Explorer Toolbar */
+.gis-explorer-toolbar {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1001;
+    width: min(860px, calc(100% - 24px));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-md);
+}
+
+.gis-explorer-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.gis-map-search {
+    width: 100%;
+    min-width: 180px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    background: var(--darker-bg);
+    color: var(--text-primary);
+    border-radius: 8px;
+    font-size: 12px;
+    outline: none;
+}
+
+.gis-map-search:focus {
+    border-color: var(--primary-color);
+}
+
+.gis-map-search.search-miss {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.gis-explorer-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.gis-chip-btn {
+    border: 1px solid var(--border-color);
+    background: var(--darker-bg);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.gis-chip-btn:hover,
+.gis-chip-btn.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
+.gis-menu-wrap {
+    position: relative;
+}
+
+.gis-more-dot-chip {
+    min-width: 34px;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.gis-panel-menu.map-menu {
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 190px;
 }
 
 .gis-tool-btn {
@@ -439,7 +600,7 @@
 /* Legend */
 .gis-legend {
     position: absolute;
-    top: 12px;
+    top: 78px;
     right: 12px;
     z-index: 1000;
     background: var(--card-bg);
@@ -462,10 +623,18 @@
     background: var(--primary-color);
     color: white;
     border-radius: 8px 8px 0 0;
+    width: 100%;
+    border: none;
+    font-family: inherit;
 }
 
 .legend-toggle {
     font-size: 14px;
+    transition: transform 0.2s ease;
+}
+
+.gis-legend.collapsed .legend-toggle {
+    transform: rotate(-90deg);
 }
 
 .gis-legend-body {
@@ -584,6 +753,8 @@
     z-index: 11;
     color: var(--text-secondary);
     font-size: 12px;
+    padding: 0;
+    font-family: inherit;
 }
 
 .gis-data-panel.collapsed .gis-data-panel-toggle #dataPanelToggleIcon {
@@ -968,6 +1139,26 @@
         padding: 6px 10px;
     }
 
+    .gis-explorer-toolbar {
+        width: calc(100% - 20px);
+        top: 10px;
+        padding: 6px;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .gis-explorer-actions {
+        justify-content: flex-start;
+    }
+
+    .gis-map-tools {
+        top: 116px;
+    }
+
+    .gis-legend {
+        top: 116px;
+    }
+
     .gis-data-tabs {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
@@ -1026,6 +1217,40 @@
     .gis-map-wrapper,
     .gis-map {
         min-height: 280px;
+    }
+
+    .gis-explorer-toolbar {
+        width: calc(100% - 20px);
+        top: 10px;
+        padding: 6px;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .gis-explorer-actions {
+        justify-content: flex-start;
+    }
+
+    .gis-map-tools {
+        top: 132px;
+    }
+
+    .gis-legend {
+        top: 132px;
+    }
+
+    .gis-chip-btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    .gis-panel-menu {
+        right: 8px;
+    }
+
+    .gis-more-dot {
+        opacity: 1;
+        transform: translateY(0);
     }
 
     .gis-data-panel {
