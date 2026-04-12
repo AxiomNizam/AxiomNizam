@@ -80,10 +80,25 @@
     --gis-row-alt: color-mix(in srgb, var(--light-bg) 55%, var(--card-bg));
 }
 
+.main-content.gis-main-content {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    min-height: 0;
+}
+
+.main-content.gis-main-content .gis-hub-container {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
 /* ----- Layout ----- */
 .gis-container {
     display: flex;
-    height: calc(100vh - 175px);
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
     gap: 0;
     flex: 1;
