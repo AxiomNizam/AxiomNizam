@@ -140,7 +140,8 @@ func main() {
 	router.Static("/static", "templates/")
 
 	// Routes
-	router.GET("/", requireFrontendRoles("admin", "system-manager", "manager", "user"), dashboardHandler)
+	router.GET("/", dashboardHandler)
+	router.GET("/signup", signupHandler)
 	router.GET("/login", loginHandler)
 	router.GET("/admin", adminHandler)
 	router.GET("/system-manager", systemManagerHandler)
@@ -177,13 +178,14 @@ func main() {
 	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
 	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
 	fmt.Printf("� IAM Admin Console: http://localhost:%s/iam-admin\n", port)
-	fmt.Printf("�📡 Backend (browser): %s\n", backendURL)
+	fmt.Printf("📝 Signup: http://localhost:%s/signup\n", port)
+	fmt.Printf("📡 Backend (browser): %s\n", backendURL)
 	fmt.Printf("🔁 Backend (proxy): %s\n\n", backendProxyURL)
 
 	router.Run(fmt.Sprintf(":%s", port))
 }
 
-// dashboardHandler serves the public dashboard
+// dashboardHandler serves the public landing page (no auth required)
 func dashboardHandler(c *gin.Context) {
 	authToken := c.GetHeader("Authorization")
 	if authToken == "" {
@@ -191,7 +193,7 @@ func dashboardHandler(c *gin.Context) {
 	}
 	isAuth := authToken != ""
 
-	userName := "User"
+	userName := "Guest"
 	if fromCookie, _ := c.Cookie("userName"); strings.TrimSpace(fromCookie) != "" {
 		userName = fromCookie
 	}
@@ -199,7 +201,7 @@ func dashboardHandler(c *gin.Context) {
 	health, _ := fetchHealth()
 
 	c.HTML(http.StatusOK, "layout.html", gin.H{
-		"title":       "AxiomNizam - Dashboard",
+		"title":       "AxiomNizam - Enterprise Data Control Plane",
 		"pageName":    "public-dashboard",
 		"page":        "public-dashboard",
 		"isAuth":      isAuth,
@@ -207,6 +209,37 @@ func dashboardHandler(c *gin.Context) {
 		"backendURL":  backendURL,
 		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
 		"health":      health,
+	})
+}
+
+// signupHandler serves the signup page
+func signupHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+	if strings.TrimSpace(authToken) != "" {
+		role := c.GetHeader("X-User-Role")
+		if role == "" {
+			role, _ = c.Cookie("userRole")
+		}
+		c.Redirect(http.StatusFound, defaultPathForRole(role))
+		return
+	}
+
+	health, _ := fetchHealth()
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":       "AxiomNizam - Sign Up",
+		"pageName":    "signup",
+		"page":        "signup",
+		"isAuth":      false,
+		"userName":    "Guest",
+		"backendURL":  backendURL,
+		"frontendURL": fmt.Sprintf("http://localhost:%s", os.Getenv("FRONTEND_PORT")),
+		"health":      health,
+		"hideChrome":  true,
 	})
 }
 

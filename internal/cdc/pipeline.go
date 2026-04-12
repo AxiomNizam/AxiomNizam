@@ -190,6 +190,7 @@ func (pe *PipelineEngine) loadState() bool {
 		pe.observability = state.Observability
 	}
 	pe.sequence = state.Sequence
+	log.Printf("cdc-pipeline: restored state from etcd (%d pipelines)", len(pe.pipelines))
 	return true
 }
 

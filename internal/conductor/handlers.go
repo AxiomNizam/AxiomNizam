@@ -255,6 +255,41 @@ func (h *Handler) GetStats(c *gin.Context) {
 	c.JSON(http.StatusOK, h.mgr.GetStats())
 }
 
+// GetConnections GET /api/v1/conductor/connections
+func (h *Handler) GetConnections(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"connections": h.mgr.GetConnections()})
+}
+
+// ConnectBackend POST /api/v1/conductor/connections
+func (h *Handler) ConnectBackend(c *gin.Context) {
+	var req ConnectBackendRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+	conn, err := h.mgr.ConnectBackend(&req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if conn != nil {
+			c.JSON(status, gin.H{"error": err.Error(), "connection": conn})
+			return
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": req.Type + " connected successfully", "connection": conn})
+}
+
+// DisconnectBackend DELETE /api/v1/conductor/connections/:type
+func (h *Handler) DisconnectBackend(c *gin.Context) {
+	backendType := c.Param("type")
+	if err := h.mgr.DisconnectBackend(backendType); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": backendType + " disconnected"})
+}
+
 // ---------------------------------------------------------------
 // Live Stream (SSE)
 // ---------------------------------------------------------------
@@ -362,6 +397,11 @@ func RegisterRoutes(router *gin.Engine, mgr *Manager, authMiddleware, adminMiddl
 		// Stats & Stream
 		api.GET("/stats", h.GetStats)
 		api.GET("/stream", h.StreamSSE)
+
+		// Connection Management
+		api.GET("/connections", h.GetConnections)
+		api.POST("/connections", adminMiddleware, h.ConnectBackend)
+		api.DELETE("/connections/:type", adminMiddleware, h.DisconnectBackend)
 	}
 
 	// WebSocket endpoint

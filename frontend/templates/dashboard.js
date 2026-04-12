@@ -1,310 +1,233 @@
-let autoRefreshInterval = null;
+// AxiomNizam Landing Page Dashboard JS
 
-// Get backend URL from template
 const BACKEND_URL = (() => {
     if (typeof window.resolveBackendURL === 'function') {
         return window.resolveBackendURL();
     }
-
     const value = String(window.BACKEND_URL || '').trim();
-    if (value) {
-        return value.endsWith('/') ? value.slice(0, -1) : value;
-    }
-
+    if (value) return value.endsWith('/') ? value.slice(0, -1) : value;
     return 'http://localhost:8000';
 })();
 
-console.log('Backend URL:', BACKEND_URL);
-
-// Initial load
-window.addEventListener('DOMContentLoaded', () => {
-    refreshData();
-    loadAPIs();
-    displayBackendInfo();
-    startAutoRefresh();
-});
-
-function refreshData() {
-    fetchHealth();
-    fetchStatus();
-    updateLastRefreshTime();
+function isAuthenticated() {
+    return !!(localStorage.getItem('authToken') || readLandingCookie('authToken'));
 }
 
-function fetchHealth() {
-    const url = '/api/health';
-    console.log('Fetching health from:', url);
-    console.log('BACKEND_URL value:', BACKEND_URL);
-    
-    fetch(url, { mode: 'cors' })
-        .then(function(response) { 
-            console.log('Health response status:', response.status);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return response.json(); 
-        })
-        .then(function(data) {
-            console.log('Health data:', data);
-            const healthContent = document.getElementById('healthContent');
-            const statusText = (data.status || 'unknown').toUpperCase();
-            const messageText = data.message || 'No message';
-            
-            if (healthContent) {
-                healthContent.innerHTML = '<div class="status-item"><span class="status-label">Status</span>' +
-                    '<span class="status-value status-ok">' + statusText + '</span></div>' +
-                    '<div class="status-item"><span class="status-label">Message</span>' +
-                    '<span class="status-value">' + messageText + '</span></div>';
-            }
-        })
-        .catch(function(error) {
-            console.error('Health fetch error:', error);
-            const healthContent = document.getElementById('healthContent');
-            if (healthContent) {
-                healthContent.innerHTML = '<div class="error-message">❌ Unable to fetch health status: ' + error.message + '</div>';
-            }
-        });
-}
-
-function fetchStatus() {
-    const url = '/api/status';
-    console.log('Fetching status from:', url);
-    
-    fetch(url, { mode: 'cors' })
-        .then(function(response) {
-            console.log('Status response status:', response.status);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return response.json();
-        })
-        .then(function(data) {
-            console.log('Status data:', data);
-            // Backend returns data.data with the database statuses
-            const databases = data.data || data.Data || {};
-            
-            console.log('Databases extracted:', databases);
-            
-            // Update the status content div with database list
-            const statusContent = document.getElementById('statusContent');
-            if (statusContent) {
-                if (databases && Object.keys(databases).length > 0) {
-                    let dbHtml = '<div class="db-checklist">';
-                    
-                    const sortedDbs = Object.entries(databases).sort(function(a, b) {
-                        return a[0].localeCompare(b[0]);
-                    });
-                    
-                    for (let i = 0; i < sortedDbs.length; i++) {
-                        const dbName = sortedDbs[i][0];
-                        const dbStatus = sortedDbs[i][1];
-                        const isConnected = dbStatus === 'connected' || dbStatus === 'Connected' || dbStatus === 'ok' || dbStatus === 'OK';
-                        const statusIcon = isConnected ? '✓' : '✕';
-                        const statusBadge = isConnected ? '✔️ connected' : '❌ disconnected';
-                        const statusClass = isConnected ? 'connected' : 'disconnected';
-                        
-                        dbHtml += '<div class="db-item ' + statusClass + '"><div class="db-info">' +
-                            '<div class="db-icon">' + statusIcon + '</div>' +
-                            '<div class="db-name">' + capitalizeFirstLetter(dbName) + '</div>' +
-                            '</div><div class="db-status ' + statusClass + '">' +
-                            '<span>' + statusBadge + '</span></div></div>';
-                    }
-                    dbHtml += '</div>';
-                    statusContent.innerHTML = dbHtml;
-                } else {
-                    statusContent.innerHTML = '<div class="error-message">No database information available</div>';
-                }
-            }
-        })
-        .catch(function(error) {
-            console.error('Status fetch error:', error);
-            const statusContent = document.getElementById('statusContent');
-            if (statusContent) {
-                statusContent.innerHTML = '<div class="error-message">❌ Unable to fetch status: ' + error.message + '</div>';
-            }
-        });
-}
-
-function toggleAutoRefresh() {
-    const checkbox = document.getElementById('autoRefresh');
-    if (checkbox.checked) {
-        startAutoRefresh();
-    } else {
-        stopAutoRefresh();
-    }
-}
-
-function startAutoRefresh() {
-    if (!autoRefreshInterval) {
-        autoRefreshInterval = setInterval(refreshData, 5000);
-    }
-}
-
-function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-    }
-}
-
-function updateLastRefreshTime() {
-    const now = new Date();
-    const time = now.toLocaleTimeString();
-    const elem = document.getElementById('lastUpdate');
-    if (elem) {
-        elem.textContent = time;
-    }
-}
-
-function displayBackendInfo() {
-    const backendInfoElem = document.getElementById('backendInfo');
-    if (backendInfoElem) {
-        backendInfoElem.textContent = BACKEND_URL;
-    }
-}
-
-function readDashboardCookie(name) {
+function readLandingCookie(name) {
     const prefix = name + '=';
     const parts = document.cookie.split(';');
     for (let i = 0; i < parts.length; i++) {
         const item = parts[i].trim();
-        if (item.startsWith(prefix)) {
-            return decodeURIComponent(item.substring(prefix.length));
-        }
+        if (item.startsWith(prefix)) return decodeURIComponent(item.substring(prefix.length));
     }
     return '';
 }
 
-function getDashboardAuthToken() {
-    return localStorage.getItem('authToken') || readDashboardCookie('authToken') || '';
+const LANDING_SVG_ICONS = {
+    category: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>',
+    feature: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"></path></svg>',
+    database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"></path></svg>',
+    architecture: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="8.5" y="14" width="7" height="7" rx="1.5"></rect><path d="M10 6.5h4"></path><path d="M12 10v4"></path></svg>'
+};
+
+function replaceLandingEmojiIcons() {
+    const landingRoot = document.querySelector('.landing-page');
+    if (!landingRoot) return;
+
+    const iconTargets = [
+        ['.category-icon', LANDING_SVG_ICONS.category],
+        ['.feature-card-icon', LANDING_SVG_ICONS.feature],
+        ['.db-icon', LANDING_SVG_ICONS.database],
+        ['.arch-icon', LANDING_SVG_ICONS.architecture]
+    ];
+
+    iconTargets.forEach(function(pair) {
+        const selector = pair[0];
+        const svg = pair[1];
+        landingRoot.querySelectorAll(selector).forEach(function(node) {
+            node.innerHTML = svg;
+            node.setAttribute('aria-hidden', 'true');
+        });
+    });
 }
 
-function normalizeDashboardRole(role) {
-    const value = String(role || '').toLowerCase().trim();
-    if (value === 'sysadmin' || value === 'system_admin' || value === 'system-admin') return 'system-manager';
-    if (value === 'api-manager' || value === 'api_manager') return 'manager';
-    if (value === 'superadmin' || value === 'super-admin') return 'admin';
-    return value || 'user';
-}
-
-function getDashboardRole() {
-    return normalizeDashboardRole(localStorage.getItem('userRole') || readDashboardCookie('userRole') || 'user');
-}
-
-function toRuntimePath(builderPath) {
-    var raw = String(builderPath || '').trim();
-    if (!raw) return '/api/custom';
-    if (raw === '/api/custom' || raw.indexOf('/api/custom/') === 0) return raw;
-    return '/api/custom/' + raw.replace(/^\/+/, '');
-}
-
-function loadAPIs() {
-    const apisContent = document.getElementById('apisContent');
-    if (!apisContent) return;
-
-    const token = getDashboardAuthToken();
-    const role = getDashboardRole();
-
-    if (!token) {
-        apisContent.innerHTML = '<div class="api-item" style="max-width:none;">' +
-            '<div class="api-description">Login required to view runtime APIs allowed by RBAC.</div>' +
-            '</div>';
-        return;
+// Gate feature access behind auth
+function requireAuth(targetPath) {
+    if (isAuthenticated()) {
+        window.location.href = targetPath;
+    } else {
+        window.location.href = '/signup';
     }
+}
 
-    apisContent.innerHTML = '<div class="loading">Loading APIs...</div>';
+// Fetch health status for the hero section
+function fetchLandingHealth() {
+    const el = document.getElementById('statHealth');
+    if (!el) return;
 
-    fetch(BACKEND_URL + '/api/v1/builder/apis', {
-        headers: {
-            'Authorization': 'Bearer ' + token,
-            'Content-Type': 'application/json'
-        }
-    })
-        .then(function(response) {
-            if (response.status === 401 || response.status === 403) {
-                throw new Error('RBAC access denied for API catalog');
-            }
-            if (!response.ok) {
-                throw new Error('Failed to load APIs: HTTP ' + response.status);
-            }
-            return response.json();
+    fetch('/api/health', { mode: 'cors' })
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
         })
         .then(function(data) {
-            const all = (data.apis || []);
-            const active = all.filter(function(api) {
-                return String(api.status || '').toLowerCase() === 'active';
-            });
-
-            if (active.length === 0) {
-                apisContent.innerHTML = '<div class="api-item" style="max-width:none;">' +
-                    '<div class="api-description">No active custom APIs found. Create one from Admin > API Builder.</div>' +
-                    '</div>';
-                return;
+            const status = (data.status || 'unknown').toUpperCase();
+            if (status === 'OK' || status === 'HEALTHY') {
+                el.innerHTML = '<span class="stat-dot stat-dot-ok"></span> Online';
+            } else {
+                el.innerHTML = '<span class="stat-dot stat-dot-warn"></span> ' + status;
             }
-
-            let html = '<div style="margin-bottom: 12px; color:#5f6b7a; font-size:0.9rem;">' +
-                'Showing ' + active.length + ' active API Builder endpoints for role: <strong>' + escapeHtmlDash(role) + '</strong></div>';
-
-            html += '<div class="api-grid">';
-            for (let i = 0; i < active.length; i++) {
-                const api = active[i];
-                const apiType = String(api.api_type || 'rest').toLowerCase();
-                const displayMethod = (apiType === 'graphql' ? 'POST' : (api.method || 'GET')).toUpperCase();
-                const runtimePath = apiType === 'graphql'
-                    ? String(api.path || '/api/graphql')
-                    : toRuntimePath(api.path || '/');
-
-                const methodClass = displayMethod.toLowerCase();
-                const cacheBadge = api.cache_enabled
-                    ? '<span class="api-auth" style="background:#d4edda;color:#155724;margin-left:6px;">Cache ' + (api.cache_ttl || 300) + 's</span>'
-                    : '';
-                const rateText = (api.rate_limit && api.rate_limit > 0)
-                    ? (api.rate_limit + '/min')
-                    : 'unlimited';
-
-                html += '<div class="api-item">' +
-                    '<span class="api-method ' + methodClass + '">' + displayMethod + '</span>' + cacheBadge +
-                    '<div class="api-path">' + escapeHtmlDash(runtimePath) + '</div>' +
-                    '<div class="api-description">' + escapeHtmlDash(api.description || api.name || 'Custom API') + '</div>' +
-                    '<span class="api-auth" style="margin-right:6px;">Type: ' + escapeHtmlDash(apiType) + '</span>' +
-                    '<span class="api-auth" style="margin-right:6px;">Category: ' + escapeHtmlDash(api.category || 'custom') + '</span>' +
-                    '<span class="api-auth" style="margin-right:6px;">Rate: ' + escapeHtmlDash(rateText) + '</span>' +
-                    '<span class="api-auth">Auth: ' + (api.auth_required ? 'required' : 'token-only') + '</span>' +
-                    '</div>';
-            }
-            html += '</div>';
-            apisContent.innerHTML = html;
         })
-        .catch(function(error) {
-            apisContent.innerHTML = '<div class="api-item" style="max-width:none;">' +
-                '<div class="api-description">Unable to load API catalog: ' + escapeHtmlDash(error.message) + '</div>' +
-                '</div>';
+        .catch(function() {
+            el.innerHTML = '<span class="stat-dot stat-dot-err"></span> Offline';
         });
 }
 
-function escapeHtmlDash(str) {
-    if (!str) return '';
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+// Animate feature cards on scroll
+function initScrollAnimations() {
+    const cards = document.querySelectorAll('.feature-card, .arch-card, .db-card');
+    if (!('IntersectionObserver' in window)) {
+        cards.forEach(function(c) { c.classList.add('visible'); });
+        return;
+    }
+    const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    cards.forEach(function(c) { observer.observe(c); });
 }
 
-function showErrorMessage(message) {
-    const messagesDiv = document.getElementById('messages');
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error-message';
-    errorDiv.textContent = '❌ ' + message;
-    messagesDiv.innerHTML = '';
-    messagesDiv.appendChild(errorDiv);
-    setTimeout(function() { errorDiv.remove(); }, 5000);
+// Feature search / filter
+function initFeatureSearch() {
+    var input = document.getElementById('featureSearch');
+    var clearBtn = document.getElementById('featureSearchClear');
+    var countEl = document.getElementById('featureSearchCount');
+    if (!input) return;
+
+    var categories = document.querySelectorAll('.feature-category');
+    var allCards = document.querySelectorAll('.feature-card');
+    var chips = document.querySelectorAll('.hero-search-chip');
+
+    function normalizeQuery(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function syncChipState(queryValue) {
+        var normalized = normalizeQuery(queryValue);
+        chips.forEach(function(chip) {
+            var chipValue = normalizeQuery(chip.getAttribute('data-search-term') || chip.textContent);
+            chip.classList.toggle('active', !!normalized && chipValue === normalized);
+        });
+    }
+
+    function runFilter() {
+        var raw = normalizeQuery(input.value);
+        if (clearBtn) {
+            clearBtn.style.display = raw ? 'flex' : 'none';
+        }
+        syncChipState(raw);
+
+        if (!raw) {
+            allCards.forEach(function(c) { c.classList.remove('search-hidden', 'search-highlight'); });
+            categories.forEach(function(cat) { cat.classList.remove('search-hidden'); });
+            if (countEl) {
+                countEl.classList.remove('empty');
+                countEl.textContent = 'Type to filter all platform capabilities';
+            }
+            return;
+        }
+
+        var terms = raw.split(/\s+/);
+        var matchCount = 0;
+
+        categories.forEach(function(cat) {
+            var cards = cat.querySelectorAll('.feature-card');
+            var catVisible = 0;
+
+            cards.forEach(function(card) {
+                var title = (card.querySelector('h4') || {}).textContent || '';
+                var desc = (card.querySelector('p') || {}).textContent || '';
+                var tags = '';
+                card.querySelectorAll('.tag').forEach(function(t) { tags += ' ' + t.textContent; });
+                var haystack = (title + ' ' + desc + ' ' + tags).toLowerCase();
+
+                var match = terms.every(function(term) { return haystack.indexOf(term) !== -1; });
+                if (match) {
+                    card.classList.remove('search-hidden');
+                    card.classList.add('search-highlight');
+                    catVisible++;
+                    matchCount++;
+                } else {
+                    card.classList.add('search-hidden');
+                    card.classList.remove('search-highlight');
+                }
+            });
+
+            if (catVisible === 0) {
+                cat.classList.add('search-hidden');
+            } else {
+                cat.classList.remove('search-hidden');
+            }
+        });
+
+        if (countEl) {
+            if (matchCount > 0) {
+                countEl.classList.remove('empty');
+                countEl.textContent = matchCount + ' feature' + (matchCount !== 1 ? 's' : '') + ' found';
+            } else {
+                countEl.classList.add('empty');
+                countEl.textContent = 'No features found. Try broader keywords like API, data, policy, or analytics.';
+            }
+        }
+    }
+
+    input.addEventListener('input', runFilter);
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            input.value = '';
+            runFilter();
+            input.focus();
+        });
+    }
+
+    chips.forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            var searchTerm = (chip.getAttribute('data-search-term') || chip.textContent || '').trim();
+            if (!searchTerm) return;
+            input.value = searchTerm;
+            runFilter();
+            input.focus();
+        });
+    });
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key !== '/' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+        var target = event.target;
+        var isEditable = target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable
+        );
+        if (isEditable) return;
+
+        event.preventDefault();
+        input.focus();
+        input.select();
+    });
+
+    runFilter();
 }
 
-function showSuccessMessage(message) {
-    // Uncomment to show success messages
-    // const messagesDiv = document.getElementById('messages');
-    // const successDiv = document.createElement('div');
-    // successDiv.className = 'success-message';
-    // successDiv.textContent = '✅ ' + message;
-    // messagesDiv.innerHTML = '';
-    // messagesDiv.appendChild(successDiv);
-    // setTimeout(() => successDiv.remove(), 3000);
-}
-
-function capitalizeFirstLetter(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
+window.addEventListener('DOMContentLoaded', function() {
+    replaceLandingEmojiIcons();
+    fetchLandingHealth();
+    initScrollAnimations();
+    initFeatureSearch();
+});

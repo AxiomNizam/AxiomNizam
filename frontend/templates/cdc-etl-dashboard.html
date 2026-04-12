@@ -199,6 +199,31 @@
                     <label for="new-connector-config">Config Keys (comma separated)</label>
                     <input type="text" id="new-connector-config" placeholder="account,warehouse,database,role">
                 </div>
+                <div class="connector-credential-section connector-form-span-2">
+                    <div class="connector-credential-title">Database Credential Keys</div>
+                    <div class="connector-credential-grid">
+                        <div class="modal-form-group"><label for="new-connector-db-host">Host Key</label><input type="text" id="new-connector-db-host" placeholder="host"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-port">Port Key</label><input type="text" id="new-connector-db-port" placeholder="port"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-user">User Key</label><input type="text" id="new-connector-db-user" placeholder="username"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-password">Password Key</label><input type="text" id="new-connector-db-password" placeholder="password"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-name">Database Key</label><input type="text" id="new-connector-db-name" placeholder="database"></div>
+                    </div>
+                    <p class="connector-credential-note">Optional key names merged into Config Keys when provided.</p>
+                </div>
+                <div class="connector-credential-section connector-form-span-2">
+                    <div class="connector-credential-title">Other Connector Credential Keys</div>
+                    <div class="connector-credential-grid">
+                        <div class="modal-form-group"><label for="new-connector-cred-api-key">API Key Key</label><input type="text" id="new-connector-cred-api-key" placeholder="api_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-client-id">Client ID Key</label><input type="text" id="new-connector-cred-client-id" placeholder="client_id"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-client-secret">Client Secret Key</label><input type="text" id="new-connector-cred-client-secret" placeholder="client_secret"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-access-key">Access Key Key</label><input type="text" id="new-connector-cred-access-key" placeholder="access_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-secret-key">Secret Key Key</label><input type="text" id="new-connector-cred-secret-key" placeholder="secret_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-token">Token Key</label><input type="text" id="new-connector-cred-token" placeholder="token"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-sasl-user">SASL User Key</label><input type="text" id="new-connector-cred-sasl-user" placeholder="sasl_username"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-sasl-pass">SASL Password Key</label><input type="text" id="new-connector-cred-sasl-pass" placeholder="sasl_password"></div>
+                    </div>
+                    <p class="connector-credential-note">Auth modes are inferred from these fields (for example: password, apikey, oauth2, access_key, sasl, bearer).</p>
+                </div>
                 <div class="modal-form-group connector-form-span-2">
                     <label for="new-connector-description">Description</label>
                     <textarea id="new-connector-description" placeholder="Connector details, usage and constraints"></textarea>
@@ -272,7 +297,13 @@
             <select id="modal-etl-extract-connector" onchange="onExtractConnectorChange()"></select>
             <div id="modal-extract-db-options" style="display:none;margin-top:8px;">
                 <label for="modal-extract-db-host">DB Host</label>
-                <input type="text" id="modal-extract-db-host" placeholder="localhost:5432">
+                <input type="text" id="modal-extract-db-host" placeholder="localhost">
+                <label for="modal-extract-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="modal-extract-db-port" placeholder="5432">
+                <label for="modal-extract-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="modal-extract-db-user" placeholder="etl_user">
+                <label for="modal-extract-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="modal-extract-db-password" placeholder="******">
                 <label for="modal-extract-db-name" style="margin-top:4px;">Database</label>
                 <input type="text" id="modal-extract-db-name" placeholder="mydb">
                 <label for="modal-extract-db-table" style="margin-top:4px;">Table (optional if SQL query used)</label>
@@ -280,17 +311,67 @@
                 <label for="modal-extract-sql" style="margin-top:4px;">SQL Query (optional)</label>
                 <textarea id="modal-extract-sql" rows="3" placeholder="SELECT * FROM users WHERE active = true" style="font-family:monospace;font-size:13px;width:100%;"></textarea>
             </div>
+            <div id="modal-extract-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="modal-extract-cred-api-key">API Key</label>
+                <input type="text" id="modal-extract-cred-api-key" placeholder="api_key_value">
+                <label for="modal-extract-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="modal-extract-cred-token" placeholder="bearer_token">
+                <label for="modal-extract-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="modal-extract-cred-client-id" placeholder="oauth_client_id">
+                <label for="modal-extract-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="modal-extract-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="modal-extract-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="modal-extract-cred-access-key" placeholder="access_key">
+                <label for="modal-extract-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="modal-extract-cred-secret-key" placeholder="secret_key">
+                <label for="modal-extract-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="modal-extract-cred-username" placeholder="username">
+                <label for="modal-extract-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="modal-extract-cred-password" placeholder="password">
+                <label for="modal-extract-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="modal-extract-cred-sasl-user" placeholder="sasl_username">
+                <label for="modal-extract-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="modal-extract-cred-sasl-pass" placeholder="sasl_password">
+            </div>
             <label for="modal-etl-load-connector" style="margin-top:8px;">Load Connector</label>
             <select id="modal-etl-load-connector" onchange="onLoadConnectorChange()"></select>
             <div id="modal-load-db-options" style="display:none;margin-top:8px;">
                 <label for="modal-load-db-host">DB Host</label>
-                <input type="text" id="modal-load-db-host" placeholder="localhost:5432">
+                <input type="text" id="modal-load-db-host" placeholder="localhost">
+                <label for="modal-load-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="modal-load-db-port" placeholder="5432">
+                <label for="modal-load-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="modal-load-db-user" placeholder="etl_writer">
+                <label for="modal-load-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="modal-load-db-password" placeholder="******">
                 <label for="modal-load-db-name" style="margin-top:4px;">Database</label>
                 <input type="text" id="modal-load-db-name" placeholder="warehouse_db">
                 <label for="modal-load-db-table" style="margin-top:4px;">Target Table</label>
                 <input type="text" id="modal-load-db-table" placeholder="dim_users">
                 <label for="modal-load-sql" style="margin-top:4px;">SQL Upsert/Insert Query (optional)</label>
                 <textarea id="modal-load-sql" rows="3" placeholder="INSERT INTO dim_users SELECT * FROM staging_users ON CONFLICT (id) DO UPDATE SET ..." style="font-family:monospace;font-size:13px;width:100%;"></textarea>
+            </div>
+            <div id="modal-load-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="modal-load-cred-api-key">API Key</label>
+                <input type="text" id="modal-load-cred-api-key" placeholder="api_key_value">
+                <label for="modal-load-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="modal-load-cred-token" placeholder="bearer_token">
+                <label for="modal-load-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="modal-load-cred-client-id" placeholder="oauth_client_id">
+                <label for="modal-load-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="modal-load-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="modal-load-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="modal-load-cred-access-key" placeholder="access_key">
+                <label for="modal-load-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="modal-load-cred-secret-key" placeholder="secret_key">
+                <label for="modal-load-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="modal-load-cred-username" placeholder="username">
+                <label for="modal-load-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="modal-load-cred-password" placeholder="password">
+                <label for="modal-load-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="modal-load-cred-sasl-user" placeholder="sasl_username">
+                <label for="modal-load-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="modal-load-cred-sasl-pass" placeholder="sasl_password">
             </div>
             <label style="margin-top:8px;"><input type="checkbox" id="modal-etl-quality-gate"> Add Quality Gate (validate + dedupe)</label>
         </div>
@@ -381,6 +462,89 @@
             <label for="edit-pipeline-tags">Tags (comma separated)</label>
             <input type="text" id="edit-pipeline-tags">
         </div>
+        <div class="modal-form-group" id="edit-pipeline-etl-connector-group" style="display:none">
+            <label for="edit-etl-extract-connector">Extract Connector</label>
+            <select id="edit-etl-extract-connector" onchange="onEditExtractConnectorChange()"></select>
+            <div id="edit-extract-db-options" style="display:none;margin-top:8px;">
+                <label for="edit-extract-db-host">DB Host</label>
+                <input type="text" id="edit-extract-db-host" placeholder="localhost">
+                <label for="edit-extract-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="edit-extract-db-port" placeholder="5432">
+                <label for="edit-extract-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="edit-extract-db-user" placeholder="etl_user">
+                <label for="edit-extract-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="edit-extract-db-password" placeholder="******">
+                <label for="edit-extract-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="edit-extract-db-name" placeholder="mydb">
+                <label for="edit-extract-db-table" style="margin-top:4px;">Table</label>
+                <input type="text" id="edit-extract-db-table" placeholder="users">
+                <label for="edit-extract-sql" style="margin-top:4px;">SQL Query</label>
+                <textarea id="edit-extract-sql" rows="3" placeholder="SELECT * FROM users"></textarea>
+            </div>
+            <div id="edit-extract-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="edit-extract-cred-api-key">API Key</label>
+                <input type="text" id="edit-extract-cred-api-key" placeholder="api_key_value">
+                <label for="edit-extract-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="edit-extract-cred-token" placeholder="bearer_token">
+                <label for="edit-extract-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="edit-extract-cred-client-id" placeholder="oauth_client_id">
+                <label for="edit-extract-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="edit-extract-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="edit-extract-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="edit-extract-cred-access-key" placeholder="access_key">
+                <label for="edit-extract-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="edit-extract-cred-secret-key" placeholder="secret_key">
+                <label for="edit-extract-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="edit-extract-cred-username" placeholder="username">
+                <label for="edit-extract-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="edit-extract-cred-password" placeholder="password">
+                <label for="edit-extract-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="edit-extract-cred-sasl-user" placeholder="sasl_username">
+                <label for="edit-extract-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="edit-extract-cred-sasl-pass" placeholder="sasl_password">
+            </div>
+
+            <label for="edit-etl-load-connector" style="margin-top:8px;">Load Connector</label>
+            <select id="edit-etl-load-connector" onchange="onEditLoadConnectorChange()"></select>
+            <div id="edit-load-db-options" style="display:none;margin-top:8px;">
+                <label for="edit-load-db-host">DB Host</label>
+                <input type="text" id="edit-load-db-host" placeholder="localhost">
+                <label for="edit-load-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="edit-load-db-port" placeholder="5432">
+                <label for="edit-load-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="edit-load-db-user" placeholder="etl_writer">
+                <label for="edit-load-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="edit-load-db-password" placeholder="******">
+                <label for="edit-load-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="edit-load-db-name" placeholder="warehouse_db">
+                <label for="edit-load-db-table" style="margin-top:4px;">Target Table</label>
+                <input type="text" id="edit-load-db-table" placeholder="dim_users">
+                <label for="edit-load-sql" style="margin-top:4px;">SQL Query</label>
+                <textarea id="edit-load-sql" rows="3" placeholder="INSERT INTO dim_users ..."></textarea>
+            </div>
+            <div id="edit-load-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="edit-load-cred-api-key">API Key</label>
+                <input type="text" id="edit-load-cred-api-key" placeholder="api_key_value">
+                <label for="edit-load-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="edit-load-cred-token" placeholder="bearer_token">
+                <label for="edit-load-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="edit-load-cred-client-id" placeholder="oauth_client_id">
+                <label for="edit-load-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="edit-load-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="edit-load-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="edit-load-cred-access-key" placeholder="access_key">
+                <label for="edit-load-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="edit-load-cred-secret-key" placeholder="secret_key">
+                <label for="edit-load-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="edit-load-cred-username" placeholder="username">
+                <label for="edit-load-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="edit-load-cred-password" placeholder="password">
+                <label for="edit-load-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="edit-load-cred-sasl-user" placeholder="sasl_username">
+                <label for="edit-load-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="edit-load-cred-sasl-pass" placeholder="sasl_password">
+            </div>
+        </div>
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closeEditPipelineModal()">Cancel</button>
             <button class="btn-submit" onclick="submitEditPipeline()">Save</button>
@@ -428,6 +592,33 @@
                 <label for="edit-connector-auth">Auth Modes (comma separated)</label>
                 <input type="text" id="edit-connector-auth">
             </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-config">Config Keys (comma separated)</label>
+                <input type="text" id="edit-connector-config">
+            </div>
+            <div class="connector-credential-section connector-form-span-2">
+                <div class="connector-credential-title">Database Credential Keys</div>
+                <div class="connector-credential-grid">
+                    <div class="modal-form-group"><label for="edit-connector-db-host">Host Key</label><input type="text" id="edit-connector-db-host" placeholder="host"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-port">Port Key</label><input type="text" id="edit-connector-db-port" placeholder="port"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-user">User Key</label><input type="text" id="edit-connector-db-user" placeholder="username"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-password">Password Key</label><input type="text" id="edit-connector-db-password" placeholder="password"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-name">Database Key</label><input type="text" id="edit-connector-db-name" placeholder="database"></div>
+                </div>
+            </div>
+            <div class="connector-credential-section connector-form-span-2">
+                <div class="connector-credential-title">Other Connector Credential Keys</div>
+                <div class="connector-credential-grid">
+                    <div class="modal-form-group"><label for="edit-connector-cred-api-key">API Key Key</label><input type="text" id="edit-connector-cred-api-key" placeholder="api_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-client-id">Client ID Key</label><input type="text" id="edit-connector-cred-client-id" placeholder="client_id"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-client-secret">Client Secret Key</label><input type="text" id="edit-connector-cred-client-secret" placeholder="client_secret"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-access-key">Access Key Key</label><input type="text" id="edit-connector-cred-access-key" placeholder="access_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-secret-key">Secret Key Key</label><input type="text" id="edit-connector-cred-secret-key" placeholder="secret_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-token">Token Key</label><input type="text" id="edit-connector-cred-token" placeholder="token"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-sasl-user">SASL User Key</label><input type="text" id="edit-connector-cred-sasl-user" placeholder="sasl_username"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-sasl-pass">SASL Password Key</label><input type="text" id="edit-connector-cred-sasl-pass" placeholder="sasl_password"></div>
+                </div>
+            </div>
             <div class="modal-form-group connector-form-span-2">
                 <label for="edit-connector-description">Description</label>
                 <textarea id="edit-connector-description"></textarea>
@@ -445,5 +636,5 @@
     </div>
 </div>
 
-<script src="/static/cdc-etl-dashboard.js?v=20260405-3"></script>
+<script src="/static/cdc-etl-dashboard.js?v=20260405-5"></script>
 {{ end }}

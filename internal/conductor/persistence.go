@@ -14,36 +14,42 @@ import (
 
 // DBProducer is the GORM model for persisting producers.
 type DBProducer struct {
-	ID          string `gorm:"primaryKey;column:id"`
-	Name        string `gorm:"column:name"`
-	Backend     string `gorm:"column:backend"`
-	Exchange    string `gorm:"column:exchange"`
-	RoutingKey  string `gorm:"column:routing_key"`
-	Topic       string `gorm:"column:topic"`
-	ContentType string `gorm:"column:content_type"`
-	HeadersJSON string `gorm:"column:headers_json;type:text"`
-	Status      string `gorm:"column:status"`
-	ConfigJSON  string `gorm:"column:config_json;type:text"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID           string `gorm:"primaryKey;column:id"`
+	Name         string `gorm:"column:name"`
+	Backend      string `gorm:"column:backend"`
+	Exchange     string `gorm:"column:exchange"`
+	RoutingKey   string `gorm:"column:routing_key"`
+	Topic        string `gorm:"column:topic"`
+	ContentType  string `gorm:"column:content_type"`
+	HeadersJSON  string `gorm:"column:headers_json;type:text"`
+	Status       string `gorm:"column:status"`
+	ConfigJSON   string `gorm:"column:config_json;type:text"`
+	MessagesSent int64  `gorm:"column:messages_sent;default:0"`
+	LastSentAt   time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func (DBProducer) TableName() string { return "conductor_producers" }
 
 // DBConsumer is the GORM model for persisting consumers.
 type DBConsumer struct {
-	ID            string `gorm:"primaryKey;column:id"`
-	Name          string `gorm:"column:name"`
-	Backend       string `gorm:"column:backend"`
-	Queue         string `gorm:"column:queue"`
-	Exchange      string `gorm:"column:exchange"`
-	RoutingKey    string `gorm:"column:routing_key"`
-	Topic         string `gorm:"column:topic"`
-	ConsumerGroup string `gorm:"column:consumer_group"`
-	Status        string `gorm:"column:status"`
-	ConfigJSON    string `gorm:"column:config_json;type:text"`
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID               string `gorm:"primaryKey;column:id"`
+	Name             string `gorm:"column:name"`
+	Backend          string `gorm:"column:backend"`
+	Queue            string `gorm:"column:queue"`
+	Exchange         string `gorm:"column:exchange"`
+	RoutingKey       string `gorm:"column:routing_key"`
+	Topic            string `gorm:"column:topic"`
+	ConsumerGroup    string `gorm:"column:consumer_group"`
+	Status           string `gorm:"column:status"`
+	ConfigJSON       string `gorm:"column:config_json;type:text"`
+	MessagesReceived int64  `gorm:"column:messages_received;default:0"`
+	MessagesAcked    int64  `gorm:"column:messages_acked;default:0"`
+	MessagesFailed   int64  `gorm:"column:messages_failed;default:0"`
+	LastReceivedAt   time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 func (DBConsumer) TableName() string { return "conductor_consumers" }
@@ -56,33 +62,37 @@ func producerToDB(p *Producer) *DBProducer {
 	hdr, _ := json.Marshal(p.Headers)
 	cfg, _ := json.Marshal(p.Config)
 	return &DBProducer{
-		ID:          p.ID,
-		Name:        p.Name,
-		Backend:     p.Backend,
-		Exchange:    p.Exchange,
-		RoutingKey:  p.RoutingKey,
-		Topic:       p.Topic,
-		ContentType: p.ContentType,
-		HeadersJSON: string(hdr),
-		Status:      p.Status,
-		ConfigJSON:  string(cfg),
-		CreatedAt:   p.CreatedAt,
-		UpdatedAt:   p.UpdatedAt,
+		ID:           p.ID,
+		Name:         p.Name,
+		Backend:      p.Backend,
+		Exchange:     p.Exchange,
+		RoutingKey:   p.RoutingKey,
+		Topic:        p.Topic,
+		ContentType:  p.ContentType,
+		HeadersJSON:  string(hdr),
+		Status:       p.Status,
+		ConfigJSON:   string(cfg),
+		MessagesSent: p.MessagesSent,
+		LastSentAt:   p.LastSentAt,
+		CreatedAt:    p.CreatedAt,
+		UpdatedAt:    p.UpdatedAt,
 	}
 }
 
 func producerFromDB(d *DBProducer) *Producer {
 	p := &Producer{
-		ID:          d.ID,
-		Name:        d.Name,
-		Backend:     d.Backend,
-		Exchange:    d.Exchange,
-		RoutingKey:  d.RoutingKey,
-		Topic:       d.Topic,
-		ContentType: d.ContentType,
-		Status:      d.Status,
-		CreatedAt:   d.CreatedAt,
-		UpdatedAt:   d.UpdatedAt,
+		ID:           d.ID,
+		Name:         d.Name,
+		Backend:      d.Backend,
+		Exchange:     d.Exchange,
+		RoutingKey:   d.RoutingKey,
+		Topic:        d.Topic,
+		ContentType:  d.ContentType,
+		Status:       d.Status,
+		MessagesSent: d.MessagesSent,
+		LastSentAt:   d.LastSentAt,
+		CreatedAt:    d.CreatedAt,
+		UpdatedAt:    d.UpdatedAt,
 	}
 	if d.HeadersJSON != "" {
 		json.Unmarshal([]byte(d.HeadersJSON), &p.Headers)
@@ -96,34 +106,42 @@ func producerFromDB(d *DBProducer) *Producer {
 func consumerToDB(c *Consumer) *DBConsumer {
 	cfg, _ := json.Marshal(c.Config)
 	return &DBConsumer{
-		ID:            c.ID,
-		Name:          c.Name,
-		Backend:       c.Backend,
-		Queue:         c.Queue,
-		Exchange:      c.Exchange,
-		RoutingKey:    c.RoutingKey,
-		Topic:         c.Topic,
-		ConsumerGroup: c.ConsumerGroup,
-		Status:        c.Status,
-		ConfigJSON:    string(cfg),
-		CreatedAt:     c.CreatedAt,
-		UpdatedAt:     c.UpdatedAt,
+		ID:               c.ID,
+		Name:             c.Name,
+		Backend:          c.Backend,
+		Queue:            c.Queue,
+		Exchange:         c.Exchange,
+		RoutingKey:       c.RoutingKey,
+		Topic:            c.Topic,
+		ConsumerGroup:    c.ConsumerGroup,
+		Status:           c.Status,
+		ConfigJSON:       string(cfg),
+		MessagesReceived: c.MessagesReceived,
+		MessagesAcked:    c.MessagesAcked,
+		MessagesFailed:   c.MessagesFailed,
+		LastReceivedAt:   c.LastReceivedAt,
+		CreatedAt:        c.CreatedAt,
+		UpdatedAt:        c.UpdatedAt,
 	}
 }
 
 func consumerFromDB(d *DBConsumer) *Consumer {
 	c := &Consumer{
-		ID:            d.ID,
-		Name:          d.Name,
-		Backend:       d.Backend,
-		Queue:         d.Queue,
-		Exchange:      d.Exchange,
-		RoutingKey:    d.RoutingKey,
-		Topic:         d.Topic,
-		ConsumerGroup: d.ConsumerGroup,
-		Status:        d.Status,
-		CreatedAt:     d.CreatedAt,
-		UpdatedAt:     d.UpdatedAt,
+		ID:               d.ID,
+		Name:             d.Name,
+		Backend:          d.Backend,
+		Queue:            d.Queue,
+		Exchange:         d.Exchange,
+		RoutingKey:       d.RoutingKey,
+		Topic:            d.Topic,
+		ConsumerGroup:    d.ConsumerGroup,
+		Status:           d.Status,
+		MessagesReceived: d.MessagesReceived,
+		MessagesAcked:    d.MessagesAcked,
+		MessagesFailed:   d.MessagesFailed,
+		LastReceivedAt:   d.LastReceivedAt,
+		CreatedAt:        d.CreatedAt,
+		UpdatedAt:        d.UpdatedAt,
 	}
 	if d.ConfigJSON != "" {
 		json.Unmarshal([]byte(d.ConfigJSON), &c.Config)

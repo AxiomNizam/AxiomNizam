@@ -22,7 +22,7 @@ services:
       IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
       PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-https://axiomnizam.bitbd.net}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://axiom:axiom@rabbitmq:5672/}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://axiom:axiom@rabbitmq:5672/axiom}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
     depends_on:
       # - valkey
