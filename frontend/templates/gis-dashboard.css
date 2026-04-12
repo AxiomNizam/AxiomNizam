@@ -341,6 +341,12 @@
     color: white;
 }
 
+.gis-btn-sm.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
 /* ----- Layers List ----- */
 .gis-layer-item {
     padding: 6px 0;
@@ -1031,6 +1037,61 @@
     margin-bottom: 10px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--border-color);
+}
+
+/* Tools Tab */
+.gis-tools-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gis-tool-section {
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.gis-tool-section h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin: 0 0 8px 0;
+}
+
+.gis-inline-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.gis-tool-input {
+    min-width: 160px;
+    flex: 1;
+}
+
+.gis-tool-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.gis-query-result {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--gis-overlay-subtle);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    min-height: 42px;
+}
+
+.gis-query-result.error {
+    border-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.08);
+    color: #ef4444;
 }
 
 .stat-row {

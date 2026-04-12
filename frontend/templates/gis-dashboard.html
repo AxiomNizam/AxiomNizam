@@ -197,6 +197,7 @@
                 <button class="gis-tool-btn" onclick="gisMap.zoomOut()" title="Zoom Out"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-minus"><path d="M5 12h14"/></svg></button>
                 <div class="gis-tool-divider"></div>
                 <button class="gis-tool-btn" onclick="resetMapView()" title="Reset View"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button>
+                <button class="gis-tool-btn" id="clusterToolBtn" onclick="toggleMarkerClustering()" title="Toggle Marker Clustering"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clusters"><path d="M6 12a2 2 0 1 0-2-2 2 2 0 0 0 2 2Z"/><path d="M18 6a2 2 0 1 0-2-2 2 2 0 0 0 2 2Z"/><path d="M18 20a2 2 0 1 0-2-2 2 2 0 0 0 2 2Z"/><path d="M8 10h6"/><path d="M8 12h4"/><path d="M8 8h4"/><path d="M16 6v10"/></svg></button>
                 <button class="gis-tool-btn" onclick="toggleFullscreen()" title="Fullscreen"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
                 <button class="gis-tool-btn" id="measureBtn" onclick="toggleMeasure()" title="Measure Distance"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ruler"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg></button>
                 <button class="gis-tool-btn" onclick="locateUser()" title="My Location"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-dot"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/></svg></button>
@@ -224,6 +225,7 @@
             <button class="gis-data-tab active" onclick="switchDataTab('properties')" id="tabProperties">Properties</button>
             <button class="gis-data-tab" onclick="switchDataTab('data')" id="tabData">Data Table</button>
             <button class="gis-data-tab" onclick="switchDataTab('stats')" id="tabStats">Statistics</button>
+            <button class="gis-data-tab" onclick="switchDataTab('tools')" id="tabTools">Tools</button>
         </div>
 
         <!-- Legend (moved from map overlay into panel) -->
@@ -278,9 +280,51 @@
                 <!-- Populated by JS -->
             </div>
         </div>
+
+        <!-- GIS Tools Panel -->
+        <div class="gis-data-content" id="panelTools">
+            <div class="gis-tools-stack">
+                <section class="gis-tool-section">
+                    <h4>Performance</h4>
+                    <div class="gis-inline-actions">
+                        <button class="gis-btn gis-btn-sm" id="clusterToggleBtn" onclick="toggleMarkerClustering()">Clustering: On</button>
+                        <button class="gis-btn gis-btn-sm" onclick="fitVisibleData()">Fit Visible</button>
+                    </div>
+                    <p class="gis-tool-hint">Chunked marker clustering keeps dense maps smooth and responsive.</p>
+                </section>
+
+                <section class="gis-tool-section">
+                    <h4>Draw and Query</h4>
+                    <div class="gis-inline-actions">
+                        <button class="gis-btn gis-btn-sm" onclick="startDrawTool('rectangle')">Draw Rectangle</button>
+                        <button class="gis-btn gis-btn-sm" onclick="startDrawTool('polygon')">Draw Polygon</button>
+                        <button class="gis-btn gis-btn-sm" onclick="runSpatialQuery()">Query Selection</button>
+                        <button class="gis-btn gis-btn-sm" onclick="clearDrawQuery()">Clear</button>
+                    </div>
+                    <div class="gis-query-result" id="drawQueryResult">Draw an area and run query.</div>
+                </section>
+
+                <section class="gis-tool-section">
+                    <h4>Saved Views and Share</h4>
+                    <div class="gis-inline-actions">
+                        <input class="gis-search-input gis-tool-input" id="viewNameInput" placeholder="View name (e.g. BD Train North)">
+                        <button class="gis-btn gis-btn-sm" onclick="saveCurrentView()">Save</button>
+                    </div>
+                    <div class="gis-inline-actions">
+                        <select class="gis-search-input gis-tool-input" id="savedViewsSelect"></select>
+                        <button class="gis-btn gis-btn-sm" onclick="loadSelectedView()">Load</button>
+                        <button class="gis-btn gis-btn-sm" onclick="deleteSelectedView()">Delete</button>
+                    </div>
+                    <div class="gis-inline-actions">
+                        <input class="gis-search-input gis-tool-input" id="shareLinkInput" readonly>
+                        <button class="gis-btn gis-btn-sm" onclick="copyShareableLink()">Copy Link</button>
+                    </div>
+                </section>
+            </div>
+        </div>
     </aside>
 </div>
 </div>
 
-<script src="/static/gis-dashboard.js?v=20260412-3"></script>
+<script src="/static/gis-dashboard.js?v=20260412-4"></script>
 {{ end }}

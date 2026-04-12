@@ -5,6 +5,7 @@
 // =============================================
 
 const GIS_API = ((typeof window.resolveBackendURL === 'function' ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000'))) + '/api/v1/gis';
+const GIS_SAVED_VIEWS_KEY = 'axiomnizam_gis_saved_views_v1';
 
 function readAuthCookie(name) {
     const prefix = name + '=';
@@ -67,6 +68,11 @@ let gisState = {
     labelsVisible: true,
     mapSearchIndex: [],
     temporarySearchMarker: null,
+    useMarkerClustering: true,
+    drawLayerGroup: null,
+    activeQueryShape: null,
+    drawHandlers: {},
+    savedViews: [],
 };
 
 // Dashboard theme configurations
@@ -110,13 +116,19 @@ document.addEventListener('DOMContentLoaded', function () {
     initMap();
     initExplorerUX();
     syncWorkspacePanelsToggle();
-    loadGISData();
+    loadSavedViews();
+    loadGISData().then(() => {
+        bootstrapViewStateFromURL();
+        syncClusterToggleUI();
+        updateShareLinkPreview();
+    });
 });
 
 function initMap() {
     gisMap = L.map('gisMap', {
         center: [23.6850, 90.3563],
         zoom: 7,
+        preferCanvas: true,
         zoomControl: false,
         attributionControl: true,
         maxBounds: [[18, 85], [28, 96]],
@@ -168,6 +180,11 @@ function initMap() {
     gisMap.on('zoomend', function () {
         const el = document.getElementById('mapZoom');
         if (el) el.textContent = 'Zoom ' + gisMap.getZoom();
+        updateShareLinkPreview();
+    });
+
+    gisMap.on('moveend', function () {
+        updateShareLinkPreview();
     });
 
     // Measure mode click handler
@@ -175,6 +192,8 @@ function initMap() {
         if (!gisState.isMeasuring) return;
         addMeasurePoint(e.latlng);
     });
+
+    initDrawQueryTools();
 }
 
 function initExplorerUX() {
@@ -205,6 +224,7 @@ function toggleWorkspacePanels() {
     }
 
     syncWorkspacePanelsToggle();
+    updateShareLinkPreview();
     setTimeout(() => {
         if (gisMap) gisMap.invalidateSize();
     }, 280);
@@ -261,7 +281,10 @@ function switchDashboardType(type) {
     gisMap.flyTo(mapCfg.center, mapCfg.zoom, { duration: 1.2 });
 
     // Load data for new type
-    loadGISData();
+    return loadGISData().then(() => {
+        syncClusterToggleUI();
+        updateShareLinkPreview();
+    });
 }
 
 function clearMapLayers() {
@@ -379,6 +402,9 @@ async function loadGISData() {
         const contentEl = document.getElementById('propertiesContent');
         if (emptyEl) emptyEl.style.display = 'flex';
         if (contentEl) contentEl.style.display = 'none';
+
+        syncClusterToggleUI();
+        updateShareLinkPreview();
     } catch (err) {
         console.error('Failed to load GIS data:', err);
     }
@@ -859,7 +885,20 @@ function getLegendLevels() {
 
 function renderMarkersOnMap() {
     if (gisState.markerGroup) gisMap.removeLayer(gisState.markerGroup);
-    gisState.markerGroup = L.layerGroup();
+
+    const canCluster = isMarkerClusteringAvailable();
+    const useCluster = gisState.useMarkerClustering && canCluster;
+
+    gisState.markerGroup = useCluster
+        ? L.markerClusterGroup({
+            chunkedLoading: true,
+            chunkInterval: 120,
+            chunkDelay: 25,
+            disableClusteringAtZoom: 13,
+            maxClusterRadius: 44,
+            showCoverageOnHover: false,
+        })
+        : L.layerGroup();
 
     const emojis = MARKER_EMOJIS[currentDashType] || MARKER_EMOJIS.general;
 
@@ -878,6 +917,7 @@ function renderMarkersOnMap() {
         const marker = L.marker([m.lat, m.lng], { icon: icon });
         marker.bindPopup('<strong>' + m.name + '</strong><br><em>' + m.category + '</em>');
         marker.on('click', () => showMarkerProperties(m));
+        marker.__source = m;
         gisState.markerGroup.addLayer(marker);
     });
 
@@ -885,6 +925,12 @@ function renderMarkersOnMap() {
     const markerLayers = gisState.layers.filter(l => l.type === 'marker');
     const anyVisible = markerLayers.length === 0 || markerLayers.some(l => l.visible);
     if (anyVisible) gisState.markerGroup.addTo(gisMap);
+
+    syncClusterToggleUI();
+}
+
+function isMarkerClusteringAvailable() {
+    return typeof L !== 'undefined' && typeof L.markerClusterGroup === 'function';
 }
 
 // =============================================
@@ -978,7 +1024,10 @@ async function switchDataset() {
     const sel = document.getElementById('filterDataset');
     if (!sel) return;
     const dsId = sel.value;
-    if (dsId) await loadDataset(dsId);
+    if (dsId) {
+        await loadDataset(dsId);
+        updateShareLinkPreview();
+    }
 }
 
 async function loadDataset(id) {
@@ -1479,6 +1528,409 @@ function setAllLayersVisibility(visible) {
     renderLayers();
 }
 
+function toggleMarkerClustering(forceState) {
+    const desired = (typeof forceState === 'boolean') ? forceState : !gisState.useMarkerClustering;
+
+    if (desired && !isMarkerClusteringAvailable()) {
+        gisState.useMarkerClustering = false;
+        syncClusterToggleUI();
+        setDrawQueryResult('Marker clustering plugin is not available in this environment.', true);
+        return;
+    }
+
+    gisState.useMarkerClustering = desired;
+    renderMarkersOnMap();
+    updateShareLinkPreview();
+}
+
+function syncClusterToggleUI() {
+    const isAvailable = isMarkerClusteringAvailable();
+    const isOn = gisState.useMarkerClustering && isAvailable;
+
+    const text = !isAvailable ? 'Clustering: Unavailable' : (isOn ? 'Clustering: On' : 'Clustering: Off');
+
+    const panelBtn = document.getElementById('clusterToggleBtn');
+    if (panelBtn) {
+        panelBtn.textContent = text;
+        panelBtn.classList.toggle('active', isOn);
+    }
+
+    const mapBtn = document.getElementById('clusterToolBtn');
+    if (mapBtn) {
+        mapBtn.classList.toggle('active', isOn);
+        mapBtn.title = isOn ? 'Disable Marker Clustering' : 'Enable Marker Clustering';
+    }
+}
+
+function initDrawQueryTools() {
+    gisState.drawLayerGroup = L.featureGroup().addTo(gisMap);
+
+    if (!isDrawToolAvailable()) {
+        setDrawQueryResult('Draw tools unavailable. Leaflet Draw is not loaded.', true);
+        return;
+    }
+
+    gisMap.on(L.Draw.Event.CREATED, function (event) {
+        if (!gisState.drawLayerGroup) return;
+
+        gisState.drawLayerGroup.clearLayers();
+        const layer = event.layer;
+        if (layer.setStyle) {
+            layer.setStyle({ color: '#0ea5e9', weight: 2, dashArray: '6,4', fillOpacity: 0.08 });
+        }
+
+        gisState.drawLayerGroup.addLayer(layer);
+        gisState.activeQueryShape = layer;
+        switchDataTab('tools');
+        runSpatialQuery(layer);
+    });
+
+    gisMap.on(L.Draw.Event.DELETED, function () {
+        gisState.activeQueryShape = null;
+        setDrawQueryResult('Selection cleared. Draw a new area to query.', false);
+    });
+}
+
+function isDrawToolAvailable() {
+    return typeof L !== 'undefined' && typeof L.Draw !== 'undefined' && typeof L.Draw.Rectangle === 'function';
+}
+
+function startDrawTool(toolType) {
+    switchDataTab('tools');
+
+    if (!isDrawToolAvailable()) {
+        setDrawQueryResult('Draw tools unavailable. Leaflet Draw plugin failed to load.', true);
+        return;
+    }
+
+    const shapeOptions = { color: '#0ea5e9', weight: 2, dashArray: '6,4', fillOpacity: 0.08 };
+
+    if (toolType === 'rectangle') {
+        const drawer = new L.Draw.Rectangle(gisMap, { shapeOptions: shapeOptions });
+        drawer.enable();
+        return;
+    }
+
+    if (toolType === 'polygon') {
+        const drawer = new L.Draw.Polygon(gisMap, {
+            allowIntersection: false,
+            showArea: true,
+            shapeOptions: shapeOptions,
+        });
+        drawer.enable();
+    }
+}
+
+function clearDrawQuery() {
+    if (gisState.drawLayerGroup) {
+        gisState.drawLayerGroup.clearLayers();
+    }
+    gisState.activeQueryShape = null;
+    setDrawQueryResult('Selection cleared. Draw an area and run query.', false);
+}
+
+function runSpatialQuery(overrideShape) {
+    const shape = overrideShape || gisState.activeQueryShape;
+    if (!shape) {
+        setDrawQueryResult('No selection found. Draw rectangle or polygon first.', true);
+        return;
+    }
+
+    const matchedMarkers = gisState.markers.filter(marker => {
+        return isLatLngInsideShape(L.latLng(marker.lat, marker.lng), shape);
+    });
+
+    const matchedRegions = gisState.regions.filter(region => {
+        if (!Array.isArray(region.center) || region.center.length < 2) return false;
+        return isLatLngInsideShape(L.latLng(region.center[0], region.center[1]), shape);
+    });
+
+    const preview = matchedMarkers.slice(0, 5).map(item => item.name).join(', ');
+    const summary = 'Markers: ' + matchedMarkers.length + ' | Regions: ' + matchedRegions.length;
+    const details = preview ? ('\nTop: ' + preview) : '';
+
+    setDrawQueryResult(summary + details, false);
+}
+
+function isLatLngInsideShape(latLng, shape) {
+    if (!shape || !latLng) return false;
+
+    if (shape instanceof L.Circle) {
+        return shape.getLatLng().distanceTo(latLng) <= shape.getRadius();
+    }
+
+    if (shape instanceof L.Rectangle) {
+        return shape.getBounds().contains(latLng);
+    }
+
+    if (shape instanceof L.Polygon) {
+        const latLngs = shape.getLatLngs();
+        const ring = Array.isArray(latLngs[0]) ? latLngs[0] : latLngs;
+        return isPointInPolygon(latLng, ring);
+    }
+
+    return false;
+}
+
+function isPointInPolygon(point, polygon) {
+    const x = point.lng;
+    const y = point.lat;
+    let inside = false;
+
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].lng;
+        const yi = polygon[i].lat;
+        const xj = polygon[j].lng;
+        const yj = polygon[j].lat;
+
+        const intersects = ((yi > y) !== (yj > y))
+            && (x < (xj - xi) * (y - yi) / ((yj - yi) || Number.EPSILON) + xi);
+
+        if (intersects) inside = !inside;
+    }
+
+    return inside;
+}
+
+function setDrawQueryResult(message, isError) {
+    const box = document.getElementById('drawQueryResult');
+    if (!box) return;
+
+    box.textContent = message;
+    box.classList.toggle('error', !!isError);
+}
+
+function loadSavedViews() {
+    let parsed = [];
+    try {
+        parsed = JSON.parse(localStorage.getItem(GIS_SAVED_VIEWS_KEY) || '[]');
+    } catch (_) {
+        parsed = [];
+    }
+
+    gisState.savedViews = Array.isArray(parsed) ? parsed : [];
+    renderSavedViewsSelect();
+}
+
+function renderSavedViewsSelect() {
+    const select = document.getElementById('savedViewsSelect');
+    if (!select) return;
+
+    select.innerHTML = '';
+
+    if (gisState.savedViews.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No saved views';
+        select.appendChild(opt);
+        return;
+    }
+
+    gisState.savedViews.forEach(view => {
+        const opt = document.createElement('option');
+        opt.value = view.id;
+        opt.textContent = view.name + ' (' + (view.type || 'general') + ')';
+        select.appendChild(opt);
+    });
+}
+
+function persistSavedViews() {
+    localStorage.setItem(GIS_SAVED_VIEWS_KEY, JSON.stringify(gisState.savedViews));
+    renderSavedViewsSelect();
+}
+
+function collectCurrentViewState() {
+    const center = gisMap ? gisMap.getCenter() : { lat: 23.685, lng: 90.3563 };
+    const zoom = gisMap ? gisMap.getZoom() : 7;
+    const datasetSelect = document.getElementById('filterDataset');
+
+    return {
+        type: currentDashType,
+        center: { lat: Number(center.lat.toFixed(6)), lng: Number(center.lng.toFixed(6)) },
+        zoom: zoom,
+        visibleLayers: gisState.layers.filter(layer => layer.visible).map(layer => layer.id),
+        datasetId: gisState.activeDataset?.id || datasetSelect?.value || '',
+        sidebarCollapsed: document.getElementById('gisSidebar')?.classList.contains('collapsed') || false,
+        dataPanelCollapsed: document.getElementById('gisDataPanel')?.classList.contains('collapsed') || false,
+        workspaceCollapsed: document.getElementById('gisHubContainer')?.classList.contains('tools-collapsed') || false,
+        clustering: !!gisState.useMarkerClustering,
+    };
+}
+
+function buildShareableLink(state) {
+    const view = state || collectCurrentViewState();
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+
+    params.set('gisType', view.type || currentDashType);
+    params.set('gisLat', String(view.center.lat));
+    params.set('gisLng', String(view.center.lng));
+    params.set('gisZoom', String(view.zoom));
+    params.set('gisLayers', (view.visibleLayers || []).join(','));
+    params.set('gisDataset', view.datasetId || '');
+    params.set('gisCluster', view.clustering ? '1' : '0');
+    params.set('gisSB', view.sidebarCollapsed ? '1' : '0');
+    params.set('gisDP', view.dataPanelCollapsed ? '1' : '0');
+    params.set('gisWP', view.workspaceCollapsed ? '1' : '0');
+
+    url.search = params.toString();
+    return url.toString();
+}
+
+function updateShareLinkPreview() {
+    const input = document.getElementById('shareLinkInput');
+    if (!input) return;
+    input.value = buildShareableLink();
+}
+
+function saveCurrentView() {
+    const input = document.getElementById('viewNameInput');
+    const name = (input?.value || '').trim() || ('View ' + new Date().toLocaleString());
+    const state = collectCurrentViewState();
+    state.id = 'view-' + Date.now();
+    state.name = name;
+    state.savedAt = new Date().toISOString();
+
+    gisState.savedViews.unshift(state);
+    gisState.savedViews = gisState.savedViews.slice(0, 50);
+    persistSavedViews();
+
+    if (input) input.value = '';
+    setDrawQueryResult('Saved view: ' + name, false);
+}
+
+function findSelectedSavedView() {
+    const select = document.getElementById('savedViewsSelect');
+    if (!select || !select.value) return null;
+    return gisState.savedViews.find(view => view.id === select.value) || null;
+}
+
+async function loadSelectedView() {
+    const selected = findSelectedSavedView();
+    if (!selected) {
+        setDrawQueryResult('Select a saved view first.', true);
+        return;
+    }
+
+    await applyViewState(selected);
+    setDrawQueryResult('Loaded view: ' + selected.name, false);
+}
+
+function deleteSelectedView() {
+    const selected = findSelectedSavedView();
+    if (!selected) {
+        setDrawQueryResult('Select a saved view first.', true);
+        return;
+    }
+
+    gisState.savedViews = gisState.savedViews.filter(view => view.id !== selected.id);
+    persistSavedViews();
+    setDrawQueryResult('Deleted view: ' + selected.name, false);
+}
+
+async function copyShareableLink() {
+    const link = buildShareableLink();
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(link);
+        } else {
+            const temp = document.createElement('textarea');
+            temp.value = link;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+        }
+        setDrawQueryResult('Shareable link copied to clipboard.', false);
+    } catch (_) {
+        setDrawQueryResult('Unable to copy link automatically. Copy it manually from the box.', true);
+    }
+
+    updateShareLinkPreview();
+}
+
+function parseViewStateFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const keys = ['gisType', 'gisLat', 'gisLng', 'gisZoom', 'gisLayers', 'gisDataset', 'gisCluster', 'gisSB', 'gisDP', 'gisWP'];
+    const hasState = keys.some(key => params.has(key));
+    if (!hasState) return null;
+
+    const lat = Number(params.get('gisLat'));
+    const lng = Number(params.get('gisLng'));
+    const zoom = Number(params.get('gisZoom'));
+
+    return {
+        type: params.get('gisType') || currentDashType,
+        center: (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat: lat, lng: lng } : null,
+        zoom: Number.isFinite(zoom) ? zoom : null,
+        visibleLayers: (params.get('gisLayers') || '').split(',').filter(Boolean),
+        datasetId: params.get('gisDataset') || '',
+        clustering: params.get('gisCluster') === '1',
+        sidebarCollapsed: params.get('gisSB') === '1',
+        dataPanelCollapsed: params.get('gisDP') === '1',
+        workspaceCollapsed: params.get('gisWP') === '1',
+    };
+}
+
+async function bootstrapViewStateFromURL() {
+    const state = parseViewStateFromURL();
+    if (!state) return;
+    await applyViewState(state);
+}
+
+async function applyViewState(state) {
+    if (!state) return;
+
+    if (state.type && state.type !== currentDashType) {
+        await switchDashboardType(state.type);
+    }
+
+    const hub = document.getElementById('gisHubContainer');
+    if (hub && typeof state.workspaceCollapsed === 'boolean') {
+        hub.classList.toggle('tools-collapsed', state.workspaceCollapsed);
+    }
+    syncWorkspacePanelsToggle();
+
+    const sidebar = document.getElementById('gisSidebar');
+    if (sidebar && typeof state.sidebarCollapsed === 'boolean') {
+        sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+    }
+
+    const dataPanel = document.getElementById('gisDataPanel');
+    if (dataPanel && typeof state.dataPanelCollapsed === 'boolean') {
+        dataPanel.classList.toggle('collapsed', state.dataPanelCollapsed);
+    }
+
+    if (typeof state.clustering === 'boolean') {
+        gisState.useMarkerClustering = state.clustering;
+        renderMarkersOnMap();
+    }
+
+    if (Array.isArray(state.visibleLayers) && state.visibleLayers.length > 0) {
+        const visible = new Set(state.visibleLayers);
+        gisState.layers.forEach(layer => {
+            const shouldShow = visible.has(layer.id);
+            toggleLayer(layer.id, shouldShow);
+        });
+        renderLayers();
+    }
+
+    if (state.center && typeof state.zoom === 'number') {
+        gisMap.setView([state.center.lat, state.center.lng], state.zoom, { animate: false });
+    }
+
+    if (state.datasetId) {
+        const datasetSelect = document.getElementById('filterDataset');
+        if (datasetSelect) datasetSelect.value = state.datasetId;
+        await loadDataset(state.datasetId);
+    }
+
+    syncClusterToggleUI();
+    updateShareLinkPreview();
+    setTimeout(() => gisMap.invalidateSize(), 120);
+}
+
 // =============================================
 // UI Panels
 // =============================================
@@ -1559,12 +2011,14 @@ function fitAllPrimaryRegions() {
 function toggleSidebar() {
     const sidebar = document.getElementById('gisSidebar');
     sidebar.classList.toggle('collapsed');
+    updateShareLinkPreview();
     setTimeout(() => gisMap.invalidateSize(), 350);
 }
 
 function toggleDataPanel() {
     const panel = document.getElementById('gisDataPanel');
     panel.classList.toggle('collapsed');
+    updateShareLinkPreview();
     setTimeout(() => gisMap.invalidateSize(), 350);
 }
 
