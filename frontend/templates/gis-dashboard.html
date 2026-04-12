@@ -188,29 +188,6 @@
         <div class="gis-map-wrapper">
             <div id="gisMap" class="gis-map"></div>
 
-            <!-- Explorer Toolbar -->
-            <div class="gis-explorer-toolbar" id="gisExplorerToolbar">
-                <div class="gis-explorer-search">
-                    <input type="text" id="mapQuickSearch" class="gis-map-search" list="mapQuickSearchList" placeholder="Search place, station or lat,lng" onkeydown="handleMapSearchKey(event)" aria-label="Search map features">
-                    <datalist id="mapQuickSearchList"></datalist>
-                    <button class="gis-btn gis-btn-sm" onclick="searchMapFeature()">Go</button>
-                </div>
-                <div class="gis-explorer-actions">
-                    <button class="gis-chip-btn" onclick="fitVisibleData()" title="Fit map to visible content">Fit View</button>
-                    <button class="gis-chip-btn" onclick="focusMarkersOnly()" title="Focus only marker layer">Focus Markers</button>
-                    <button class="gis-chip-btn" id="labelToggleBtn" onclick="toggleRegionLabels()" title="Toggle region labels">Labels On</button>
-                    <div class="gis-menu-wrap">
-                        <button class="gis-chip-btn gis-more-dot-chip" onclick="togglePanelMenu(event, 'mapToolsMenu')" title="More map tools" aria-label="More map tools">...</button>
-                        <div class="gis-panel-menu map-menu" id="mapToolsMenu">
-                            <button onclick="toggleMeasure(); closeAllMenus()">Measure Distance</button>
-                            <button onclick="locateUser(); closeAllMenus()">Find My Location</button>
-                            <button onclick="resetMapView(); closeAllMenus()">Reset View</button>
-                            <button onclick="toggleFullscreen(); closeAllMenus()">Fullscreen</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Map Controls Overlay -->
             <div class="gis-map-tools">
                 <button class="gis-tool-btn" onclick="gisMap.zoomIn()" title="Zoom In">+</button>
