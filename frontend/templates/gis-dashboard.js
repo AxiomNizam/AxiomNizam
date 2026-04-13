@@ -78,27 +78,15 @@ let gisState = {
 
 // Dashboard theme configurations
 const DASH_THEMES = {
-    general:     { icon: '🌍', title: 'GENERAL',     accent: '#3b82f6', legendTitle: 'Population' },
-    agriculture: { icon: '🌾', title: 'AGRICULTURE',  accent: '#2ecc71', legendTitle: 'Rice Production (MT)' },
-    industries:  { icon: '🏭', title: 'INDUSTRIES',   accent: '#e74c3c', legendTitle: 'Industrial Output (Cr)' },
-    medical:     { icon: '🏥', title: 'MEDICAL',      accent: '#e74c3c', legendTitle: 'EPI Coverage %' },
-    train:       { icon: '🚂', title: 'TRAIN (INDIA)', accent: '#f59e0b', legendTitle: 'Train Routes' },
-    'bd-train':  { icon: '🚂', title: 'TRAIN (BD)',    accent: '#06b6d4', legendTitle: 'Train Routes' },
-    satellite:   { icon: '🛰️', title: 'SATELLITE',    accent: '#00bcd4', legendTitle: 'Orbit Type' },
-    airplane:    { icon: '✈️', title: 'AIRPLANE',      accent: '#ff5722', legendTitle: 'Traffic Density' },
-    ship:        { icon: '🚢', title: 'SHIP',          accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
-};
-
-const MARKER_EMOJIS = {
-    general:     { capital: '⭐', port: '⚓', airport: '✈️', infrastructure: '🛣️', tourism: '🏖️', nature: '🌳' },
-    agriculture: { research: '🔬', cold_storage: '❄️', processing: '🏭', tea_estate: '🍵', dairy: '🥛', seed_bank: '🌱', market: '🛒' },
-    industries:  { epz: '🏗️', industrial_zone: '🏭', textile: '🧵', port_industry: '⚓', tech_park: '💻', sez: '📦', power: '⚡' },
-    medical:     { hospital: '🏥', research: '🔬', clinic: '🩺', vaccine: '💉', blood_bank: '🩸' },
-    satellite:   { satellite: '🛰️', constellation: '✨', navigation: '📡', weather: '🌤️', ground_station: '📻', launch_site: '🚀', earth_observation: '🌍' },
-    airplane:    { airport: '✈️', aircraft: '🛩️' },
-    ship:        { port: '⚓', canal: '🌊', strait: '🌊', vessel: '🚢' },
-    train:       { train: '🚂', station: '🚉' },
-    'bd-train':  { train: '🚂', station: '🚉' },
+    general:     { title: 'GENERAL',      accent: '#3b82f6', legendTitle: 'Population' },
+    agriculture: { title: 'AGRICULTURE',  accent: '#2ecc71', legendTitle: 'Rice Production (MT)' },
+    industries:  { title: 'INDUSTRIES',   accent: '#e74c3c', legendTitle: 'Industrial Output (Cr)' },
+    medical:     { title: 'MEDICAL',      accent: '#e74c3c', legendTitle: 'EPI Coverage %' },
+    train:       { title: 'TRAIN (INDIA)', accent: '#f59e0b', legendTitle: 'Train Routes' },
+    'bd-train':  { title: 'TRAIN (BD)',    accent: '#06b6d4', legendTitle: 'Train Routes' },
+    satellite:   { title: 'SATELLITE',    accent: '#00bcd4', legendTitle: 'Orbit Type' },
+    airplane:    { title: 'AIRPLANE',     accent: '#ff5722', legendTitle: 'Traffic Density' },
+    ship:        { title: 'SHIP',         accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
 };
 
 // Map configurations per scope
@@ -263,9 +251,7 @@ function switchDashboardType(type) {
 
     // Update dashboard info panel
     const theme = DASH_THEMES[type] || DASH_THEMES.general;
-    const iconEl = document.getElementById('dashInfoIcon');
     const titleEl = document.getElementById('dashInfoTitle');
-    if (iconEl) iconEl.textContent = theme.icon;
     if (titleEl) titleEl.textContent = theme.title;
 
     // Update accent color
@@ -431,10 +417,10 @@ function updateSummaryCards(summary) {
 
     cards.forEach((card, i) => {
         if (cardElements[i]) {
-            const iconEl = cardElements[i].querySelector('.summary-icon');
-            const valEl = cardElements[i].querySelector('.summary-value');
-            const lblEl = cardElements[i].querySelector('.summary-label');
-            if (iconEl) { iconEl.textContent = card.icon; iconEl.style.background = card.color; }
+            const cardEl = cardElements[i];
+            const valEl = cardEl.querySelector('.summary-value');
+            const lblEl = cardEl.querySelector('.summary-label');
+            cardEl.style.borderColor = card.color;
             if (valEl) valEl.textContent = card.value;
             if (lblEl) lblEl.textContent = card.label;
         }
@@ -448,75 +434,75 @@ function getSummaryCardConfig(summary) {
     switch (currentDashType) {
         case 'general':
             return [
-                { icon: '🏠', color: '#3b82f6', value: rbt.division || 0, label: 'Divisions' },
-                { icon: '🏢', color: '#10b981', value: rbt.district || 0, label: 'Districts' },
-                { icon: '👥', color: '#8b5cf6', value: calcTotalPopField('population'), label: 'Population' },
-                { icon: '📌', color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
-                { icon: '🗺️', color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
-                { icon: '📁', color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#3b82f6', value: rbt.division || 0, label: 'Divisions' },
+                { color: '#10b981', value: rbt.district || 0, label: 'Districts' },
+                { color: '#8b5cf6', value: calcTotalPopField('population'), label: 'Population' },
+                { color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
+                { color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
+                { color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'agriculture':
             return [
-                { icon: '🌾', color: '#2ecc71', value: totalRegions, label: 'Agri Zones' },
-                { icon: '🌿', color: '#27ae60', value: calcFieldTotal('rice_production'), label: 'Rice (MT)' },
-                { icon: '🌻', color: '#f39c12', value: calcFieldTotal('wheat_production'), label: 'Wheat (MT)' },
-                { icon: '📌', color: '#3498db', value: summary.totalMarkers || 0, label: 'Facilities' },
-                { icon: '💧', color: '#2980b9', value: calcFieldAvg('irrigation_pct') + '%', label: 'Avg Irrigation' },
-                { icon: '📁', color: '#8e44ad', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#2ecc71', value: totalRegions, label: 'Agri Zones' },
+                { color: '#27ae60', value: calcFieldTotal('rice_production'), label: 'Rice (MT)' },
+                { color: '#f39c12', value: calcFieldTotal('wheat_production'), label: 'Wheat (MT)' },
+                { color: '#3498db', value: summary.totalMarkers || 0, label: 'Facilities' },
+                { color: '#2980b9', value: calcFieldAvg('irrigation_pct') + '%', label: 'Avg Irrigation' },
+                { color: '#8e44ad', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'industries':
             return [
-                { icon: '🏭', color: '#e74c3c', value: totalRegions, label: 'Ind. Divisions' },
-                { icon: '🏗️', color: '#c0392b', value: calcFieldTotal('factories'), label: 'Factories' },
-                { icon: '👷', color: '#f39c12', value: calcFieldTotal('employment'), label: 'Employment' },
-                { icon: '📦', color: '#3498db', value: calcFieldTotal('garment_units'), label: 'Garment Units' },
-                { icon: '📌', color: '#9b59b6', value: summary.totalMarkers || 0, label: 'Markers' },
-                { icon: '📁', color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#e74c3c', value: totalRegions, label: 'Ind. Divisions' },
+                { color: '#c0392b', value: calcFieldTotal('factories'), label: 'Factories' },
+                { color: '#f39c12', value: calcFieldTotal('employment'), label: 'Employment' },
+                { color: '#3498db', value: calcFieldTotal('garment_units'), label: 'Garment Units' },
+                { color: '#9b59b6', value: summary.totalMarkers || 0, label: 'Markers' },
+                { color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'medical':
             return [
-                { icon: '🏥', color: '#e74c3c', value: calcFieldTotal('hospitals'), label: 'Hospitals' },
-                { icon: '🛏️', color: '#3498db', value: calcFieldTotal('beds'), label: 'Hospital Beds' },
-                { icon: '👨‍⚕️', color: '#2ecc71', value: calcFieldTotal('doctors'), label: 'Doctors' },
-                { icon: '💉', color: '#f39c12', value: calcFieldAvg('epi_coverage') + '%', label: 'Avg EPI Coverage' },
-                { icon: '🩺', color: '#9b59b6', value: calcFieldTotal('community_clinics'), label: 'Clinics' },
-                { icon: '📁', color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#e74c3c', value: calcFieldTotal('hospitals'), label: 'Hospitals' },
+                { color: '#3498db', value: calcFieldTotal('beds'), label: 'Hospital Beds' },
+                { color: '#2ecc71', value: calcFieldTotal('doctors'), label: 'Doctors' },
+                { color: '#f39c12', value: calcFieldAvg('epi_coverage') + '%', label: 'Avg EPI Coverage' },
+                { color: '#9b59b6', value: calcFieldTotal('community_clinics'), label: 'Clinics' },
+                { color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'satellite':
             return [
-                { icon: '🛰️', color: '#00bcd4', value: totalRegions, label: 'Orbit Zones' },
-                { icon: '📡', color: '#ff9800', value: calcFieldTotal('satellites'), label: 'Satellites' },
-                { icon: '🚀', color: '#e91e63', value: countMarkerCategory('launch_site'), label: 'Launch Sites' },
-                { icon: '📻', color: '#f44336', value: countMarkerCategory('ground_station'), label: 'Ground Stations' },
-                { icon: '📌', color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
-                { icon: '📁', color: '#9c27b0', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#00bcd4', value: totalRegions, label: 'Orbit Zones' },
+                { color: '#ff9800', value: calcFieldTotal('satellites'), label: 'Satellites' },
+                { color: '#e91e63', value: countMarkerCategory('launch_site'), label: 'Launch Sites' },
+                { color: '#f44336', value: countMarkerCategory('ground_station'), label: 'Ground Stations' },
+                { color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
+                { color: '#9c27b0', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'airplane':
             return [
-                { icon: '✈️', color: '#ff5722', value: totalRegions, label: 'Air Regions' },
-                { icon: '🛬', color: '#2196f3', value: countMarkerCategory('airport'), label: 'Airports' },
-                { icon: '🛩️', color: '#ff9800', value: countMarkerCategory('aircraft'), label: 'Aircraft' },
-                { icon: '👥', color: '#4caf50', value: calcFieldTotal('annual_passengers'), label: 'Passengers/yr' },
-                { icon: '🛫', color: '#9c27b0', value: calcFieldTotal('airlines'), label: 'Airlines' },
-                { icon: '📁', color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#ff5722', value: totalRegions, label: 'Air Regions' },
+                { color: '#2196f3', value: countMarkerCategory('airport'), label: 'Airports' },
+                { color: '#ff9800', value: countMarkerCategory('aircraft'), label: 'Aircraft' },
+                { color: '#4caf50', value: calcFieldTotal('annual_passengers'), label: 'Passengers/yr' },
+                { color: '#9c27b0', value: calcFieldTotal('airlines'), label: 'Airlines' },
+                { color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'ship':
             return [
-                { icon: '🌊', color: '#0277bd', value: totalRegions, label: 'Ocean Zones' },
-                { icon: '⚓', color: '#f44336', value: countMarkerCategory('port'), label: 'Ports' },
-                { icon: '🚢', color: '#ff9800', value: countMarkerCategory('vessel'), label: 'Vessels' },
-                { icon: '🌊', color: '#00897b', value: countMarkerCategory('canal') + countMarkerCategory('strait'), label: 'Chokepoints' },
-                { icon: '📌', color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
-                { icon: '📁', color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#0277bd', value: totalRegions, label: 'Ocean Zones' },
+                { color: '#f44336', value: countMarkerCategory('port'), label: 'Ports' },
+                { color: '#ff9800', value: countMarkerCategory('vessel'), label: 'Vessels' },
+                { color: '#00897b', value: countMarkerCategory('canal') + countMarkerCategory('strait'), label: 'Chokepoints' },
+                { color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
+                { color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         default:
             return [
-                { icon: '🗺️', color: '#3b82f6', value: totalRegions, label: 'Regions' },
-                { icon: '📌', color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
-                { icon: '🗺️', color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
-                { icon: '📁', color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
-                { icon: '📊', color: '#10b981', value: '-', label: '-' },
-                { icon: '🔷', color: '#8b5cf6', value: '-', label: '-' },
+                { color: '#3b82f6', value: totalRegions, label: 'Regions' },
+                { color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
+                { color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
+                { color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#10b981', value: '-', label: '-' },
+                { color: '#8b5cf6', value: '-', label: '-' },
             ];
     }
 }
@@ -574,17 +560,11 @@ function renderLayers() {
             <label class="gis-layer-label">
                 <input type="checkbox" ${layer.visible ? 'checked' : ''} 
                     onchange="toggleLayer('${layer.id}', this.checked)">
-                <span class="layer-icon">${getLayerIcon(layer.type)}</span>
                 <span class="layer-name">${layer.name}</span>
             </label>
         `;
         container.appendChild(item);
     });
-}
-
-function getLayerIcon(type) {
-    const icons = { geojson: '🔷', tile: '🗺️', marker: '📌', heatmap: '🔥' };
-    return icons[type] || '📄';
 }
 
 function toggleLayer(id, visible) {
@@ -892,35 +872,17 @@ function getLegendLevels() {
 function renderMarkersOnMap() {
     if (gisState.markerGroup) gisMap.removeLayer(gisState.markerGroup);
 
-    const canCluster = isMarkerClusteringAvailable();
-    const useCluster = gisState.useMarkerClustering && canCluster;
-
-    gisState.markerGroup = useCluster
-        ? L.markerClusterGroup({
-            chunkedLoading: true,
-            chunkInterval: 120,
-            chunkDelay: 25,
-            disableClusteringAtZoom: 13,
-            maxClusterRadius: 44,
-            showCoverageOnHover: false,
-        })
-        : L.layerGroup();
-
-    const emojis = MARKER_EMOJIS[currentDashType] || MARKER_EMOJIS.general;
+    gisState.markerGroup = L.layerGroup();
 
     gisState.markers.forEach(m => {
         const color = m.color || '#3388ff';
-        const emoji = emojis[m.category] || '📍';
-
-        const icon = L.divIcon({
-            html: '<div class="gis-marker-icon" style="background:' + color + '"><span>' + emoji + '</span></div>',
-            className: 'gis-marker-container',
-            iconSize: [32, 32],
-            iconAnchor: [16, 32],
-            popupAnchor: [0, -32],
+        const marker = L.circleMarker([m.lat, m.lng], {
+            radius: 7,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 0.9,
         });
-
-        const marker = L.marker([m.lat, m.lng], { icon: icon });
         marker.bindPopup('<strong>' + m.name + '</strong><br><em>' + m.category + '</em>');
         marker.on('click', () => showMarkerProperties(m));
         marker.__source = m;
@@ -936,7 +898,7 @@ function renderMarkersOnMap() {
 }
 
 function isMarkerClusteringAvailable() {
-    return typeof L !== 'undefined' && typeof L.markerClusterGroup === 'function';
+    return false;
 }
 
 // =============================================

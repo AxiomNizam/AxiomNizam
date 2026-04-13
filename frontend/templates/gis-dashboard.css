@@ -16,6 +16,22 @@
     display: inline-block;
 }
 
+.gis-hub-container .type-icon,
+.gis-hub-container .panel-icon,
+.gis-hub-container .filter-icon,
+.gis-hub-container .summary-icon,
+.gis-hub-container .empty-icon {
+    display: none !important;
+}
+
+.gis-hub-container .gis-btn > span,
+.gis-hub-container .gis-tool-btn > svg,
+.gis-hub-container .toggle-icon svg,
+.gis-hub-container .legend-toggle svg,
+.gis-hub-container .lucide {
+    display: none !important;
+}
+
 .summary-icon svg {
     width: 1.5rem;
     height: 1.5rem;
@@ -537,7 +553,8 @@
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 18px;
+    font-size: 12px;
+    font-weight: 700;
     cursor: pointer;
     display: flex;
     align-items: center;
