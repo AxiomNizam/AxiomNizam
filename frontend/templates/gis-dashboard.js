@@ -5,6 +5,7 @@
 // =============================================
 
 const GIS_API = ((typeof window.resolveBackendURL === 'function' ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000'))) + '/api/v1/gis';
+const GIS_SAVED_VIEWS_KEY = 'axiomnizam_gis_saved_views_v1';
 
 function readAuthCookie(name) {
     const prefix = name + '=';
@@ -64,31 +65,40 @@ let gisState = {
     measureLine: null,
     baseLayers: {},
     dashboardConfig: {},
+    labelsVisible: true,
+    mapSearchIndex: [],
+    temporarySearchMarker: null,
+    useMarkerClustering: true,
+    drawLayerGroup: null,
+    activeQueryShape: null,
+    drawHandlers: {},
+    savedViews: [],
+    importedGeoJsonLayer: null,
 };
 
 // Dashboard theme configurations
 const DASH_THEMES = {
-    general:     { icon: '🌍', title: 'GENERAL',     accent: '#3b82f6', legendTitle: 'Population' },
-    agriculture: { icon: '🌾', title: 'AGRICULTURE',  accent: '#2ecc71', legendTitle: 'Rice Production (MT)' },
-    industries:  { icon: '🏭', title: 'INDUSTRIES',   accent: '#e74c3c', legendTitle: 'Industrial Output (Cr)' },
-    medical:     { icon: '🏥', title: 'MEDICAL',      accent: '#e74c3c', legendTitle: 'EPI Coverage %' },
-    train:       { icon: '🚂', title: 'TRAIN (INDIA)', accent: '#f59e0b', legendTitle: 'Train Routes' },
-    'bd-train':  { icon: '🚂', title: 'TRAIN (BD)',    accent: '#06b6d4', legendTitle: 'Train Routes' },
-    satellite:   { icon: '🛰️', title: 'SATELLITE',    accent: '#00bcd4', legendTitle: 'Orbit Type' },
-    airplane:    { icon: '✈️', title: 'AIRPLANE',      accent: '#ff5722', legendTitle: 'Traffic Density' },
-    ship:        { icon: '🚢', title: 'SHIP',          accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
+    general:     { title: 'GENERAL',      accent: '#3b82f6', legendTitle: 'Population' },
+    agriculture: { title: 'AGRICULTURE',  accent: '#2ecc71', legendTitle: 'Rice Production (MT)' },
+    industries:  { title: 'INDUSTRIES',   accent: '#e74c3c', legendTitle: 'Industrial Output (Cr)' },
+    medical:     { title: 'MEDICAL',      accent: '#e74c3c', legendTitle: 'EPI Coverage %' },
+    train:       { title: 'TRAIN (INDIA)', accent: '#f59e0b', legendTitle: 'Train Routes' },
+    'bd-train':  { title: 'TRAIN (BD)',    accent: '#06b6d4', legendTitle: 'Train Routes' },
+    satellite:   { title: 'SATELLITE',    accent: '#00bcd4', legendTitle: 'Orbit Type' },
+    airplane:    { title: 'AIRPLANE',     accent: '#ff5722', legendTitle: 'Traffic Density' },
+    ship:        { title: 'SHIP',         accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
 };
 
-const MARKER_EMOJIS = {
-    general:     { capital: '⭐', port: '⚓', airport: '✈️', infrastructure: '🛣️', tourism: '🏖️', nature: '🌳' },
-    agriculture: { research: '🔬', cold_storage: '❄️', processing: '🏭', tea_estate: '🍵', dairy: '🥛', seed_bank: '🌱', market: '🛒' },
-    industries:  { epz: '🏗️', industrial_zone: '🏭', textile: '🧵', port_industry: '⚓', tech_park: '💻', sez: '📦', power: '⚡' },
-    medical:     { hospital: '🏥', research: '🔬', clinic: '🩺', vaccine: '💉', blood_bank: '🩸' },
-    satellite:   { satellite: '🛰️', constellation: '✨', navigation: '📡', weather: '🌤️', ground_station: '📻', launch_site: '🚀', earth_observation: '🌍' },
-    airplane:    { airport: '✈️', aircraft: '🛩️' },
-    ship:        { port: '⚓', canal: '🌊', strait: '🌊', vessel: '🚢' },
-    train:       { train: '🚂', station: '🚉' },
-    'bd-train':  { train: '🚂', station: '🚉' },
+const DASH_PANEL_ICONS = {
+    general: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
+    agriculture: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-leaf"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+    industries: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-factory"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>',
+    medical: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hospital"><path d="M12 6v4"/><path d="M14 8h-4"/><path d="M16 21V5a2 2 0 0 0-2-2H2v16"/><path d="M8 21v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4"/><path d="M22 21V9a2 2 0 0 0-2-2h-4"/></svg>',
+    train: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-train-front"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/></svg>',
+    'bd-train': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-train-front"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/></svg>',
+    satellite: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-satellite"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4-4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>',
+    airplane: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.2-1.1.7l-1.6 4.6L9 15l-4 4-4-1-1-4 4-4 3.5 6.9 8.4-1.6c.5-.1.8-.5.7-1Z"/></svg>',
+    ship: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ship"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M12 10v4"/><path d="M12 2v3"/></svg>',
 };
 
 // Map configurations per scope
@@ -105,13 +115,21 @@ const MAP_CONFIG = {
 
 document.addEventListener('DOMContentLoaded', function () {
     initMap();
-    loadGISData();
+    initExplorerUX();
+    syncWorkspacePanelsToggle();
+    loadSavedViews();
+    loadGISData().then(() => {
+        bootstrapViewStateFromURL();
+        syncClusterToggleUI();
+        updateShareLinkPreview();
+    });
 });
 
 function initMap() {
     gisMap = L.map('gisMap', {
         center: [23.6850, 90.3563],
         zoom: 7,
+        preferCanvas: true,
         zoomControl: false,
         attributionControl: true,
         maxBounds: [[18, 85], [28, 96]],
@@ -163,6 +181,11 @@ function initMap() {
     gisMap.on('zoomend', function () {
         const el = document.getElementById('mapZoom');
         if (el) el.textContent = 'Zoom ' + gisMap.getZoom();
+        updateShareLinkPreview();
+    });
+
+    gisMap.on('moveend', function () {
+        updateShareLinkPreview();
     });
 
     // Measure mode click handler
@@ -170,6 +193,57 @@ function initMap() {
         if (!gisState.isMeasuring) return;
         addMeasurePoint(e.latlng);
     });
+
+    initDrawQueryTools();
+}
+
+function initExplorerUX() {
+    document.addEventListener('click', function (event) {
+        if (event.target.closest('.gis-menu-wrap') || event.target.closest('.gis-more-dot')) {
+            return;
+        }
+        closeAllMenus();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            closeAllMenus();
+        }
+    });
+}
+
+function toggleWorkspacePanels() {
+    const hub = document.getElementById('gisHubContainer');
+    if (!hub) return;
+
+    const willExpand = hub.classList.contains('tools-collapsed');
+    hub.classList.toggle('tools-collapsed');
+
+    if (willExpand) {
+        const sidebar = document.getElementById('gisSidebar');
+        if (sidebar) sidebar.classList.remove('collapsed');
+    }
+
+    syncWorkspacePanelsToggle();
+    updateShareLinkPreview();
+    setTimeout(() => {
+        if (gisMap) gisMap.invalidateSize();
+    }, 280);
+}
+
+function syncWorkspacePanelsToggle() {
+    const hub = document.getElementById('gisHubContainer');
+    const btn = document.getElementById('gisMoreWorkspaceBtn');
+    if (!hub || !btn) return;
+
+    const expanded = !hub.classList.contains('tools-collapsed');
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    btn.textContent = expanded ? 'Hide Panels' : 'More';
+    btn.title = expanded ? 'Hide panels and summary' : 'Show panels and summary';
+}
+
+function getDashboardPanelIconMarkup(type) {
+    return DASH_PANEL_ICONS[type] || DASH_PANEL_ICONS.general;
 }
 
 // =============================================
@@ -184,6 +258,7 @@ function getDashScope() {
 function switchDashboardType(type) {
     if (type === currentDashType) return;
     currentDashType = type;
+    closeAllMenus();
 
     // Update type bar button states
     document.querySelectorAll('.gis-type-btn').forEach(b => b.classList.remove('active'));
@@ -194,7 +269,7 @@ function switchDashboardType(type) {
     const theme = DASH_THEMES[type] || DASH_THEMES.general;
     const iconEl = document.getElementById('dashInfoIcon');
     const titleEl = document.getElementById('dashInfoTitle');
-    if (iconEl) iconEl.textContent = theme.icon;
+    if (iconEl) iconEl.innerHTML = getDashboardPanelIconMarkup(type);
     if (titleEl) titleEl.textContent = theme.title;
 
     // Update accent color
@@ -211,7 +286,10 @@ function switchDashboardType(type) {
     gisMap.flyTo(mapCfg.center, mapCfg.zoom, { duration: 1.2 });
 
     // Load data for new type
-    loadGISData();
+    return loadGISData().then(() => {
+        syncClusterToggleUI();
+        updateShareLinkPreview();
+    });
 }
 
 function clearMapLayers() {
@@ -227,6 +305,12 @@ function clearMapLayers() {
     gisState.datasets = [];
     gisState.activeDataset = null;
     gisState.selectedRegion = null;
+    gisState.mapSearchIndex = [];
+
+    if (gisState.importedGeoJsonLayer) {
+        gisMap.removeLayer(gisState.importedGeoJsonLayer);
+        gisState.importedGeoJsonLayer = null;
+    }
 }
 
 // =============================================
@@ -316,6 +400,8 @@ async function loadGISData() {
         renderMarkersOnMap();
         populateFilterDropdowns();
         populateDatasetSelector();
+        buildMapQuickSearchIndex();
+        syncLabelToggleButton();
 
         if (gisState.datasets.length > 0) {
             loadDataset(gisState.datasets[0].id);
@@ -326,6 +412,9 @@ async function loadGISData() {
         const contentEl = document.getElementById('propertiesContent');
         if (emptyEl) emptyEl.style.display = 'flex';
         if (contentEl) contentEl.style.display = 'none';
+
+        syncClusterToggleUI();
+        updateShareLinkPreview();
     } catch (err) {
         console.error('Failed to load GIS data:', err);
     }
@@ -346,10 +435,12 @@ function updateSummaryCards(summary) {
 
     cards.forEach((card, i) => {
         if (cardElements[i]) {
-            const iconEl = cardElements[i].querySelector('.summary-icon');
-            const valEl = cardElements[i].querySelector('.summary-value');
-            const lblEl = cardElements[i].querySelector('.summary-label');
-            if (iconEl) { iconEl.textContent = card.icon; iconEl.style.background = card.color; }
+            const cardEl = cardElements[i];
+            const iconEl = cardEl.querySelector('.summary-icon');
+            const valEl = cardEl.querySelector('.summary-value');
+            const lblEl = cardEl.querySelector('.summary-label');
+            cardEl.style.borderColor = card.color;
+            if (iconEl) iconEl.style.background = card.color;
             if (valEl) valEl.textContent = card.value;
             if (lblEl) lblEl.textContent = card.label;
         }
@@ -363,75 +454,75 @@ function getSummaryCardConfig(summary) {
     switch (currentDashType) {
         case 'general':
             return [
-                { icon: '🏠', color: '#3b82f6', value: rbt.division || 0, label: 'Divisions' },
-                { icon: '🏢', color: '#10b981', value: rbt.district || 0, label: 'Districts' },
-                { icon: '👥', color: '#8b5cf6', value: calcTotalPopField('population'), label: 'Population' },
-                { icon: '📌', color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
-                { icon: '🗺️', color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
-                { icon: '📁', color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#3b82f6', value: rbt.division || 0, label: 'Divisions' },
+                { color: '#10b981', value: rbt.district || 0, label: 'Districts' },
+                { color: '#8b5cf6', value: calcTotalPopField('population'), label: 'Population' },
+                { color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
+                { color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
+                { color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'agriculture':
             return [
-                { icon: '🌾', color: '#2ecc71', value: totalRegions, label: 'Agri Zones' },
-                { icon: '🌿', color: '#27ae60', value: calcFieldTotal('rice_production'), label: 'Rice (MT)' },
-                { icon: '🌻', color: '#f39c12', value: calcFieldTotal('wheat_production'), label: 'Wheat (MT)' },
-                { icon: '📌', color: '#3498db', value: summary.totalMarkers || 0, label: 'Facilities' },
-                { icon: '💧', color: '#2980b9', value: calcFieldAvg('irrigation_pct') + '%', label: 'Avg Irrigation' },
-                { icon: '📁', color: '#8e44ad', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#2ecc71', value: totalRegions, label: 'Agri Zones' },
+                { color: '#27ae60', value: calcFieldTotal('rice_production'), label: 'Rice (MT)' },
+                { color: '#f39c12', value: calcFieldTotal('wheat_production'), label: 'Wheat (MT)' },
+                { color: '#3498db', value: summary.totalMarkers || 0, label: 'Facilities' },
+                { color: '#2980b9', value: calcFieldAvg('irrigation_pct') + '%', label: 'Avg Irrigation' },
+                { color: '#8e44ad', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'industries':
             return [
-                { icon: '🏭', color: '#e74c3c', value: totalRegions, label: 'Ind. Divisions' },
-                { icon: '🏗️', color: '#c0392b', value: calcFieldTotal('factories'), label: 'Factories' },
-                { icon: '👷', color: '#f39c12', value: calcFieldTotal('employment'), label: 'Employment' },
-                { icon: '📦', color: '#3498db', value: calcFieldTotal('garment_units'), label: 'Garment Units' },
-                { icon: '📌', color: '#9b59b6', value: summary.totalMarkers || 0, label: 'Markers' },
-                { icon: '📁', color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#e74c3c', value: totalRegions, label: 'Ind. Divisions' },
+                { color: '#c0392b', value: calcFieldTotal('factories'), label: 'Factories' },
+                { color: '#f39c12', value: calcFieldTotal('employment'), label: 'Employment' },
+                { color: '#3498db', value: calcFieldTotal('garment_units'), label: 'Garment Units' },
+                { color: '#9b59b6', value: summary.totalMarkers || 0, label: 'Markers' },
+                { color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'medical':
             return [
-                { icon: '🏥', color: '#e74c3c', value: calcFieldTotal('hospitals'), label: 'Hospitals' },
-                { icon: '🛏️', color: '#3498db', value: calcFieldTotal('beds'), label: 'Hospital Beds' },
-                { icon: '👨‍⚕️', color: '#2ecc71', value: calcFieldTotal('doctors'), label: 'Doctors' },
-                { icon: '💉', color: '#f39c12', value: calcFieldAvg('epi_coverage') + '%', label: 'Avg EPI Coverage' },
-                { icon: '🩺', color: '#9b59b6', value: calcFieldTotal('community_clinics'), label: 'Clinics' },
-                { icon: '📁', color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#e74c3c', value: calcFieldTotal('hospitals'), label: 'Hospitals' },
+                { color: '#3498db', value: calcFieldTotal('beds'), label: 'Hospital Beds' },
+                { color: '#2ecc71', value: calcFieldTotal('doctors'), label: 'Doctors' },
+                { color: '#f39c12', value: calcFieldAvg('epi_coverage') + '%', label: 'Avg EPI Coverage' },
+                { color: '#9b59b6', value: calcFieldTotal('community_clinics'), label: 'Clinics' },
+                { color: '#1abc9c', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'satellite':
             return [
-                { icon: '🛰️', color: '#00bcd4', value: totalRegions, label: 'Orbit Zones' },
-                { icon: '📡', color: '#ff9800', value: calcFieldTotal('satellites'), label: 'Satellites' },
-                { icon: '🚀', color: '#e91e63', value: countMarkerCategory('launch_site'), label: 'Launch Sites' },
-                { icon: '📻', color: '#f44336', value: countMarkerCategory('ground_station'), label: 'Ground Stations' },
-                { icon: '📌', color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
-                { icon: '📁', color: '#9c27b0', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#00bcd4', value: totalRegions, label: 'Orbit Zones' },
+                { color: '#ff9800', value: calcFieldTotal('satellites'), label: 'Satellites' },
+                { color: '#e91e63', value: countMarkerCategory('launch_site'), label: 'Launch Sites' },
+                { color: '#f44336', value: countMarkerCategory('ground_station'), label: 'Ground Stations' },
+                { color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
+                { color: '#9c27b0', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'airplane':
             return [
-                { icon: '✈️', color: '#ff5722', value: totalRegions, label: 'Air Regions' },
-                { icon: '🛬', color: '#2196f3', value: countMarkerCategory('airport'), label: 'Airports' },
-                { icon: '🛩️', color: '#ff9800', value: countMarkerCategory('aircraft'), label: 'Aircraft' },
-                { icon: '👥', color: '#4caf50', value: calcFieldTotal('annual_passengers'), label: 'Passengers/yr' },
-                { icon: '🛫', color: '#9c27b0', value: calcFieldTotal('airlines'), label: 'Airlines' },
-                { icon: '📁', color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#ff5722', value: totalRegions, label: 'Air Regions' },
+                { color: '#2196f3', value: countMarkerCategory('airport'), label: 'Airports' },
+                { color: '#ff9800', value: countMarkerCategory('aircraft'), label: 'Aircraft' },
+                { color: '#4caf50', value: calcFieldTotal('annual_passengers'), label: 'Passengers/yr' },
+                { color: '#9c27b0', value: calcFieldTotal('airlines'), label: 'Airlines' },
+                { color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         case 'ship':
             return [
-                { icon: '🌊', color: '#0277bd', value: totalRegions, label: 'Ocean Zones' },
-                { icon: '⚓', color: '#f44336', value: countMarkerCategory('port'), label: 'Ports' },
-                { icon: '🚢', color: '#ff9800', value: countMarkerCategory('vessel'), label: 'Vessels' },
-                { icon: '🌊', color: '#00897b', value: countMarkerCategory('canal') + countMarkerCategory('strait'), label: 'Chokepoints' },
-                { icon: '📌', color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
-                { icon: '📁', color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#0277bd', value: totalRegions, label: 'Ocean Zones' },
+                { color: '#f44336', value: countMarkerCategory('port'), label: 'Ports' },
+                { color: '#ff9800', value: countMarkerCategory('vessel'), label: 'Vessels' },
+                { color: '#00897b', value: countMarkerCategory('canal') + countMarkerCategory('strait'), label: 'Chokepoints' },
+                { color: '#4caf50', value: summary.totalMarkers || 0, label: 'Total Markers' },
+                { color: '#607d8b', value: summary.totalDatasets || 0, label: 'Datasets' },
             ];
         default:
             return [
-                { icon: '🗺️', color: '#3b82f6', value: totalRegions, label: 'Regions' },
-                { icon: '📌', color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
-                { icon: '🗺️', color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
-                { icon: '📁', color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
-                { icon: '📊', color: '#10b981', value: '-', label: '-' },
-                { icon: '🔷', color: '#8b5cf6', value: '-', label: '-' },
+                { color: '#3b82f6', value: totalRegions, label: 'Regions' },
+                { color: '#f59e0b', value: summary.totalMarkers || 0, label: 'Markers' },
+                { color: '#ef4444', value: summary.totalLayers || 0, label: 'Layers' },
+                { color: '#06b6d4', value: summary.totalDatasets || 0, label: 'Datasets' },
+                { color: '#10b981', value: '-', label: '-' },
+                { color: '#8b5cf6', value: '-', label: '-' },
             ];
     }
 }
@@ -495,31 +586,16 @@ function renderLayers() {
         `;
         container.appendChild(item);
     });
-
-    // Add base map selector
-    const baseItem = document.createElement('div');
-    baseItem.className = 'gis-layer-item gis-layer-base';
-    baseItem.innerHTML = `<span class="layer-section-title">Base Maps</span>`;
-    container.appendChild(baseItem);
-
-    Object.keys(gisState.baseLayers).forEach(name => {
-        const item = document.createElement('div');
-        item.className = 'gis-layer-item';
-        const isActive = gisMap.hasLayer(gisState.baseLayers[name]);
-        item.innerHTML = `
-            <label class="gis-layer-label">
-                <input type="radio" name="baseMap" ${isActive ? 'checked' : ''} 
-                    onchange="switchBaseMap('${name}')">
-                <span class="layer-name">${name}</span>
-            </label>
-        `;
-        container.appendChild(item);
-    });
 }
 
 function getLayerIcon(type) {
-    const icons = { geojson: '🔷', tile: '🗺️', marker: '📌', heatmap: '🔥' };
-    return icons[type] || '📄';
+    const icons = {
+        geojson: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>',
+        tile: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-grid-3x3"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>',
+        marker: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+        heatmap: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-flame"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17h2a2 2 0 0 0 0-4c0-2 1-3.5 2.5-5 .8 1.5 2.2 3.2 2.2 5A4 4 0 0 1 14 17h-4"/><path d="M12 2c1.5 2.2 4 4.5 4 8a4 4 0 0 1-8 0c0-1.5.5-3.2 1.5-4.6"/></svg>',
+    };
+    return icons[type] || '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>';
 }
 
 function toggleLayer(id, visible) {
@@ -665,6 +741,7 @@ function renderRegionsOnMap() {
             fillColor: color,
             fillOpacity: 0.3,
         });
+        circle.__regionName = region.name;
 
         circle.bindTooltip(region.name, {
             permanent: scope === 'domestic',
@@ -696,6 +773,7 @@ function renderRegionsOnMap() {
             fillColor: getValueColor(val),
             fillOpacity: 0.4,
         });
+        circle.__regionName = region.name;
 
         circle.bindTooltip(region.name, { direction: 'top' });
         circle.on('click', () => showRegionProperties(region));
@@ -703,6 +781,8 @@ function renderRegionsOnMap() {
         if (secondaryLayerVisible) circle.addTo(gisMap);
         gisState.districtPolygons[region.id] = circle;
     });
+
+    applyRegionLabelMode();
 
     renderLegend();
 }
@@ -738,7 +818,7 @@ function getValueColor(val) {
 
 function renderLegend() {
     const body = document.getElementById('legendBody');
-    const titleEl = document.querySelector('.gis-legend h4');
+    const titleEl = document.getElementById('legendTitle');
     if (!body) return;
     body.innerHTML = '';
 
@@ -822,25 +902,37 @@ function getLegendLevels() {
 
 function renderMarkersOnMap() {
     if (gisState.markerGroup) gisMap.removeLayer(gisState.markerGroup);
-    gisState.markerGroup = L.layerGroup();
 
-    const emojis = MARKER_EMOJIS[currentDashType] || MARKER_EMOJIS.general;
+    const canCluster = isMarkerClusteringAvailable();
+    const useCluster = gisState.useMarkerClustering && canCluster;
+
+    gisState.markerGroup = useCluster
+        ? L.markerClusterGroup({
+            chunkedLoading: true,
+            chunkInterval: 120,
+            chunkDelay: 25,
+            disableClusteringAtZoom: 13,
+            maxClusterRadius: 44,
+            showCoverageOnHover: false,
+        })
+        : L.layerGroup();
 
     gisState.markers.forEach(m => {
         const color = m.color || '#3388ff';
-        const emoji = emojis[m.category] || '📍';
+        const glyph = getMarkerGlyph(m.category);
 
         const icon = L.divIcon({
-            html: '<div class="gis-marker-icon" style="background:' + color + '"><span>' + emoji + '</span></div>',
+            html: '<div class="gis-marker-icon"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C9.4 2 4 7.4 4 14c0 7.5 8.8 15.6 11.2 17.6a1.2 1.2 0 0 0 1.6 0C19.2 29.6 28 21.5 28 14 28 7.4 22.6 2 16 2Z" fill="' + color + '"/><circle cx="16" cy="14" r="6" fill="#ffffff"/><text x="16" y="17" text-anchor="middle" font-size="8" font-weight="700" fill="#0f172a" font-family="Arial, sans-serif">' + glyph + '</text></svg></div>',
             className: 'gis-marker-container',
             iconSize: [32, 32],
-            iconAnchor: [16, 32],
-            popupAnchor: [0, -32],
+            iconAnchor: [16, 31],
+            popupAnchor: [0, -28],
         });
 
         const marker = L.marker([m.lat, m.lng], { icon: icon });
         marker.bindPopup('<strong>' + m.name + '</strong><br><em>' + m.category + '</em>');
         marker.on('click', () => showMarkerProperties(m));
+        marker.__source = m;
         gisState.markerGroup.addLayer(marker);
     });
 
@@ -848,6 +940,61 @@ function renderMarkersOnMap() {
     const markerLayers = gisState.layers.filter(l => l.type === 'marker');
     const anyVisible = markerLayers.length === 0 || markerLayers.some(l => l.visible);
     if (anyVisible) gisState.markerGroup.addTo(gisMap);
+
+    syncClusterToggleUI();
+}
+
+function getMarkerGlyph(category) {
+    const glyphMap = {
+        capital: 'C',
+        port: 'P',
+        airport: 'A',
+        infrastructure: 'I',
+        tourism: 'T',
+        nature: 'N',
+        research: 'R',
+        cold_storage: 'S',
+        processing: 'P',
+        tea_estate: 'T',
+        dairy: 'D',
+        seed_bank: 'B',
+        market: 'M',
+        epz: 'E',
+        industrial_zone: 'Z',
+        textile: 'T',
+        port_industry: 'P',
+        tech_park: 'K',
+        sez: 'S',
+        power: 'W',
+        hospital: 'H',
+        clinic: 'C',
+        vaccine: 'V',
+        blood_bank: 'B',
+        satellite: 'S',
+        constellation: 'C',
+        navigation: 'N',
+        weather: 'W',
+        ground_station: 'G',
+        launch_site: 'L',
+        earth_observation: 'E',
+        aircraft: 'A',
+        canal: 'C',
+        strait: 'S',
+        vessel: 'V',
+        train: 'T',
+        station: 'S',
+    };
+
+    if (glyphMap[category]) {
+        return glyphMap[category];
+    }
+
+    const fallback = String(category || '').trim();
+    return fallback ? fallback.charAt(0).toUpperCase() : 'M';
+}
+
+function isMarkerClusteringAvailable() {
+    return typeof L !== 'undefined' && typeof L.markerClusterGroup === 'function';
 }
 
 // =============================================
@@ -941,7 +1088,10 @@ async function switchDataset() {
     const sel = document.getElementById('filterDataset');
     if (!sel) return;
     const dsId = sel.value;
-    if (dsId) await loadDataset(dsId);
+    if (dsId) {
+        await loadDataset(dsId);
+        updateShareLinkPreview();
+    }
 }
 
 async function loadDataset(id) {
@@ -1236,19 +1386,941 @@ function addMeasurePoint(latlng) {
     }
 }
 
+function handleMapSearchKey(event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    searchMapFeature();
+}
+
+function searchMapFeature() {
+    const input = document.getElementById('mapQuickSearch');
+    if (!input) return;
+    const query = (input.value || '').trim();
+    if (!query) return;
+
+    const coordMatch = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (coordMatch) {
+        const lat = Number(coordMatch[1]);
+        const lng = Number(coordMatch[2]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            placeTemporaryCoordinateMarker(lat, lng, 'Coordinate');
+            gisMap.flyTo([lat, lng], Math.max(10, gisMap.getZoom()), { duration: 0.9 });
+        }
+        return;
+    }
+
+    const normalized = query.toLowerCase();
+    let match = gisState.mapSearchIndex.find(item => item.nameLower === normalized);
+    if (!match) {
+        match = gisState.mapSearchIndex.find(item => item.nameLower.startsWith(normalized));
+    }
+    if (!match) {
+        match = gisState.mapSearchIndex.find(item => item.nameLower.includes(normalized));
+    }
+    if (!match) {
+        input.classList.add('search-miss');
+        setTimeout(() => input.classList.remove('search-miss'), 500);
+        return;
+    }
+
+    if (match.kind === 'region' && match.ref) {
+        const scope = getDashScope();
+        gisMap.flyTo(match.ref.center, scope === 'domestic' ? 10 : 5, { duration: 0.9 });
+        showRegionProperties(match.ref);
+        return;
+    }
+
+    if (match.kind === 'marker' && match.ref) {
+        gisMap.flyTo([match.ref.lat, match.ref.lng], Math.max(9, gisMap.getZoom()), { duration: 0.9 });
+        showMarkerProperties(match.ref);
+    }
+}
+
+function buildMapQuickSearchIndex() {
+    const list = [];
+    const datalist = document.getElementById('mapQuickSearchList');
+    const seen = new Set();
+
+    gisState.regions.forEach(region => {
+        if (!region || !region.name) return;
+        const key = 'region:' + region.name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push({ kind: 'region', ref: region, nameLower: region.name.toLowerCase() });
+    });
+
+    gisState.markers.forEach(marker => {
+        if (!marker || !marker.name) return;
+        const key = 'marker:' + marker.name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push({ kind: 'marker', ref: marker, nameLower: marker.name.toLowerCase() });
+    });
+
+    gisState.mapSearchIndex = list;
+
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    list.slice(0, 250).forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.ref.name;
+        datalist.appendChild(opt);
+    });
+}
+
+function placeTemporaryCoordinateMarker(lat, lng, label) {
+    if (gisState.temporarySearchMarker) {
+        gisMap.removeLayer(gisState.temporarySearchMarker);
+    }
+    gisState.temporarySearchMarker = L.circleMarker([lat, lng], {
+        radius: 7,
+        color: '#f59e0b',
+        fillColor: '#f59e0b',
+        fillOpacity: 0.75,
+        weight: 2,
+    }).addTo(gisMap).bindPopup(label + ': ' + lat.toFixed(5) + ', ' + lng.toFixed(5));
+    gisState.temporarySearchMarker.openPopup();
+}
+
+function fitVisibleData() {
+    const bounds = L.latLngBounds([]);
+
+    Object.values(gisState.divisionPolygons).forEach(layer => {
+        if (gisMap.hasLayer(layer)) bounds.extend(layer.getBounds());
+    });
+    Object.values(gisState.districtPolygons).forEach(layer => {
+        if (gisMap.hasLayer(layer)) bounds.extend(layer.getBounds());
+    });
+
+    if (gisState.markerGroup && gisMap.hasLayer(gisState.markerGroup)) {
+        gisState.markerGroup.eachLayer(layer => {
+            if (layer.getLatLng) bounds.extend(layer.getLatLng());
+        });
+    }
+
+    if (bounds.isValid()) {
+        gisMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 12 });
+    } else {
+        resetMapView();
+    }
+}
+
+function focusMarkersOnly() {
+    Object.values(gisState.divisionPolygons).forEach(layer => gisMap.removeLayer(layer));
+    Object.values(gisState.districtPolygons).forEach(layer => gisMap.removeLayer(layer));
+
+    gisState.layers.forEach(layer => {
+        if (layer.type === 'marker') {
+            layer.visible = true;
+        }
+        if (layer.type === 'geojson' || layer.type === 'heatmap') {
+            layer.visible = false;
+        }
+    });
+
+    if (gisState.markerGroup) {
+        gisState.markerGroup.addTo(gisMap);
+    }
+
+    renderLayers();
+    fitVisibleData();
+}
+
+function toggleRegionLabels() {
+    gisState.labelsVisible = !gisState.labelsVisible;
+    applyRegionLabelMode();
+    syncLabelToggleButton();
+}
+
+function applyRegionLabelMode() {
+    const apply = function (layer) {
+        if (!layer) return;
+        if (gisState.labelsVisible) {
+            if (!layer.getTooltip() && layer.__regionName) {
+                layer.bindTooltip(layer.__regionName, {
+                    permanent: true,
+                    direction: 'center',
+                    className: 'gis-division-label',
+                });
+            }
+            return;
+        }
+        if (layer.getTooltip()) {
+            layer.unbindTooltip();
+        }
+    };
+
+    Object.values(gisState.divisionPolygons).forEach(apply);
+}
+
+function syncLabelToggleButton() {
+    const btn = document.getElementById('labelToggleBtn');
+    if (!btn) return;
+    btn.textContent = gisState.labelsVisible ? 'Labels On' : 'Labels Off';
+    btn.classList.toggle('active', gisState.labelsVisible);
+}
+
+function setAllLayersVisibility(visible) {
+    gisState.layers.forEach(layer => {
+        layer.visible = visible;
+    });
+
+    Object.values(gisState.divisionPolygons).forEach(layer => {
+        if (visible) {
+            layer.addTo(gisMap);
+        } else {
+            gisMap.removeLayer(layer);
+        }
+    });
+
+    Object.values(gisState.districtPolygons).forEach(layer => {
+        if (visible) {
+            layer.addTo(gisMap);
+        } else {
+            gisMap.removeLayer(layer);
+        }
+    });
+
+    if (gisState.markerGroup) {
+        if (visible) {
+            gisState.markerGroup.addTo(gisMap);
+        } else {
+            gisMap.removeLayer(gisState.markerGroup);
+        }
+    }
+
+    renderLayers();
+}
+
+function toggleMarkerClustering(forceState) {
+    const desired = (typeof forceState === 'boolean') ? forceState : !gisState.useMarkerClustering;
+
+    if (desired && !isMarkerClusteringAvailable()) {
+        gisState.useMarkerClustering = false;
+        syncClusterToggleUI();
+        setDrawQueryResult('Marker clustering plugin is not available in this environment.', true);
+        return;
+    }
+
+    gisState.useMarkerClustering = desired;
+    renderMarkersOnMap();
+    updateShareLinkPreview();
+}
+
+function syncClusterToggleUI() {
+    const isAvailable = isMarkerClusteringAvailable();
+    const isOn = gisState.useMarkerClustering && isAvailable;
+
+    const text = !isAvailable ? 'Clustering: Unavailable' : (isOn ? 'Clustering: On' : 'Clustering: Off');
+
+    const panelBtn = document.getElementById('clusterToggleBtn');
+    if (panelBtn) {
+        panelBtn.textContent = text;
+        panelBtn.classList.toggle('active', isOn);
+    }
+
+    const mapBtn = document.getElementById('clusterToolBtn');
+    if (mapBtn) {
+        mapBtn.classList.toggle('active', isOn);
+        mapBtn.title = isOn ? 'Disable Marker Clustering' : 'Enable Marker Clustering';
+    }
+}
+
+function initDrawQueryTools() {
+    gisState.drawLayerGroup = L.featureGroup().addTo(gisMap);
+
+    if (!isDrawToolAvailable()) {
+        setDrawQueryResult('Draw tools unavailable. Leaflet Draw is not loaded.', true);
+        return;
+    }
+
+    gisMap.on(L.Draw.Event.CREATED, function (event) {
+        if (!gisState.drawLayerGroup) return;
+
+        gisState.drawLayerGroup.clearLayers();
+        const layer = event.layer;
+        if (layer.setStyle) {
+            layer.setStyle({ color: '#0ea5e9', weight: 2, dashArray: '6,4', fillOpacity: 0.08 });
+        }
+
+        gisState.drawLayerGroup.addLayer(layer);
+        gisState.activeQueryShape = layer;
+        switchDataTab('tools');
+        runSpatialQuery(layer);
+    });
+
+    gisMap.on(L.Draw.Event.DELETED, function () {
+        gisState.activeQueryShape = null;
+        setDrawQueryResult('Selection cleared. Draw a new area to query.', false);
+    });
+}
+
+function isDrawToolAvailable() {
+    return typeof L !== 'undefined' && typeof L.Draw !== 'undefined' && typeof L.Draw.Rectangle === 'function';
+}
+
+function startDrawTool(toolType) {
+    switchDataTab('tools');
+
+    if (!isDrawToolAvailable()) {
+        setDrawQueryResult('Draw tools unavailable. Leaflet Draw plugin failed to load.', true);
+        return;
+    }
+
+    const shapeOptions = { color: '#0ea5e9', weight: 2, dashArray: '6,4', fillOpacity: 0.08 };
+
+    if (toolType === 'rectangle') {
+        const drawer = new L.Draw.Rectangle(gisMap, { shapeOptions: shapeOptions });
+        drawer.enable();
+        return;
+    }
+
+    if (toolType === 'polygon') {
+        const drawer = new L.Draw.Polygon(gisMap, {
+            allowIntersection: false,
+            showArea: true,
+            shapeOptions: shapeOptions,
+        });
+        drawer.enable();
+    }
+}
+
+function clearDrawQuery() {
+    if (gisState.drawLayerGroup) {
+        gisState.drawLayerGroup.clearLayers();
+    }
+    gisState.activeQueryShape = null;
+    setDrawQueryResult('Selection cleared. Draw an area and run query.', false);
+}
+
+function runSpatialQuery(overrideShape) {
+    const shape = overrideShape || gisState.activeQueryShape;
+    if (!shape) {
+        setDrawQueryResult('No selection found. Draw rectangle or polygon first.', true);
+        return;
+    }
+
+    const matchedMarkers = gisState.markers.filter(marker => {
+        return isLatLngInsideShape(L.latLng(marker.lat, marker.lng), shape);
+    });
+
+    const matchedRegions = gisState.regions.filter(region => {
+        if (!Array.isArray(region.center) || region.center.length < 2) return false;
+        return isLatLngInsideShape(L.latLng(region.center[0], region.center[1]), shape);
+    });
+
+    const preview = matchedMarkers.slice(0, 5).map(item => item.name).join(', ');
+    const summary = 'Markers: ' + matchedMarkers.length + ' | Regions: ' + matchedRegions.length;
+    const details = preview ? ('\nTop: ' + preview) : '';
+
+    setDrawQueryResult(summary + details, false);
+}
+
+function isLatLngInsideShape(latLng, shape) {
+    if (!shape || !latLng) return false;
+
+    if (shape instanceof L.Circle) {
+        return shape.getLatLng().distanceTo(latLng) <= shape.getRadius();
+    }
+
+    if (shape instanceof L.Rectangle) {
+        return shape.getBounds().contains(latLng);
+    }
+
+    if (shape instanceof L.Polygon) {
+        const latLngs = shape.getLatLngs();
+        const ring = Array.isArray(latLngs[0]) ? latLngs[0] : latLngs;
+        return isPointInPolygon(latLng, ring);
+    }
+
+    return false;
+}
+
+function isPointInPolygon(point, polygon) {
+    const x = point.lng;
+    const y = point.lat;
+    let inside = false;
+
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].lng;
+        const yi = polygon[i].lat;
+        const xj = polygon[j].lng;
+        const yj = polygon[j].lat;
+
+        const intersects = ((yi > y) !== (yj > y))
+            && (x < (xj - xi) * (y - yi) / ((yj - yi) || Number.EPSILON) + xi);
+
+        if (intersects) inside = !inside;
+    }
+
+    return inside;
+}
+
+function setDrawQueryResult(message, isError) {
+    const box = document.getElementById('drawQueryResult');
+    if (!box) return;
+
+    box.textContent = message;
+    box.classList.toggle('error', !!isError);
+}
+
+function loadSavedViews() {
+    let parsed = [];
+    try {
+        parsed = JSON.parse(localStorage.getItem(GIS_SAVED_VIEWS_KEY) || '[]');
+    } catch (_) {
+        parsed = [];
+    }
+
+    gisState.savedViews = Array.isArray(parsed) ? parsed : [];
+    renderSavedViewsSelect();
+}
+
+function renderSavedViewsSelect() {
+    const select = document.getElementById('savedViewsSelect');
+    if (!select) return;
+
+    select.innerHTML = '';
+
+    if (gisState.savedViews.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No saved views';
+        select.appendChild(opt);
+        return;
+    }
+
+    gisState.savedViews.forEach(view => {
+        const opt = document.createElement('option');
+        opt.value = view.id;
+        opt.textContent = view.name + ' (' + (view.type || 'general') + ')';
+        select.appendChild(opt);
+    });
+}
+
+function persistSavedViews() {
+    localStorage.setItem(GIS_SAVED_VIEWS_KEY, JSON.stringify(gisState.savedViews));
+    renderSavedViewsSelect();
+}
+
+function collectCurrentViewState() {
+    const center = gisMap ? gisMap.getCenter() : { lat: 23.685, lng: 90.3563 };
+    const zoom = gisMap ? gisMap.getZoom() : 7;
+    const datasetSelect = document.getElementById('filterDataset');
+
+    return {
+        type: currentDashType,
+        center: { lat: Number(center.lat.toFixed(6)), lng: Number(center.lng.toFixed(6)) },
+        zoom: zoom,
+        visibleLayers: gisState.layers.filter(layer => layer.visible).map(layer => layer.id),
+        datasetId: gisState.activeDataset?.id || datasetSelect?.value || '',
+        sidebarCollapsed: document.getElementById('gisSidebar')?.classList.contains('collapsed') || false,
+        dataPanelCollapsed: document.getElementById('gisDataPanel')?.classList.contains('collapsed') || false,
+        workspaceCollapsed: document.getElementById('gisHubContainer')?.classList.contains('tools-collapsed') || false,
+        clustering: !!gisState.useMarkerClustering,
+    };
+}
+
+function buildShareableLink(state) {
+    const view = state || collectCurrentViewState();
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+
+    params.set('gisType', view.type || currentDashType);
+    params.set('gisLat', String(view.center.lat));
+    params.set('gisLng', String(view.center.lng));
+    params.set('gisZoom', String(view.zoom));
+    params.set('gisLayers', (view.visibleLayers || []).join(','));
+    params.set('gisDataset', view.datasetId || '');
+    params.set('gisCluster', view.clustering ? '1' : '0');
+    params.set('gisSB', view.sidebarCollapsed ? '1' : '0');
+    params.set('gisDP', view.dataPanelCollapsed ? '1' : '0');
+    params.set('gisWP', view.workspaceCollapsed ? '1' : '0');
+
+    url.search = params.toString();
+    return url.toString();
+}
+
+function updateShareLinkPreview() {
+    const input = document.getElementById('shareLinkInput');
+    if (!input) return;
+    input.value = buildShareableLink();
+}
+
+function saveCurrentView() {
+    const input = document.getElementById('viewNameInput');
+    const name = (input?.value || '').trim() || ('View ' + new Date().toLocaleString());
+    const state = collectCurrentViewState();
+    state.id = 'view-' + Date.now();
+    state.name = name;
+    state.savedAt = new Date().toISOString();
+
+    gisState.savedViews.unshift(state);
+    gisState.savedViews = gisState.savedViews.slice(0, 50);
+    persistSavedViews();
+
+    if (input) input.value = '';
+    setDrawQueryResult('Saved view: ' + name, false);
+}
+
+function findSelectedSavedView() {
+    const select = document.getElementById('savedViewsSelect');
+    if (!select || !select.value) return null;
+    return gisState.savedViews.find(view => view.id === select.value) || null;
+}
+
+async function loadSelectedView() {
+    const selected = findSelectedSavedView();
+    if (!selected) {
+        setDrawQueryResult('Select a saved view first.', true);
+        return;
+    }
+
+    await applyViewState(selected);
+    setDrawQueryResult('Loaded view: ' + selected.name, false);
+}
+
+function deleteSelectedView() {
+    const selected = findSelectedSavedView();
+    if (!selected) {
+        setDrawQueryResult('Select a saved view first.', true);
+        return;
+    }
+
+    gisState.savedViews = gisState.savedViews.filter(view => view.id !== selected.id);
+    persistSavedViews();
+    setDrawQueryResult('Deleted view: ' + selected.name, false);
+}
+
+async function copyShareableLink() {
+    const link = buildShareableLink();
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(link);
+        } else {
+            const temp = document.createElement('textarea');
+            temp.value = link;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+        }
+        setDrawQueryResult('Shareable link copied to clipboard.', false);
+    } catch (_) {
+        setDrawQueryResult('Unable to copy link automatically. Copy it manually from the box.', true);
+    }
+
+    updateShareLinkPreview();
+}
+
+function parseViewStateFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const keys = ['gisType', 'gisLat', 'gisLng', 'gisZoom', 'gisLayers', 'gisDataset', 'gisCluster', 'gisSB', 'gisDP', 'gisWP'];
+    const hasState = keys.some(key => params.has(key));
+    if (!hasState) return null;
+
+    const lat = Number(params.get('gisLat'));
+    const lng = Number(params.get('gisLng'));
+    const zoom = Number(params.get('gisZoom'));
+
+    return {
+        type: params.get('gisType') || currentDashType,
+        center: (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat: lat, lng: lng } : null,
+        zoom: Number.isFinite(zoom) ? zoom : null,
+        visibleLayers: (params.get('gisLayers') || '').split(',').filter(Boolean),
+        datasetId: params.get('gisDataset') || '',
+        clustering: params.get('gisCluster') === '1',
+        sidebarCollapsed: params.get('gisSB') === '1',
+        dataPanelCollapsed: params.get('gisDP') === '1',
+        workspaceCollapsed: params.get('gisWP') === '1',
+    };
+}
+
+async function bootstrapViewStateFromURL() {
+    const state = parseViewStateFromURL();
+    if (!state) return;
+    await applyViewState(state);
+}
+
+async function applyViewState(state) {
+    if (!state) return;
+
+    if (state.type && state.type !== currentDashType) {
+        await switchDashboardType(state.type);
+    }
+
+    const hub = document.getElementById('gisHubContainer');
+    if (hub && typeof state.workspaceCollapsed === 'boolean') {
+        hub.classList.toggle('tools-collapsed', state.workspaceCollapsed);
+    }
+    syncWorkspacePanelsToggle();
+
+    const sidebar = document.getElementById('gisSidebar');
+    if (sidebar && typeof state.sidebarCollapsed === 'boolean') {
+        sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+    }
+
+    const dataPanel = document.getElementById('gisDataPanel');
+    if (dataPanel && typeof state.dataPanelCollapsed === 'boolean') {
+        dataPanel.classList.toggle('collapsed', state.dataPanelCollapsed);
+    }
+
+    if (typeof state.clustering === 'boolean') {
+        gisState.useMarkerClustering = state.clustering;
+        renderMarkersOnMap();
+    }
+
+    if (Array.isArray(state.visibleLayers) && state.visibleLayers.length > 0) {
+        const visible = new Set(state.visibleLayers);
+        gisState.layers.forEach(layer => {
+            const shouldShow = visible.has(layer.id);
+            toggleLayer(layer.id, shouldShow);
+        });
+        renderLayers();
+    }
+
+    if (state.center && typeof state.zoom === 'number') {
+        gisMap.setView([state.center.lat, state.center.lng], state.zoom, { animate: false });
+    }
+
+    if (state.datasetId) {
+        const datasetSelect = document.getElementById('filterDataset');
+        if (datasetSelect) datasetSelect.value = state.datasetId;
+        await loadDataset(state.datasetId);
+    }
+
+    syncClusterToggleUI();
+    updateShareLinkPreview();
+    setTimeout(() => gisMap.invalidateSize(), 120);
+}
+
+function buildCurrentGISJsonPayload() {
+    return {
+        schema: 'axiomnizam-gis-json-v1',
+        exportedAt: new Date().toISOString(),
+        dashboardType: currentDashType,
+        summary: {
+            layerCount: gisState.layers.length,
+            regionCount: gisState.regions.length,
+            markerCount: gisState.markers.length,
+            datasetCount: gisState.datasets.length,
+        },
+        viewState: collectCurrentViewState(),
+        layers: gisState.layers,
+        regions: gisState.regions,
+        markers: gisState.markers,
+        datasets: gisState.datasets,
+        activeDataset: gisState.activeDataset || null,
+    };
+}
+
+function loadCurrentDataAsGISJson() {
+    const editor = document.getElementById('gisJsonEditor');
+    if (!editor) return;
+
+    const payload = buildCurrentGISJsonPayload();
+    editor.value = JSON.stringify(payload, null, 2);
+    setGISJsonStatus('Loaded current GIS data into JSON editor.', false);
+}
+
+function validateGISJson() {
+    const parsed = parseGISJsonEditorInput();
+    if (!parsed) return false;
+
+    const normalized = normalizeToGeoJSON(parsed);
+    if (normalized) {
+        const count = (normalized.features || []).length;
+        setGISJsonStatus('Valid JSON. Convertible to GeoJSON with ' + count + ' feature(s).', false);
+    } else {
+        setGISJsonStatus('Valid JSON, but no recognizable GIS structures found.', true);
+    }
+
+    return true;
+}
+
+function importGISJsonToMap() {
+    const parsed = parseGISJsonEditorInput();
+    if (!parsed) return;
+
+    const geo = normalizeToGeoJSON(parsed);
+    if (!geo || !Array.isArray(geo.features) || geo.features.length === 0) {
+        setGISJsonStatus('Import failed: no GeoJSON features found in provided JSON.', true);
+        return;
+    }
+
+    clearGISJsonLayer();
+
+    gisState.importedGeoJsonLayer = L.geoJSON(geo, {
+        style: function () {
+            return { color: '#0ea5e9', weight: 2, fillOpacity: 0.12 };
+        },
+        pointToLayer: function (_feature, latlng) {
+            return L.circleMarker(latlng, {
+                radius: 5,
+                color: '#0ea5e9',
+                fillColor: '#22d3ee',
+                fillOpacity: 0.8,
+                weight: 2,
+            });
+        },
+        onEachFeature: function (feature, layer) {
+            if (!feature || !feature.properties) return;
+            const keys = Object.keys(feature.properties).slice(0, 8);
+            if (keys.length === 0) return;
+            const lines = keys.map(k => '<strong>' + k + '</strong>: ' + String(feature.properties[k]));
+            layer.bindPopup(lines.join('<br>'));
+        },
+    }).addTo(gisMap);
+
+    const bounds = gisState.importedGeoJsonLayer.getBounds();
+    if (bounds && bounds.isValid()) {
+        gisMap.fitBounds(bounds, { padding: [22, 22], maxZoom: 13 });
+    }
+
+    setGISJsonStatus('Imported ' + geo.features.length + ' feature(s) to map.', false);
+}
+
+function clearGISJsonLayer() {
+    if (gisState.importedGeoJsonLayer) {
+        gisMap.removeLayer(gisState.importedGeoJsonLayer);
+        gisState.importedGeoJsonLayer = null;
+        setGISJsonStatus('Cleared imported GIS JSON layer.', false);
+    }
+}
+
+function downloadGISJson() {
+    const editor = document.getElementById('gisJsonEditor');
+    const raw = editor ? editor.value.trim() : '';
+
+    let payload = null;
+    if (raw) {
+        try {
+            payload = JSON.parse(raw);
+        } catch (_) {
+            setGISJsonStatus('Cannot download: JSON editor contains invalid JSON.', true);
+            return;
+        }
+    } else {
+        payload = buildCurrentGISJsonPayload();
+    }
+
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'gis-' + currentDashType + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    setGISJsonStatus('GIS JSON downloaded.', false);
+}
+
+function parseGISJsonEditorInput() {
+    const editor = document.getElementById('gisJsonEditor');
+    if (!editor) return null;
+
+    const raw = (editor.value || '').trim();
+    if (!raw) {
+        setGISJsonStatus('JSON editor is empty.', true);
+        return null;
+    }
+
+    try {
+        return JSON.parse(raw);
+    } catch (err) {
+        setGISJsonStatus('Invalid JSON: ' + err.message, true);
+        return null;
+    }
+}
+
+function normalizeToGeoJSON(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+
+    if (payload.type === 'FeatureCollection' && Array.isArray(payload.features)) {
+        return payload;
+    }
+
+    if (payload.type === 'Feature') {
+        return { type: 'FeatureCollection', features: [payload] };
+    }
+
+    if (payload.type && ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection'].includes(payload.type)) {
+        return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: payload, properties: {} }] };
+    }
+
+    if (payload.geojson && typeof payload.geojson === 'object') {
+        return normalizeToGeoJSON(payload.geojson);
+    }
+
+    const features = [];
+
+    if (Array.isArray(payload.markers)) {
+        payload.markers.forEach(marker => {
+            if (!marker || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) return;
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [marker.lng, marker.lat] },
+                properties: {
+                    source: 'marker',
+                    id: marker.id || '',
+                    name: marker.name || '',
+                    category: marker.category || '',
+                    ...(marker.properties || {}),
+                },
+            });
+        });
+    }
+
+    if (Array.isArray(payload.regions)) {
+        payload.regions.forEach(region => {
+            if (region && region.geojson && typeof region.geojson === 'object') {
+                const regionGeo = normalizeToGeoJSON(region.geojson);
+                if (regionGeo && Array.isArray(regionGeo.features)) {
+                    regionGeo.features.forEach(f => {
+                        features.push({
+                            type: 'Feature',
+                            geometry: f.geometry,
+                            properties: {
+                                source: 'region',
+                                id: region.id || '',
+                                name: region.name || '',
+                                regionType: region.type || '',
+                                ...(region.properties || {}),
+                                ...(f.properties || {}),
+                            },
+                        });
+                    });
+                }
+                return;
+            }
+
+            if (!region || !Array.isArray(region.center) || region.center.length < 2) return;
+            const lat = Number(region.center[0]);
+            const lng = Number(region.center[1]);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [lng, lat] },
+                properties: {
+                    source: 'region-center',
+                    id: region.id || '',
+                    name: region.name || '',
+                    regionType: region.type || '',
+                    ...(region.properties || {}),
+                },
+            });
+        });
+    }
+
+    if (Array.isArray(payload.features)) {
+        payload.features.forEach(feature => {
+            if (feature && feature.type === 'Feature' && feature.geometry) {
+                features.push(feature);
+            }
+        });
+    }
+
+    if (features.length === 0) return null;
+    return { type: 'FeatureCollection', features: features };
+}
+
+function setGISJsonStatus(message, isError) {
+    const box = document.getElementById('gisJsonStatus');
+    if (!box) return;
+    box.textContent = message;
+    box.classList.toggle('error', !!isError);
+}
+
 // =============================================
 // UI Panels
 // =============================================
 
+function togglePanelMenu(event, menuId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const menu = document.getElementById(menuId);
+    if (!menu) return;
+
+    const willOpen = !menu.classList.contains('open');
+    closeAllMenus();
+
+    if (willOpen) {
+        menu.classList.add('open');
+        if (event && event.currentTarget) {
+            event.currentTarget.classList.add('active');
+        }
+    }
+}
+
+function closeAllMenus() {
+    document.querySelectorAll('.gis-panel-menu.open').forEach(menu => menu.classList.remove('open'));
+    document.querySelectorAll('.gis-more-dot.active, .gis-more-dot-chip.active').forEach(btn => btn.classList.remove('active'));
+}
+
+function runPanelAction(action) {
+    switch (action) {
+        case 'filters-apply':
+            applyFilters();
+            break;
+        case 'filters-clear':
+            clearFilters();
+            break;
+        case 'filters-markers':
+            focusMarkersOnly();
+            break;
+        case 'layers-show-all':
+            setAllLayersVisibility(true);
+            break;
+        case 'layers-hide-all':
+            setAllLayersVisibility(false);
+            break;
+        case 'layers-default-basemap':
+            switchBaseMap('CartoDB Light');
+            renderLayers();
+            break;
+        case 'regions-fit-all':
+            fitAllPrimaryRegions();
+            break;
+        case 'regions-reset-view':
+            resetMapView();
+            break;
+        default:
+            break;
+    }
+    closeAllMenus();
+}
+
+function fitAllPrimaryRegions() {
+    const types = getPrimaryRegionTypes();
+    const bounds = L.latLngBounds([]);
+
+    gisState.regions
+        .filter(region => types.includes(region.type) && Array.isArray(region.center))
+        .forEach(region => bounds.extend(region.center));
+
+    if (bounds.isValid()) {
+        gisMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 10 });
+    } else {
+        resetMapView();
+    }
+}
+
 function toggleSidebar() {
     const sidebar = document.getElementById('gisSidebar');
     sidebar.classList.toggle('collapsed');
+    updateShareLinkPreview();
     setTimeout(() => gisMap.invalidateSize(), 350);
 }
 
 function toggleDataPanel() {
     const panel = document.getElementById('gisDataPanel');
     panel.classList.toggle('collapsed');
+    updateShareLinkPreview();
     setTimeout(() => gisMap.invalidateSize(), 350);
 }
 
@@ -1263,14 +2335,16 @@ function switchDataTab(tabName) {
 }
 
 function toggleLegend() {
+    const legend = document.getElementById('gisLegend');
     const body = document.getElementById('legendBody');
-    const icon = document.getElementById('legendToggle');
+    if (!body || !legend) return;
+
     if (body.style.display === 'none') {
         body.style.display = 'block';
-        icon.textContent = '▾';
+        legend.classList.remove('collapsed');
     } else {
         body.style.display = 'none';
-        icon.textContent = '▸';
+        legend.classList.add('collapsed');
     }
 }
 

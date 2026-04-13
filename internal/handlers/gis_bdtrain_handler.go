@@ -102,6 +102,75 @@ func NewGISBDTrainHandler(db *gorm.DB) *GISBDTrainHandler {
 	return &GISBDTrainHandler{db: db}
 }
 
+type bdStationGeoProjection struct {
+	StationID int     `gorm:"column:station_id"`
+	Latitude  float64 `gorm:"column:latitude"`
+	Longitude float64 `gorm:"column:longitude"`
+	District  string  `gorm:"column:district"`
+	Division  string  `gorm:"column:division"`
+}
+
+func projectionSliceToGeoMap(projections []bdStationGeoProjection) map[int]BDStationGeo {
+	geoMap := make(map[int]BDStationGeo, len(projections))
+	for _, p := range projections {
+		if p.StationID == 0 {
+			continue
+		}
+		geoMap[p.StationID] = BDStationGeo{
+			StationID: p.StationID,
+			Latitude:  p.Latitude,
+			Longitude: p.Longitude,
+			District:  p.District,
+			Division:  p.Division,
+		}
+	}
+	return geoMap
+}
+
+func (h *GISBDTrainHandler) loadStationGeoByIDs(stationIDs []int) map[int]BDStationGeo {
+	if len(stationIDs) == 0 {
+		return map[int]BDStationGeo{}
+	}
+
+	geoMap := make(map[int]BDStationGeo)
+
+	var geos []BDStationGeo
+	if err := h.db.Where("station_id IN ?", stationIDs).Find(&geos).Error; err == nil {
+		for _, g := range geos {
+			geoMap[g.StationID] = g
+		}
+		if len(geoMap) > 0 {
+			return geoMap
+		}
+	}
+
+	var projections []bdStationGeoProjection
+	if err := h.db.Table("stations").
+		Select("id AS station_id, latitude, longitude, '' AS district, '' AS division").
+		Where("id IN ? AND latitude IS NOT NULL AND longitude IS NOT NULL", stationIDs).
+		Scan(&projections).Error; err == nil && len(projections) > 0 {
+		return projectionSliceToGeoMap(projections)
+	}
+
+	projections = projections[:0]
+	if err := h.db.Table("stations").
+		Select("id AS station_id, lat AS latitude, lng AS longitude, '' AS district, '' AS division").
+		Where("id IN ? AND lat IS NOT NULL AND lng IS NOT NULL", stationIDs).
+		Scan(&projections).Error; err == nil && len(projections) > 0 {
+		return projectionSliceToGeoMap(projections)
+	}
+
+	projections = projections[:0]
+	if err := h.db.Table("stations").
+		Select("id AS station_id, lat AS latitude, lon AS longitude, '' AS district, '' AS division").
+		Where("id IN ? AND lat IS NOT NULL AND lon IS NOT NULL", stationIDs).
+		Scan(&projections).Error; err == nil && len(projections) > 0 {
+		return projectionSliceToGeoMap(projections)
+	}
+
+	return geoMap
+}
+
 // -- Trains --
 
 // ListTrains GET /api/v1/gis/bd-trains
@@ -235,12 +304,7 @@ func (h *GISBDTrainHandler) ListStations(c *gin.Context) {
 	for i, s := range stations {
 		stationIDs[i] = s.ID
 	}
-	var geos []BDStationGeo
-	h.db.Where("station_id IN ?", stationIDs).Find(&geos)
-	geoMap := make(map[int]BDStationGeo)
-	for _, g := range geos {
-		geoMap[g.StationID] = g
-	}
+	geoMap := h.loadStationGeoByIDs(stationIDs)
 
 	result := make([]stationWithGeo, len(stations))
 	for i, s := range stations {
@@ -271,9 +335,8 @@ func (h *GISBDTrainHandler) GetStation(c *gin.Context) {
 		return
 	}
 
-	// Geo
-	var geo BDStationGeo
-	hasGeo := h.db.Where("station_id = ?", station.ID).First(&geo).Error == nil
+	geoMap := h.loadStationGeoByIDs([]int{station.ID})
+	geo, hasGeo := geoMap[station.ID]
 
 	// Trains passing through
 	type trainBrief struct {
@@ -555,6 +618,30 @@ func (h *GISBDTrainHandler) GetDashboard(c *gin.Context) {
 	var allStations []BDStation
 	h.db.Find(&allStations)
 
+	if len(geoStations) == 0 && len(allStations) > 0 {
+		stationIDs := make([]int, 0, len(allStations))
+		stationNames := make(map[int]string, len(allStations))
+		for _, s := range allStations {
+			stationIDs = append(stationIDs, s.ID)
+			stationNames[s.ID] = s.Name
+		}
+
+		fallbackGeo := h.loadStationGeoByIDs(stationIDs)
+		if len(fallbackGeo) > 0 {
+			geoStations = make([]stationWithGeo, 0, len(fallbackGeo))
+			for stationID, g := range fallbackGeo {
+				geoStations = append(geoStations, stationWithGeo{
+					ID:        stationID,
+					Name:      stationNames[stationID],
+					Latitude:  g.Latitude,
+					Longitude: g.Longitude,
+					District:  g.District,
+					Division:  g.Division,
+				})
+			}
+		}
+	}
+
 	// Top stations
 	type stationStat struct {
 		Name       string `gorm:"column:name"`
@@ -670,7 +757,16 @@ func (h *GISBDTrainHandler) GetDashboardSummary(c *gin.Context) {
 	h.db.Model(&BDSeatClass{}).Count(&seatClassCount)
 
 	var geoCount int64
-	h.db.Table("station_geo").Where("latitude IS NOT NULL").Count(&geoCount)
+	if err := h.db.Table("station_geo").Where("latitude IS NOT NULL").Count(&geoCount).Error; err != nil || geoCount == 0 {
+		var stations []BDStation
+		if err := h.db.Find(&stations).Error; err == nil && len(stations) > 0 {
+			stationIDs := make([]int, 0, len(stations))
+			for _, s := range stations {
+				stationIDs = append(stationIDs, s.ID)
+			}
+			geoCount = int64(len(h.loadStationGeoByIDs(stationIDs)))
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_trains":       trainCount,

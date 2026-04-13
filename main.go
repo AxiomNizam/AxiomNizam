@@ -200,26 +200,77 @@ func main() {
 	// Create tables
 	createTables(conns)
 
+	openPostgresByNames := func(label string, dbNames []string) (*gorm.DB, string, error) {
+		const attemptErrFmt = "%s (%s)"
+		seen := make(map[string]struct{}, len(dbNames))
+		attemptErrors := make([]string, 0, len(dbNames))
+
+		for _, candidate := range dbNames {
+			name := strings.TrimSpace(candidate)
+			if name == "" {
+				continue
+			}
+			if _, exists := seen[name]; exists {
+				continue
+			}
+			seen[name] = struct{}{}
+
+			dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
+				cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
+				name, cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
+
+			db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			if err != nil {
+				attemptErrors = append(attemptErrors, fmt.Sprintf(attemptErrFmt, name, err.Error()))
+				continue
+			}
+
+			sqlDB, err := db.DB()
+			if err != nil {
+				attemptErrors = append(attemptErrors, fmt.Sprintf(attemptErrFmt, name, err.Error()))
+				continue
+			}
+			if err := sqlDB.Ping(); err != nil {
+				attemptErrors = append(attemptErrors, fmt.Sprintf(attemptErrFmt, name, err.Error()))
+				continue
+			}
+
+			return db, name, nil
+		}
+
+		if len(attemptErrors) == 0 {
+			return nil, "", fmt.Errorf("no database candidates configured")
+		}
+
+		return nil, "", fmt.Errorf("%s database candidates failed: %s", label, strings.Join(attemptErrors, " | "))
+	}
+
 	// Connect to the train database (separate PostgreSQL database — Indian Railways)
 	var trainDB *gorm.DB
-	trainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=train port=%s sslmode=%s",
-		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
-		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
-	if db, err := gorm.Open(postgres.Open(trainDSN), &gorm.Config{}); err == nil {
+	trainDBNameCandidates := []string{
+		strings.TrimSpace(os.Getenv("TRAIN_DATABASE")),
+		"train",
+		cfg.PostgreSQL.Database,
+	}
+	if db, dbName, err := openPostgresByNames("train", trainDBNameCandidates); err == nil {
 		trainDB = db
-		log.Println("✅ Train database (PostgreSQL/India) connected")
+		log.Printf("✅ Train database (PostgreSQL/India) connected: %s", dbName)
 	} else {
 		log.Printf("⚠️  Train database connection failed: %v — Indian train GIS APIs will be unavailable", err)
 	}
 
 	// Connect to the bd-train database (Bangladesh Railways)
 	var bdTrainDB *gorm.DB
-	bdTrainDSN := fmt.Sprintf("host=%s user=%s password=%s dbname=bd-train port=%s sslmode=%s",
-		cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
-		cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
-	if db, err := gorm.Open(postgres.Open(bdTrainDSN), &gorm.Config{}); err == nil {
+	bdTrainDBNameCandidates := []string{
+		strings.TrimSpace(os.Getenv("BD_TRAIN_DATABASE")),
+		strings.TrimSpace(os.Getenv("BD_TRAIN_DB")),
+		"bd-train",
+		"bd_train",
+		cfg.PostgreSQL.Database,
+	}
+	if db, dbName, err := openPostgresByNames("bd-train", bdTrainDBNameCandidates); err == nil {
 		bdTrainDB = db
-		log.Println("✅ BD-Train database (PostgreSQL/Bangladesh) connected")
+		log.Printf("✅ BD-Train database (PostgreSQL/Bangladesh) connected: %s", dbName)
 	} else {
 		log.Printf("⚠️  BD-Train database connection failed: %v — Bangladesh train GIS APIs will be unavailable", err)
 	}

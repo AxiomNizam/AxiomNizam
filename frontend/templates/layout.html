@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }}</title>
     <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/style.css?v=20260411-6">
+    <link rel="stylesheet" href="/static/style.css?v=20260412-1">
     <link rel="stylesheet" href="/static/responsive.css?v=20260410-3">
-    <link rel="stylesheet" href="/static/gis-dashboard.css?v=20260410">
+    <link rel="stylesheet" href="/static/gis-dashboard.css?v=20260412-10">
     <link rel="stylesheet" href="/static/analytics-dashboard.css?v=20260410">
     <link rel="stylesheet" href="/static/cdc-etl-dashboard.css?v=20260411-3">
     <link rel="stylesheet" href="/static/netintel-dashboard.css?v=20260410">
@@ -16,7 +16,12 @@
     <link rel="stylesheet" href="/static/platform-console.css?v=20260410">
     <!-- Leaflet.js for GIS maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css?v=20260410" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <!-- Chart.js for Analytics dashboard -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script>
@@ -223,7 +228,7 @@
         {{ end }}
 
         <!-- Main Content -->
-        <main class="main-content{{ if .hideChrome }} login-main-content{{ end }}{{ if eq .pageName "public-dashboard" }} landing-main-content{{ end }}">
+        <main class="main-content{{ if .hideChrome }} login-main-content{{ end }}{{ if eq .pageName "public-dashboard" }} landing-main-content{{ end }}{{ if eq .pageName "gis-dashboard" }} gis-main-content{{ end }}">
             {{ if eq .pageName "login" }}
                 {{ template "login" . }}
             {{ else if eq .pageName "signup" }}
