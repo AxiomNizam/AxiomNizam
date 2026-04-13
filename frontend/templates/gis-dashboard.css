@@ -16,22 +16,6 @@
     display: inline-block;
 }
 
-.gis-hub-container .type-icon,
-.gis-hub-container .panel-icon,
-.gis-hub-container .filter-icon,
-.gis-hub-container .summary-icon,
-.gis-hub-container .empty-icon {
-    display: none !important;
-}
-
-.gis-hub-container .gis-btn > span,
-.gis-hub-container .gis-tool-btn > svg,
-.gis-hub-container .toggle-icon svg,
-.gis-hub-container .legend-toggle svg,
-.gis-hub-container .lucide {
-    display: none !important;
-}
-
 .summary-icon svg {
     width: 1.5rem;
     height: 1.5rem;
@@ -553,8 +537,7 @@
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 18px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -690,17 +673,16 @@
 .gis-marker-icon {
     width: 32px;
     height: 32px;
-    border-radius: 50% 50% 50% 0;
-    transform: rotate(-45deg);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: var(--shadow-sm);
 }
 
-.gis-marker-icon span {
-    transform: rotate(45deg);
-    font-size: 14px;
+.gis-marker-icon svg {
+    width: 32px;
+    height: 32px;
+    display: block;
+    filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.35));
 }
 
 /* ----- Right Data Panel ----- */

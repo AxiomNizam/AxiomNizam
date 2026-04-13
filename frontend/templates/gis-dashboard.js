@@ -89,6 +89,18 @@ const DASH_THEMES = {
     ship:        { title: 'SHIP',         accent: '#0277bd', legendTitle: 'Port Throughput (TEU)' },
 };
 
+const DASH_PANEL_ICONS = {
+    general: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
+    agriculture: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-leaf"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+    industries: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-factory"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>',
+    medical: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hospital"><path d="M12 6v4"/><path d="M14 8h-4"/><path d="M16 21V5a2 2 0 0 0-2-2H2v16"/><path d="M8 21v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4"/><path d="M22 21V9a2 2 0 0 0-2-2h-4"/></svg>',
+    train: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-train-front"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/></svg>',
+    'bd-train': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-train-front"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/></svg>',
+    satellite: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-satellite"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4-4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>',
+    airplane: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.2-1.1.7l-1.6 4.6L9 15l-4 4-4-1-1-4 4-4 3.5 6.9 8.4-1.6c.5-.1.8-.5.7-1Z"/></svg>',
+    ship: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ship"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M12 10v4"/><path d="M12 2v3"/></svg>',
+};
+
 // Map configurations per scope
 const MAP_CONFIG = {
     domestic:      { center: [23.6850, 90.3563], zoom: 7, maxBounds: [[18, 85], [28, 96]], minZoom: 5 },
@@ -230,6 +242,10 @@ function syncWorkspacePanelsToggle() {
     btn.title = expanded ? 'Hide panels and summary' : 'Show panels and summary';
 }
 
+function getDashboardPanelIconMarkup(type) {
+    return DASH_PANEL_ICONS[type] || DASH_PANEL_ICONS.general;
+}
+
 // =============================================
 // Dashboard Type Switching
 // =============================================
@@ -251,7 +267,9 @@ function switchDashboardType(type) {
 
     // Update dashboard info panel
     const theme = DASH_THEMES[type] || DASH_THEMES.general;
+    const iconEl = document.getElementById('dashInfoIcon');
     const titleEl = document.getElementById('dashInfoTitle');
+    if (iconEl) iconEl.innerHTML = getDashboardPanelIconMarkup(type);
     if (titleEl) titleEl.textContent = theme.title;
 
     // Update accent color
@@ -418,9 +436,11 @@ function updateSummaryCards(summary) {
     cards.forEach((card, i) => {
         if (cardElements[i]) {
             const cardEl = cardElements[i];
+            const iconEl = cardEl.querySelector('.summary-icon');
             const valEl = cardEl.querySelector('.summary-value');
             const lblEl = cardEl.querySelector('.summary-label');
             cardEl.style.borderColor = card.color;
+            if (iconEl) iconEl.style.background = card.color;
             if (valEl) valEl.textContent = card.value;
             if (lblEl) lblEl.textContent = card.label;
         }
@@ -560,11 +580,22 @@ function renderLayers() {
             <label class="gis-layer-label">
                 <input type="checkbox" ${layer.visible ? 'checked' : ''} 
                     onchange="toggleLayer('${layer.id}', this.checked)">
+                <span class="layer-icon">${getLayerIcon(layer.type)}</span>
                 <span class="layer-name">${layer.name}</span>
             </label>
         `;
         container.appendChild(item);
     });
+}
+
+function getLayerIcon(type) {
+    const icons = {
+        geojson: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>',
+        tile: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-grid-3x3"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>',
+        marker: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+        heatmap: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-flame"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17h2a2 2 0 0 0 0-4c0-2 1-3.5 2.5-5 .8 1.5 2.2 3.2 2.2 5A4 4 0 0 1 14 17h-4"/><path d="M12 2c1.5 2.2 4 4.5 4 8a4 4 0 0 1-8 0c0-1.5.5-3.2 1.5-4.6"/></svg>',
+    };
+    return icons[type] || '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>';
 }
 
 function toggleLayer(id, visible) {
@@ -872,17 +903,33 @@ function getLegendLevels() {
 function renderMarkersOnMap() {
     if (gisState.markerGroup) gisMap.removeLayer(gisState.markerGroup);
 
-    gisState.markerGroup = L.layerGroup();
+    const canCluster = isMarkerClusteringAvailable();
+    const useCluster = gisState.useMarkerClustering && canCluster;
+
+    gisState.markerGroup = useCluster
+        ? L.markerClusterGroup({
+            chunkedLoading: true,
+            chunkInterval: 120,
+            chunkDelay: 25,
+            disableClusteringAtZoom: 13,
+            maxClusterRadius: 44,
+            showCoverageOnHover: false,
+        })
+        : L.layerGroup();
 
     gisState.markers.forEach(m => {
         const color = m.color || '#3388ff';
-        const marker = L.circleMarker([m.lat, m.lng], {
-            radius: 7,
-            color: '#ffffff',
-            weight: 2,
-            fillColor: color,
-            fillOpacity: 0.9,
+        const glyph = getMarkerGlyph(m.category);
+
+        const icon = L.divIcon({
+            html: '<div class="gis-marker-icon"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C9.4 2 4 7.4 4 14c0 7.5 8.8 15.6 11.2 17.6a1.2 1.2 0 0 0 1.6 0C19.2 29.6 28 21.5 28 14 28 7.4 22.6 2 16 2Z" fill="' + color + '"/><circle cx="16" cy="14" r="6" fill="#ffffff"/><text x="16" y="17" text-anchor="middle" font-size="8" font-weight="700" fill="#0f172a" font-family="Arial, sans-serif">' + glyph + '</text></svg></div>',
+            className: 'gis-marker-container',
+            iconSize: [32, 32],
+            iconAnchor: [16, 31],
+            popupAnchor: [0, -28],
         });
+
+        const marker = L.marker([m.lat, m.lng], { icon: icon });
         marker.bindPopup('<strong>' + m.name + '</strong><br><em>' + m.category + '</em>');
         marker.on('click', () => showMarkerProperties(m));
         marker.__source = m;
@@ -897,8 +944,57 @@ function renderMarkersOnMap() {
     syncClusterToggleUI();
 }
 
+function getMarkerGlyph(category) {
+    const glyphMap = {
+        capital: 'C',
+        port: 'P',
+        airport: 'A',
+        infrastructure: 'I',
+        tourism: 'T',
+        nature: 'N',
+        research: 'R',
+        cold_storage: 'S',
+        processing: 'P',
+        tea_estate: 'T',
+        dairy: 'D',
+        seed_bank: 'B',
+        market: 'M',
+        epz: 'E',
+        industrial_zone: 'Z',
+        textile: 'T',
+        port_industry: 'P',
+        tech_park: 'K',
+        sez: 'S',
+        power: 'W',
+        hospital: 'H',
+        clinic: 'C',
+        vaccine: 'V',
+        blood_bank: 'B',
+        satellite: 'S',
+        constellation: 'C',
+        navigation: 'N',
+        weather: 'W',
+        ground_station: 'G',
+        launch_site: 'L',
+        earth_observation: 'E',
+        aircraft: 'A',
+        canal: 'C',
+        strait: 'S',
+        vessel: 'V',
+        train: 'T',
+        station: 'S',
+    };
+
+    if (glyphMap[category]) {
+        return glyphMap[category];
+    }
+
+    const fallback = String(category || '').trim();
+    return fallback ? fallback.charAt(0).toUpperCase() : 'M';
+}
+
 function isMarkerClusteringAvailable() {
-    return false;
+    return typeof L !== 'undefined' && typeof L.markerClusterGroup === 'function';
 }
 
 // =============================================
