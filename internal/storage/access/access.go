@@ -263,7 +263,7 @@ func (ac *Controller) RequireBucketAccess(minRole models.StorageRole) gin.Handle
 			if len(ak.BucketScope) > 0 {
 				found := false
 				for _, b := range ak.BucketScope {
-					if b == bucket {
+					if bucketScopeMatches(b, bucket) {
 						found = true
 						break
 					}
@@ -514,7 +514,7 @@ func ValidateAccessKeyForObjectRequest(ak *models.AccessKey, method, bucket, key
 	if len(ak.BucketScope) > 0 {
 		ok := false
 		for _, b := range ak.BucketScope {
-			if strings.TrimSpace(b) == bucket {
+			if bucketScopeMatches(b, bucket) {
 				ok = true
 				break
 			}
@@ -535,6 +535,28 @@ func ValidateAccessKeyForObjectRequest(ak *models.AccessKey, method, bucket, key
 	}
 
 	return nil
+}
+
+func bucketScopeMatches(scopeEntry, bucket string) bool {
+	scope := strings.ToLower(strings.TrimSpace(scopeEntry))
+	b := strings.ToLower(strings.TrimSpace(bucket))
+	if scope == "" || b == "" {
+		return false
+	}
+	if scope == "*" || scope == b {
+		return true
+	}
+
+	// Backward/forward compatibility:
+	// - logical scope (e.g. "m") should match storage bucket "<prefix><tenant>-m"
+	// - storage scope should match logical API path bucket when it ends with "-<logical>"
+	if strings.HasSuffix(b, "-"+scope) {
+		return true
+	}
+	if strings.HasSuffix(scope, "-"+b) {
+		return true
+	}
+	return false
 }
 
 // ListAccessKeys returns all access keys for a user.

@@ -159,6 +159,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             Access Policies
         </button>
+        <button class="os-tab" onclick="osSwitch('os-access-keys')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5 5 0 1 1 7.07 7.07L12 22l-2-2 1.32-1.32a5 5 0 0 1 0-7.07z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+            Access Keys
+        </button>
         <button class="os-tab" onclick="osSwitch('os-metrics')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             Metrics
@@ -417,6 +421,97 @@
                 </thead>
                 <tbody id="osPoliciesBody">
                     <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== ACCESS KEYS PANEL ===== -->
+    <div id="os-access-keys" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">Access Keys</h3>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <span id="osAccessKeysCount" style="font-size:.85rem; color:var(--text-muted);">0 key(s)</span>
+                <button class="os-btn os-btn-secondary" onclick="osLoadAccessKeys()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-grid-two">
+            <div class="os-card">
+                <h4>Create Access Key</h4>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyName">Name *</label>
+                    <input type="text" id="osNewAccessKeyName" placeholder="e.g. ci-reader-key">
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyRole">Role *</label>
+                    <select id="osNewAccessKeyRole">
+                        <option value="storage-reader" selected>storage-reader</option>
+                        <option value="storage-browser">storage-browser</option>
+                        <option value="storage-writer">storage-writer</option>
+                        <option value="storage-uploader">storage-uploader</option>
+                        <option value="storage-admin">storage-admin</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyDescription">Description</label>
+                    <input type="text" id="osNewAccessKeyDescription" placeholder="Optional purpose note">
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyBucketScope">Bucket Scope (comma-separated, optional)</label>
+                    <input type="text" id="osNewAccessKeyBucketScope" placeholder="m, axiom-tenant-m">
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyExpiresAt">Expires At (optional)</label>
+                    <input type="datetime-local" id="osNewAccessKeyExpiresAt">
+                </div>
+                <p style="font-size:.8rem; color:var(--text-muted); margin:0;">Leave scope empty to allow all buckets available to this key.</p>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-secondary" onclick="osClearAccessKeyForm()">Clear</button>
+                    <button class="os-btn os-btn-primary" onclick="osCreateAccessKeyFromTab()">Create Access Key</button>
+                </div>
+            </div>
+
+            <div class="os-card">
+                <h4>Created Key</h4>
+                <div id="osAccessKeyCreateResult" style="display:none;">
+                    <p style="font-size:.85rem; color:#f59e0b; margin-top:0;">Copy these credentials now. The secret is shown only once.</p>
+                    <div class="os-form-group">
+                        <label for="osCreatedAccessKeyIdField">Access Key ID</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="text" id="osCreatedAccessKeyIdField" readonly style="flex:1;" value="">
+                            <button class="os-btn os-btn-secondary os-btn-sm" onclick="osCopyCreatedAccessKeyId()">Copy</button>
+                        </div>
+                        <div id="osCreatedAccessKeyId" style="display:none;"></div>
+                    </div>
+                    <div class="os-form-group">
+                        <label for="osCreatedAccessKeySecret">Secret Access Key</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="text" id="osCreatedAccessKeySecret" readonly style="flex:1; font-family:var(--font-mono, monospace);">
+                            <button class="os-btn os-btn-secondary os-btn-sm" onclick="osCopyCreatedAccessKeySecret()">Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="osAccessKeyCreateResultEmpty" style="color:var(--text-muted); font-size:.9rem;">No key created in this session yet.</div>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Access Key ID</th>
+                        <th>Role</th>
+                        <th>Scope</th>
+                        <th>Expires</th>
+                        <th>Last Used</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osAccessKeysBody">
+                    <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">Open this tab or click Refresh to load access keys</td></tr>
                 </tbody>
             </table>
         </div>
@@ -858,6 +953,68 @@
     </div>
 </div>
 
+<!-- ===== SHARE SETUP MODAL ===== -->
+<div id="osShareSetupModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:720px;">
+        <div class="os-modal-header">
+            <h2>Share Object Setup</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osShareSetupModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label for="osShareSetupObject">Object</label>
+                <input type="text" id="osShareSetupObject" readonly style="font-family:var(--font-mono, monospace);">
+            </div>
+
+            <div class="os-grid-two">
+                <div class="os-form-group">
+                    <label for="osShareSetupExpiry">Expires In (seconds)</label>
+                    <input type="number" id="osShareSetupExpiry" value="86400" min="60" max="604800">
+                </div>
+                <div class="os-form-group">
+                    <label for="osShareAccessKey">Access Key</label>
+                    <select id="osShareAccessKey">
+                        <option value="">Loading access keys...</option>
+                    </select>
+                    <div id="osShareAccessKeyHint" style="font-size:.8rem; color:var(--text-muted); margin-top:4px;"></div>
+                </div>
+            </div>
+
+            <div class="os-card" style="margin:0 0 14px 0; background:var(--darker-bg);">
+                <h4 style="margin-bottom:10px;">Create Access Key</h4>
+                <div class="os-grid-two" style="margin-bottom:8px;">
+                    <div class="os-form-group" style="margin-bottom:0;">
+                        <label for="osShareNewAccessKeyName">Key Name</label>
+                        <input type="text" id="osShareNewAccessKeyName" placeholder="share-reader-m-...">
+                    </div>
+                    <div class="os-form-group" style="margin-bottom:0;">
+                        <label for="osShareRestrictToBucket">Scope</label>
+                        <label style="display:flex; align-items:center; gap:8px; margin:0; cursor:pointer;">
+                            <input type="checkbox" id="osShareRestrictToBucket" checked style="width:auto;">
+                            Restrict to this bucket
+                        </label>
+                        <div style="font-size:.8rem; color:var(--text-muted); margin-top:4px;">
+                            API bucket: <span id="osShareSetupBucketScope" class="os-mono">-</span><br>
+                            Storage bucket: <span id="osShareSetupStorageBucket" class="os-mono">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="os-btn os-btn-secondary os-btn-sm" onclick="osShareReloadAccessKeys()">Refresh Keys</button>
+                    <button class="os-btn os-btn-primary os-btn-sm" onclick="osShareCreateAccessKeyFromModal()">Create Access Key</button>
+                </div>
+            </div>
+
+            <div id="osShareSetupError" style="display:none; padding:10px 12px; border-radius:8px; background:rgba(239,68,68,.15); color:#ef4444; font-size:.85rem; margin-bottom:8px;"></div>
+
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osShareSetupModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osShareGenerateFromModal()">Generate Share Link</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ===== SHARE OBJECT MODAL ===== -->
 <div id="osShareObjectModal" class="os-modal">
     <div class="os-modal-content" style="max-width:600px;">
@@ -886,6 +1043,6 @@
     </div>
 </div>
 
-<script src="/static/object-storage.js?v=20260417-1"></script>
+<script src="/static/object-storage.js?v=20260417-3"></script>
 {{ end }}
 

@@ -87,6 +87,7 @@
         if (tabId === 'os-browser') osPopulateBucketSelects();
         if (tabId === 'os-upload') osPopulateBucketSelects();
         if (tabId === 'os-policies') osLoadPolicies();
+        if (tabId === 'os-access-keys') osLoadAccessKeys();
         if (tabId === 'os-metrics') osLoadMetrics();
         if (tabId === 'os-events') osLoadEvents();
         if (tabId === 'os-settings') {
@@ -106,6 +107,7 @@
     let osBucketsCache = [];
     let osObjectsCache = [];
     let osPoliciesCache = [];
+    let osAccessKeysCache = [];
 
     // ===== Dashboard =====
     window.osLoadDashboard = async function() {
@@ -385,15 +387,12 @@
         }
     };
 
+    let osShareContext = null;
+    let osShareKeysCache = [];
+
     function osRoleAllowsRead(role) {
         const r = String(role || '').toLowerCase();
         return r === 'storage-admin' || r === 'storage-writer' || r === 'storage-reader' || r === 'storage-browser';
-    }
-
-    function osAccessKeyAllowsBucket(ak, bucket) {
-        const scopes = Array.isArray(ak && ak.bucketScope) ? ak.bucketScope : [];
-        if (!scopes.length) return true;
-        return scopes.indexOf(bucket) !== -1 || scopes.indexOf('*') !== -1;
     }
 
     function osAccessKeyExpired(ak) {
@@ -405,6 +404,47 @@
     function osDefaultAccessKeyName(bucket) {
         const ts = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
         return 'share-reader-' + bucket + '-' + ts;
+    }
+
+    function osNormalizeBucketName(v) {
+        return String(v || '').trim().toLowerCase();
+    }
+
+    function osBucketScopeMatches(scopeEntry, logicalBucket, storageBucket) {
+        const scope = osNormalizeBucketName(scopeEntry);
+        if (!scope) return false;
+        if (scope === '*') return true;
+
+        const logical = osNormalizeBucketName(logicalBucket);
+        const storage = osNormalizeBucketName(storageBucket);
+        if (!logical && !storage) return false;
+
+        if (scope === logical || scope === storage) return true;
+        if (storage && storage.endsWith('-' + scope)) return true;
+        if (logical && scope.endsWith('-' + logical)) return true;
+        return false;
+    }
+
+    function osAccessKeyAllowsBucket(ak, logicalBucket, storageBucket) {
+        const scopes = Array.isArray(ak && ak.bucketScope) ? ak.bucketScope : [];
+        if (!scopes.length) return true;
+        return scopes.some(scope => osBucketScopeMatches(scope, logicalBucket, storageBucket));
+    }
+
+    function osAccessKeyAllowsObjectKey(ak, key) {
+        const prefix = String((ak && ak.prefixScope) || '').trim();
+        if (!prefix) return true;
+        const objectKey = String(key || '').replace(/^\/+/, '');
+        return objectKey === prefix || objectKey.indexOf(prefix) === 0;
+    }
+
+    function osAccessKeySupportsShare(ak, logicalBucket, storageBucket, key) {
+        return ak &&
+            ak.active !== false &&
+            !osAccessKeyExpired(ak) &&
+            osRoleAllowsRead(ak.role) &&
+            osAccessKeyAllowsBucket(ak, logicalBucket, storageBucket) &&
+            osAccessKeyAllowsObjectKey(ak, key);
     }
 
     async function osListAccessKeys() {
@@ -419,100 +459,190 @@
         return [];
     }
 
-    async function osCreateShareAccessKey(bucket) {
-        const suggestedName = osDefaultAccessKeyName(bucket);
-        const name = prompt('Create access key for sharing\n\nName:', suggestedName);
-        if (name === null) return '';
-        if (!name.trim()) {
-            osToast('Access key name is required', true);
-            return '';
+    function osFindBucketResource(logicalBucket, tenantId) {
+        for (let i = 0; i < osBucketsCache.length; i++) {
+            const b = osBucketsCache[i] || {};
+            const m = b.metadata || {};
+            if (m.name !== logicalBucket) continue;
+            if (tenantId && m.tenantId && m.tenantId !== tenantId) continue;
+            return b;
         }
-
-        const restrictToBucket = confirm('Restrict this access key to bucket "' + bucket + '" only?\n\nOK = only this bucket\nCancel = all buckets');
-        const body = {
-            name: name.trim(),
-            role: 'storage-reader'
-        };
-        if (restrictToBucket) body.bucketScope = [bucket];
-
-        const resp = await osFetch('/access-keys', {
-            method: 'POST',
-            body: JSON.stringify(body)
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-            throw new Error(data.error || ('Failed to create access key (' + resp.status + ')'));
-        }
-        if (!data.accessKeyId) {
-            throw new Error('Access key created but no accessKeyId was returned');
-        }
-        osToast('Created access key: ' + data.accessKeyId);
-        return data.accessKeyId;
+        return null;
     }
 
-    // Collects an existing key choice (or creates one) right before generating a share link.
-    async function osPickAccessKeyForShare(bucket, key) {
-        let keys = await osListAccessKeys();
-        keys = keys.filter(ak => {
-            return ak && ak.active !== false && !osAccessKeyExpired(ak) && osRoleAllowsRead(ak.role) && osAccessKeyAllowsBucket(ak, bucket);
-        });
+    function osResolvedStorageBucketName(logicalBucket, tenantId) {
+        const bucket = osFindBucketResource(logicalBucket, tenantId);
+        const resolved = bucket && bucket.spec && bucket.spec.name;
+        return resolved || logicalBucket;
+    }
 
-        if (!keys.length) {
-            const createNow = confirm('No active access key can read ' + bucket + '/' + key + '.\n\nCreate one now?');
-            if (!createNow) return '';
-            return await osCreateShareAccessKey(bucket);
+    function osShareSetupError(msg) {
+        const el = document.getElementById('osShareSetupError');
+        if (!el) return;
+        if (!msg) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = '';
+        el.textContent = msg;
+    }
+
+    function osDescribeAccessKeyScope(ak) {
+        const scopes = Array.isArray(ak && ak.bucketScope) ? ak.bucketScope.filter(Boolean) : [];
+        return scopes.length ? scopes.join(', ') : '*';
+    }
+
+    function osRenderShareAccessKeyOptions(preferredAccessKeyId) {
+        const select = document.getElementById('osShareAccessKey');
+        const hint = document.getElementById('osShareAccessKeyHint');
+        if (!select || !hint) return;
+
+        if (!osShareKeysCache.length) {
+            select.innerHTML = '<option value="">No compatible active key found</option>';
+            select.value = '';
+            hint.textContent = 'No compatible key available for this object. Create one below.';
+            return;
         }
 
-        let promptText = 'Select access key for sharing ' + bucket + '/' + key + ':\n';
-        promptText += '\n0) Create a new access key';
-        keys.forEach((ak, idx) => {
-            const scope = Array.isArray(ak.bucketScope) && ak.bucketScope.length ? ak.bucketScope.join(',') : '*';
-            const label = ak.name ? ak.name : '(unnamed)';
-            promptText += '\n' + (idx + 1) + ') ' + label + ' [' + ak.accessKeyId + '] role=' + (ak.role || '-') + ' scope=' + scope;
-        });
-        promptText += '\n\nEnter a number, or paste an accessKeyId directly.';
+        select.innerHTML = osShareKeysCache.map(ak => {
+            const label = (ak.name || '(unnamed)') + ' [' + (ak.accessKeyId || '-') + '] role=' + (ak.role || '-') + ' scope=' + osDescribeAccessKeyScope(ak);
+            return '<option value="' + escHtml(ak.accessKeyId || '') + '">' + escHtml(label) + '</option>';
+        }).join('');
 
-        const selection = prompt(promptText, '1');
-        if (selection === null) return '';
-        const trimmed = selection.trim();
-        if (!trimmed) return '';
+        if (preferredAccessKeyId) {
+            const exists = osShareKeysCache.some(ak => ak.accessKeyId === preferredAccessKeyId);
+            if (exists) {
+                select.value = preferredAccessKeyId;
+            }
+        }
+        if (!select.value && osShareKeysCache[0] && osShareKeysCache[0].accessKeyId) {
+            select.value = osShareKeysCache[0].accessKeyId;
+        }
+        hint.textContent = osShareKeysCache.length + ' compatible key(s) available for this object.';
+    }
 
-        if (trimmed === '0') {
-            return await osCreateShareAccessKey(bucket);
+    window.osShareReloadAccessKeys = async function(preferredAccessKeyId) {
+        if (!osShareContext) return;
+        try {
+            const keys = await osListAccessKeys();
+            osShareKeysCache = keys.filter(ak => {
+                return osAccessKeySupportsShare(ak, osShareContext.bucket, osShareContext.storageBucket, osShareContext.key);
+            });
+            osRenderShareAccessKeyOptions(preferredAccessKeyId);
+            osShareSetupError('');
+        } catch (e) {
+            osShareKeysCache = [];
+            osRenderShareAccessKeyOptions('');
+            osShareSetupError(e.message || 'Failed to load access keys');
+        }
+    };
+
+    window.osShareCreateAccessKeyFromModal = async function() {
+        if (!osShareContext) return;
+
+        const nameInput = document.getElementById('osShareNewAccessKeyName');
+        const restrict = !!document.getElementById('osShareRestrictToBucket').checked;
+        const name = (nameInput.value || '').trim();
+        if (!name) {
+            osShareSetupError('Access key name is required');
+            return;
         }
 
-        const selectedNum = parseInt(trimmed, 10);
-        if (!isNaN(selectedNum) && selectedNum >= 1 && selectedNum <= keys.length) {
-            return keys[selectedNum - 1].accessKeyId || '';
+        const body = {
+            name: name,
+            role: 'storage-reader'
+        };
+
+        if (restrict) {
+            body.bucketScope = [osShareContext.bucket];
+            if (osShareContext.storageBucket && osShareContext.storageBucket !== osShareContext.bucket) {
+                body.bucketScope.push(osShareContext.storageBucket);
+            }
         }
 
-        return trimmed;
+        try {
+            const resp = await osFetch('/access-keys', {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                osShareSetupError(data.error || ('Failed to create access key (' + resp.status + ')'));
+                return;
+            }
+
+            osToast('Access key created: ' + (data.accessKeyId || ''));
+            nameInput.value = osDefaultAccessKeyName(osShareContext.bucket);
+            osShareSetupError('');
+            await window.osShareReloadAccessKeys(data.accessKeyId || '');
+        } catch (e) {
+            osShareSetupError(e.message || 'Failed to create access key');
+        }
+    };
+
+    window.osShareGenerateFromModal = async function() {
+        if (!osShareContext) return;
+
+        const accessKeyId = (document.getElementById('osShareAccessKey').value || '').trim();
+        const seconds = parseInt(document.getElementById('osShareSetupExpiry').value, 10);
+
+        if (!accessKeyId) {
+            osShareSetupError('Select an access key or create a new one first');
+            return;
+        }
+        if (!seconds || seconds < 60) {
+            osShareSetupError('Expiry must be at least 60 seconds');
+            return;
+        }
+
+        try {
+            const payload = { key: osShareContext.key, expires: seconds, accessKeyId: accessKeyId };
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osShareContext.bucket) + '/share-object?tenantId=' + encodeURIComponent(osShareContext.tenantId), {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                osShareSetupError(data.error || 'Share failed');
+                osToast(data.error || 'Share failed', true);
+                return;
+            }
+
+            osCloseModal('osShareSetupModal');
+            document.getElementById('osShareURL').value = data.url || '';
+            document.getElementById('osShareExpires').textContent = fmtDate(data.expiresAt);
+            document.getElementById('osShareObjectKey').textContent = osShareContext.bucket + '/' + osShareContext.key;
+            osOpenModal('osShareObjectModal');
+            osToast('Shareable link generated');
+        } catch (e) {
+            osShareSetupError(e.message || 'Failed to generate share link');
+        }
     }
 
     // ===== Share Object (Shareable URL) =====
     window.osShareObject = async function(bucket, key, tenantId) {
-        const expiresIn = prompt('Share link expires in (seconds):\n\n• 3600 = 1 hour\n• 86400 = 1 day\n• 604800 = 7 days', '86400');
-        if (!expiresIn) return;
-        const seconds = parseInt(expiresIn);
-        if (!seconds || seconds < 60) { osToast('Minimum 60 seconds', true); return; }
         try {
-            const accessKeyId = await osPickAccessKeyForShare(bucket, key);
-            if (!accessKeyId) return;
+            osShareContext = {
+                bucket: bucket,
+                key: key,
+                tenantId: tenantId,
+                storageBucket: osResolvedStorageBucketName(bucket, tenantId)
+            };
 
-            const payload = { key: key, expires: seconds, accessKeyId: accessKeyId };
-            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/share-object?tenantId=' + encodeURIComponent(tenantId), {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
-            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Share failed', true); return; }
-            const data = await resp.json();
-            // Show share modal
-            document.getElementById('osShareURL').value = data.url || '';
-            document.getElementById('osShareExpires').textContent = fmtDate(data.expiresAt);
-            document.getElementById('osShareObjectKey').textContent = bucket + '/' + key;
-            osOpenModal('osShareObjectModal');
-            osToast('Shareable link generated');
-        } catch(e) { osToast('Error: ' + e.message, true); }
+            document.getElementById('osShareSetupObject').value = bucket + '/' + key;
+            document.getElementById('osShareSetupExpiry').value = 86400;
+            document.getElementById('osShareNewAccessKeyName').value = osDefaultAccessKeyName(bucket);
+            document.getElementById('osShareRestrictToBucket').checked = true;
+            document.getElementById('osShareSetupBucketScope').textContent = bucket;
+            document.getElementById('osShareSetupStorageBucket').textContent = osShareContext.storageBucket;
+
+            osShareSetupError('');
+            await window.osShareReloadAccessKeys('');
+            osOpenModal('osShareSetupModal');
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+        }
     };
 
     window.osCopyShareURL = function() {
@@ -630,6 +760,192 @@
         el.select();
         document.execCommand('copy');
         osToast('Copied to clipboard');
+    };
+
+    // ===== Access Keys =====
+    function osFormatAccessKeyScope(ak) {
+        const scopes = Array.isArray(ak && ak.bucketScope) ? ak.bucketScope.filter(Boolean) : [];
+        return scopes.length ? scopes.join(', ') : '*';
+    }
+
+    function osAccessKeyStatusInfo(ak) {
+        if (!ak || ak.active === false) {
+            return { label: 'Inactive', cls: 'os-badge-error' };
+        }
+        if (ak.expiresAt) {
+            const expMs = Date.parse(ak.expiresAt);
+            if (!isNaN(expMs) && expMs <= Date.now()) {
+                return { label: 'Expired', cls: 'os-badge-error' };
+            }
+        }
+        return { label: 'Active', cls: 'os-badge-ready' };
+    }
+
+    function renderAccessKeys(keys) {
+        const tbody = document.getElementById('osAccessKeysBody');
+        const count = document.getElementById('osAccessKeysCount');
+        if (count) count.textContent = (keys.length || 0) + ' key(s)';
+
+        if (!keys.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="os-empty">No access keys found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = keys.map(ak => {
+            const status = osAccessKeyStatusInfo(ak);
+            return '<tr>' +
+                '<td>' + escHtml(ak.name || '-') + '</td>' +
+                '<td class="os-mono">' + escHtml(ak.accessKeyId || '-') + '</td>' +
+                '<td><span class="os-badge os-badge-enabled">' + escHtml(ak.role || '-') + '</span></td>' +
+                '<td class="os-mono" style="max-width:220px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(osFormatAccessKeyScope(ak)) + '</td>' +
+                '<td>' + fmtDate(ak.expiresAt) + '</td>' +
+                '<td>' + fmtDate(ak.lastUsedAt) + '</td>' +
+                '<td><span class="os-badge ' + status.cls + '">' + status.label + '</span></td>' +
+                '<td style="white-space:nowrap;">' +
+                    '<button class="os-btn os-btn-danger os-btn-sm" data-keyid="' + escHtml(ak.accessKeyId || '') + '" onclick="osRevokeAccessKey(this.dataset.keyid)">Revoke</button>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    window.osLoadAccessKeys = async function() {
+        const tbody = document.getElementById('osAccessKeysBody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--text-muted);">Loading access keys...</td></tr>';
+        }
+
+        try {
+            const resp = await osFetch('/access-keys');
+            if (!resp.ok) {
+                const d = await resp.json().catch(() => ({}));
+                osToast(d.error || 'Failed to load access keys', true);
+                renderAccessKeys([]);
+                return;
+            }
+
+            const data = await resp.json();
+            osAccessKeysCache = Array.isArray(data) ? data : (Array.isArray(data.accessKeys) ? data.accessKeys : []);
+            osAccessKeysCache.sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''));
+            renderAccessKeys(osAccessKeysCache);
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+            renderAccessKeys([]);
+        }
+    };
+
+    window.osClearAccessKeyForm = function() {
+        document.getElementById('osNewAccessKeyName').value = '';
+        document.getElementById('osNewAccessKeyRole').value = 'storage-reader';
+        document.getElementById('osNewAccessKeyDescription').value = '';
+        document.getElementById('osNewAccessKeyBucketScope').value = '';
+        document.getElementById('osNewAccessKeyExpiresAt').value = '';
+    };
+
+    window.osCreateAccessKeyFromTab = async function() {
+        const name = (document.getElementById('osNewAccessKeyName').value || '').trim();
+        const role = document.getElementById('osNewAccessKeyRole').value;
+        const description = (document.getElementById('osNewAccessKeyDescription').value || '').trim();
+        const scopeRaw = (document.getElementById('osNewAccessKeyBucketScope').value || '').trim();
+        const expiresAtRaw = (document.getElementById('osNewAccessKeyExpiresAt').value || '').trim();
+
+        if (!name) { osToast('Access key name is required', true); return; }
+        if (!role) { osToast('Access key role is required', true); return; }
+
+        const body = { name: name, role: role };
+        if (description) body.description = description;
+
+        const scopes = scopeRaw.split(',').map(s => s.trim()).filter(Boolean);
+        if (scopes.length) body.bucketScope = scopes;
+
+        if (expiresAtRaw) {
+            const expMs = Date.parse(expiresAtRaw);
+            if (isNaN(expMs)) {
+                osToast('Invalid expiry date/time', true);
+                return;
+            }
+            body.expiresAt = new Date(expMs).toISOString();
+        }
+
+        try {
+            const resp = await osFetch('/access-keys', {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                osToast(data.error || 'Failed to create access key', true);
+                return;
+            }
+
+            const resultBox = document.getElementById('osAccessKeyCreateResult');
+            const resultEmpty = document.getElementById('osAccessKeyCreateResultEmpty');
+            if (resultBox) resultBox.style.display = '';
+            if (resultEmpty) resultEmpty.style.display = 'none';
+            const createdId = data.accessKeyId || '';
+            setText('osCreatedAccessKeyId', createdId || '-');
+            const idField = document.getElementById('osCreatedAccessKeyIdField');
+            if (idField) idField.value = createdId;
+            document.getElementById('osCreatedAccessKeySecret').value = data.secretAccessKey || '';
+
+            osToast('Access key created');
+            window.osClearAccessKeyForm();
+            await window.osLoadAccessKeys();
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+        }
+    };
+
+    window.osCopyCreatedAccessKeyId = function() {
+        const idField = document.getElementById('osCreatedAccessKeyIdField');
+        const fallback = document.getElementById('osCreatedAccessKeyId').textContent || '';
+        const text = idField ? idField.value.trim() : fallback.trim();
+        if (!text || text === '-') { osToast('No access key ID to copy', true); return; }
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => osToast('Access key ID copied'));
+        } else {
+            osToast('Clipboard API not available', true);
+        }
+    };
+
+    window.osCopyCreatedAccessKeySecret = function() {
+        const el = document.getElementById('osCreatedAccessKeySecret');
+        const text = el ? (el.value || '') : '';
+        if (!text) { osToast('No secret key to copy', true); return; }
+
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => osToast('Secret key copied'));
+            return;
+        }
+
+        if (el) {
+            el.select();
+            document.execCommand('copy');
+            osToast('Secret key copied');
+        }
+    };
+
+    window.osRevokeAccessKey = async function(keyId) {
+        if (!keyId) { osToast('Invalid access key', true); return; }
+        if (!confirm('Revoke access key ' + keyId + '?')) return;
+
+        try {
+            const resp = await osFetch('/access-keys/' + encodeURIComponent(keyId), { method: 'DELETE' });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                osToast(data.error || 'Failed to revoke access key', true);
+                return;
+            }
+
+            osToast('Access key revoked');
+            await window.osLoadAccessKeys();
+
+            const shareSetup = document.getElementById('osShareSetupModal');
+            if (shareSetup && shareSetup.classList.contains('show') && typeof window.osShareReloadAccessKeys === 'function') {
+                await window.osShareReloadAccessKeys('');
+            }
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+        }
     };
 
     // ===== Policies =====
