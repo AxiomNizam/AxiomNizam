@@ -3,7 +3,9 @@ package storage
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
+	"strings"
 
 	iamMiddleware "example.com/axiomnizam/internal/iam/middleware"
 	iamStorage "example.com/axiomnizam/internal/iam/storage"
@@ -19,6 +21,7 @@ import (
 	"example.com/axiomnizam/internal/storage/store"
 	"example.com/axiomnizam/internal/storage/tenant"
 	"github.com/gin-gonic/gin"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // System holds the fully initialised object storage system and exposes
@@ -68,7 +71,7 @@ func getEnv(key, fallback string) string {
 // Uses the built-in native filesystem backend — no external service required.
 // IAM issuer and revokedStore are optional; when provided, routes are protected
 // by IAM JWT middleware so that the access controller can extract user identity.
-func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRevokedTokenStore) (*System, error) {
+func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRevokedTokenStore, etcdClient *clientv3.Client) (*System, error) {
 	backend, err := native.New(cfg.DataDir, cfg.PresignSecret)
 	if err != nil {
 		return nil, err
@@ -76,12 +79,14 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 
 	endpoint := backend.Endpoint()
 	bucketStore := store.NewBucketStore()
+	bucketStore.ConfigurePersistence(etcdClient)
 	tenantMgr := tenant.NewManager(cfg.BucketPrefix, bucketStore)
 	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint)
 	policyCtrl := policy.NewController()
 	metricsCollector := storageMetrics.NewCollector()
 	auditLog := events.NewAuditLog(10000)
 	accessCtrl := access.NewController(auditLog)
+	accessCtrl.ConfigurePersistence(etcdClient)
 	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, metricsCollector, auditLog, endpoint)
 
 	return &System{
@@ -105,10 +110,34 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 // middleware so that downstream handlers can extract iam_claims for access control.
 func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 	if s.iamIssuer != nil {
-		rg.Use(iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore))
+		jwtAuth := iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
+		rg.Use(func(c *gin.Context) {
+			if isPresignedObjectRequest(c) {
+				c.Next()
+				return
+			}
+			jwtAuth(c)
+		})
 		log.Println("✅ Storage: IAM JWT middleware attached to storage routes")
 	}
 	s.Handler.RegisterRoutes(rg)
+}
+
+func isPresignedObjectRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	if strings.TrimSpace(c.Query("X-Axiom-Token")) == "" {
+		return false
+	}
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodPut {
+		return false
+	}
+	path := c.Request.URL.Path
+	if !strings.Contains(path, "/storage/buckets/") {
+		return false
+	}
+	return strings.Contains(path, "/objects/")
 }
 
 // Start begins the reconciliation controller.

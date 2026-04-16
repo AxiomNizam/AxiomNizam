@@ -1,10 +1,13 @@
 package access
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,6 +18,7 @@ import (
 	"example.com/axiomnizam/internal/storage/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Controller manages IAM-integrated access control, access keys, and bucket sharing.
@@ -24,7 +28,15 @@ type Controller struct {
 	accessKeys map[string]*models.AccessKey    // key = accessKeyID
 	shares     map[string]*models.BucketShare  // key = shareID
 	auditLog   *events.AuditLog
+	etcd       *clientv3.Client
 }
+
+const (
+	accessEtcdTimeout  = 3 * time.Second
+	accessPolicyPrefix = "storage:access:policies/"
+	accessKeyPrefix    = "storage:access:keys/"
+	accessSharePrefix  = "storage:access:shares/"
+)
 
 // NewController creates an access controller.
 func NewController(auditLog *events.AuditLog) *Controller {
@@ -34,6 +46,15 @@ func NewController(auditLog *events.AuditLog) *Controller {
 		shares:     make(map[string]*models.BucketShare),
 		auditLog:   auditLog,
 	}
+}
+
+// ConfigurePersistence enables etcd-backed persistence for policies, access keys,
+// and bucket shares. Existing state is loaded from etcd when configured.
+func (ac *Controller) ConfigurePersistence(etcd *clientv3.Client) {
+	ac.mu.Lock()
+	ac.etcd = etcd
+	ac.mu.Unlock()
+	ac.loadFromEtcd()
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +107,16 @@ func (ac *Controller) RequireStorageAuth() gin.HandlerFunc {
 		// Option 2: Use IAM JWT claims from IAM middleware.
 		claimsRaw, exists := c.Get("iam_claims")
 		if !exists {
+			// Option 3: Allow pre-signed GET/PUT object requests to continue.
+			if strings.TrimSpace(c.Query("X-Axiom-Token")) != "" {
+				if (c.Request.Method == http.MethodGet || c.Request.Method == http.MethodPut) &&
+					c.Param("bucket") != "" && strings.TrimPrefix(c.Param("key"), "/") != "" {
+					c.Set("storage_presigned_request", true)
+					c.Next()
+					return
+				}
+			}
+
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "authentication required",
 				"details": "provide IAM JWT token or storage access key",
@@ -181,6 +212,10 @@ func (ac *Controller) RequireBucketAccess(minRole models.StorageRole) gin.Handle
 	return func(c *gin.Context) {
 		sc := GetStorageContext(c)
 		if sc == nil {
+			if c.GetBool("storage_presigned_request") && strings.TrimSpace(c.Query("X-Axiom-Token")) != "" {
+				c.Next()
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
@@ -314,6 +349,7 @@ func (ac *Controller) CreateAccessKey(userID, tenantID, name, description string
 	}
 
 	ac.accessKeys[accessKeyID] = ak
+	ac.persistAccessKeyUnlocked(ak)
 
 	if ac.auditLog != nil {
 		ac.auditLog.Record(models.StorageEvent{
@@ -386,6 +422,7 @@ func (ac *Controller) RevokeAccessKey(accessKeyID, userID string) error {
 	}
 
 	ak.Active = false
+	ac.persistAccessKeyUnlocked(ak)
 
 	if ac.auditLog != nil {
 		ac.auditLog.Record(models.StorageEvent{
@@ -413,6 +450,7 @@ func (ac *Controller) DeleteAccessKey(accessKeyID, userID string) error {
 	}
 
 	delete(ac.accessKeys, accessKeyID)
+	ac.deleteEtcdKey(accessKeyPrefix + accessKeyID)
 	return nil
 }
 
@@ -443,6 +481,7 @@ func (ac *Controller) ShareBucket(share models.BucketShare) (*models.BucketShare
 	share.Active = true
 
 	ac.shares[share.ID] = &share
+	ac.persistShareUnlocked(&share)
 
 	if ac.auditLog != nil {
 		ac.auditLog.Record(models.StorageEvent{
@@ -495,6 +534,7 @@ func (ac *Controller) RevokeShare(shareID, userID string) error {
 		return fmt.Errorf("share %q not found", shareID)
 	}
 	s.Active = false
+	ac.persistShareUnlocked(s)
 
 	if ac.auditLog != nil {
 		ac.auditLog.Record(models.StorageEvent{
@@ -518,6 +558,7 @@ func (ac *Controller) DeleteShare(shareID string) error {
 		return fmt.Errorf("share %q not found", shareID)
 	}
 	delete(ac.shares, shareID)
+	ac.deleteEtcdKey(accessSharePrefix + shareID)
 	return nil
 }
 
@@ -546,6 +587,7 @@ func (ac *Controller) SetPolicy(p models.TenantPolicy) error {
 	key := policyKey(p.TenantID, p.UserID, p.BucketName)
 	p.GrantedAt = time.Now().UTC()
 	ac.policies[key] = &p
+	ac.persistPolicyUnlocked(&p)
 	return nil
 }
 
@@ -580,6 +622,7 @@ func (ac *Controller) DeletePolicy(tenantID, userID, bucket string) error {
 		return fmt.Errorf("policy not found")
 	}
 	delete(ac.policies, key)
+	ac.deleteEtcdKey(accessPolicyPrefix + key)
 	return nil
 }
 
@@ -636,4 +679,110 @@ func generateRandomHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func (ac *Controller) loadFromEtcd() {
+	etcd := ac.etcd
+	if etcd == nil {
+		return
+	}
+
+	load := func(prefix string, fn func([]byte)) {
+		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		defer cancel()
+		resp, err := etcd.Get(ctx, prefix, clientv3.WithPrefix())
+		if err != nil {
+			log.Printf("storage access: etcd load failed for prefix %s: %v", prefix, err)
+			return
+		}
+		for _, kv := range resp.Kvs {
+			fn(kv.Value)
+		}
+	}
+
+	load(accessPolicyPrefix, func(v []byte) {
+		var p models.TenantPolicy
+		if err := json.Unmarshal(v, &p); err != nil {
+			return
+		}
+		ac.mu.Lock()
+		cp := p
+		ac.policies[policyKey(cp.TenantID, cp.UserID, cp.BucketName)] = &cp
+		ac.mu.Unlock()
+	})
+
+	load(accessKeyPrefix, func(v []byte) {
+		var k models.AccessKey
+		if err := json.Unmarshal(v, &k); err != nil {
+			return
+		}
+		ac.mu.Lock()
+		ck := k
+		ac.accessKeys[ck.AccessKeyID] = &ck
+		ac.mu.Unlock()
+	})
+
+	load(accessSharePrefix, func(v []byte) {
+		var s models.BucketShare
+		if err := json.Unmarshal(v, &s); err != nil {
+			return
+		}
+		ac.mu.Lock()
+		cs := s
+		ac.shares[cs.ID] = &cs
+		ac.mu.Unlock()
+	})
+}
+
+func (ac *Controller) putEtcdJSON(key string, value interface{}) {
+	etcd := ac.etcd
+	if etcd == nil {
+		return
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		log.Printf("storage access: etcd marshal failed for key %s: %v", key, err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+	defer cancel()
+	if _, err := etcd.Put(ctx, key, string(data)); err != nil {
+		log.Printf("storage access: etcd put failed for key %s: %v", key, err)
+	}
+}
+
+func (ac *Controller) deleteEtcdKey(key string) {
+	etcd := ac.etcd
+	if etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+	defer cancel()
+	if _, err := etcd.Delete(ctx, key); err != nil {
+		log.Printf("storage access: etcd delete failed for key %s: %v", key, err)
+	}
+}
+
+func (ac *Controller) persistPolicyUnlocked(p *models.TenantPolicy) {
+	if p == nil {
+		return
+	}
+	ac.putEtcdJSON(accessPolicyPrefix+policyKey(p.TenantID, p.UserID, p.BucketName), p)
+}
+
+func (ac *Controller) persistAccessKeyUnlocked(k *models.AccessKey) {
+	if k == nil {
+		return
+	}
+	ac.putEtcdJSON(accessKeyPrefix+k.AccessKeyID, k)
+}
+
+func (ac *Controller) persistShareUnlocked(s *models.BucketShare) {
+	if s == nil {
+		return
+	}
+	ac.putEtcdJSON(accessSharePrefix+s.ID, s)
 }

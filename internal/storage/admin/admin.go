@@ -524,6 +524,10 @@ func (h *Handler) SetBucketEncryption(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	b.Spec.Encryption = req
+	if err := h.store.Update(b); err != nil {
+		log.Printf("storage: failed to persist bucket encryption config for %s/%s: %v", sc.TenantID, bucket, err)
+	}
 	h.audit.Record(models.StorageEvent{
 		Type: "bucket.encryption.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
 		Details: fmt.Sprintf("encryption %s enabled=%v", req.Algorithm, req.Enabled), SourceIP: c.ClientIP(),
@@ -542,6 +546,10 @@ func (h *Handler) DeleteBucketEncryption(c *gin.Context) {
 	if err := h.client.DeleteBucketEncryption(context.Background(), b.Spec.Name); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	b.Spec.Encryption = models.BucketEncryption{}
+	if err := h.store.Update(b); err != nil {
+		log.Printf("storage: failed to persist bucket encryption removal for %s/%s: %v", sc.TenantID, bucket, err)
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true, "bucket": bucket})
 }
@@ -582,6 +590,10 @@ func (h *Handler) SetObjectLockConfig(c *gin.Context) {
 	if err := h.client.SetObjectLockConfig(context.Background(), b.Spec.Name, req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	b.Spec.ObjectLock = req
+	if err := h.store.Update(b); err != nil {
+		log.Printf("storage: failed to persist bucket object-lock config for %s/%s: %v", sc.TenantID, bucket, err)
 	}
 	h.audit.Record(models.StorageEvent{
 		Type: "bucket.objectlock.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
@@ -785,6 +797,10 @@ func (h *Handler) SetBucketNotifications(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	b.Spec.Notifications = req
+	if err := h.store.Update(b); err != nil {
+		log.Printf("storage: failed to persist bucket notifications config for %s/%s: %v", sc.TenantID, bucket, err)
+	}
 	h.audit.Record(models.StorageEvent{
 		Type: "bucket.notifications.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
 		Details: fmt.Sprintf("%d notification rules", len(req.Rules)), SourceIP: c.ClientIP(),
@@ -877,12 +893,6 @@ func (h *Handler) GetBucketQuota(c *gin.Context) {
 // ---------------------------------------------------------------------------
 
 func (h *Handler) PutObject(c *gin.Context) {
-	sc := access.GetStorageContext(c)
-	if sc == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-		return
-	}
-
 	bucket := c.Param("bucket")
 	key := strings.TrimPrefix(c.Param("key"), "/")
 	if key == "" {
@@ -890,10 +900,35 @@ func (h *Handler) PutObject(c *gin.Context) {
 		return
 	}
 
-	b, err := h.store.Get(sc.TenantID, bucket)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
+	sc := access.GetStorageContext(c)
+	isPresigned := c.GetBool("storage_presigned_request")
+
+	backendBucket := bucket
+	tenantID := ""
+	userID := "presigned"
+
+	if isPresigned {
+		token := strings.TrimSpace(c.Query("X-Axiom-Token"))
+		if !h.verifyPresignedToken("PUT", backendBucket, key, token) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired presigned token"})
+			return
+		}
+		if rb := h.resolveBucketByBackendName(backendBucket); rb != nil {
+			tenantID = rb.Metadata.TenantID
+		}
+	} else {
+		if sc == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		b, err := h.store.Get(sc.TenantID, bucket)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		backendBucket = b.Spec.Name
+		tenantID = sc.TenantID
+		userID = sc.UserID
 	}
 
 	contentType := c.GetHeader("Content-Type")
@@ -930,20 +965,20 @@ func (h *Handler) PutObject(c *gin.Context) {
 		opts.Encryption = true
 	}
 
-	err = h.client.PutObjectWithOptions(context.Background(), b.Spec.Name, key, c.Request.Body, c.Request.ContentLength, opts)
+	err := h.client.PutObjectWithOptions(context.Background(), backendBucket, key, c.Request.Body, c.Request.ContentLength, opts)
 	latency := time.Since(start)
 	if err != nil {
-		h.metrics.RecordRequest(sc.TenantID, bucket, "PUT", 0, latency, true)
+		h.metrics.RecordRequest(tenantID, bucket, "PUT", 0, latency, true)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.metrics.RecordRequest(sc.TenantID, bucket, "PUT", c.Request.ContentLength, latency, false)
+	h.metrics.RecordRequest(tenantID, bucket, "PUT", c.Request.ContentLength, latency, false)
 
 	h.audit.Record(models.StorageEvent{
 		Type:     "object.uploaded",
-		TenantID: sc.TenantID,
-		UserID:   sc.UserID,
+		TenantID: tenantID,
+		UserID:   userID,
 		Bucket:   bucket,
 		Key:      key,
 		Size:     c.Request.ContentLength,
@@ -958,32 +993,51 @@ func (h *Handler) PutObject(c *gin.Context) {
 }
 
 func (h *Handler) GetObject(c *gin.Context) {
-	sc := access.GetStorageContext(c)
-	if sc == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-		return
-	}
-
 	bucket := c.Param("bucket")
 	key := strings.TrimPrefix(c.Param("key"), "/")
 
-	b, err := h.store.Get(sc.TenantID, bucket)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
+	sc := access.GetStorageContext(c)
+	isPresigned := c.GetBool("storage_presigned_request")
+
+	backendBucket := bucket
+	tenantID := ""
+	userID := "presigned"
+
+	if isPresigned {
+		token := strings.TrimSpace(c.Query("X-Axiom-Token"))
+		if !h.verifyPresignedToken("GET", backendBucket, key, token) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired presigned token"})
+			return
+		}
+		if rb := h.resolveBucketByBackendName(backendBucket); rb != nil {
+			tenantID = rb.Metadata.TenantID
+		}
+	} else {
+		if sc == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		b, err := h.store.Get(sc.TenantID, bucket)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		backendBucket = b.Spec.Name
+		tenantID = sc.TenantID
+		userID = sc.UserID
 	}
 
 	start := time.Now()
-	reader, err := h.client.GetObject(context.Background(), b.Spec.Name, key)
+	reader, err := h.client.GetObject(context.Background(), backendBucket, key)
 	if err != nil {
-		h.metrics.RecordRequest(sc.TenantID, bucket, "GET", 0, time.Since(start), true)
+		h.metrics.RecordRequest(tenantID, bucket, "GET", 0, time.Since(start), true)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	defer reader.Close()
 
 	// Set content type from metadata if available.
-	info, _ := h.client.StatObject(context.Background(), b.Spec.Name, key)
+	info, _ := h.client.StatObject(context.Background(), backendBucket, key)
 	if info != nil && info.ContentType != "" {
 		c.Header("Content-Type", info.ContentType)
 		c.Header("Content-Length", strconv.FormatInt(info.Size, 10))
@@ -996,17 +1050,45 @@ func (h *Handler) GetObject(c *gin.Context) {
 
 	n, _ := io.Copy(c.Writer, reader)
 	latency := time.Since(start)
-	h.metrics.RecordRequest(sc.TenantID, bucket, "GET", n, latency, false)
+	h.metrics.RecordRequest(tenantID, bucket, "GET", n, latency, false)
 
 	h.audit.Record(models.StorageEvent{
 		Type:     "object.downloaded",
-		TenantID: sc.TenantID,
-		UserID:   sc.UserID,
+		TenantID: tenantID,
+		UserID:   userID,
 		Bucket:   bucket,
 		Key:      key,
 		Size:     n,
 		SourceIP: c.ClientIP(),
 	})
+}
+
+type presignTokenVerifier interface {
+	VerifyPresignToken(method, bucket, key, token string) bool
+}
+
+func (h *Handler) verifyPresignedToken(method, bucket, key, token string) bool {
+	if token == "" {
+		return false
+	}
+	v, ok := h.client.(presignTokenVerifier)
+	if !ok {
+		return false
+	}
+	return v.VerifyPresignToken(method, bucket, key, token)
+}
+
+func (h *Handler) resolveBucketByBackendName(backendName string) *models.BucketResource {
+	buckets := h.store.ListAll()
+	for _, b := range buckets {
+		if b == nil {
+			continue
+		}
+		if b.Spec.Name == backendName || b.Metadata.Name == backendName {
+			return b
+		}
+	}
+	return nil
 }
 
 func (h *Handler) HeadObject(c *gin.Context) {
@@ -1507,6 +1589,10 @@ func (h *Handler) CreatePolicy(c *gin.Context) {
 
 func (h *Handler) ListPolicies(c *gin.Context) {
 	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
 	tenantFilter := sc.TenantID
 	if hasAnyRole(sc.Roles, "sysadmin", "system-manager", "admin") {
 		tenantFilter = strings.TrimSpace(c.Query("tenantId")) // empty => list all
@@ -1521,12 +1607,17 @@ func (h *Handler) ListPolicies(c *gin.Context) {
 
 func (h *Handler) DeletePolicy(c *gin.Context) {
 	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
 	tenantID := c.Param("tenantId")
 	userID := c.Param("userId")
 	bucket := c.Param("bucket")
 
-	// Only allow deleting own-tenant policies unless sysadmin.
-	if tenantID != sc.TenantID {
+	// Only allow deleting own-tenant policies unless privileged admin roles.
+	if tenantID != sc.TenantID && !hasAnyRole(sc.Roles, "sysadmin", "system-manager", "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete cross-tenant policy"})
 		return
 	}

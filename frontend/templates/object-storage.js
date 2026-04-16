@@ -362,12 +362,27 @@
         }).join('');
     }
 
-    window.osDownloadObject = function(bucket, key, tenantId) {
-        const url = OS_API + '/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = key.split('/').pop();
-        a.click();
+    window.osDownloadObject = async function(bucket, key, tenantId) {
+        const path = '/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId);
+        try {
+            const resp = await osFetch(path, { method: 'GET' });
+            if (!resp.ok) {
+                const d = await resp.json().catch(() => ({}));
+                osToast(d.error || 'Download failed', true);
+                return;
+            }
+            const blob = await resp.blob();
+            const a = document.createElement('a');
+            const url = window.URL.createObjectURL(blob);
+            a.href = url;
+            a.download = key.split('/').pop() || 'download';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+        }
     };
 
     // ===== Share Object (Shareable URL) =====

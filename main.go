@@ -1685,7 +1685,7 @@ func main() {
 		storageIssuer = iamSystem.Issuer
 		storageRevokedStore = iamSystem.RevokedStore
 	}
-	storageSys, storageErr := storage.NewSystem(storageCfg, storageIssuer, storageRevokedStore)
+	storageSys, storageErr := storage.NewSystem(storageCfg, storageIssuer, storageRevokedStore, conns.Etcd)
 	if storageErr != nil {
 		log.Printf("⚠️  Object storage module initialization failed: %v — storage API will be unavailable", storageErr)
 	} else {

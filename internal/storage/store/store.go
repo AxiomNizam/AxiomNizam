@@ -1,13 +1,17 @@
 package store
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"example.com/axiomnizam/internal/storage/models"
 	"github.com/google/uuid"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // BucketStore provides in-memory CRUD operations for BucketResource objects.
@@ -15,13 +19,28 @@ import (
 type BucketStore struct {
 	mu      sync.RWMutex
 	buckets map[string]*models.BucketResource // key = tenantID/bucketName
+	etcd    *clientv3.Client
 }
+
+const (
+	bucketStoreEtcdTimeout = 3 * time.Second
+	bucketStoreEtcdPrefix  = "storage:bucketstore/"
+)
 
 // NewBucketStore creates an empty bucket store.
 func NewBucketStore() *BucketStore {
 	return &BucketStore{
 		buckets: make(map[string]*models.BucketResource),
 	}
+}
+
+// ConfigurePersistence enables etcd-backed persistence for bucket resources.
+// Existing buckets are loaded from etcd when configured.
+func (s *BucketStore) ConfigurePersistence(etcd *clientv3.Client) {
+	s.mu.Lock()
+	s.etcd = etcd
+	s.mu.Unlock()
+	s.loadFromEtcd()
 }
 
 func bucketKey(tenantID, name string) string {
@@ -48,6 +67,7 @@ func (s *BucketStore) Create(b *models.BucketResource) error {
 	b.Status.Phase = models.BucketPhasePending
 
 	s.buckets[key] = b
+	s.persistBucketUnlocked(b)
 	return nil
 }
 
@@ -77,6 +97,7 @@ func (s *BucketStore) Update(b *models.BucketResource) error {
 	b.Generation++
 	b.Metadata.UpdatedAt = time.Now().UTC()
 	s.buckets[key] = b
+	s.persistBucketUnlocked(b)
 	return nil
 }
 
@@ -93,6 +114,7 @@ func (s *BucketStore) UpdateStatus(tenantID, name string, status models.BucketSt
 
 	b.Status = status
 	b.Metadata.UpdatedAt = time.Now().UTC()
+	s.persistBucketUnlocked(b)
 	return nil
 }
 
@@ -106,6 +128,7 @@ func (s *BucketStore) Delete(tenantID, name string) error {
 		return fmt.Errorf("bucket %q not found for tenant %q", name, tenantID)
 	}
 	delete(s.buckets, key)
+	s.deleteBucketFromEtcdUnlocked(tenantID, name)
 	return nil
 }
 
@@ -126,6 +149,63 @@ func (s *BucketStore) List(tenantID string) []*models.BucketResource {
 // ListAll returns all bucket resources across all tenants.
 func (s *BucketStore) ListAll() []*models.BucketResource {
 	return s.List("")
+}
+
+func (s *BucketStore) loadFromEtcd() {
+	s.mu.RLock()
+	etcd := s.etcd
+	s.mu.RUnlock()
+	if etcd == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+	defer cancel()
+	resp, err := etcd.Get(ctx, bucketStoreEtcdPrefix, clientv3.WithPrefix())
+	if err != nil {
+		log.Printf("storage bucket store: etcd load failed: %v", err)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, kv := range resp.Kvs {
+		var b models.BucketResource
+		if err := json.Unmarshal(kv.Value, &b); err != nil {
+			continue
+		}
+		cb := b
+		s.buckets[bucketKey(cb.Metadata.TenantID, cb.Metadata.Name)] = &cb
+	}
+}
+
+func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
+	if b == nil || s.etcd == nil {
+		return
+	}
+	data, err := json.Marshal(b)
+	if err != nil {
+		log.Printf("storage bucket store: marshal failed: %v", err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+	defer cancel()
+	key := bucketStoreEtcdPrefix + bucketKey(b.Metadata.TenantID, b.Metadata.Name)
+	if _, err := s.etcd.Put(ctx, key, string(data)); err != nil {
+		log.Printf("storage bucket store: etcd put failed for key %s: %v", key, err)
+	}
+}
+
+func (s *BucketStore) deleteBucketFromEtcdUnlocked(tenantID, name string) {
+	if s.etcd == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+	defer cancel()
+	key := bucketStoreEtcdPrefix + bucketKey(tenantID, name)
+	if _, err := s.etcd.Delete(ctx, key); err != nil {
+		log.Printf("storage bucket store: etcd delete failed for key %s: %v", key, err)
+	}
 }
 
 // TenantBucketName returns the storage-level bucket name for a tenant.
