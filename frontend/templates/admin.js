@@ -61,6 +61,7 @@ let currentDashMappings = [];
 let builderDataServers = [];
 let customAPIById = {};
 let graphQLAPIById = {};
+let existingRESTEndpoints = [];
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
 let latestAdminAPIScanReport = null;
@@ -101,8 +102,10 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     loadBuilderSummary();
     loadCustomAPIs();
+    loadRESTEndpointCatalog();
     loadGraphQLBuilderSummary();
     loadGraphQLCustomAPIs();
+    bindRESTEndpointValidation();
     loadBuilderDataSources();
     loadCSVHistory();
     loadAPIs();
@@ -400,6 +403,220 @@ function renderAPINameCell(api) {
         '</div>';
 }
 
+function normalizeRESTEndpointMethod(method) {
+    return String(method || 'GET').trim().toUpperCase();
+}
+
+function normalizeRESTEndpointPath(path) {
+    var raw = String(path || '').trim();
+    if (!raw) return '/';
+
+    var normalized = '/' + raw.replace(/^\/+/, '');
+    normalized = normalized.replace(/\/{2,}/g, '/');
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+        normalized = normalized.slice(0, -1);
+    }
+
+    if (normalized === '/api/custom') {
+        return '/';
+    }
+    if (normalized.indexOf('/api/custom/') === 0) {
+        var trimmed = normalized.substring('/api/custom'.length);
+        if (!trimmed) return '/';
+        return '/' + String(trimmed).replace(/^\/+/, '').replace(/\/{2,}/g, '/');
+    }
+
+    return normalized;
+}
+
+function toRESTEndpointCatalogEntry(api) {
+    if (!api || typeof api !== 'object') return null;
+
+    var apiType = String(api.api_type || 'rest').trim().toLowerCase();
+    if (apiType && apiType !== 'rest') return null;
+
+    var rawPath = String(api.path || '').trim();
+    if (!rawPath) return null;
+
+    return {
+        id: String(api.id || '').trim(),
+        name: String(api.name || '').trim(),
+        method: normalizeRESTEndpointMethod(api.method),
+        rawPath: rawPath,
+        normalizedPath: normalizeRESTEndpointPath(rawPath)
+    };
+}
+
+function setRESTEndpointCatalog(list) {
+    var entries = Array.isArray(list) ? list.map(toRESTEndpointCatalogEntry).filter(function(item) { return !!item; }) : [];
+    var seen = {};
+
+    existingRESTEndpoints = entries.filter(function(item) {
+        var key = item.id + '|' + item.method + '|' + item.normalizedPath;
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+    });
+
+    renderRESTEndpointSuggestions();
+}
+
+function renderRESTEndpointSuggestions() {
+    var datalist = document.getElementById('restEndpointSuggestions');
+    if (!datalist) return;
+
+    var rows = existingRESTEndpoints.slice().sort(function(a, b) {
+        var pathCmp = a.normalizedPath.localeCompare(b.normalizedPath);
+        if (pathCmp !== 0) return pathCmp;
+        return a.method.localeCompare(b.method);
+    });
+
+    var optionSeen = {};
+    var html = '';
+    rows.forEach(function(entry) {
+        var optionKey = entry.method + '|' + entry.rawPath;
+        if (optionSeen[optionKey]) return;
+        optionSeen[optionKey] = true;
+
+        var label = entry.method + ' ' + entry.normalizedPath;
+        if (entry.name) {
+            label += ' - ' + entry.name;
+        }
+
+        html += '<option value="' + escapeHtml(entry.rawPath) + '" label="' + escapeHtml(label) + '"></option>';
+    });
+
+    datalist.innerHTML = html;
+}
+
+function loadRESTEndpointCatalog() {
+    return fetchJSON('/api/v1/builder/apis?api_type=rest').then(function(d) {
+        setRESTEndpointCatalog(d.apis || []);
+        validateCreateRESTEndpoint(false);
+        validateEditRESTEndpoint(false);
+    }).catch(function() {
+        var fallback = [];
+        Object.keys(customAPIById || {}).forEach(function(id) {
+            fallback.push(customAPIById[id]);
+        });
+        if (fallback.length > 0) {
+            setRESTEndpointCatalog(fallback);
+            validateCreateRESTEndpoint(false);
+            validateEditRESTEndpoint(false);
+        }
+    });
+}
+
+function findDuplicateRESTEndpoint(method, path, excludeID) {
+    var targetMethod = normalizeRESTEndpointMethod(method);
+    var targetPath = normalizeRESTEndpointPath(path);
+    var skipID = String(excludeID || '').trim();
+
+    for (var i = 0; i < existingRESTEndpoints.length; i++) {
+        var entry = existingRESTEndpoints[i];
+        if (skipID && entry.id === skipID) continue;
+        if (entry.method === targetMethod && entry.normalizedPath === targetPath) {
+            return entry;
+        }
+    }
+
+    return null;
+}
+
+function setRESTEndpointDuplicateWarning(elementID, message) {
+    var warningEl = document.getElementById(elementID);
+    if (!warningEl) return;
+    if (message) {
+        warningEl.textContent = message;
+        warningEl.style.display = 'block';
+        return;
+    }
+
+    warningEl.textContent = '';
+    warningEl.style.display = 'none';
+}
+
+function validateCreateRESTEndpoint(showAlert) {
+    var methodEl = document.getElementById('apiMethodInput');
+    var pathEl = document.getElementById('apiPathInput');
+    if (!methodEl || !pathEl) return true;
+
+    var path = String(pathEl.value || '').trim();
+    if (!path) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var duplicate = findDuplicateRESTEndpoint(methodEl.value, path, '');
+    if (!duplicate) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var msg = 'Endpoint already exists: ' + duplicate.method + ' ' + duplicate.normalizedPath + (duplicate.name ? ' (' + duplicate.name + ')' : '');
+    pathEl.setCustomValidity(msg);
+    setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', msg);
+    if (showAlert) {
+        alert(msg);
+    }
+    return false;
+}
+
+function validateEditRESTEndpoint(showAlert) {
+    var methodEl = document.getElementById('editApiMethodInput');
+    var pathEl = document.getElementById('editApiPathInput');
+    var idEl = document.getElementById('editApiIdInput');
+    if (!methodEl || !pathEl || !idEl) return true;
+
+    var path = String(pathEl.value || '').trim();
+    if (!path) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var duplicate = findDuplicateRESTEndpoint(methodEl.value, path, idEl.value || '');
+    if (!duplicate) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var msg = 'Endpoint already exists: ' + duplicate.method + ' ' + duplicate.normalizedPath + (duplicate.name ? ' (' + duplicate.name + ')' : '');
+    pathEl.setCustomValidity(msg);
+    setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', msg);
+    if (showAlert) {
+        alert(msg);
+    }
+    return false;
+}
+
+function bindRESTEndpointValidation() {
+    var createMethodEl = document.getElementById('apiMethodInput');
+    var createPathEl = document.getElementById('apiPathInput');
+    var editMethodEl = document.getElementById('editApiMethodInput');
+    var editPathEl = document.getElementById('editApiPathInput');
+
+    if (createMethodEl && createMethodEl.dataset.endpointValidationBound !== '1') {
+        createMethodEl.addEventListener('change', function() { validateCreateRESTEndpoint(false); });
+        createMethodEl.dataset.endpointValidationBound = '1';
+    }
+    if (createPathEl && createPathEl.dataset.endpointValidationBound !== '1') {
+        createPathEl.addEventListener('input', function() { validateCreateRESTEndpoint(false); });
+        createPathEl.dataset.endpointValidationBound = '1';
+    }
+    if (editMethodEl && editMethodEl.dataset.endpointValidationBound !== '1') {
+        editMethodEl.addEventListener('change', function() { validateEditRESTEndpoint(false); });
+        editMethodEl.dataset.endpointValidationBound = '1';
+    }
+    if (editPathEl && editPathEl.dataset.endpointValidationBound !== '1') {
+        editPathEl.addEventListener('input', function() { validateEditRESTEndpoint(false); });
+        editPathEl.dataset.endpointValidationBound = '1';
+    }
+}
+
 function loadCustomAPIs() {
     var catEl = document.getElementById('apiCategoryFilter');
     var statEl = document.getElementById('apiStatusFilter');
@@ -412,6 +629,9 @@ function loadCustomAPIs() {
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
         customAPIById = {};
+        if (!cat && !status) {
+            setRESTEndpointCatalog(list);
+        }
         var el = document.getElementById('apiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -459,6 +679,9 @@ function escapeHtml(str) {
 function closeCreateAPIModal() {
     document.getElementById('createAPIModal').style.display = 'none';
     document.getElementById('createAPIForm').reset();
+    var pathInput = document.getElementById('apiPathInput');
+    if (pathInput) pathInput.setCustomValidity('');
+    setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
     var ttlGroup = document.getElementById('cacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
     updateBuilderSourceServers();
@@ -485,6 +708,10 @@ function getSQLTemplateFromAPI(api) {
 
 function submitCreateAPI(e) {
     e.preventDefault();
+    if (!validateCreateRESTEndpoint(true)) {
+        return;
+    }
+
     var mockRaw = document.getElementById('apiMockResponseInput').value.trim();
     var mockResp = null;
     if (mockRaw) {
@@ -536,6 +763,7 @@ function submitCreateAPI(e) {
             closeCreateAPIModal();
             loadBuilderSummary();
             loadCustomAPIs();
+            loadRESTEndpointCatalog();
             addLog('Created API: ' + body.name, 'info');
         } else {
             alert(d.error || 'Failed to create API');
@@ -948,6 +1176,7 @@ function openEditCustomAPI(id) {
     if (!api) { alert('API details not found. Please refresh and try again.'); return; }
 
     loadBuilderDataSources(function() {
+        loadRESTEndpointCatalog();
         document.getElementById('editApiIdInput').value = api.id || '';
         document.getElementById('editApiNameInput').value = api.name || '';
         document.getElementById('editApiMethodInput').value = api.method || 'GET';
@@ -965,12 +1194,16 @@ function openEditCustomAPI(id) {
         document.getElementById('editApiRateLimitInput').value = api.rate_limit || 0;
         document.getElementById('editApiStatusInput').value = api.status || 'active';
         document.getElementById('editAPIModal').style.display = 'flex';
+        validateEditRESTEndpoint(false);
     });
 }
 
 function closeEditAPIModal() {
     document.getElementById('editAPIModal').style.display = 'none';
     document.getElementById('editAPIForm').reset();
+    var pathInput = document.getElementById('editApiPathInput');
+    if (pathInput) pathInput.setCustomValidity('');
+    setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', '');
     var ttlGroup = document.getElementById('editCacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
 }
@@ -984,6 +1217,9 @@ function toggleEditCacheTTL() {
 function submitEditAPI(e) {
     e.preventDefault();
     if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+    if (!validateEditRESTEndpoint(true)) {
+        return;
+    }
 
     var id = document.getElementById('editApiIdInput').value;
     if (!id) {
@@ -1017,6 +1253,7 @@ function submitEditAPI(e) {
             closeEditAPIModal();
             loadBuilderSummary();
             loadCustomAPIs();
+            loadRESTEndpointCatalog();
             addLog('Updated API: ' + id, 'info');
         } else {
             alert(d.error || 'Failed to update API');
@@ -2851,7 +3088,7 @@ function deleteCustomAPI(id) {
     var apiName = api.name || id;
     if (!confirmDeleteAPI('REST API', apiName)) return;
     deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
-        if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); }
+        if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); loadRESTEndpointCatalog(); }
         else { alert(d.error || 'Failed to delete API'); }
     });
 }
@@ -2867,6 +3104,11 @@ function deleteDashboard(dashId) {
 
 function openCreateAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin, manager, or system-manager.'); return; }
+    bindRESTEndpointValidation();
+    loadRESTEndpointCatalog();
+    setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
+    var pathInput = document.getElementById('apiPathInput');
+    if (pathInput) pathInput.setCustomValidity('');
     loadBuilderDataSources();
     document.getElementById('createAPIModal').style.display = 'flex';
 }

@@ -448,6 +448,17 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 			return
 		}
 
+		if existing := h.findDuplicateRESTEndpointLocked(method, path, ""); existing != nil {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":             "endpoint already exists",
+				"method":            strings.ToUpper(strings.TrimSpace(method)),
+				"path":              normalizeBuilderRuntimePath(path),
+				"existing_api_id":   existing.ID,
+				"existing_api_name": existing.Name,
+			})
+			return
+		}
+
 		sqlTemplate := strings.TrimSpace(req.SQLTemplate)
 		if sqlTemplate == "" && strings.TrimSpace(req.SourceDatabase) != "" {
 			legacyTemplate, _ := extractQueryFromMock(req.MockResponse)
@@ -530,6 +541,14 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	}
 	if strings.TrimSpace(api.APIType) == "" {
 		api.APIType = "rest"
+	}
+	originalAPIType := strings.ToLower(strings.TrimSpace(api.APIType))
+	if originalAPIType == "" {
+		originalAPIType = "rest"
+	}
+	originalEndpointSignature := ""
+	if originalAPIType == "rest" {
+		originalEndpointSignature = normalizeRESTEndpointSignature(api.Method, api.Path)
 	}
 
 	var req map[string]interface{}
@@ -620,7 +639,13 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	if v, ok := req["cache_ttl"].(float64); ok {
 		api.CacheTTL = int(v)
 	}
-	if api.APIType == "graphql" {
+	currentAPIType := strings.ToLower(strings.TrimSpace(api.APIType))
+	if currentAPIType == "" {
+		currentAPIType = "rest"
+		api.APIType = "rest"
+	}
+
+	if currentAPIType == "graphql" {
 		if strings.TrimSpace(api.Path) == "" {
 			api.Path = "/api/graphql"
 		}
@@ -643,6 +668,24 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 		}
 		api.SQLTemplate = template
 	}
+
+	if currentAPIType == "rest" && strings.TrimSpace(api.Method) != "" && strings.TrimSpace(api.Path) != "" {
+		currentEndpointSignature := normalizeRESTEndpointSignature(api.Method, api.Path)
+		endpointChanged := originalAPIType != "rest" || currentEndpointSignature != originalEndpointSignature
+		if endpointChanged {
+			if existing := h.findDuplicateRESTEndpointLocked(api.Method, api.Path, api.ID); existing != nil {
+				c.JSON(http.StatusConflict, gin.H{
+					"error":             "endpoint already exists",
+					"method":            strings.ToUpper(strings.TrimSpace(api.Method)),
+					"path":              normalizeBuilderRuntimePath(api.Path),
+					"existing_api_id":   existing.ID,
+					"existing_api_name": existing.Name,
+				})
+				return
+			}
+		}
+	}
+
 	api.UpdatedAt = time.Now()
 	h.persistStateLocked()
 
@@ -988,6 +1031,36 @@ func normalizeBuilderRuntimePath(path string) string {
 		return "/" + strings.Trim(strings.TrimSpace(trimmed), "/")
 	}
 	return normalized
+}
+
+func normalizeRESTEndpointSignature(method, path string) string {
+	return strings.ToUpper(strings.TrimSpace(method)) + " " + normalizeBuilderRuntimePath(path)
+}
+
+func (h *APIBuilderHandler) findDuplicateRESTEndpointLocked(method, path, excludeID string) *CustomAPI {
+	targetSignature := normalizeRESTEndpointSignature(method, path)
+	for _, candidate := range h.customAPIs {
+		if candidate == nil {
+			continue
+		}
+
+		candidateType := strings.ToLower(strings.TrimSpace(candidate.APIType))
+		if candidateType == "" {
+			candidateType = "rest"
+		}
+		if candidateType != "rest" {
+			continue
+		}
+		if excludeID != "" && candidate.ID == excludeID {
+			continue
+		}
+
+		if normalizeRESTEndpointSignature(candidate.Method, candidate.Path) == targetSignature {
+			return candidate
+		}
+	}
+
+	return nil
 }
 
 func extractQueryFromMock(mock interface{}) (string, []interface{}) {
