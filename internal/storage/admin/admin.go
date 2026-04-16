@@ -1299,6 +1299,7 @@ func (h *Handler) PresignURL(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	presignURL = absoluteURL(c, presignURL)
 
 	h.audit.Record(models.StorageEvent{
 		Type:     "presign.generated",
@@ -1469,9 +1470,22 @@ func (h *Handler) CreatePolicy(c *gin.Context) {
 		return
 	}
 
-	if req.TenantID == "" {
+	req.UserID = strings.TrimSpace(req.UserID)
+	req.BucketName = strings.TrimSpace(req.BucketName)
+	if req.UserID == "" || req.BucketName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userId and bucketName are required"})
+		return
+	}
+
+	// Non-admin users can only create policies in their own tenant.
+	if hasAnyRole(sc.Roles, "sysadmin", "system-manager", "admin") {
+		if strings.TrimSpace(req.TenantID) == "" {
+			req.TenantID = sc.TenantID
+		}
+	} else {
 		req.TenantID = sc.TenantID
 	}
+
 	req.GrantedBy = sc.UserID
 
 	if err := h.access.SetPolicy(req); err != nil {
@@ -1493,7 +1507,12 @@ func (h *Handler) CreatePolicy(c *gin.Context) {
 
 func (h *Handler) ListPolicies(c *gin.Context) {
 	sc := access.GetStorageContext(c)
-	policies := h.access.ListPolicies(sc.TenantID)
+	tenantFilter := sc.TenantID
+	if hasAnyRole(sc.Roles, "sysadmin", "system-manager", "admin") {
+		tenantFilter = strings.TrimSpace(c.Query("tenantId")) // empty => list all
+	}
+
+	policies := h.access.ListPolicies(tenantFilter)
 	if policies == nil {
 		policies = []*models.TenantPolicy{}
 	}
@@ -1568,6 +1587,7 @@ func (h *Handler) ShareObject(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	shareURL = absoluteURL(c, shareURL)
 
 	h.audit.Record(models.StorageEvent{
 		Type:     "object.shared",
@@ -1586,6 +1606,48 @@ func (h *Handler) ShareObject(c *gin.Context) {
 		"expiresAt": time.Now().Add(expires).Format(time.RFC3339),
 		"expiresIn": int(expires.Seconds()),
 	})
+}
+
+func hasAnyRole(roles []string, allowed ...string) bool {
+	if len(roles) == 0 || len(allowed) == 0 {
+		return false
+	}
+	for _, role := range roles {
+		r := strings.ToLower(strings.TrimSpace(role))
+		for _, a := range allowed {
+			if r == strings.ToLower(strings.TrimSpace(a)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func absoluteURL(c *gin.Context, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+
+	scheme := "http"
+	if fp := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); fp != "" {
+		scheme = strings.ToLower(strings.Split(fp, ",")[0])
+	} else if c.Request != nil && c.Request.TLS != nil {
+		scheme = "https"
+	}
+
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host == "" && c.Request != nil {
+		host = c.Request.Host
+	}
+	if host == "" {
+		return raw
+	}
+
+	if !strings.HasPrefix(raw, "/") {
+		raw = "/" + raw
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, host, raw)
 }
 
 // ---------------------------------------------------------------------------

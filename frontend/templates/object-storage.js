@@ -550,7 +550,8 @@
             role: document.getElementById('osNewPolicyRole').value,
             prefix: document.getElementById('osNewPolicyPrefix').value.trim()
         };
-        if (!body.tenantId || !body.userId || !body.bucketName) { osToast('All required fields must be filled', true); return; }
+        if (!body.userId || !body.bucketName) { osToast('User ID and Bucket Name are required', true); return; }
+        if (!body.tenantId) delete body.tenantId;
         try {
             const resp = await osFetch('/policies', { method: 'POST', body: JSON.stringify(body) });
             const data = await resp.json();
