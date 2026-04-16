@@ -385,6 +385,110 @@
         }
     };
 
+    function osRoleAllowsRead(role) {
+        const r = String(role || '').toLowerCase();
+        return r === 'storage-admin' || r === 'storage-writer' || r === 'storage-reader' || r === 'storage-browser';
+    }
+
+    function osAccessKeyAllowsBucket(ak, bucket) {
+        const scopes = Array.isArray(ak && ak.bucketScope) ? ak.bucketScope : [];
+        if (!scopes.length) return true;
+        return scopes.indexOf(bucket) !== -1 || scopes.indexOf('*') !== -1;
+    }
+
+    function osAccessKeyExpired(ak) {
+        if (!ak || !ak.expiresAt) return false;
+        const ms = Date.parse(ak.expiresAt);
+        return !isNaN(ms) && ms <= Date.now();
+    }
+
+    function osDefaultAccessKeyName(bucket) {
+        const ts = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+        return 'share-reader-' + bucket + '-' + ts;
+    }
+
+    async function osListAccessKeys() {
+        const resp = await osFetch('/access-keys');
+        if (!resp.ok) {
+            const d = await resp.json().catch(() => ({}));
+            throw new Error(d.error || ('Failed to list access keys (' + resp.status + ')'));
+        }
+        const data = await resp.json();
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data.accessKeys)) return data.accessKeys;
+        return [];
+    }
+
+    async function osCreateShareAccessKey(bucket) {
+        const suggestedName = osDefaultAccessKeyName(bucket);
+        const name = prompt('Create access key for sharing\n\nName:', suggestedName);
+        if (name === null) return '';
+        if (!name.trim()) {
+            osToast('Access key name is required', true);
+            return '';
+        }
+
+        const restrictToBucket = confirm('Restrict this access key to bucket "' + bucket + '" only?\n\nOK = only this bucket\nCancel = all buckets');
+        const body = {
+            name: name.trim(),
+            role: 'storage-reader'
+        };
+        if (restrictToBucket) body.bucketScope = [bucket];
+
+        const resp = await osFetch('/access-keys', {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            throw new Error(data.error || ('Failed to create access key (' + resp.status + ')'));
+        }
+        if (!data.accessKeyId) {
+            throw new Error('Access key created but no accessKeyId was returned');
+        }
+        osToast('Created access key: ' + data.accessKeyId);
+        return data.accessKeyId;
+    }
+
+    // Collects an existing key choice (or creates one) right before generating a share link.
+    async function osPickAccessKeyForShare(bucket, key) {
+        let keys = await osListAccessKeys();
+        keys = keys.filter(ak => {
+            return ak && ak.active !== false && !osAccessKeyExpired(ak) && osRoleAllowsRead(ak.role) && osAccessKeyAllowsBucket(ak, bucket);
+        });
+
+        if (!keys.length) {
+            const createNow = confirm('No active access key can read ' + bucket + '/' + key + '.\n\nCreate one now?');
+            if (!createNow) return '';
+            return await osCreateShareAccessKey(bucket);
+        }
+
+        let promptText = 'Select access key for sharing ' + bucket + '/' + key + ':\n';
+        promptText += '\n0) Create a new access key';
+        keys.forEach((ak, idx) => {
+            const scope = Array.isArray(ak.bucketScope) && ak.bucketScope.length ? ak.bucketScope.join(',') : '*';
+            const label = ak.name ? ak.name : '(unnamed)';
+            promptText += '\n' + (idx + 1) + ') ' + label + ' [' + ak.accessKeyId + '] role=' + (ak.role || '-') + ' scope=' + scope;
+        });
+        promptText += '\n\nEnter a number, or paste an accessKeyId directly.';
+
+        const selection = prompt(promptText, '1');
+        if (selection === null) return '';
+        const trimmed = selection.trim();
+        if (!trimmed) return '';
+
+        if (trimmed === '0') {
+            return await osCreateShareAccessKey(bucket);
+        }
+
+        const selectedNum = parseInt(trimmed, 10);
+        if (!isNaN(selectedNum) && selectedNum >= 1 && selectedNum <= keys.length) {
+            return keys[selectedNum - 1].accessKeyId || '';
+        }
+
+        return trimmed;
+    }
+
     // ===== Share Object (Shareable URL) =====
     window.osShareObject = async function(bucket, key, tenantId) {
         const expiresIn = prompt('Share link expires in (seconds):\n\n• 3600 = 1 hour\n• 86400 = 1 day\n• 604800 = 7 days', '86400');
@@ -392,9 +496,13 @@
         const seconds = parseInt(expiresIn);
         if (!seconds || seconds < 60) { osToast('Minimum 60 seconds', true); return; }
         try {
+            const accessKeyId = await osPickAccessKeyForShare(bucket, key);
+            if (!accessKeyId) return;
+
+            const payload = { key: key, expires: seconds, accessKeyId: accessKeyId };
             const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/share-object?tenantId=' + encodeURIComponent(tenantId), {
                 method: 'POST',
-                body: JSON.stringify({ key: key, expires: seconds })
+                body: JSON.stringify(payload)
             });
             if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Share failed', true); return; }
             const data = await resp.json();
@@ -499,14 +607,14 @@
         const tenantId = (document.getElementById('osPresignTenant').value || 'default').trim();
         const key = (document.getElementById('osPresignKey').value || '').trim();
         const method = document.getElementById('osPresignMethod').value;
-        const expiresIn = parseInt(document.getElementById('osPresignExpiry').value) || 900;
+        const expires = parseInt(document.getElementById('osPresignExpiry').value) || 900;
 
         if (!bucket || !key) { osToast('Bucket and key are required', true); return; }
 
         try {
             const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/presign?tenantId=' + encodeURIComponent(tenantId), {
                 method: 'POST',
-                body: JSON.stringify({ key: key, method: method, expiresIn: expiresIn })
+                body: JSON.stringify({ key: key, method: method, expires: expires })
             });
             if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
             const data = await resp.json();

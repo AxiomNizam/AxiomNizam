@@ -20,6 +20,25 @@ type BucketStore struct {
 	mu      sync.RWMutex
 	buckets map[string]*models.BucketResource // key = tenantID/bucketName
 	etcd    *clientv3.Client
+
+	watchers      map[int]chan BucketEvent
+	nextWatcherID int
+}
+
+// BucketEventType identifies the type of bucket resource change.
+type BucketEventType string
+
+const (
+	BucketEventCreate BucketEventType = "create"
+	BucketEventUpdate BucketEventType = "update"
+	BucketEventDelete BucketEventType = "delete"
+)
+
+// BucketEvent is emitted for bucket spec/resource changes.
+type BucketEvent struct {
+	Type     BucketEventType
+	TenantID string
+	Name     string
 }
 
 const (
@@ -30,8 +49,43 @@ const (
 // NewBucketStore creates an empty bucket store.
 func NewBucketStore() *BucketStore {
 	return &BucketStore{
-		buckets: make(map[string]*models.BucketResource),
+		buckets:  make(map[string]*models.BucketResource),
+		watchers: make(map[int]chan BucketEvent),
 	}
+}
+
+// Subscribe registers for bucket create/update/delete events.
+// The returned channel is buffered with the requested size.
+func (s *BucketStore) Subscribe(buffer int) (int, <-chan BucketEvent) {
+	if buffer <= 0 {
+		buffer = 64
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.nextWatcherID++
+	id := s.nextWatcherID
+	ch := make(chan BucketEvent, buffer)
+	s.watchers[id] = ch
+	return id, ch
+}
+
+// Unsubscribe removes an existing bucket event subscriber.
+func (s *BucketStore) Unsubscribe(id int) {
+	if id == 0 {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ch, ok := s.watchers[id]
+	if !ok {
+		return
+	}
+	delete(s.watchers, id)
+	close(ch)
 }
 
 // ConfigurePersistence enables etcd-backed persistence for bucket resources.
@@ -68,6 +122,7 @@ func (s *BucketStore) Create(b *models.BucketResource) error {
 
 	s.buckets[key] = b
 	s.persistBucketUnlocked(b)
+	s.emitEventUnlocked(BucketEvent{Type: BucketEventCreate, TenantID: b.Metadata.TenantID, Name: b.Metadata.Name})
 	return nil
 }
 
@@ -98,6 +153,7 @@ func (s *BucketStore) Update(b *models.BucketResource) error {
 	b.Metadata.UpdatedAt = time.Now().UTC()
 	s.buckets[key] = b
 	s.persistBucketUnlocked(b)
+	s.emitEventUnlocked(BucketEvent{Type: BucketEventUpdate, TenantID: b.Metadata.TenantID, Name: b.Metadata.Name})
 	return nil
 }
 
@@ -129,6 +185,7 @@ func (s *BucketStore) Delete(tenantID, name string) error {
 	}
 	delete(s.buckets, key)
 	s.deleteBucketFromEtcdUnlocked(tenantID, name)
+	s.emitEventUnlocked(BucketEvent{Type: BucketEventDelete, TenantID: tenantID, Name: name})
 	return nil
 }
 
@@ -205,6 +262,15 @@ func (s *BucketStore) deleteBucketFromEtcdUnlocked(tenantID, name string) {
 	key := bucketStoreEtcdPrefix + bucketKey(tenantID, name)
 	if _, err := s.etcd.Delete(ctx, key); err != nil {
 		log.Printf("storage bucket store: etcd delete failed for key %s: %v", key, err)
+	}
+}
+
+func (s *BucketStore) emitEventUnlocked(ev BucketEvent) {
+	for _, ch := range s.watchers {
+		select {
+		case ch <- ev:
+		default:
+		}
 	}
 }
 
