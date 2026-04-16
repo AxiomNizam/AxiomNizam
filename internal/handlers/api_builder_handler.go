@@ -484,6 +484,18 @@ func (h *APIBuilderHandler) CreateAPI(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "graphql_query is required for GraphQL APIs"})
 			return
 		}
+
+		if existing := h.findDuplicateGraphQLEndpointLocked(method, path, ""); existing != nil {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":             "endpoint already exists",
+				"api_type":          "graphql",
+				"method":            strings.ToUpper(strings.TrimSpace(method)),
+				"path":              normalizeBuilderRuntimePath(path),
+				"existing_api_id":   existing.ID,
+				"existing_api_name": existing.Name,
+			})
+			return
+		}
 	}
 
 	id := "api-" + uuid.New().String()[:8]
@@ -549,6 +561,8 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 	originalEndpointSignature := ""
 	if originalAPIType == "rest" {
 		originalEndpointSignature = normalizeRESTEndpointSignature(api.Method, api.Path)
+	} else if originalAPIType == "graphql" {
+		originalEndpointSignature = normalizeGraphQLEndpointSignature(api.Method, api.Path)
 	}
 
 	var req map[string]interface{}
@@ -676,6 +690,24 @@ func (h *APIBuilderHandler) UpdateAPI(c *gin.Context) {
 			if existing := h.findDuplicateRESTEndpointLocked(api.Method, api.Path, api.ID); existing != nil {
 				c.JSON(http.StatusConflict, gin.H{
 					"error":             "endpoint already exists",
+					"method":            strings.ToUpper(strings.TrimSpace(api.Method)),
+					"path":              normalizeBuilderRuntimePath(api.Path),
+					"existing_api_id":   existing.ID,
+					"existing_api_name": existing.Name,
+				})
+				return
+			}
+		}
+	}
+
+	if currentAPIType == "graphql" && strings.TrimSpace(api.Path) != "" {
+		currentEndpointSignature := normalizeGraphQLEndpointSignature(api.Method, api.Path)
+		endpointChanged := originalAPIType != "graphql" || currentEndpointSignature != originalEndpointSignature
+		if endpointChanged {
+			if existing := h.findDuplicateGraphQLEndpointLocked(api.Method, api.Path, api.ID); existing != nil {
+				c.JSON(http.StatusConflict, gin.H{
+					"error":             "endpoint already exists",
+					"api_type":          "graphql",
 					"method":            strings.ToUpper(strings.TrimSpace(api.Method)),
 					"path":              normalizeBuilderRuntimePath(api.Path),
 					"existing_api_id":   existing.ID,
@@ -1037,6 +1069,20 @@ func normalizeRESTEndpointSignature(method, path string) string {
 	return strings.ToUpper(strings.TrimSpace(method)) + " " + normalizeBuilderRuntimePath(path)
 }
 
+func normalizeGraphQLEndpointSignature(method, path string) string {
+	normalizedMethod := strings.ToUpper(strings.TrimSpace(method))
+	if normalizedMethod == "" {
+		normalizedMethod = "POST"
+	}
+
+	normalizedPath := strings.TrimSpace(path)
+	if normalizedPath == "" {
+		normalizedPath = "/api/graphql"
+	}
+
+	return normalizedMethod + " " + normalizeBuilderRuntimePath(normalizedPath)
+}
+
 func (h *APIBuilderHandler) findDuplicateRESTEndpointLocked(method, path, excludeID string) *CustomAPI {
 	targetSignature := normalizeRESTEndpointSignature(method, path)
 	for _, candidate := range h.customAPIs {
@@ -1056,6 +1102,29 @@ func (h *APIBuilderHandler) findDuplicateRESTEndpointLocked(method, path, exclud
 		}
 
 		if normalizeRESTEndpointSignature(candidate.Method, candidate.Path) == targetSignature {
+			return candidate
+		}
+	}
+
+	return nil
+}
+
+func (h *APIBuilderHandler) findDuplicateGraphQLEndpointLocked(method, path, excludeID string) *CustomAPI {
+	targetSignature := normalizeGraphQLEndpointSignature(method, path)
+	for _, candidate := range h.customAPIs {
+		if candidate == nil {
+			continue
+		}
+
+		candidateType := strings.ToLower(strings.TrimSpace(candidate.APIType))
+		if candidateType != "graphql" {
+			continue
+		}
+		if excludeID != "" && candidate.ID == excludeID {
+			continue
+		}
+
+		if normalizeGraphQLEndpointSignature(candidate.Method, candidate.Path) == targetSignature {
 			return candidate
 		}
 	}

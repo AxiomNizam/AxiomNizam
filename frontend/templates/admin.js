@@ -62,6 +62,7 @@ let builderDataServers = [];
 let customAPIById = {};
 let graphQLAPIById = {};
 let existingRESTEndpoints = [];
+let existingGraphQLEndpoints = [];
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
 let latestAdminAPIScanReport = null;
@@ -105,7 +106,9 @@ window.addEventListener('DOMContentLoaded', function() {
     loadRESTEndpointCatalog();
     loadGraphQLBuilderSummary();
     loadGraphQLCustomAPIs();
+    loadGraphQLEndpointCatalog();
     bindRESTEndpointValidation();
+    bindGraphQLEndpointValidation();
     loadBuilderDataSources();
     loadCSVHistory();
     loadAPIs();
@@ -617,6 +620,154 @@ function bindRESTEndpointValidation() {
     }
 }
 
+function normalizeGraphQLEndpointMethod(method) {
+    var normalized = String(method || '').trim().toUpperCase();
+    return normalized || 'POST';
+}
+
+function normalizeGraphQLEndpointPath(path) {
+    var raw = String(path || '').trim();
+    if (!raw) {
+        raw = '/api/graphql';
+    }
+    return normalizeRESTEndpointPath(raw);
+}
+
+function toGraphQLEndpointCatalogEntry(api) {
+    if (!api || typeof api !== 'object') return null;
+
+    var apiType = String(api.api_type || 'rest').trim().toLowerCase();
+    if (apiType !== 'graphql') return null;
+
+    return {
+        id: String(api.id || '').trim(),
+        name: String(api.name || '').trim(),
+        operation: String(api.graphql_operation_name || '').trim(),
+        method: normalizeGraphQLEndpointMethod(api.method),
+        rawPath: String(api.path || '/api/graphql').trim() || '/api/graphql',
+        normalizedPath: normalizeGraphQLEndpointPath(api.path)
+    };
+}
+
+function setGraphQLEndpointCatalog(list) {
+    var entries = Array.isArray(list) ? list.map(toGraphQLEndpointCatalogEntry).filter(function(item) { return !!item; }) : [];
+    var seen = {};
+
+    existingGraphQLEndpoints = entries.filter(function(item) {
+        var key = item.id + '|' + item.method + '|' + item.normalizedPath;
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+    });
+
+    renderGraphQLEndpointSuggestions();
+}
+
+function renderGraphQLEndpointSuggestions() {
+    var datalist = document.getElementById('graphqlEndpointSuggestions');
+    if (!datalist) return;
+
+    var rows = existingGraphQLEndpoints.slice().sort(function(a, b) {
+        var pathCmp = a.normalizedPath.localeCompare(b.normalizedPath);
+        if (pathCmp !== 0) return pathCmp;
+        return a.method.localeCompare(b.method);
+    });
+
+    var optionSeen = {};
+    var html = '';
+    rows.forEach(function(entry) {
+        var optionKey = entry.method + '|' + entry.rawPath;
+        if (optionSeen[optionKey]) return;
+        optionSeen[optionKey] = true;
+
+        var label = entry.method + ' ' + entry.normalizedPath;
+        if (entry.operation) {
+            label += ' - ' + entry.operation;
+        } else if (entry.name) {
+            label += ' - ' + entry.name;
+        }
+
+        html += '<option value="' + escapeHtml(entry.rawPath) + '" label="' + escapeHtml(label) + '"></option>';
+    });
+
+    datalist.innerHTML = html;
+}
+
+function loadGraphQLEndpointCatalog() {
+    return fetchJSON('/api/v1/builder/apis?api_type=graphql').then(function(d) {
+        setGraphQLEndpointCatalog(d.apis || []);
+        validateGraphQLEndpoint(false);
+    }).catch(function() {
+        var fallback = [];
+        Object.keys(graphQLAPIById || {}).forEach(function(id) {
+            fallback.push(graphQLAPIById[id]);
+        });
+        if (fallback.length > 0) {
+            setGraphQLEndpointCatalog(fallback);
+            validateGraphQLEndpoint(false);
+        }
+    });
+}
+
+function findDuplicateGraphQLEndpoint(method, path, excludeID) {
+    var targetMethod = normalizeGraphQLEndpointMethod(method);
+    var targetPath = normalizeGraphQLEndpointPath(path);
+    var skipID = String(excludeID || '').trim();
+
+    for (var i = 0; i < existingGraphQLEndpoints.length; i++) {
+        var entry = existingGraphQLEndpoints[i];
+        if (skipID && entry.id === skipID) continue;
+        if (entry.method === targetMethod && entry.normalizedPath === targetPath) {
+            return entry;
+        }
+    }
+
+    return null;
+}
+
+function setGraphQLEndpointDuplicateWarning(message) {
+    var warningEl = document.getElementById('gqlPathDuplicateWarning');
+    if (!warningEl) return;
+    if (message) {
+        warningEl.textContent = message;
+        warningEl.style.display = 'block';
+        return;
+    }
+
+    warningEl.textContent = '';
+    warningEl.style.display = 'none';
+}
+
+function validateGraphQLEndpoint(showAlert) {
+    var pathEl = document.getElementById('gqlPathInput');
+    if (!pathEl) return true;
+
+    var effectivePath = String(pathEl.value || '').trim() || '/api/graphql';
+    var excludeID = (graphQLFormMode === 'edit' && editingGraphQLApiId) ? editingGraphQLApiId : '';
+    var duplicate = findDuplicateGraphQLEndpoint('POST', effectivePath, excludeID);
+    if (!duplicate) {
+        pathEl.setCustomValidity('');
+        setGraphQLEndpointDuplicateWarning('');
+        return true;
+    }
+
+    var msg = 'GraphQL endpoint already exists: ' + duplicate.method + ' ' + duplicate.normalizedPath + (duplicate.operation ? ' (' + duplicate.operation + ')' : (duplicate.name ? ' (' + duplicate.name + ')' : ''));
+    pathEl.setCustomValidity(msg);
+    setGraphQLEndpointDuplicateWarning(msg);
+    if (showAlert) {
+        alert(msg);
+    }
+    return false;
+}
+
+function bindGraphQLEndpointValidation() {
+    var pathEl = document.getElementById('gqlPathInput');
+    if (pathEl && pathEl.dataset.graphqlEndpointValidationBound !== '1') {
+        pathEl.addEventListener('input', function() { validateGraphQLEndpoint(false); });
+        pathEl.dataset.graphqlEndpointValidationBound = '1';
+    }
+}
+
 function loadCustomAPIs() {
     var catEl = document.getElementById('apiCategoryFilter');
     var statEl = document.getElementById('apiStatusFilter');
@@ -909,6 +1060,9 @@ function loadGraphQLCustomAPIs() {
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
         graphQLAPIById = {};
+        if (!cat && !status) {
+            setGraphQLEndpointCatalog(list);
+        }
         var el = document.getElementById('graphqlApiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -987,6 +1141,16 @@ function updateGraphQLBuilderSourceServers() {
 function openCreateGraphQLAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin, manager, or system-manager.'); return; }
     resetGraphQLFormMode();
+    bindGraphQLEndpointValidation();
+    loadGraphQLEndpointCatalog();
+    setGraphQLEndpointDuplicateWarning('');
+    var pathEl = document.getElementById('gqlPathInput');
+    if (pathEl) {
+        pathEl.setCustomValidity('');
+        if (!pathEl.value) {
+            pathEl.value = '/api/graphql';
+        }
+    }
     loadBuilderDataSources();
     document.getElementById('createGraphQLAPIModal').style.display = 'flex';
 }
@@ -995,9 +1159,11 @@ function closeCreateGraphQLAPIModal() {
     resetGraphQLFormMode();
     document.getElementById('createGraphQLAPIModal').style.display = 'none';
     document.getElementById('createGraphQLAPIForm').reset();
+    var pathEl = document.getElementById('gqlPathInput');
+    if (pathEl) pathEl.setCustomValidity('');
+    setGraphQLEndpointDuplicateWarning('');
     var ttlGroup = document.getElementById('gqlCacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
-    var pathEl = document.getElementById('gqlPathInput');
     if (pathEl && !pathEl.value) {
         pathEl.value = '/api/graphql';
     }
@@ -1024,6 +1190,9 @@ function parseBuilderParams(raw) {
 
 function submitCreateGraphQLAPI(e) {
     e.preventDefault();
+    if (!validateGraphQLEndpoint(true)) {
+        return;
+    }
 
     var mockRaw = document.getElementById('gqlMockResponseInput').value.trim();
     var mockResp = null;
@@ -1064,6 +1233,7 @@ function submitCreateGraphQLAPI(e) {
             closeCreateGraphQLAPIModal();
             loadGraphQLBuilderSummary();
             loadGraphQLCustomAPIs();
+            loadGraphQLEndpointCatalog();
             if (isEditMode) {
                 addLog('Updated GraphQL API: ' + body.name, 'info');
             } else {
@@ -1092,6 +1262,7 @@ function deleteGraphQLCustomAPI(id) {
             addLog('Deleted GraphQL API: ' + id, 'warn');
             loadGraphQLBuilderSummary();
             loadGraphQLCustomAPIs();
+            loadGraphQLEndpointCatalog();
         } else {
             alert(d.error || 'Failed to delete GraphQL API');
         }
@@ -1112,6 +1283,7 @@ function openEditGraphQLCustomAPI(id) {
     if (submitBtn) submitBtn.textContent = 'Save Changes';
 
     loadBuilderDataSources(function() {
+        loadGraphQLEndpointCatalog();
         document.getElementById('gqlApiNameInput').value = api.name || '';
         document.getElementById('gqlApiCategoryInput').value = api.category || 'custom';
         document.getElementById('gqlOperationNameInput').value = api.graphql_operation_name || '';
@@ -1138,6 +1310,7 @@ function openEditGraphQLCustomAPI(id) {
         document.getElementById('gqlQueryParamsInput').value = qpLines.join('\n');
 
         document.getElementById('createGraphQLAPIModal').style.display = 'flex';
+        validateGraphQLEndpoint(false);
     });
 }
 
