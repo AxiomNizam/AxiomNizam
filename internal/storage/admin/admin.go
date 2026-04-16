@@ -27,9 +27,15 @@ type Handler struct {
 	tenant     *tenant.Manager
 	controller *controller.BucketController
 	access     *access.Controller
+	presign    PresignSigner
 	metrics    *storageMetrics.Collector
 	audit      *events.AuditLog
 	endpoint   string
+}
+
+// PresignSigner generates SigV4-compatible presigned object URLs.
+type PresignSigner interface {
+	Generate(method, bucket, objectKey string, expiry time.Duration, accessKey, secretKey, host string) (string, error)
 }
 
 // NewHandler creates a new storage API handler.
@@ -39,6 +45,7 @@ func NewHandler(
 	t *tenant.Manager,
 	ctrl *controller.BucketController,
 	ac *access.Controller,
+	ps PresignSigner,
 	m *storageMetrics.Collector,
 	a *events.AuditLog,
 	endpoint string,
@@ -49,6 +56,7 @@ func NewHandler(
 		tenant:     t,
 		controller: ctrl,
 		access:     ac,
+		presign:    ps,
 		metrics:    m,
 		audit:      a,
 		endpoint:   endpoint,
@@ -908,13 +916,21 @@ func (h *Handler) PutObject(c *gin.Context) {
 	userID := "presigned"
 
 	if isPresigned {
-		token := strings.TrimSpace(c.Query("X-Axiom-Token"))
-		if !h.verifyPresignedToken("PUT", backendBucket, key, token) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired presigned token"})
+		signedBucket := strings.TrimSpace(c.GetString("storage_presigned_bucket"))
+		signedKey := strings.TrimPrefix(strings.TrimSpace(c.GetString("storage_presigned_key")), "/")
+		if signedBucket == "" || signedKey == "" || signedBucket != bucket || signedKey != key {
+			c.JSON(http.StatusForbidden, gin.H{"error": "presigned request scope mismatch"})
 			return
 		}
-		if rb := h.resolveBucketByBackendName(backendBucket); rb != nil {
-			tenantID = rb.Metadata.TenantID
+		backendBucket = signedBucket
+		tenantID = strings.TrimSpace(c.GetString("storage_presigned_tenant"))
+		if tenantID == "" {
+			if rb := h.resolveBucketByBackendName(backendBucket); rb != nil {
+				tenantID = rb.Metadata.TenantID
+			}
+		}
+		if ak := strings.TrimSpace(c.GetString("storage_presigned_access_key")); ak != "" {
+			userID = "presigned:" + ak
 		}
 	} else {
 		if sc == nil {
@@ -1004,13 +1020,21 @@ func (h *Handler) GetObject(c *gin.Context) {
 	userID := "presigned"
 
 	if isPresigned {
-		token := strings.TrimSpace(c.Query("X-Axiom-Token"))
-		if !h.verifyPresignedToken("GET", backendBucket, key, token) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired presigned token"})
+		signedBucket := strings.TrimSpace(c.GetString("storage_presigned_bucket"))
+		signedKey := strings.TrimPrefix(strings.TrimSpace(c.GetString("storage_presigned_key")), "/")
+		if signedBucket == "" || signedKey == "" || signedBucket != bucket || signedKey != key {
+			c.JSON(http.StatusForbidden, gin.H{"error": "presigned request scope mismatch"})
 			return
 		}
-		if rb := h.resolveBucketByBackendName(backendBucket); rb != nil {
-			tenantID = rb.Metadata.TenantID
+		backendBucket = signedBucket
+		tenantID = strings.TrimSpace(c.GetString("storage_presigned_tenant"))
+		if tenantID == "" {
+			if rb := h.resolveBucketByBackendName(backendBucket); rb != nil {
+				tenantID = rb.Metadata.TenantID
+			}
+		}
+		if ak := strings.TrimSpace(c.GetString("storage_presigned_access_key")); ak != "" {
+			userID = "presigned:" + ak
 		}
 	} else {
 		if sc == nil {
@@ -1061,21 +1085,6 @@ func (h *Handler) GetObject(c *gin.Context) {
 		Size:     n,
 		SourceIP: c.ClientIP(),
 	})
-}
-
-type presignTokenVerifier interface {
-	VerifyPresignToken(method, bucket, key, token string) bool
-}
-
-func (h *Handler) verifyPresignedToken(method, bucket, key, token string) bool {
-	if token == "" {
-		return false
-	}
-	v, ok := h.client.(presignTokenVerifier)
-	if !ok {
-		return false
-	}
-	return v.VerifyPresignToken(method, bucket, key, token)
 }
 
 func (h *Handler) resolveBucketByBackendName(backendName string) *models.BucketResource {
@@ -1339,6 +1348,10 @@ func (h *Handler) PresignURL(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
+	if h.presign == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "presign signer is not configured"})
+		return
+	}
 
 	bucket := c.Param("bucket")
 	b, err := h.store.Get(sc.TenantID, bucket)
@@ -1348,9 +1361,10 @@ func (h *Handler) PresignURL(c *gin.Context) {
 	}
 
 	var req struct {
-		Key     string `json:"key" binding:"required"`
-		Method  string `json:"method"`  // "GET" or "PUT", default GET
-		Expires int    `json:"expires"` // seconds, default 3600
+		Key         string `json:"key" binding:"required"`
+		Method      string `json:"method"`  // "GET" or "PUT", default GET
+		Expires     int    `json:"expires"` // seconds, default 3600
+		AccessKeyID string `json:"accessKeyId,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1365,17 +1379,22 @@ func (h *Handler) PresignURL(c *gin.Context) {
 	if expires <= 0 {
 		expires = time.Hour
 	}
-
-	var presignURL string
-	switch method {
-	case "GET":
-		presignURL, err = h.client.PresignGetObject(context.Background(), b.Spec.Name, req.Key, expires)
-	case "PUT":
-		presignURL, err = h.client.PresignPutObject(context.Background(), b.Spec.Name, req.Key, expires)
-	default:
+	if method != http.MethodGet && method != http.MethodPut {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET or PUT"})
 		return
 	}
+
+	ak, err := h.access.ResolveUserAccessKeyForPresign(sc.UserID, sc.TenantID, req.AccessKeyID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no active access key available for presign; create one via /access-keys first"})
+		return
+	}
+	if err := access.ValidateAccessKeyForObjectRequest(ak, method, b.Spec.Name, req.Key); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+
+	presignURL, err := h.presign.Generate(method, b.Spec.Name, req.Key, expires, ak.AccessKeyID, ak.SecretAccessKey, requestHostForSignature(c))
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1389,7 +1408,7 @@ func (h *Handler) PresignURL(c *gin.Context) {
 		UserID:   sc.UserID,
 		Bucket:   bucket,
 		Key:      req.Key,
-		Details:  fmt.Sprintf("method=%s expires=%v", method, expires),
+		Details:  fmt.Sprintf("method=%s expires=%v accessKey=%s", method, expires, ak.AccessKeyID),
 		SourceIP: c.ClientIP(),
 	})
 
@@ -1504,6 +1523,18 @@ func (h *Handler) CreateAccessKey(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if !hasAnyRole(sc.Roles, "sysadmin", "system-manager", "admin") {
+		callerMaxRole := maxStorageRoleForIAMRoles(sc.Roles)
+		if !roleAtLeast(callerMaxRole, req.Role) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":         "requested access key role exceeds caller IAM privileges",
+				"requestedRole": req.Role,
+				"maxRole":       callerMaxRole,
+			})
+			return
+		}
 	}
 
 	ak, err := h.access.CreateAccessKey(sc.UserID, sc.TenantID, req.Name, req.Description, req.Role, req.BucketScope, req.ExpiresAt)
@@ -1648,6 +1679,10 @@ func (h *Handler) ShareObject(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
+	if h.presign == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "presign signer is not configured"})
+		return
+	}
 
 	bucket := c.Param("bucket")
 	b, err := h.store.Get(sc.TenantID, bucket)
@@ -1657,8 +1692,9 @@ func (h *Handler) ShareObject(c *gin.Context) {
 	}
 
 	var req struct {
-		Key     string `json:"key" binding:"required"`
-		Expires int    `json:"expires"` // seconds, default 3600
+		Key         string `json:"key" binding:"required"`
+		Expires     int    `json:"expires"` // seconds, default 3600
+		AccessKeyID string `json:"accessKeyId,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1673,7 +1709,17 @@ func (h *Handler) ShareObject(c *gin.Context) {
 		expires = 7 * 24 * time.Hour
 	}
 
-	shareURL, err := h.client.PresignGetObject(context.Background(), b.Spec.Name, req.Key, expires)
+	ak, err := h.access.ResolveUserAccessKeyForPresign(sc.UserID, sc.TenantID, req.AccessKeyID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no active access key available for sharing; create one via /access-keys first"})
+		return
+	}
+	if err := access.ValidateAccessKeyForObjectRequest(ak, http.MethodGet, b.Spec.Name, req.Key); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+
+	shareURL, err := h.presign.Generate(http.MethodGet, b.Spec.Name, req.Key, expires, ak.AccessKeyID, ak.SecretAccessKey, requestHostForSignature(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1686,7 +1732,7 @@ func (h *Handler) ShareObject(c *gin.Context) {
 		UserID:   sc.UserID,
 		Bucket:   bucket,
 		Key:      req.Key,
-		Details:  fmt.Sprintf("expires=%v", expires),
+		Details:  fmt.Sprintf("expires=%v accessKey=%s", expires, ak.AccessKeyID),
 		SourceIP: c.ClientIP(),
 	})
 
@@ -1714,6 +1760,28 @@ func hasAnyRole(roles []string, allowed ...string) bool {
 	return false
 }
 
+func maxStorageRoleForIAMRoles(iamRoles []string) models.StorageRole {
+	maxRole := models.StorageRoleReader
+	for _, r := range iamRoles {
+		mapped := access.MapIAMRoleToStorageRole(r)
+		if roleAtLeast(mapped, maxRole) {
+			maxRole = mapped
+		}
+	}
+	return maxRole
+}
+
+func roleAtLeast(have, need models.StorageRole) bool {
+	order := map[models.StorageRole]int{
+		models.StorageRoleAdmin:    4,
+		models.StorageRoleWriter:   3,
+		models.StorageRoleBrowser:  2,
+		models.StorageRoleReader:   1,
+		models.StorageRoleUploader: 1,
+	}
+	return order[have] >= order[need]
+}
+
 func absoluteURL(c *gin.Context, raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
@@ -1739,6 +1807,17 @@ func absoluteURL(c *gin.Context, raw string) string {
 		raw = "/" + raw
 	}
 	return fmt.Sprintf("%s://%s%s", scheme, host, raw)
+}
+
+func requestHostForSignature(c *gin.Context) string {
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host != "" {
+		return strings.TrimSpace(strings.Split(host, ",")[0])
+	}
+	if c.Request != nil {
+		return strings.TrimSpace(c.Request.Host)
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,22 +31,42 @@ type Controller struct {
 	shares     map[string]*models.BucketShare  // key = shareID
 	auditLog   *events.AuditLog
 	etcd       *clientv3.Client
+	rateMu     sync.Mutex
+	rateMap    map[string]*objectRateState
+	rateLimit  int
+	rateWindow time.Duration
 }
 
 const (
-	accessEtcdTimeout  = 3 * time.Second
-	accessPolicyPrefix = "storage:access:policies/"
-	accessKeyPrefix    = "storage:access:keys/"
-	accessSharePrefix  = "storage:access:shares/"
+	accessEtcdTimeout               = 3 * time.Second
+	accessPolicyPrefix              = "storage:access:policies/"
+	accessKeyPrefix                 = "storage:access:keys/"
+	accessSharePrefix               = "storage:access:shares/"
+	defaultObjectRateLimitPerMinute = 240
 )
+
+type objectRateState struct {
+	windowStart time.Time
+	count       int
+}
 
 // NewController creates an access controller.
 func NewController(auditLog *events.AuditLog) *Controller {
+	limit := defaultObjectRateLimitPerMinute
+	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_RATE_LIMIT_PER_MINUTE")); s != "" {
+		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
 	return &Controller{
 		policies:   make(map[string]*models.TenantPolicy),
 		accessKeys: make(map[string]*models.AccessKey),
 		shares:     make(map[string]*models.BucketShare),
 		auditLog:   auditLog,
+		rateMap:    make(map[string]*objectRateState),
+		rateLimit:  limit,
+		rateWindow: time.Minute,
 	}
 }
 
@@ -107,14 +129,10 @@ func (ac *Controller) RequireStorageAuth() gin.HandlerFunc {
 		// Option 2: Use IAM JWT claims from IAM middleware.
 		claimsRaw, exists := c.Get("iam_claims")
 		if !exists {
-			// Option 3: Allow pre-signed GET/PUT object requests to continue.
-			if strings.TrimSpace(c.Query("X-Axiom-Token")) != "" {
-				if (c.Request.Method == http.MethodGet || c.Request.Method == http.MethodPut) &&
-					c.Param("bucket") != "" && strings.TrimPrefix(c.Param("key"), "/") != "" {
-					c.Set("storage_presigned_request", true)
-					c.Next()
-					return
-				}
+			// Option 3: allow requests already validated as presigned by the outer storage middleware.
+			if c.GetBool("storage_presigned_request") {
+				c.Next()
+				return
 			}
 
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -212,11 +230,18 @@ func (ac *Controller) RequireBucketAccess(minRole models.StorageRole) gin.Handle
 	return func(c *gin.Context) {
 		sc := GetStorageContext(c)
 		if sc == nil {
-			if c.GetBool("storage_presigned_request") && strings.TrimSpace(c.Query("X-Axiom-Token")) != "" {
+			if c.GetBool("storage_presigned_request") {
+				if !ac.enforceObjectRateLimit(c, nil) {
+					return
+				}
 				c.Next()
 				return
 			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+
+		if !ac.enforceObjectRateLimit(c, sc) {
 			return
 		}
 
@@ -388,6 +413,128 @@ func (ac *Controller) ValidateAccessKey(accessKeyID, secretKey string) *models.A
 	ak.LastUsedAt = &now
 
 	return ak
+}
+
+// ResolveAccessKey returns an active, non-expired access key by ID.
+// The returned key is a copy and includes SecretAccessKey for internal signing.
+func (ac *Controller) ResolveAccessKey(accessKeyID string) (*models.AccessKey, error) {
+	ac.mu.RLock()
+	defer ac.mu.RUnlock()
+
+	ak, exists := ac.accessKeys[accessKeyID]
+	if !exists {
+		return nil, fmt.Errorf("access key %q not found", accessKeyID)
+	}
+	if !ak.Active {
+		return nil, fmt.Errorf("access key %q is inactive", accessKeyID)
+	}
+	if ak.ExpiresAt != nil && time.Now().After(*ak.ExpiresAt) {
+		return nil, fmt.Errorf("access key %q is expired", accessKeyID)
+	}
+	copy := *ak
+	return &copy, nil
+}
+
+// ResolveUserAccessKeyForPresign returns a user's active key for signing presigned URLs.
+// If preferredAccessKeyID is provided, it must belong to that user+tenant.
+func (ac *Controller) ResolveUserAccessKeyForPresign(userID, tenantID, preferredAccessKeyID string) (*models.AccessKey, error) {
+	if strings.TrimSpace(preferredAccessKeyID) != "" {
+		ak, err := ac.ResolveAccessKey(strings.TrimSpace(preferredAccessKeyID))
+		if err != nil {
+			return nil, err
+		}
+		if ak.UserID != userID || ak.TenantID != tenantID {
+			return nil, fmt.Errorf("access key %q does not belong to user", preferredAccessKeyID)
+		}
+		return ak, nil
+	}
+
+	ac.mu.RLock()
+	defer ac.mu.RUnlock()
+
+	var selected *models.AccessKey
+	for _, ak := range ac.accessKeys {
+		if ak == nil || !ak.Active {
+			continue
+		}
+		if ak.UserID != userID || ak.TenantID != tenantID {
+			continue
+		}
+		if ak.ExpiresAt != nil && time.Now().After(*ak.ExpiresAt) {
+			continue
+		}
+		if selected == nil || ak.CreatedAt.After(selected.CreatedAt) {
+			copy := *ak
+			selected = &copy
+		}
+	}
+
+	if selected == nil {
+		return nil, fmt.Errorf("no active access key found for user %q in tenant %q", userID, tenantID)
+	}
+	return selected, nil
+}
+
+// ValidateAccessKeyForObjectRequest enforces method and scope constraints for an access key.
+func ValidateAccessKeyForObjectRequest(ak *models.AccessKey, method, bucket, key string) error {
+	if ak == nil {
+		return fmt.Errorf("access key is required")
+	}
+	if !ak.Active {
+		return fmt.Errorf("access key is inactive")
+	}
+	if ak.ExpiresAt != nil && time.Now().After(*ak.ExpiresAt) {
+		return fmt.Errorf("access key is expired")
+	}
+
+	bucket = strings.TrimSpace(bucket)
+	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
+	method = strings.ToUpper(strings.TrimSpace(method))
+
+	if bucket == "" || key == "" {
+		return fmt.Errorf("bucket and object key are required")
+	}
+	if strings.Contains(bucket, "*") || strings.Contains(key, "*") {
+		return fmt.Errorf("wildcard bucket/key is not allowed")
+	}
+
+	allowedMethod := false
+	switch method {
+	case http.MethodGet:
+		allowedMethod = roleAtLeast(ak.Role, models.StorageRoleReader) || ak.Role == models.StorageRoleBrowser
+	case http.MethodPut:
+		allowedMethod = roleAtLeast(ak.Role, models.StorageRoleWriter) || ak.Role == models.StorageRoleUploader
+	default:
+		return fmt.Errorf("method %s is not allowed for presigned access", method)
+	}
+	if !allowedMethod {
+		return fmt.Errorf("access key role %s does not allow %s", ak.Role, method)
+	}
+
+	if len(ak.BucketScope) > 0 {
+		ok := false
+		for _, b := range ak.BucketScope {
+			if strings.TrimSpace(b) == bucket {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("access key is not allowed for bucket %s", bucket)
+		}
+	}
+
+	prefix := strings.TrimSpace(ak.PrefixScope)
+	if prefix != "" {
+		if strings.Contains(prefix, "*") {
+			return fmt.Errorf("wildcard prefix scope is not allowed")
+		}
+		if key != prefix && !strings.HasPrefix(key, prefix) {
+			return fmt.Errorf("object key is outside access key prefix scope")
+		}
+	}
+
+	return nil
 }
 
 // ListAccessKeys returns all access keys for a user.
@@ -679,6 +826,67 @@ func generateRandomHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func (ac *Controller) enforceObjectRateLimit(c *gin.Context, sc *StorageContext) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return true
+	}
+
+	path := c.Request.URL.Path
+	if !strings.Contains(path, "/storage/buckets/") || !strings.Contains(path, "/objects") {
+		return true
+	}
+
+	identity := c.ClientIP()
+	if sc != nil && strings.TrimSpace(sc.UserID) != "" {
+		identity = "user:" + strings.TrimSpace(sc.UserID)
+	}
+	if c.GetBool("storage_presigned_request") {
+		if ak := strings.TrimSpace(c.GetString("storage_presigned_access_key")); ak != "" {
+			identity = "ak:" + ak
+		}
+	}
+
+	bucket := strings.TrimSpace(c.Param("bucket"))
+	if bucket == "" {
+		bucket = "-"
+	}
+	rateKey := strings.Join([]string{identity, strings.ToUpper(c.Request.Method), bucket}, "|")
+
+	now := time.Now().UTC()
+	ac.rateMu.Lock()
+	state := ac.rateMap[rateKey]
+	if state == nil || now.Sub(state.windowStart) >= ac.rateWindow {
+		state = &objectRateState{windowStart: now, count: 0}
+		ac.rateMap[rateKey] = state
+	}
+	state.count++
+	count := state.count
+	limit := ac.rateLimit
+	resetAt := state.windowStart.Add(ac.rateWindow)
+	ac.rateMu.Unlock()
+
+	remaining := limit - count
+	if remaining < 0 {
+		remaining = 0
+	}
+	c.Header("X-RateLimit-Limit", strconv.Itoa(limit))
+	c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+	c.Header("X-RateLimit-Reset", strconv.FormatInt(resetAt.Unix(), 10))
+
+	if count > limit {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+			"error":        "bucket object rate limit exceeded",
+			"limit":        limit,
+			"bucket":       bucket,
+			"retryAfter":   int(time.Until(resetAt).Seconds()),
+			"identityHint": identity,
+		})
+		return false
+	}
+
+	return true
 }
 
 func (ac *Controller) loadFromEtcd() {

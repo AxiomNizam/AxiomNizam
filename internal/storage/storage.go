@@ -5,7 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"strconv"
+	"time"
 
 	iamMiddleware "example.com/axiomnizam/internal/iam/middleware"
 	iamStorage "example.com/axiomnizam/internal/iam/storage"
@@ -87,7 +88,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	auditLog := events.NewAuditLog(10000)
 	accessCtrl := access.NewController(auditLog)
 	accessCtrl.ConfigurePersistence(etcdClient)
-	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, metricsCollector, auditLog, endpoint)
+	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint)
 
 	return &System{
 		Backend:         backend,
@@ -109,35 +110,53 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 // When an IAM issuer is configured, the storage route group is wrapped with JWTAuth
 // middleware so that downstream handlers can extract iam_claims for access control.
 func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
+	presignedLimit := 0
+	if raw := os.Getenv("STORAGE_PRESIGN_RATE_LIMIT_PER_MINUTE"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			presignedLimit = parsed
+		}
+	}
+	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, presignedLimit)
+
+	var jwtAuth gin.HandlerFunc
 	if s.iamIssuer != nil {
-		jwtAuth := iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
-		rg.Use(func(c *gin.Context) {
-			if isPresignedObjectRequest(c) {
-				c.Next()
+		jwtAuth = iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
+	}
+
+	rg.Use(func(c *gin.Context) {
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c.Request = r
+
+			if info, ok := getPresignedRequestInfo(r.Context()); ok {
+				c.Set("storage_presigned_request", true)
+				c.Set("storage_presigned_access_key", info.AccessKeyID)
+				c.Set("storage_presigned_bucket", info.Bucket)
+				c.Set("storage_presigned_key", info.ObjectKey)
+				c.Set("storage_presigned_tenant", info.TenantID)
+				c.Set("storage_presigned_user", info.UserID)
+			}
+
+			if !c.GetBool("storage_presigned_request") && jwtAuth != nil {
+				jwtAuth(c)
 				return
 			}
-			jwtAuth(c)
+
+			c.Next()
 		})
-		log.Println("✅ Storage: IAM JWT middleware attached to storage routes")
+
+		PresignedOrIAMMiddleware(next).ServeHTTP(c.Writer, c.Request)
+	})
+
+	if s.iamIssuer != nil {
+		log.Println("✅ Storage: secure presigned/IAM middleware attached to storage routes")
 	}
 	s.Handler.RegisterRoutes(rg)
 }
 
-func isPresignedObjectRequest(c *gin.Context) bool {
-	if c == nil || c.Request == nil || c.Request.URL == nil {
-		return false
-	}
-	if strings.TrimSpace(c.Query("X-Axiom-Token")) == "" {
-		return false
-	}
-	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodPut {
-		return false
-	}
-	path := c.Request.URL.Path
-	if !strings.Contains(path, "/storage/buckets/") {
-		return false
-	}
-	return strings.Contains(path, "/objects/")
+type sigV4PresignSigner struct{}
+
+func (sigV4PresignSigner) Generate(method, bucket, objectKey string, expiry time.Duration, accessKey, secretKey, host string) (string, error) {
+	return GeneratePresignedURLWithHost(method, bucket, objectKey, expiry, accessKey, secretKey, host)
 }
 
 // Start begins the reconciliation controller.
