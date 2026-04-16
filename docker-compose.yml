@@ -38,6 +38,7 @@ services:
       # - elasticsearch
     volumes:
       - query_logs:/data/query_logs
+      - storage-data:/data/storage
     networks:
       - app-network
 
@@ -434,5 +435,6 @@ volumes:
   clamav-data:
   rabbitmq-data:
   query_logs:
+  storage-data:
   openclaw-config:
   ollama-data:

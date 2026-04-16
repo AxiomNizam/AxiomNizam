@@ -51,8 +51,41 @@ func NewClient(endpoint string, accessKey, secretKey, region string, useSSL bool
 
 // Ping checks connectivity to the storage backend by listing buckets.
 func (c *Client) Ping(ctx context.Context) error {
-	_, err := c.ListBuckets(ctx)
-	return err
+	req, err := c.newRequest(ctx, http.MethodGet, "/", nil)
+	if err != nil {
+		return err
+	}
+	c.signRequest(req, nil)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("storage: ping request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusMovedPermanently, http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect, http.StatusMethodNotAllowed:
+		return nil
+	case http.StatusUnauthorized, http.StatusForbidden:
+		// Treat permission-denied responses as reachable if auth is structurally valid.
+		err := parseS3Error(resp)
+		if s3Err, ok := err.(*S3Error); ok {
+			switch s3Err.Code {
+			case "AccessDenied", "AllAccessDisabled", "AuthorizationHeaderMalformed":
+				return nil
+			case "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken":
+				return fmt.Errorf("storage: ping auth validation failed: %w", err)
+			default:
+				return nil
+			}
+		}
+		return nil
+	default:
+		if resp.StatusCode >= http.StatusInternalServerError {
+			return parseS3Error(resp)
+		}
+		return fmt.Errorf("storage: ping returned unexpected status %d", resp.StatusCode)
+	}
 }
 
 // ---------- Bucket Operations ----------

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/storage/models"
-	"example.com/axiomnizam/internal/storage/s3client"
 	"example.com/axiomnizam/internal/storage/store"
 )
 
@@ -16,7 +15,7 @@ import (
 // Follows the Kubernetes controller pattern: observe → diff → act.
 type BucketController struct {
 	store    *store.BucketStore
-	client   *s3client.Client
+	client   models.Backend
 	endpoint string
 
 	mu      sync.Mutex
@@ -25,8 +24,8 @@ type BucketController struct {
 }
 
 // NewBucketController creates a new controller that reconciles BucketResources
-// against the S3 storage backend.
-func NewBucketController(s *store.BucketStore, client *s3client.Client, endpoint string) *BucketController {
+// against the storage backend.
+func NewBucketController(s *store.BucketStore, client models.Backend, endpoint string) *BucketController {
 	return &BucketController{
 		store:    s,
 		client:   client,

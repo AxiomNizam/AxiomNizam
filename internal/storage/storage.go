@@ -9,8 +9,9 @@ import (
 	"example.com/axiomnizam/internal/storage/controller"
 	"example.com/axiomnizam/internal/storage/events"
 	storageMetrics "example.com/axiomnizam/internal/storage/metrics"
+	"example.com/axiomnizam/internal/storage/models"
+	"example.com/axiomnizam/internal/storage/native"
 	"example.com/axiomnizam/internal/storage/policy"
-	"example.com/axiomnizam/internal/storage/s3client"
 	"example.com/axiomnizam/internal/storage/store"
 	"example.com/axiomnizam/internal/storage/tenant"
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,7 @@ import (
 // System holds the fully initialised object storage system and exposes
 // the router registration. Follows the IAM System struct pattern.
 type System struct {
-	Client     *s3client.Client
+	Backend    models.Backend
 	Store      *store.BucketStore
 	Controller *controller.BucketController
 	Tenant     *tenant.Manager
@@ -30,26 +31,20 @@ type System struct {
 	Config     Config
 }
 
-// Config holds configuration for connecting to an S3-compatible storage backend.
+// Config holds configuration for the native object storage backend.
 type Config struct {
-	Endpoint        string `json:"endpoint"`
-	AccessKeyID     string `json:"accessKeyId"`
-	SecretAccessKey string `json:"secretAccessKey"`
-	UseSSL          bool   `json:"useSsl"`
-	Region          string `json:"region"`
-	BucketPrefix    string `json:"bucketPrefix"` // e.g., "axiom-"
+	DataDir       string `json:"dataDir"`       // filesystem root for object data
+	BucketPrefix  string `json:"bucketPrefix"`  // e.g., "axiom-"
+	PresignSecret string `json:"presignSecret"` // HMAC key for presign tokens
 }
 
 // DefaultConfig returns configuration populated from environment variables
-// with sensible defaults for a local MinIO instance.
+// with sensible defaults for a local native storage backend.
 func DefaultConfig() Config {
 	return Config{
-		Endpoint:        getEnv("MINIO_ENDPOINT", "localhost:9000"),
-		AccessKeyID:     getEnv("MINIO_ACCESS_KEY", "minioadmin"),
-		SecretAccessKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
-		UseSSL:          getEnv("MINIO_USE_SSL", "false") == "true",
-		Region:          getEnv("MINIO_REGION", "us-east-1"),
-		BucketPrefix:    getEnv("MINIO_BUCKET_PREFIX", "axiom-"),
+		DataDir:       getEnv("STORAGE_DATA_DIR", "/data/storage"),
+		BucketPrefix:  getEnv("STORAGE_BUCKET_PREFIX", "axiom-"),
+		PresignSecret: getEnv("STORAGE_PRESIGN_SECRET", "axiom-native-storage-default-key"),
 	}
 }
 
@@ -61,24 +56,24 @@ func getEnv(key, fallback string) string {
 }
 
 // NewSystem initialises the complete object storage system.
-// Creates the native S3 HTTP client, in-memory store, reconciliation controller,
-// tenant manager, policy controller, and admin handler.
+// Uses the built-in native filesystem backend — no external service required.
 func NewSystem(cfg Config) (*System, error) {
-	client, err := s3client.NewClient(cfg.Endpoint, cfg.AccessKeyID, cfg.SecretAccessKey, cfg.Region, cfg.UseSSL)
+	backend, err := native.New(cfg.DataDir, cfg.PresignSecret)
 	if err != nil {
 		return nil, err
 	}
 
+	endpoint := backend.Endpoint()
 	bucketStore := store.NewBucketStore()
 	tenantMgr := tenant.NewManager(cfg.BucketPrefix, bucketStore)
-	bucketCtrl := controller.NewBucketController(bucketStore, client, cfg.Endpoint)
+	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint)
 	policyCtrl := policy.NewController()
 	metricsCollector := storageMetrics.NewCollector()
 	auditLog := events.NewAuditLog(10000)
-	handler := admin.NewHandler(bucketStore, client, tenantMgr, bucketCtrl, policyCtrl, metricsCollector, auditLog, cfg.Endpoint)
+	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, policyCtrl, metricsCollector, auditLog, endpoint)
 
 	return &System{
-		Client:     client,
+		Backend:    backend,
 		Store:      bucketStore,
 		Controller: bucketCtrl,
 		Tenant:     tenantMgr,
@@ -98,7 +93,7 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 // Start begins the reconciliation controller.
 func (s *System) Start(ctx context.Context) {
 	s.Controller.Start(ctx)
-	log.Println("✅ Storage: module started")
+	log.Println("✅ Storage: module started (native backend)")
 }
 
 // Stop gracefully shuts down the storage module.

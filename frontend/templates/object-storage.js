@@ -106,8 +106,9 @@
     // ===== Dashboard =====
     window.osLoadDashboard = async function() {
         try {
-            const [statsResp, bucketsResp, metricsResp] = await Promise.all([
+            const [statsResp, healthResp, bucketsResp, metricsResp] = await Promise.all([
                 osFetch('/stats'),
+                osFetch('/health'),
                 osFetch('/buckets'),
                 osFetch('/metrics')
             ]);
@@ -125,6 +126,26 @@
                 osBucketsCache = Array.isArray(buckets) ? buckets : [];
                 renderDashRecentBuckets(osBucketsCache.slice(0, 5));
             }
+            if (healthResp.ok) {
+                const h = await healthResp.json();
+                const online = h.status === 'healthy';
+                setText('osStatHealth', online ? 'Online' : 'Offline');
+                document.getElementById('osStatHealth').style.color = online ? '#22c55e' : '#ef4444';
+                document.getElementById('osDashHealth').textContent = JSON.stringify(h, null, 2);
+            } else {
+                let hErr = { status: 'unhealthy', endpoint: '', checkedAt: '' };
+                try {
+                    hErr = await healthResp.json();
+                } catch (_) {}
+                setText('osStatHealth', 'Offline');
+                document.getElementById('osStatHealth').style.color = '#ef4444';
+                document.getElementById('osDashHealth').textContent = JSON.stringify({
+                    status: hErr.status || 'unhealthy',
+                    endpoint: hErr.endpoint || '',
+                    checkedAt: hErr.checkedAt || '',
+                    error: hErr.error || ('health request failed with status ' + healthResp.status)
+                }, null, 2);
+            }
             if (metricsResp.ok) {
                 const m = await metricsResp.json();
                 setText('osStatRequests', m.totalRequests || 0);
@@ -134,21 +155,14 @@
                 const avgMs = m.totalRequests > 0 ? ((m.avgLatencyMs || 0)).toFixed(1) : '0';
                 setText('osDashLatency', avgMs + ' ms');
 
-                const backendHealthy = !!m.backendHealthy;
-                setText('osStatHealth', backendHealthy ? 'Online' : 'Offline');
-                document.getElementById('osStatHealth').style.color = backendHealthy ? '#22c55e' : '#ef4444';
-                document.getElementById('osDashHealth').textContent = JSON.stringify({
-                    status: backendHealthy ? 'healthy' : 'degraded',
-                    backendHealthy: backendHealthy,
-                    uptime: m.uptime || '-',
-                    totalRequests: m.totalRequests || 0,
-                    totalErrors: m.totalErrors || 0,
-                    avgLatencyMs: Number(m.avgLatencyMs || 0).toFixed(1)
-                }, null, 2);
+                if (!healthResp.ok) {
+                    const backendHealthy = !!m.backendHealthy;
+                    setText('osStatHealth', backendHealthy ? 'Online' : 'Offline');
+                    document.getElementById('osStatHealth').style.color = backendHealthy ? '#22c55e' : '#ef4444';
+                }
             } else {
-                setText('osStatHealth', 'Offline');
-                document.getElementById('osStatHealth').style.color = '#ef4444';
-                document.getElementById('osDashHealth').textContent = 'Storage metrics unavailable';
+                setText('osStatRequests', 0);
+                setText('osStatErrors', 0);
             }
         } catch(e) {
             document.getElementById('osDashHealth').textContent = 'Error: ' + e.message;

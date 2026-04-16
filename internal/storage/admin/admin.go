@@ -15,7 +15,6 @@ import (
 	storageMetrics "example.com/axiomnizam/internal/storage/metrics"
 	"example.com/axiomnizam/internal/storage/models"
 	"example.com/axiomnizam/internal/storage/policy"
-	"example.com/axiomnizam/internal/storage/s3client"
 	"example.com/axiomnizam/internal/storage/store"
 	"example.com/axiomnizam/internal/storage/tenant"
 	"github.com/gin-gonic/gin"
@@ -24,7 +23,7 @@ import (
 // Handler exposes the object storage API endpoints.
 type Handler struct {
 	store      *store.BucketStore
-	client     *s3client.Client
+	client     models.Backend
 	tenant     *tenant.Manager
 	controller *controller.BucketController
 	policy     *policy.Controller
@@ -36,7 +35,7 @@ type Handler struct {
 // NewHandler creates a new storage API handler.
 func NewHandler(
 	s *store.BucketStore,
-	client *s3client.Client,
+	client models.Backend,
 	t *tenant.Manager,
 	ctrl *controller.BucketController,
 	p *policy.Controller,
@@ -106,17 +105,21 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *Handler) Health(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	checkedAt := time.Now().UTC()
 
 	if err := h.client.Ping(ctx); err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"error":  err.Error(),
+			"status":    "unhealthy",
+			"error":     err.Error(),
+			"endpoint":  h.endpoint,
+			"checkedAt": checkedAt,
 		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"status":   "healthy",
-		"endpoint": h.endpoint,
+		"status":    "healthy",
+		"endpoint":  h.endpoint,
+		"checkedAt": checkedAt,
 	})
 }
 

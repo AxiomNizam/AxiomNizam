@@ -1684,7 +1684,7 @@ func main() {
 		storageAPI := router.Group("/api/v1")
 		storageSys.RegisterRoutes(storageAPI)
 		storageSys.Start(ctx)
-		log.Println("✅ Object Storage module started (endpoint:", storageCfg.Endpoint, ")")
+		log.Println("✅ Object Storage module started (native backend, data:", storageCfg.DataDir, ")")
 	}
 
 	apiPort := cfg.API.Port
