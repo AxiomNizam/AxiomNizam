@@ -2565,6 +2565,26 @@ func (h *APIBuilderHandler) ListScans(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "count": len(result), "scans": result})
 }
 
+// GetScan returns a single file scan report by id
+func (h *APIBuilderHandler) GetScan(c *gin.Context) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "scan id is required"})
+		return
+	}
+
+	record, ok := h.scanRecords[id]
+	if !ok || record == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "scan report not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "scan": record})
+}
+
 // GetScannerHealth returns the scanner pipeline status
 func (h *APIBuilderHandler) GetScannerHealth(c *gin.Context) {
 	scanners := h.scanOrch.ScannerNames()

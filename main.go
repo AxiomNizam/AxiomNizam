@@ -1265,6 +1265,7 @@ func main() {
 		// File Scanner (SafeGate Pipeline)
 		builderAPI.POST("/scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanFile)
 		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
+		builderAPI.GET("/scanner/scans/:id", apiBuilderHandler.GetScan)
 		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
 
 		// API Scanner Reports

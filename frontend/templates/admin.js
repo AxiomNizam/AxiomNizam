@@ -63,6 +63,8 @@ let customAPIById = {};
 let graphQLAPIById = {};
 let existingRESTEndpoints = [];
 let existingGraphQLEndpoints = [];
+let scanHistoryById = {};
+let selectedScanReportId = '';
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
 let latestAdminAPIScanReport = null;
@@ -3100,6 +3102,9 @@ function handleFileScan() {
     }).then(function(r) { return r.json(); }).then(function(d) {
         if (d.status === 'success') {
             showScanResult(d.scan);
+            if (d.scan && d.scan.id) {
+                selectedScanReportId = d.scan.id;
+            }
             addLog('Scanned file: ' + d.scan.filename + ' — ' + (d.safe ? 'SAFE' : 'THREATS FOUND'), d.safe ? 'info' : 'error');
             loadScanHistory();
         } else {
@@ -3110,7 +3115,53 @@ function handleFileScan() {
     });
 }
 
+function normalizeScanFindings(scan) {
+    if (!scan || !Array.isArray(scan.findings)) return [];
+    return scan.findings;
+}
+
+function getFindingSeverityWeight(severity) {
+    var sev = String(severity || '').toLowerCase();
+    if (sev === 'critical') return 5;
+    if (sev === 'high') return 4;
+    if (sev === 'medium') return 3;
+    if (sev === 'low') return 2;
+    if (sev === 'info') return 1;
+    return 0;
+}
+
+function getHighestFindingSeverity(findings) {
+    var highest = 'unknown';
+    var highestWeight = -1;
+    (findings || []).forEach(function(f) {
+        var candidate = String((f && f.severity) || 'unknown').toLowerCase();
+        var weight = getFindingSeverityWeight(candidate);
+        if (weight > highestWeight) {
+            highestWeight = weight;
+            highest = candidate;
+        }
+    });
+    return highest;
+}
+
+function renderFindingSeverityBadge(severity) {
+    var sev = String(severity || 'unknown').toLowerCase();
+    var cls = 'status-active';
+    if (sev === 'critical' || sev === 'high') cls = 'status-inactive';
+    else if (sev === 'medium') cls = 'status-draft';
+    return '<span class="status-badge ' + cls + '">' + escapeHtml(sev.toUpperCase()) + '</span>';
+}
+
 function showScanResult(scan) {
+    if (!scan) return;
+    var findings = normalizeScanFindings(scan);
+    var resultBox = document.getElementById('scanResult');
+    if (resultBox) resultBox.style.display = 'block';
+
+    if (scan.id) {
+        selectedScanReportId = scan.id;
+    }
+
     document.getElementById('scanFilenameDisplay').textContent = scan.filename;
     var safeBadge = scan.safe
         ? '<span class="badge badge-success">✅ SAFE</span>'
@@ -3118,14 +3169,16 @@ function showScanResult(scan) {
     document.getElementById('scanBadges').innerHTML =
         safeBadge + ' ' +
         '<span class="badge">' + formatFileSize(scan.file_size) + '</span> ' +
-        '<span class="badge">' + scan.findings.length + ' finding(s)</span>';
+        '<span class="badge">' + findings.length + ' finding(s)</span> ' +
+        (scan.id ? '<span class="badge">Report: ' + escapeHtml(scan.id) + '</span> ' : '') +
+        (scan.scanned_at ? '<span class="badge">' + escapeHtml(new Date(scan.scanned_at).toLocaleString()) + '</span>' : '');
 
     var html = '';
-    if (scan.findings.length === 0) {
+    if (findings.length === 0) {
         html = '<div class="empty-state" style="padding:10px">No security issues found.</div>';
     } else {
         html = '<table class="admin-table compact"><thead><tr><th>Severity</th><th>Scanner</th><th>Description</th><th>Details</th></tr></thead><tbody>';
-        scan.findings.forEach(function(f) {
+        findings.forEach(function(f) {
             var sevClass = f.severity === 'critical' || f.severity === 'high' ? 'status-inactive' :
                            f.severity === 'medium' ? 'status-draft' : 'status-active';
             html += '<tr><td><span class="status-badge ' + sevClass + '">' + f.severity.toUpperCase() + '</span></td>' +
@@ -3136,6 +3189,55 @@ function showScanResult(scan) {
         html += '</tbody></table>';
     }
     document.getElementById('scanFindings').innerHTML = html;
+}
+
+function viewScanReport(scanID) {
+    var id = String(scanID || '').trim();
+    if (!id) return;
+
+    var cached = scanHistoryById[id];
+    if (cached) {
+        showScanResult(cached);
+        return;
+    }
+
+    fetchJSON('/api/v1/builder/scanner/scans/' + encodeURIComponent(id)).then(function(d) {
+        if (d.status !== 'success' || !d.scan) {
+            alert(d.error || 'Scan report not found');
+            return;
+        }
+        scanHistoryById[id] = d.scan;
+        showScanResult(d.scan);
+    }).catch(function(err) {
+        alert('Failed to load scan report: ' + (err && err.message ? err.message : 'unknown error'));
+    });
+}
+
+function renderSuspiciousScanList(list) {
+    var el = document.getElementById('scanSuspiciousFiles');
+    if (!el) return;
+
+    var suspicious = (list || []).filter(function(s) { return !s.safe; });
+    if (suspicious.length === 0) {
+        el.innerHTML = '<div class="empty-state">No suspicious files found yet.</div>';
+        return;
+    }
+
+    var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Highest Severity</th><th>Findings</th><th>Date</th><th>Action</th></tr></thead><tbody>';
+    suspicious.forEach(function(s) {
+        var findings = normalizeScanFindings(s);
+        var severity = getHighestFindingSeverity(findings);
+        var safeID = String(s.id || '').replace(/'/g, "\\'");
+        html += '<tr>' +
+            '<td>' + escapeHtml(s.filename || '-') + '</td>' +
+            '<td>' + renderFindingSeverityBadge(severity) + '</td>' +
+            '<td>' + findings.length + '</td>' +
+            '<td>' + (s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-') + '</td>' +
+            '<td><button class="btn-sm btn-secondary" onclick="viewScanReport(\'' + safeID + '\')">View Report</button></td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
 }
 
 function formatFileSize(bytes) {
@@ -3163,25 +3265,40 @@ function loadScannerHealth() {
 function loadScanHistory() {
     fetchJSON('/api/v1/builder/scanner/scans').then(function(d) {
         var list = d.scans || [];
+        scanHistoryById = {};
+        list.forEach(function(s) {
+            if (s && s.id) scanHistoryById[s.id] = s;
+        });
+
         var el = document.getElementById('scanHistory');
         if (!el) return;
         if (list.length === 0) {
             el.innerHTML = '<div class="empty-state">No scans yet</div>';
+            renderSuspiciousScanList([]);
             return;
         }
-        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Size</th><th>Result</th><th>Findings</th><th>Date</th></tr></thead><tbody>';
+        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Size</th><th>Result</th><th>Findings</th><th>Date</th><th>Action</th></tr></thead><tbody>';
         list.forEach(function(s) {
+            var findings = normalizeScanFindings(s);
             var resultBadge = s.safe
                 ? '<span class="status-badge status-active">Safe</span>'
                 : '<span class="status-badge status-inactive">Unsafe</span>';
+            var safeID = String(s.id || '').replace(/'/g, "\\'");
             html += '<tr><td>' + escapeHtml(s.filename) + '</td>' +
                 '<td>' + formatFileSize(s.file_size) + '</td>' +
                 '<td>' + resultBadge + '</td>' +
-                '<td>' + s.findings.length + '</td>' +
-                '<td>' + new Date(s.scanned_at).toLocaleString() + '</td></tr>';
+                '<td>' + findings.length + '</td>' +
+                '<td>' + new Date(s.scanned_at).toLocaleString() + '</td>' +
+                '<td><button class="btn-sm btn-secondary" onclick="viewScanReport(\'' + safeID + '\')">View Report</button></td></tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
+
+        renderSuspiciousScanList(list);
+
+        if (selectedScanReportId && scanHistoryById[selectedScanReportId]) {
+            showScanResult(scanHistoryById[selectedScanReportId]);
+        }
     }).catch(function() {});
 }
 

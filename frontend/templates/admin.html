@@ -308,6 +308,13 @@
                 <h3>Scan History</h3>
                 <div id="scanHistory"></div>
             </div>
+
+            <!-- Suspicious Files -->
+            <div class="csv-history">
+                <h3>Suspicious Files</h3>
+                <p class="upload-hint" style="margin-bottom:10px;">Files flagged as unsafe by SafeGate are listed here for later review.</p>
+                <div id="scanSuspiciousFiles"></div>
+            </div>
         </div>
     </div>
 
@@ -986,7 +993,7 @@ search:string:false"></textarea>
 <datalist id="graphqlEndpointSuggestions"></datalist>
 
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260416-2"></script>
+<script src="/static/admin.js?v=20260416-3"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP
