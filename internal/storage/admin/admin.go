@@ -76,6 +76,10 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			auth.GET("/events", h.ListEvents)
 			auth.GET("/events/:bucket", h.ListBucketEvents)
 
+			// Metrics (authenticated alias — frontend uses /storage/metrics)
+			auth.GET("/metrics", h.SystemMetrics)
+			auth.GET("/metrics/:bucket", h.BucketMetricsHandler)
+
 			// Bucket CRUD
 			auth.POST("/buckets", h.access.RequireStorageRole(models.StorageRoleWriter, models.StorageRoleAdmin), h.CreateBucket)
 			auth.GET("/buckets", h.ListBuckets)
