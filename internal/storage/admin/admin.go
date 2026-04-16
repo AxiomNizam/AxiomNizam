@@ -165,6 +165,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			auth.POST("/access-keys", h.CreateAccessKey)
 			auth.GET("/access-keys", h.ListAccessKeys)
 			auth.DELETE("/access-keys/:keyId", h.RevokeAccessKey)
+			auth.DELETE("/access-keys/:keyId/permanent", h.DeleteAccessKey)
 
 			// Bucket Lifecycle
 			auth.GET("/buckets/:bucket/lifecycle", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketLifecycle)
@@ -1564,6 +1565,16 @@ func (h *Handler) RevokeAccessKey(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"revoked": keyID})
+}
+
+func (h *Handler) DeleteAccessKey(c *gin.Context) {
+	keyID := c.Param("keyId")
+	// Admin can delete any key (userID="" bypasses ownership check).
+	if err := h.access.DeleteAccessKey(keyID, ""); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": keyID})
 }
 
 // ---------------------------------------------------------------------------

@@ -793,6 +793,11 @@
 
         tbody.innerHTML = keys.map(ak => {
             const status = osAccessKeyStatusInfo(ak);
+            const canDelete = status.label !== 'Active';
+            let actions = '<button class="os-btn os-btn-danger os-btn-sm" data-keyid="' + escHtml(ak.accessKeyId || '') + '" onclick="osRevokeAccessKey(this.dataset.keyid)">Revoke</button>';
+            if (canDelete) {
+                actions += ' <button class="os-btn os-btn-secondary os-btn-sm" data-keyid="' + escHtml(ak.accessKeyId || '') + '" onclick="osDeleteAccessKey(this.dataset.keyid)">Delete</button>';
+            }
             return '<tr>' +
                 '<td>' + escHtml(ak.name || '-') + '</td>' +
                 '<td class="os-mono">' + escHtml(ak.accessKeyId || '-') + '</td>' +
@@ -802,7 +807,7 @@
                 '<td>' + fmtDate(ak.lastUsedAt) + '</td>' +
                 '<td><span class="os-badge ' + status.cls + '">' + status.label + '</span></td>' +
                 '<td style="white-space:nowrap;">' +
-                    '<button class="os-btn os-btn-danger os-btn-sm" data-keyid="' + escHtml(ak.accessKeyId || '') + '" onclick="osRevokeAccessKey(this.dataset.keyid)">Revoke</button>' +
+                    actions +
                 '</td>' +
             '</tr>';
         }).join('');
@@ -937,6 +942,30 @@
             }
 
             osToast('Access key revoked');
+            await window.osLoadAccessKeys();
+
+            const shareSetup = document.getElementById('osShareSetupModal');
+            if (shareSetup && shareSetup.classList.contains('show') && typeof window.osShareReloadAccessKeys === 'function') {
+                await window.osShareReloadAccessKeys('');
+            }
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+        }
+    };
+
+    window.osDeleteAccessKey = async function(keyId) {
+        if (!keyId) { osToast('Invalid access key', true); return; }
+        if (!confirm('Permanently delete access key ' + keyId + '? This cannot be undone.')) return;
+
+        try {
+            const resp = await osFetch('/access-keys/' + encodeURIComponent(keyId) + '/permanent', { method: 'DELETE' });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                osToast(data.error || 'Failed to delete access key', true);
+                return;
+            }
+
+            osToast('Access key deleted');
             await window.osLoadAccessKeys();
 
             const shareSetup = document.getElementById('osShareSetupModal');
