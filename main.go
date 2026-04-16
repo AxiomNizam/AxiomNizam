@@ -37,6 +37,7 @@ import (
 	"example.com/axiomnizam/internal/rbac"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
+	"example.com/axiomnizam/internal/storage"
 	"example.com/axiomnizam/internal/streaming"
 	"example.com/axiomnizam/internal/tenant"
 	"example.com/axiomnizam/internal/tracing"
@@ -1672,6 +1673,20 @@ func main() {
 		log.Println("✅ IAM routes registered")
 	}
 
+	// ====================================
+	// OBJECT STORAGE MODULE (Native S3)
+	// ====================================
+	storageCfg := storage.DefaultConfig()
+	storageSys, storageErr := storage.NewSystem(storageCfg)
+	if storageErr != nil {
+		log.Printf("⚠️  Object storage module initialization failed: %v — storage API will be unavailable", storageErr)
+	} else {
+		storageAPI := router.Group("/api/v1")
+		storageSys.RegisterRoutes(storageAPI)
+		storageSys.Start(ctx)
+		log.Println("✅ Object Storage module started (endpoint:", storageCfg.Endpoint, ")")
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
@@ -1778,6 +1793,11 @@ func main() {
 	// Stop runtime
 	if err := rt.Stop(); err != nil {
 		log.Printf("Runtime stop error: %v", err)
+	}
+
+	// Stop object storage module
+	if storageSys != nil {
+		storageSys.Stop()
 	}
 
 	// Flush conductor stats to DB before exit

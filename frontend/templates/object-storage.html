@@ -1,0 +1,1458 @@
+{{ define "object-storage" }}
+<style>
+    .os-container { animation: fadeIn 0.3s ease; }
+    .os-header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+    .os-header h1 { font-size:1.6rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .os-header .subtitle { color:var(--text-muted); font-size:.9rem; margin-top:4px; }
+    .os-header-icon { width:28px; height:28px; fill:var(--primary-light); }
+    .os-stat-row { display:flex; gap:12px; flex-wrap:wrap; }
+    .os-stat-box { background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:12px 18px; min-width:120px; text-align:center; }
+    .os-stat-label { font-size:.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+    .os-stat-value { font-size:1.4rem; font-weight:700; color:var(--primary-light); margin-top:2px; }
+
+    .os-tabs { display:flex; gap:0; border-bottom:1px solid var(--border-color); margin-bottom:24px; overflow-x:auto; }
+    .os-tab { padding:12px 24px; border:none; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:.9rem; font-weight:500; border-bottom:3px solid transparent; transition:var(--transition); white-space:nowrap; display:flex; align-items:center; gap:8px; }
+    .os-tab:hover { color:var(--primary-light); }
+    .os-tab.active { color:var(--primary-light); border-bottom-color:var(--primary-light); }
+    .os-tab svg { width:16px; height:16px; }
+    .os-panel { display:none; animation:fadeIn .3s ease; }
+    .os-panel.active { display:block; }
+
+    .os-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .os-search { padding:8px 14px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; min-width:220px; }
+    .os-search:focus { outline:none; border-color:var(--primary-light); }
+
+    .os-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+    .os-table thead th { background:var(--darker-bg); color:var(--text-muted); padding:10px 14px; text-align:left; font-weight:600; text-transform:uppercase; font-size:.75rem; letter-spacing:.5px; border-bottom:2px solid var(--border-color); white-space:nowrap; }
+    .os-table tbody td { padding:10px 14px; border-bottom:1px solid var(--border-color); color:var(--text-primary); vertical-align:middle; }
+    .os-table tbody tr:hover { background:rgba(var(--primary-rgb,96,165,250),.06); }
+
+    .os-badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:.78rem; font-weight:600; }
+    .os-badge-ready { background:rgba(34,197,94,.15); color:#22c55e; }
+    .os-badge-pending { background:rgba(250,204,21,.15); color:#facc15; }
+    .os-badge-error { background:rgba(239,68,68,.15); color:#ef4444; }
+    .os-badge-enabled { background:rgba(96,165,250,.15); color:#60a5fa; }
+    .os-badge-disabled { background:rgba(148,163,184,.15); color:#94a3b8; }
+
+    .os-btn { padding:7px 16px; border:none; border-radius:6px; cursor:pointer; font-size:.85rem; font-weight:500; transition:var(--transition); }
+    .os-btn-primary { background:var(--primary-color); color:#fff; }
+    .os-btn-primary:hover { opacity:.85; }
+    .os-btn-secondary { background:var(--darker-bg); color:var(--text-primary); border:1px solid var(--border-color); }
+    .os-btn-secondary:hover { border-color:var(--primary-light); }
+    .os-btn-danger { background:rgba(239,68,68,.15); color:#ef4444; border:1px solid rgba(239,68,68,.3); }
+    .os-btn-danger:hover { background:rgba(239,68,68,.25); }
+    .os-btn-sm { padding:4px 10px; font-size:.8rem; }
+
+    .os-card { background:var(--card-bg); border:1px solid var(--border-color); border-radius:10px; padding:20px; margin-bottom:16px; }
+    .os-card h3 { font-size:1.1rem; font-weight:600; margin-bottom:12px; }
+    .os-card h4 { font-size:1rem; font-weight:600; margin-bottom:10px; }
+
+    .os-grid-three { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:16px; }
+    .os-grid-two { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-bottom:16px; }
+
+    .os-upload-zone { border:2px dashed var(--border-color); border-radius:10px; padding:40px 20px; text-align:center; cursor:pointer; transition:var(--transition); }
+    .os-upload-zone:hover, .os-upload-zone.dragover { border-color:var(--primary-light); background:rgba(var(--primary-rgb,96,165,250),.05); }
+    .os-upload-zone svg { width:48px; height:48px; fill:var(--text-muted); margin-bottom:12px; }
+
+    .os-breadcrumb { display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--text-muted); margin-bottom:12px; }
+    .os-breadcrumb a { color:var(--primary-light); text-decoration:none; }
+    .os-breadcrumb a:hover { text-decoration:underline; }
+
+    .os-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center; }
+    .os-modal.show { display:flex; }
+    .os-modal-content { background:var(--card-bg); border-radius:12px; max-width:560px; width:90%; max-height:85vh; overflow-y:auto; }
+    .os-modal-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border-color); }
+    .os-modal-header h2 { font-size:1.1rem; font-weight:600; }
+    .os-modal-close { background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted); }
+    .os-modal-body { padding:20px; }
+    .os-form-group { margin-bottom:14px; }
+    .os-form-group label { display:block; font-size:.85rem; font-weight:500; margin-bottom:4px; color:var(--text-secondary); }
+    .os-form-group input, .os-form-group select, .os-form-group textarea { width:100%; padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; box-sizing:border-box; }
+    .os-form-group input:focus, .os-form-group select:focus { outline:none; border-color:var(--primary-light); }
+    .os-form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+
+    .os-toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:8px; font-size:.9rem; z-index:2000; animation:fadeIn .3s ease; }
+    .os-toast-success { background:#166534; color:#fff; }
+    .os-toast-error { background:#991b1b; color:#fff; }
+
+    .os-empty { text-align:center; padding:40px 20px; color:var(--text-muted); }
+    .os-empty svg { width:64px; height:64px; fill:var(--text-muted); opacity:.5; margin-bottom:12px; }
+
+    .os-size { font-family:var(--font-mono, monospace); font-size:.85rem; }
+    .os-mono { font-family:var(--font-mono, monospace); font-size:.85rem; word-break:break-all; }
+
+    .os-progress { width:100%; height:6px; background:var(--darker-bg); border-radius:3px; overflow:hidden; margin-top:8px; }
+    .os-progress-bar { height:100%; background:var(--primary-light); border-radius:3px; transition:width .3s ease; }
+
+    .os-event-row:hover td { background:rgba(var(--primary-rgb,96,165,250),.04); }
+    .os-metric-highlight { font-size:1.4rem; font-weight:700; }
+    .os-tag-table td { padding:6px 10px; }
+    @media (max-width:768px) {
+        .os-grid-three { grid-template-columns:1fr; }
+        .os-grid-two { grid-template-columns:1fr; }
+        .os-stat-row { flex-direction:column; }
+        .os-toolbar { flex-direction:column; align-items:stretch; }
+    }
+</style>
+
+<div class="os-container">
+    <!-- Header -->
+    <div class="os-header">
+        <div>
+            <h1>
+                <svg class="os-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+                Object Storage
+            </h1>
+            <p class="subtitle">S3-Compatible Object Storage &middot; Buckets &middot; Objects &middot; Metrics &middot; Events</p>
+        </div>
+        <div class="os-stat-row" id="osHeaderStats">
+            <div class="os-stat-box">
+                <div class="os-stat-label">Buckets</div>
+                <div class="os-stat-value" id="osStatBuckets">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Objects</div>
+                <div class="os-stat-value" id="osStatObjects">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Total Size</div>
+                <div class="os-stat-value" id="osStatSize">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Backend</div>
+                <div class="os-stat-value" id="osStatHealth" style="font-size:1rem;">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Requests</div>
+                <div class="os-stat-value" id="osStatRequests">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Errors</div>
+                <div class="os-stat-value" id="osStatErrors" style="color:#ef4444;">&ndash;</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="os-tabs">
+        <button class="os-tab active" onclick="osSwitch('os-dashboard')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-buckets')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            Buckets
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-browser')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            Object Browser
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-upload')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+            Upload
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-policies')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Access Policies
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-metrics')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Metrics
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-events')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Audit Events
+        </button>
+    </div>
+
+    <!-- ===== DASHBOARD PANEL ===== -->
+    <div id="os-dashboard" class="os-panel active">
+        <div class="os-grid-three">
+            <div class="os-card" style="border-top:4px solid var(--primary-color); text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:var(--primary-light);" id="osDashBuckets">0</div>
+                <div style="color:var(--text-muted);">Buckets</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #22c55e; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#22c55e;" id="osDashObjects">0</div>
+                <div style="color:var(--text-muted);">Total Objects</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #f59e0b; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#f59e0b;" id="osDashSize">0 B</div>
+                <div style="color:var(--text-muted);">Storage Used</div>
+            </div>
+        </div>
+
+        <div class="os-grid-two">
+            <div class="os-card">
+                <h4>Quick Actions</h4>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="os-btn os-btn-primary" onclick="osSwitch('os-buckets'); osShowCreateBucket();">+ Create Bucket</button>
+                    <button class="os-btn os-btn-primary" onclick="osSwitch('os-upload');">Upload Object</button>
+                    <button class="os-btn os-btn-secondary" onclick="osSwitch('os-metrics');">View Metrics</button>
+                    <button class="os-btn os-btn-secondary" onclick="osSwitch('os-events');">View Events</button>
+                    <button class="os-btn os-btn-secondary" onclick="osLoadDashboard();">↻ Refresh</button>
+                </div>
+            </div>
+
+            <div class="os-card">
+                <h4>Activity Summary</h4>
+                <div class="os-grid-three" style="margin-bottom:0;">
+                    <div style="text-align:center;">
+                        <div style="font-size:1.3rem; font-weight:700; color:var(--primary-light);" id="osDashRequests">0</div>
+                        <div style="color:var(--text-muted); font-size:.8rem;">Requests</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:1.3rem; font-weight:700; color:#ef4444;" id="osDashErrors">0</div>
+                        <div style="color:var(--text-muted); font-size:.8rem;">Errors</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:1.3rem; font-weight:700; color:#a78bfa;" id="osDashLatency">0 ms</div>
+                        <div style="color:var(--text-muted); font-size:.8rem;">Avg Latency</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="os-card">
+            <h4>Backend Health</h4>
+            <pre id="osDashHealth" style="background:var(--darker-bg); padding:14px; border-radius:8px; font-size:.85rem; overflow-x:auto;">Checking...</pre>
+        </div>
+
+        <div class="os-card">
+            <h4>Recent Buckets</h4>
+            <div id="osDashRecentBuckets" style="overflow-x:auto;">
+                <p style="color:var(--text-muted);">Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== BUCKETS PANEL ===== -->
+    <div id="os-buckets" class="os-panel">
+        <div class="os-toolbar">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" class="os-search" id="osBucketSearch" placeholder="Search buckets..." oninput="osFilterBuckets()">
+                <div class="os-form-group" style="margin:0; min-width:160px;">
+                    <select id="osTenantFilter" onchange="osLoadBuckets()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem;">
+                        <option value="">All Tenants</option>
+                        <option value="default">default</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="os-btn os-btn-primary" onclick="osShowCreateBucket()">+ Create Bucket</button>
+                <button class="os-btn os-btn-secondary" onclick="osLoadBuckets()">↻ Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table" id="osBucketsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Tenant</th>
+                        <th>Phase</th>
+                        <th>Versioning</th>
+                        <th>Objects</th>
+                        <th>Size</th>
+                        <th>Tags</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osBucketsBody">
+                    <tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== OBJECT BROWSER PANEL ===== -->
+    <div id="os-browser" class="os-panel">
+        <div class="os-toolbar">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <select id="osBrowserBucket" onchange="osBrowseBucket()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; min-width:200px;">
+                    <option value="">Select a bucket...</option>
+                </select>
+                <input type="text" class="os-search" id="osBrowserPrefix" placeholder="Filter by prefix..." oninput="osBrowseBucket()">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="os-btn os-btn-danger os-btn-sm" id="osBatchDeleteBtn" onclick="osBatchDelete()" style="display:none;">Delete Selected</button>
+                <button class="os-btn os-btn-secondary os-btn-sm" id="osCopyObjectBtn" onclick="osShowCopyModal()" style="display:none;">Copy Selected</button>
+                <button class="os-btn os-btn-secondary" onclick="osBrowseBucket()">↻ Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-breadcrumb" id="osBrowserBreadcrumb"></div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th style="width:30px;"><input type="checkbox" id="osSelectAll" onchange="osToggleSelectAll(this.checked)"></th>
+                        <th>Key</th>
+                        <th>Size</th>
+                        <th>Content Type</th>
+                        <th>Last Modified</th>
+                        <th>ETag</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osBrowserBody">
+                    <tr><td colspan="7" class="os-empty">Select a bucket to browse objects</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== UPLOAD PANEL ===== -->
+    <div id="os-upload" class="os-panel">
+        <div class="os-grid-two">
+            <div class="os-card">
+                <h4>Upload Object</h4>
+                <div class="os-form-group">
+                    <label for="osUploadBucket">Bucket</label>
+                    <select id="osUploadBucket" style="width:100%;">
+                        <option value="">Select bucket...</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osUploadTenant">Tenant ID</label>
+                    <input type="text" id="osUploadTenant" value="default" placeholder="default">
+                </div>
+                <div class="os-form-group">
+                    <label for="osUploadKey">Object Key (path)</label>
+                    <input type="text" id="osUploadKey" placeholder="e.g. documents/report.pdf">
+                </div>
+                <div id="osUploadZone" class="os-upload-zone"
+                     ondrop="osHandleDrop(event)" ondragover="osHandleDragOver(event)" ondragleave="osHandleDragLeave(event)"
+                     onclick="document.getElementById('osUploadFile').click()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polyline points="16 16 12 12 8 16"/>
+                        <line x1="12" y1="12" x2="12" y2="21"/>
+                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                    </svg>
+                    <p>Drag &amp; drop a file here or click to browse</p>
+                    <p id="osUploadFileName" style="color:var(--primary-light); font-weight:600; margin-top:8px;"></p>
+                    <input type="file" id="osUploadFile" style="display:none;" onchange="osFileSelected(event)">
+                </div>
+                <div class="os-progress" id="osUploadProgress" style="display:none;">
+                    <div class="os-progress-bar" id="osUploadProgressBar" style="width:0%;"></div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osUploadObject()">Upload</button>
+                </div>
+            </div>
+
+            <div class="os-card">
+                <h4>Generate Pre-Signed URL</h4>
+                <div class="os-form-group">
+                    <label for="osPresignBucket">Bucket</label>
+                    <select id="osPresignBucket" style="width:100%;">
+                        <option value="">Select bucket...</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignTenant">Tenant ID</label>
+                    <input type="text" id="osPresignTenant" value="default" placeholder="default">
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignKey">Object Key</label>
+                    <input type="text" id="osPresignKey" placeholder="e.g. documents/report.pdf">
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignMethod">Method</label>
+                    <select id="osPresignMethod">
+                        <option value="GET">GET (Download)</option>
+                        <option value="PUT">PUT (Upload)</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignExpiry">Expires In (seconds)</label>
+                    <input type="number" id="osPresignExpiry" value="900" min="60" max="604800">
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osGeneratePresign()">Generate URL</button>
+                </div>
+                <div id="osPresignResult" style="display:none; margin-top:14px;">
+                    <label style="font-size:.85rem; color:var(--text-muted);">Pre-Signed URL:</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="text" id="osPresignURL" readonly style="flex:1; padding:8px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-family:var(--font-mono, monospace); font-size:.8rem;">
+                        <button class="os-btn os-btn-secondary os-btn-sm" onclick="osCopyPresign()">Copy</button>
+                    </div>
+                    <p style="font-size:.8rem; color:var(--text-muted); margin-top:4px;">Expires: <span id="osPresignExpires"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== POLICIES PANEL ===== -->
+    <div id="os-policies" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">Access Policies</h3>
+            <div style="display:flex; gap:10px;">
+                <button class="os-btn os-btn-primary" onclick="osShowCreatePolicy()">+ Create Policy</button>
+                <button class="os-btn os-btn-secondary" onclick="osLoadPolicies()">↻ Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th>Tenant</th>
+                        <th>User</th>
+                        <th>Bucket</th>
+                        <th>Role</th>
+                        <th>Prefix</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osPoliciesBody">
+                    <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== METRICS PANEL ===== -->
+    <div id="os-metrics" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">System &amp; Bucket Metrics</h3>
+            <button class="os-btn os-btn-secondary" onclick="osLoadMetrics()">↻ Refresh</button>
+        </div>
+
+        <div class="os-grid-three" id="osMetricsSystemCards">
+            <div class="os-card" style="border-top:4px solid var(--primary-color); text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:var(--primary-light);" id="osMetricRequests">0</div>
+                <div style="color:var(--text-muted);">Total Requests</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #22c55e; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#22c55e;" id="osMetricBytesIn">0 B</div>
+                <div style="color:var(--text-muted);">Bytes Ingested</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #f59e0b; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#f59e0b;" id="osMetricBytesOut">0 B</div>
+                <div style="color:var(--text-muted);">Bytes Served</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #ef4444; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#ef4444;" id="osMetricErrors">0</div>
+                <div style="color:var(--text-muted);">Total Errors</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #a78bfa; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#a78bfa;" id="osMetricAvgLatency">0 ms</div>
+                <div style="color:var(--text-muted);">Avg Latency</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #06b6d4; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#06b6d4;" id="osMetricUptime">–</div>
+                <div style="color:var(--text-muted);">Uptime</div>
+            </div>
+        </div>
+
+        <div class="os-card">
+            <h4>Per-Bucket Metrics</h4>
+            <div style="overflow-x:auto;">
+                <table class="os-table" id="osMetricsBucketTable">
+                    <thead>
+                        <tr>
+                            <th>Bucket</th>
+                            <th>Requests</th>
+                            <th>GETs</th>
+                            <th>PUTs</th>
+                            <th>DELETEs</th>
+                            <th>Bytes In</th>
+                            <th>Bytes Out</th>
+                            <th>Errors</th>
+                            <th>Avg Latency</th>
+                            <th>Last Access</th>
+                        </tr>
+                    </thead>
+                    <tbody id="osMetricsBucketBody">
+                        <tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== EVENTS PANEL ===== -->
+    <div id="os-events" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">Audit Events</h3>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <select id="osEventsTypeFilter" onchange="osLoadEvents()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem;">
+                    <option value="">All Event Types</option>
+                    <option value="bucket.created">Bucket Created</option>
+                    <option value="bucket.deleted">Bucket Deleted</option>
+                    <option value="object.uploaded">Object Uploaded</option>
+                    <option value="object.downloaded">Object Downloaded</option>
+                    <option value="object.deleted">Object Deleted</option>
+                    <option value="object.copied">Object Copied</option>
+                    <option value="object.multi-deleted">Multi Delete</option>
+                    <option value="policy.created">Policy Created</option>
+                    <option value="policy.deleted">Policy Deleted</option>
+                    <option value="presign.generated">Presign Generated</option>
+                </select>
+                <select id="osEventsLimitFilter" onchange="osLoadEvents()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem;">
+                    <option value="50">Last 50</option>
+                    <option value="100" selected>Last 100</option>
+                    <option value="500">Last 500</option>
+                    <option value="1000">Last 1000</option>
+                </select>
+                <button class="os-btn os-btn-secondary" onclick="osLoadEvents()">↻ Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Tenant</th>
+                        <th>Bucket</th>
+                        <th>Key</th>
+                        <th>Size</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="osEventsBody">
+                    <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CREATE BUCKET MODAL ===== -->
+<div id="osCreateBucketModal" class="os-modal">
+    <div class="os-modal-content">
+        <div class="os-modal-header">
+            <h2>Create Bucket</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osCreateBucketModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label for="osNewBucketName">Bucket Name *</label>
+                <input type="text" id="osNewBucketName" placeholder="my-data-bucket">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewBucketTenant">Tenant ID *</label>
+                <input type="text" id="osNewBucketTenant" value="default" placeholder="default">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewBucketVersioning">Versioning</label>
+                <select id="osNewBucketVersioning">
+                    <option value="Disabled">Disabled</option>
+                    <option value="Enabled">Enabled</option>
+                </select>
+            </div>
+            <div class="os-form-group">
+                <label for="osNewBucketRegion">Region</label>
+                <input type="text" id="osNewBucketRegion" placeholder="us-east-1">
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osCreateBucketModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osCreateBucket()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CREATE POLICY MODAL ===== -->
+<div id="osCreatePolicyModal" class="os-modal">
+    <div class="os-modal-content">
+        <div class="os-modal-header">
+            <h2>Create Access Policy</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osCreatePolicyModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label for="osNewPolicyTenant">Tenant ID *</label>
+                <input type="text" id="osNewPolicyTenant" value="default">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyUser">User ID *</label>
+                <input type="text" id="osNewPolicyUser" placeholder="user-123">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyBucket">Bucket Name *</label>
+                <input type="text" id="osNewPolicyBucket" placeholder="my-data-bucket">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyRole">Role *</label>
+                <select id="osNewPolicyRole">
+                    <option value="storage-admin">Storage Admin (Full Access)</option>
+                    <option value="storage-writer">Storage Writer (Read + Write)</option>
+                    <option value="storage-reader" selected>Storage Reader (Read Only)</option>
+                    <option value="storage-uploader">Storage Uploader (Write Only)</option>
+                </select>
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyPrefix">Path Prefix (optional)</label>
+                <input type="text" id="osNewPolicyPrefix" placeholder="e.g. uploads/">
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osCreatePolicyModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osCreatePolicy()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== VIEW POLICY MODAL ===== -->
+<div id="osViewPolicyModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:640px;">
+        <div class="os-modal-header">
+            <h2>Policy Document</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osViewPolicyModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <pre id="osViewPolicyJSON" style="background:var(--darker-bg); padding:16px; border-radius:8px; font-size:.85rem; overflow-x:auto; white-space:pre-wrap;"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- ===== BUCKET TAGS MODAL ===== -->
+<div id="osBucketTagsModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:640px;">
+        <div class="os-modal-header">
+            <h2>Bucket Tags: <span id="osTagsBucketName"></span></h2>
+            <button class="os-modal-close" onclick="osCloseModal('osBucketTagsModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div id="osTagsList" style="margin-bottom:16px;"></div>
+            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                <div class="os-form-group" style="margin:0; flex:1;">
+                    <label>Key</label>
+                    <input type="text" id="osNewTagKey" placeholder="tag-key">
+                </div>
+                <div class="os-form-group" style="margin:0; flex:1;">
+                    <label>Value</label>
+                    <input type="text" id="osNewTagValue" placeholder="tag-value">
+                </div>
+                <button class="os-btn os-btn-primary os-btn-sm" onclick="osAddTag()">Add</button>
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-danger" onclick="osDeleteAllTags()">Delete All Tags</button>
+                <button class="os-btn os-btn-primary" onclick="osSaveTags()">Save Tags</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== COPY OBJECT MODAL ===== -->
+<div id="osCopyObjectModal" class="os-modal">
+    <div class="os-modal-content">
+        <div class="os-modal-header">
+            <h2>Copy Object</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osCopyObjectModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label>Source</label>
+                <input type="text" id="osCopySrc" readonly style="background:var(--darker-bg);">
+            </div>
+            <div class="os-form-group">
+                <label for="osCopyDestBucket">Destination Bucket *</label>
+                <select id="osCopyDestBucket" style="width:100%;">
+                    <option value="">Select bucket...</option>
+                </select>
+            </div>
+            <div class="os-form-group">
+                <label for="osCopyDestKey">Destination Key *</label>
+                <input type="text" id="osCopyDestKey" placeholder="e.g. copies/report.pdf">
+            </div>
+            <div class="os-form-group">
+                <label for="osCopyTenant">Tenant ID</label>
+                <input type="text" id="osCopyTenant" value="default">
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osCopyObjectModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osDoCopy()">Copy</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    // ===== API Configuration =====
+    const OS_API = (() => {
+        let base = (typeof window.resolveBackendURL === 'function') ?
+            window.resolveBackendURL() : String(window.BACKEND_URL || '').trim();
+        if (!base) {
+            const bh = String(window.location.hostname || '').toLowerCase();
+            if (bh && bh !== 'localhost' && bh !== '127.0.0.1') {
+                const proto = window.location.protocol || 'https:';
+                base = bh.indexOf('axiomnizam.') === 0
+                    ? proto + '//axiomnizam-platform.' + bh.substring('axiomnizam.'.length)
+                    : proto + '//' + bh;
+            } else {
+                base = 'http://localhost:8000';
+            }
+        }
+        if (base.endsWith('/')) base = base.slice(0, -1);
+        return base + '/api/v1/storage';
+    })();
+
+    function osHeaders() {
+        const h = { 'Content-Type': 'application/json' };
+        const tok = localStorage.getItem('iamToken') || localStorage.getItem('authToken') ||
+                    (document.cookie.match(/(?:^|;\s*)authToken=([^;]*)/) || [])[1] || '';
+        if (tok) h['Authorization'] = 'Bearer ' + tok;
+        return h;
+    }
+
+    async function osFetch(path, opts) {
+        opts = opts || {};
+        if (!opts.headers) opts.headers = osHeaders();
+        try {
+            return await fetch(OS_API + path, opts);
+        } catch (e) {
+            osToast('Network error: ' + e.message, true);
+            throw e;
+        }
+    }
+
+    // ===== Utilities =====
+    function escHtml(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+    function fmtSize(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024, units = ['B','KB','MB','GB','TB','PB'];
+        const i = Math.floor(Math.log(bytes)/Math.log(k));
+        return (bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+    }
+
+    function fmtDate(s) {
+        if (!s) return '–';
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? s : d.toLocaleString();
+    }
+
+    function osToast(msg, isErr) {
+        const t = document.createElement('div');
+        t.className = 'os-toast ' + (isErr ? 'os-toast-error' : 'os-toast-success');
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 4000);
+    }
+
+    function phaseBadge(phase) {
+        const cls = phase === 'Ready' ? 'os-badge-ready' : phase === 'Pending' ? 'os-badge-pending' : 'os-badge-error';
+        return '<span class="os-badge ' + cls + '">' + escHtml(phase || 'Unknown') + '</span>';
+    }
+
+    function versionBadge(v) {
+        const cls = v === 'Enabled' ? 'os-badge-enabled' : 'os-badge-disabled';
+        return '<span class="os-badge ' + cls + '">' + escHtml(v || 'Disabled') + '</span>';
+    }
+
+    // ===== Tab Switching =====
+    window.osSwitch = function(tabId) {
+        document.querySelectorAll('.os-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.os-tab').forEach(b => b.classList.remove('active'));
+        const panel = document.getElementById(tabId);
+        if (panel) panel.classList.add('active');
+        document.querySelectorAll('.os-tab').forEach(b => {
+            if (b.getAttribute('onclick') && b.getAttribute('onclick').indexOf(tabId) !== -1) b.classList.add('active');
+        });
+        if (tabId === 'os-dashboard') osLoadDashboard();
+        if (tabId === 'os-buckets') osLoadBuckets();
+        if (tabId === 'os-browser') osPopulateBucketSelects();
+        if (tabId === 'os-upload') osPopulateBucketSelects();
+        if (tabId === 'os-policies') osLoadPolicies();
+        if (tabId === 'os-metrics') osLoadMetrics();
+        if (tabId === 'os-events') osLoadEvents();
+    };
+
+    // ===== Modals =====
+    window.osCloseModal = function(id) { document.getElementById(id).classList.remove('show'); };
+    function osOpenModal(id) { document.getElementById(id).classList.add('show'); }
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('os-modal')) e.target.classList.remove('show');
+    });
+
+    // ===== Data Cache =====
+    let osBucketsCache = [];
+    let osObjectsCache = [];
+    let osPoliciesCache = [];
+
+    // ===== Dashboard =====
+    window.osLoadDashboard = async function() {
+        try {
+            const [statsResp, healthResp, bucketsResp, metricsResp] = await Promise.all([
+                osFetch('/stats'),
+                osFetch('/health'),
+                osFetch('/buckets'),
+                osFetch('/metrics')
+            ]);
+            if (statsResp.ok) {
+                const st = await statsResp.json();
+                setText('osStatBuckets', st.totalBuckets || 0);
+                setText('osStatObjects', st.totalObjects || 0);
+                setText('osStatSize', fmtSize(st.totalSizeBytes));
+                setText('osDashBuckets', st.totalBuckets || 0);
+                setText('osDashObjects', st.totalObjects || 0);
+                setText('osDashSize', fmtSize(st.totalSizeBytes));
+            }
+            if (healthResp.ok) {
+                const h = await healthResp.json();
+                setText('osStatHealth', h.status === 'healthy' ? '● Online' : '● Offline');
+                document.getElementById('osStatHealth').style.color = h.status === 'healthy' ? '#22c55e' : '#ef4444';
+                document.getElementById('osDashHealth').textContent = JSON.stringify(h, null, 2);
+            } else {
+                setText('osStatHealth', '● Offline');
+                document.getElementById('osStatHealth').style.color = '#ef4444';
+                document.getElementById('osDashHealth').textContent = 'Storage backend unreachable';
+            }
+            if (bucketsResp.ok) {
+                const buckets = await bucketsResp.json();
+                osBucketsCache = Array.isArray(buckets) ? buckets : [];
+                renderDashRecentBuckets(osBucketsCache.slice(0, 5));
+            }
+            if (metricsResp.ok) {
+                const m = await metricsResp.json();
+                setText('osStatRequests', m.totalRequests || 0);
+                setText('osStatErrors', m.totalErrors || 0);
+                setText('osDashRequests', m.totalRequests || 0);
+                setText('osDashErrors', m.totalErrors || 0);
+                const avgMs = m.totalRequests > 0 ? ((m.avgLatencyMs || 0)).toFixed(1) : '0';
+                setText('osDashLatency', avgMs + ' ms');
+            }
+        } catch(e) {
+            document.getElementById('osDashHealth').textContent = 'Error: ' + e.message;
+        }
+    };
+
+    function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+
+    function renderDashRecentBuckets(buckets) {
+        const el = document.getElementById('osDashRecentBuckets');
+        if (!buckets.length) { el.innerHTML = '<p style="color:var(--text-muted);">No buckets yet. Create one to get started.</p>'; return; }
+        let html = '<table class="os-table"><thead><tr><th>Name</th><th>Tenant</th><th>Phase</th><th>Objects</th><th>Size</th></tr></thead><tbody>';
+        buckets.forEach(b => {
+            html += '<tr><td>' + escHtml(b.metadata?.name) + '</td><td>' + escHtml(b.metadata?.tenantId) + '</td><td>' + phaseBadge(b.status?.phase) + '</td><td>' + (b.status?.objectCount||0) + '</td><td class="os-size">' + fmtSize(b.status?.totalSize) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    }
+
+    // ===== Buckets =====
+    window.osLoadBuckets = async function() {
+        const tenant = document.getElementById('osTenantFilter').value;
+        const qs = tenant ? '?tenantId=' + encodeURIComponent(tenant) : '';
+        try {
+            const resp = await osFetch('/buckets' + qs);
+            if (!resp.ok) { osToast('Failed to load buckets: ' + resp.status, true); return; }
+            const data = await resp.json();
+            osBucketsCache = Array.isArray(data) ? data : [];
+            renderBuckets(osBucketsCache);
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    function renderBuckets(buckets) {
+        const tbody = document.getElementById('osBucketsBody');
+        if (!buckets.length) {
+            tbody.innerHTML = '<tr><td colspan="9" class="os-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg><br>No buckets found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = buckets.map(b => {
+            const m = b.metadata || {};
+            const s = b.spec || {};
+            const st = b.status || {};
+            return '<tr>' +
+                '<td><strong>' + escHtml(m.name) + '</strong></td>' +
+                '<td>' + escHtml(m.tenantId) + '</td>' +
+                '<td>' + phaseBadge(st.phase) + '</td>' +
+                '<td>' + versionBadge(s.versioning) + '</td>' +
+                '<td>' + (st.objectCount||0) + '</td>' +
+                '<td class="os-size">' + fmtSize(st.totalSize) + '</td>' +
+                '<td><button class="os-btn os-btn-secondary os-btn-sm" onclick="osShowBucketTags(\'' + escHtml(m.name) + '\',\'' + escHtml(m.tenantId) + '\')">Tags</button></td>' +
+                '<td>' + fmtDate(m.createdAt) + '</td>' +
+                '<td style="white-space:nowrap;">' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osBrowseThisBucket(\'' + escHtml(m.name) + '\',\'' + escHtml(m.tenantId) + '\')">Browse</button> ' +
+                    '<button class="os-btn os-btn-danger os-btn-sm" onclick="osDeleteBucket(\'' + escHtml(m.name) + '\',\'' + escHtml(m.tenantId) + '\')">Delete</button>' +
+                '</td></tr>';
+        }).join('');
+    }
+
+    window.osFilterBuckets = function() {
+        const q = (document.getElementById('osBucketSearch').value || '').toLowerCase();
+        renderBuckets(osBucketsCache.filter(b => {
+            const n = (b.metadata?.name || '').toLowerCase();
+            const t = (b.metadata?.tenantId || '').toLowerCase();
+            return n.indexOf(q) !== -1 || t.indexOf(q) !== -1;
+        }));
+    };
+
+    window.osShowCreateBucket = function() { osOpenModal('osCreateBucketModal'); };
+
+    window.osCreateBucket = async function() {
+        const name = document.getElementById('osNewBucketName').value.trim();
+        const tenant = document.getElementById('osNewBucketTenant').value.trim();
+        if (!name || !tenant) { osToast('Name and Tenant ID required', true); return; }
+        const body = {
+            name: name,
+            tenantId: tenant,
+            versioning: document.getElementById('osNewBucketVersioning').value,
+            region: document.getElementById('osNewBucketRegion').value.trim()
+        };
+        try {
+            const resp = await osFetch('/buckets', { method: 'POST', body: JSON.stringify(body) });
+            const data = await resp.json();
+            if (!resp.ok) { osToast(data.error || 'Create failed', true); return; }
+            osToast('Bucket "' + name + '" created');
+            osCloseModal('osCreateBucketModal');
+            document.getElementById('osNewBucketName').value = '';
+            osLoadBuckets();
+            osLoadDashboard();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osDeleteBucket = async function(name, tenantId) {
+        if (!confirm('Delete bucket "' + name + '"? This cannot be undone.')) return;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(name) + '?tenantId=' + encodeURIComponent(tenantId), { method: 'DELETE' });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Delete failed', true); return; }
+            osToast('Bucket deleted');
+            osLoadBuckets();
+            osLoadDashboard();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    // ===== Object Browser =====
+    function osPopulateBucketSelects() {
+        const selects = ['osBrowserBucket', 'osUploadBucket', 'osPresignBucket', 'osCopyDestBucket'];
+        selects.forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const current = sel.value;
+            const optStart = '<option value="">Select bucket...</option>';
+            sel.innerHTML = optStart + osBucketsCache.map(b => {
+                const n = b.metadata?.name || '';
+                const t = b.metadata?.tenantId || '';
+                return '<option value="' + escHtml(n) + '" data-tenant="' + escHtml(t) + '">' + escHtml(n) + ' (' + escHtml(t) + ')</option>';
+            }).join('');
+            if (current) sel.value = current;
+        });
+    }
+
+    window.osBrowseBucket = async function() {
+        const sel = document.getElementById('osBrowserBucket');
+        const bucket = sel.value;
+        if (!bucket) return;
+        const opt = sel.options[sel.selectedIndex];
+        const tenantId = opt.getAttribute('data-tenant') || 'default';
+        const prefix = (document.getElementById('osBrowserPrefix').value || '').trim();
+
+        const qs = '?tenantId=' + encodeURIComponent(tenantId) + (prefix ? '&prefix=' + encodeURIComponent(prefix) : '');
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/objects' + qs);
+            if (!resp.ok) { osToast('Failed to list objects', true); return; }
+            const data = await resp.json();
+            osObjectsCache = data.objects || [];
+            renderObjects(osObjectsCache, bucket, tenantId);
+            // Breadcrumb
+            const bc = document.getElementById('osBrowserBreadcrumb');
+            bc.innerHTML = '<a href="#" onclick="document.getElementById(\'osBrowserPrefix\').value=\'\'; osBrowseBucket(); return false;">🗄 ' + escHtml(bucket) + '</a>';
+            if (prefix) bc.innerHTML += ' / <span>' + escHtml(prefix) + '</span>';
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osBrowseThisBucket = function(name, tenantId) {
+        osSwitch('os-browser');
+        setTimeout(() => {
+            const sel = document.getElementById('osBrowserBucket');
+            for (let i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === name) { sel.selectedIndex = i; break; }
+            }
+            osBrowseBucket();
+        }, 100);
+    };
+
+    function renderObjects(objects, bucket, tenantId) {
+        const tbody = document.getElementById('osBrowserBody');
+        if (!objects.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="os-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg><br>No objects in this bucket</td></tr>';
+            document.getElementById('osBatchDeleteBtn').style.display = 'none';
+            document.getElementById('osCopyObjectBtn').style.display = 'none';
+            return;
+        }
+        document.getElementById('osBatchDeleteBtn').style.display = '';
+        document.getElementById('osCopyObjectBtn').style.display = '';
+        window._osBrowserBucket = bucket;
+        window._osBrowserTenant = tenantId;
+        tbody.innerHTML = objects.map(o => {
+            return '<tr>' +
+                '<td><input type="checkbox" class="os-obj-check" data-key="' + escHtml(o.key) + '"></td>' +
+                '<td class="os-mono">' + escHtml(o.key) + '</td>' +
+                '<td class="os-size">' + fmtSize(o.size) + '</td>' +
+                '<td>' + escHtml(o.contentType || '–') + '</td>' +
+                '<td>' + fmtDate(o.lastModified) + '</td>' +
+                '<td class="os-mono" style="max-width:120px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(o.etag || '–') + '</td>' +
+                '<td style="white-space:nowrap;">' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osDownloadObject(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Download</button> ' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osShowCopySingle(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Copy</button> ' +
+                    '<button class="os-btn os-btn-danger os-btn-sm" onclick="osDeleteObjectFromBrowser(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Delete</button>' +
+                '</td></tr>';
+        }).join('');
+    }
+
+    window.osDownloadObject = function(bucket, key, tenantId) {
+        const url = OS_API + '/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = key.split('/').pop();
+        a.click();
+    };
+
+    window.osDeleteObjectFromBrowser = async function(bucket, key, tenantId) {
+        if (!confirm('Delete object "' + key + '"?')) return;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId), { method: 'DELETE' });
+            if (!resp.ok) { osToast('Delete failed', true); return; }
+            osToast('Object deleted');
+            osBrowseBucket();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    // ===== Upload =====
+    let osSelectedFile = null;
+
+    window.osHandleDrop = function(e) {
+        e.preventDefault();
+        document.getElementById('osUploadZone').classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            osSelectedFile = e.dataTransfer.files[0];
+            document.getElementById('osUploadFileName').textContent = osSelectedFile.name + ' (' + fmtSize(osSelectedFile.size) + ')';
+        }
+    };
+    window.osHandleDragOver = function(e) { e.preventDefault(); document.getElementById('osUploadZone').classList.add('dragover'); };
+    window.osHandleDragLeave = function(e) { document.getElementById('osUploadZone').classList.remove('dragover'); };
+    window.osFileSelected = function(e) {
+        if (e.target.files.length > 0) {
+            osSelectedFile = e.target.files[0];
+            document.getElementById('osUploadFileName').textContent = osSelectedFile.name + ' (' + fmtSize(osSelectedFile.size) + ')';
+        }
+    };
+
+    window.osUploadObject = async function() {
+        const bucket = document.getElementById('osUploadBucket').value;
+        const tenantId = (document.getElementById('osUploadTenant').value || 'default').trim();
+        let key = (document.getElementById('osUploadKey').value || '').trim();
+        if (!bucket) { osToast('Select a bucket', true); return; }
+        if (!osSelectedFile) { osToast('Select a file to upload', true); return; }
+        if (!key) key = osSelectedFile.name;
+
+        const url = OS_API + '/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId);
+
+        const progress = document.getElementById('osUploadProgress');
+        const bar = document.getElementById('osUploadProgressBar');
+        progress.style.display = 'block';
+        bar.style.width = '0%';
+
+        try {
+            const tok = localStorage.getItem('iamToken') || localStorage.getItem('authToken') || '';
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', url, true);
+            xhr.setRequestHeader('Content-Type', osSelectedFile.type || 'application/octet-stream');
+            if (tok) xhr.setRequestHeader('Authorization', 'Bearer ' + tok);
+
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable) bar.style.width = Math.round(e.loaded/e.total*100) + '%';
+            };
+            xhr.onload = function() {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    osToast('Upload complete: ' + key);
+                    bar.style.width = '100%';
+                    osSelectedFile = null;
+                    document.getElementById('osUploadFileName').textContent = '';
+                    document.getElementById('osUploadKey').value = '';
+                } else {
+                    osToast('Upload failed: ' + xhr.status, true);
+                }
+                setTimeout(() => { progress.style.display = 'none'; }, 2000);
+            };
+            xhr.onerror = function() { osToast('Upload failed', true); progress.style.display = 'none'; };
+            xhr.send(osSelectedFile);
+        } catch(e) {
+            osToast('Error: ' + e.message, true);
+            progress.style.display = 'none';
+        }
+    };
+
+    // ===== Pre-signed URLs =====
+    window.osGeneratePresign = async function() {
+        const bucket = document.getElementById('osPresignBucket').value;
+        const tenantId = (document.getElementById('osPresignTenant').value || 'default').trim();
+        const key = (document.getElementById('osPresignKey').value || '').trim();
+        const method = document.getElementById('osPresignMethod').value;
+        const expiresIn = parseInt(document.getElementById('osPresignExpiry').value) || 900;
+
+        if (!bucket || !key) { osToast('Bucket and key are required', true); return; }
+
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/presign?tenantId=' + encodeURIComponent(tenantId), {
+                method: 'POST',
+                body: JSON.stringify({ key: key, method: method, expiresIn: expiresIn })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
+            const data = await resp.json();
+            document.getElementById('osPresignURL').value = data.url || '';
+            document.getElementById('osPresignExpires').textContent = fmtDate(data.expiresAt);
+            document.getElementById('osPresignResult').style.display = 'block';
+            osToast('Pre-signed URL generated');
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osCopyPresign = function() {
+        const el = document.getElementById('osPresignURL');
+        el.select();
+        document.execCommand('copy');
+        osToast('Copied to clipboard');
+    };
+
+    // ===== Policies =====
+    window.osLoadPolicies = async function() {
+        try {
+            const resp = await osFetch('/policies');
+            if (!resp.ok) { osToast('Failed to load policies', true); return; }
+            osPoliciesCache = await resp.json();
+            if (!Array.isArray(osPoliciesCache)) osPoliciesCache = [];
+            renderPolicies(osPoliciesCache);
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    function renderPolicies(policies) {
+        const tbody = document.getElementById('osPoliciesBody');
+        if (!policies.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="os-empty">No access policies defined</td></tr>';
+            return;
+        }
+        tbody.innerHTML = policies.map(p => {
+            return '<tr>' +
+                '<td>' + escHtml(p.tenantId) + '</td>' +
+                '<td>' + escHtml(p.userId) + '</td>' +
+                '<td class="os-mono">' + escHtml(p.bucketName) + '</td>' +
+                '<td><span class="os-badge os-badge-enabled">' + escHtml(p.role) + '</span></td>' +
+                '<td class="os-mono">' + escHtml(p.prefix || '–') + '</td>' +
+                '<td style="white-space:nowrap;">' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osViewPolicyDoc(' + escHtml(JSON.stringify(JSON.stringify(p.policyJson))) + ')">View</button> ' +
+                    '<button class="os-btn os-btn-danger os-btn-sm" onclick="osDeletePolicy(\'' + escHtml(p.tenantId) + '\',\'' + escHtml(p.userId) + '\',\'' + escHtml(p.bucketName) + '\')">Delete</button>' +
+                '</td></tr>';
+        }).join('');
+    }
+
+    window.osShowCreatePolicy = function() { osOpenModal('osCreatePolicyModal'); };
+
+    window.osCreatePolicy = async function() {
+        const body = {
+            tenantId: document.getElementById('osNewPolicyTenant').value.trim(),
+            userId: document.getElementById('osNewPolicyUser').value.trim(),
+            bucketName: document.getElementById('osNewPolicyBucket').value.trim(),
+            role: document.getElementById('osNewPolicyRole').value,
+            prefix: document.getElementById('osNewPolicyPrefix').value.trim()
+        };
+        if (!body.tenantId || !body.userId || !body.bucketName) { osToast('All required fields must be filled', true); return; }
+        try {
+            const resp = await osFetch('/policies', { method: 'POST', body: JSON.stringify(body) });
+            const data = await resp.json();
+            if (!resp.ok) { osToast(data.error || 'Create failed', true); return; }
+            osToast('Policy created');
+            osCloseModal('osCreatePolicyModal');
+            osLoadPolicies();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osDeletePolicy = async function(tenantId, userId, bucket) {
+        if (!confirm('Delete this access policy?')) return;
+        try {
+            const resp = await osFetch('/policies/' + encodeURIComponent(tenantId) + '/' + encodeURIComponent(userId) + '/' + encodeURIComponent(bucket), { method: 'DELETE' });
+            if (!resp.ok) { osToast('Delete failed', true); return; }
+            osToast('Policy deleted');
+            osLoadPolicies();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osViewPolicyDoc = function(jsonStr) {
+        try {
+            const parsed = JSON.parse(jsonStr);
+            document.getElementById('osViewPolicyJSON').textContent = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+        } catch(e) {
+            document.getElementById('osViewPolicyJSON').textContent = jsonStr;
+        }
+        osOpenModal('osViewPolicyModal');
+    };
+
+    // ===== Metrics =====
+    window.osLoadMetrics = async function() {
+        try {
+            const resp = await osFetch('/metrics');
+            if (!resp.ok) { osToast('Failed to load metrics', true); return; }
+            const m = await resp.json();
+            setText('osMetricRequests', m.totalRequests || 0);
+            setText('osMetricBytesIn', fmtSize(m.totalBytesIn));
+            setText('osMetricBytesOut', fmtSize(m.totalBytesOut));
+            setText('osMetricErrors', m.totalErrors || 0);
+            const avgMs = m.totalRequests > 0 ? (m.avgLatencyMs || 0).toFixed(1) : '0';
+            setText('osMetricAvgLatency', avgMs + ' ms');
+            setText('osMetricUptime', fmtDuration(m.uptimeSeconds));
+
+            // Per-bucket metrics
+            const bm = m.bucketMetrics || {};
+            const tbody = document.getElementById('osMetricsBucketBody');
+            const entries = Object.entries(bm);
+            if (!entries.length) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">No per-bucket metrics yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = entries.map(([name, b]) => {
+                const bAvg = b.requests > 0 ? (b.avgLatencyMs || 0).toFixed(1) : '0';
+                return '<tr>' +
+                    '<td><strong>' + escHtml(name) + '</strong></td>' +
+                    '<td>' + (b.requests || 0) + '</td>' +
+                    '<td>' + (b.gets || 0) + '</td>' +
+                    '<td>' + (b.puts || 0) + '</td>' +
+                    '<td>' + (b.deletes || 0) + '</td>' +
+                    '<td class="os-size">' + fmtSize(b.bytesIn) + '</td>' +
+                    '<td class="os-size">' + fmtSize(b.bytesOut) + '</td>' +
+                    '<td style="color:#ef4444;">' + (b.errors || 0) + '</td>' +
+                    '<td>' + bAvg + ' ms</td>' +
+                    '<td>' + fmtDate(b.lastAccess) + '</td>' +
+                '</tr>';
+            }).join('');
+        } catch(e) { osToast('Error loading metrics: ' + e.message, true); }
+    };
+
+    function fmtDuration(sec) {
+        if (!sec || sec <= 0) return '–';
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return h + 'h ' + m + 'm';
+        return m + 'm ' + Math.floor(sec % 60) + 's';
+    }
+
+    // ===== Events =====
+    window.osLoadEvents = async function() {
+        const evType = document.getElementById('osEventsTypeFilter').value;
+        const limit = document.getElementById('osEventsLimitFilter').value || '100';
+        let qs = '?limit=' + limit;
+        if (evType) qs += '&type=' + encodeURIComponent(evType);
+        try {
+            const resp = await osFetch('/events' + qs);
+            if (!resp.ok) { osToast('Failed to load events', true); return; }
+            const evts = await resp.json();
+            renderEvents(Array.isArray(evts) ? evts : []);
+        } catch(e) { osToast('Error loading events: ' + e.message, true); }
+    };
+
+    function eventBadge(type) {
+        const colors = {
+            'bucket.created': '#22c55e', 'bucket.deleted': '#ef4444',
+            'object.uploaded': '#60a5fa', 'object.downloaded': '#a78bfa',
+            'object.deleted': '#ef4444', 'object.copied': '#f59e0b',
+            'object.multi-deleted': '#ef4444', 'policy.created': '#22c55e',
+            'policy.deleted': '#ef4444', 'presign.generated': '#06b6d4'
+        };
+        const color = colors[type] || '#94a3b8';
+        return '<span class="os-badge" style="background:' + color + '22; color:' + color + ';">' + escHtml(type) + '</span>';
+    }
+
+    function renderEvents(events) {
+        const tbody = document.getElementById('osEventsBody');
+        if (!events.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">No events found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = events.map(e => {
+            return '<tr>' +
+                '<td style="white-space:nowrap;">' + fmtDate(e.timestamp) + '</td>' +
+                '<td>' + eventBadge(e.eventType) + '</td>' +
+                '<td>' + escHtml(e.tenantId || '–') + '</td>' +
+                '<td class="os-mono">' + escHtml(e.bucket || '–') + '</td>' +
+                '<td class="os-mono" style="max-width:200px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(e.key || '–') + '</td>' +
+                '<td class="os-size">' + (e.size ? fmtSize(e.size) : '–') + '</td>' +
+                '<td>' + escHtml(e.details || '–') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    // ===== Bucket Tags =====
+    let osCurrentTagsBucket = '';
+    let osCurrentTagsTenant = '';
+    let osCurrentTags = [];
+
+    window.osShowBucketTags = async function(bucket, tenantId) {
+        osCurrentTagsBucket = bucket;
+        osCurrentTagsTenant = tenantId;
+        document.getElementById('osTagsBucketName').textContent = bucket;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/tags?tenantId=' + encodeURIComponent(tenantId));
+            if (resp.ok) {
+                const data = await resp.json();
+                osCurrentTags = data.tags || [];
+            } else {
+                osCurrentTags = [];
+            }
+        } catch(e) { osCurrentTags = []; }
+        renderTags();
+        osOpenModal('osBucketTagsModal');
+    };
+
+    function renderTags() {
+        const el = document.getElementById('osTagsList');
+        if (!osCurrentTags.length) {
+            el.innerHTML = '<p style="color:var(--text-muted); font-size:.9rem;">No tags set</p>';
+            return;
+        }
+        el.innerHTML = '<table class="os-table"><thead><tr><th>Key</th><th>Value</th><th></th></tr></thead><tbody>' +
+            osCurrentTags.map((t, i) => '<tr><td class="os-mono">' + escHtml(t.key) + '</td><td class="os-mono">' + escHtml(t.value) + '</td><td><button class="os-btn os-btn-danger os-btn-sm" onclick="osRemoveTag(' + i + ')">×</button></td></tr>').join('') +
+            '</tbody></table>';
+    }
+
+    window.osAddTag = function() {
+        const k = document.getElementById('osNewTagKey').value.trim();
+        const v = document.getElementById('osNewTagValue').value.trim();
+        if (!k) { osToast('Tag key required', true); return; }
+        osCurrentTags.push({ key: k, value: v });
+        document.getElementById('osNewTagKey').value = '';
+        document.getElementById('osNewTagValue').value = '';
+        renderTags();
+    };
+
+    window.osRemoveTag = function(idx) {
+        osCurrentTags.splice(idx, 1);
+        renderTags();
+    };
+
+    window.osSaveTags = async function() {
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osCurrentTagsBucket) + '/tags?tenantId=' + encodeURIComponent(osCurrentTagsTenant), {
+                method: 'PUT',
+                body: JSON.stringify({ tags: osCurrentTags })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Save tags failed', true); return; }
+            osToast('Tags saved');
+            osCloseModal('osBucketTagsModal');
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osDeleteAllTags = async function() {
+        if (!confirm('Delete all tags from "' + osCurrentTagsBucket + '"?')) return;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osCurrentTagsBucket) + '/tags?tenantId=' + encodeURIComponent(osCurrentTagsTenant), { method: 'DELETE' });
+            if (!resp.ok) { osToast('Delete tags failed', true); return; }
+            osToast('Tags deleted');
+            osCurrentTags = [];
+            renderTags();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    // ===== Batch Delete =====
+    window.osToggleSelectAll = function(checked) {
+        document.querySelectorAll('.os-obj-check').forEach(cb => { cb.checked = checked; });
+    };
+
+    function osGetSelectedKeys() {
+        const keys = [];
+        document.querySelectorAll('.os-obj-check:checked').forEach(cb => keys.push(cb.getAttribute('data-key')));
+        return keys;
+    }
+
+    window.osBatchDelete = async function() {
+        const keys = osGetSelectedKeys();
+        if (!keys.length) { osToast('No objects selected', true); return; }
+        if (!confirm('Delete ' + keys.length + ' selected object(s)?')) return;
+        const bucket = window._osBrowserBucket;
+        const tenantId = window._osBrowserTenant || 'default';
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/multi-delete?tenantId=' + encodeURIComponent(tenantId), {
+                method: 'POST',
+                body: JSON.stringify({ keys: keys })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Batch delete failed', true); return; }
+            const data = await resp.json();
+            osToast('Deleted ' + (data.deleted || 0) + ' of ' + (data.total || keys.length) + ' objects');
+            document.getElementById('osSelectAll').checked = false;
+            osBrowseBucket();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    // ===== Copy Object =====
+    let osCopySrcBucket = '';
+    let osCopySrcKey = '';
+    let osCopySrcTenant = '';
+
+    window.osShowCopySingle = function(bucket, key, tenantId) {
+        osCopySrcBucket = bucket;
+        osCopySrcKey = key;
+        osCopySrcTenant = tenantId;
+        document.getElementById('osCopySrc').value = bucket + '/' + key;
+        document.getElementById('osCopyDestKey').value = key;
+        document.getElementById('osCopyTenant').value = tenantId;
+        // Populate dest bucket select
+        const sel = document.getElementById('osCopyDestBucket');
+        sel.innerHTML = '<option value="">Select bucket...</option>' +
+            osBucketsCache.map(b => {
+                const n = b.metadata?.name || '';
+                return '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>';
+            }).join('');
+        osOpenModal('osCopyObjectModal');
+    };
+
+    window.osShowCopyModal = function() {
+        const keys = osGetSelectedKeys();
+        if (keys.length !== 1) { osToast('Select exactly one object to copy', true); return; }
+        const bucket = window._osBrowserBucket;
+        const tenantId = window._osBrowserTenant || 'default';
+        osShowCopySingle(bucket, keys[0], tenantId);
+    };
+
+    window.osDoCopy = async function() {
+        const destBucket = document.getElementById('osCopyDestBucket').value;
+        const destKey = document.getElementById('osCopyDestKey').value.trim();
+        const tenantId = (document.getElementById('osCopyTenant').value || 'default').trim();
+        if (!destBucket || !destKey) { osToast('Destination bucket and key required', true); return; }
+        try {
+            const resp = await osFetch('/copy', {
+                method: 'POST',
+                body: JSON.stringify({
+                    sourceBucket: osCopySrcBucket,
+                    sourceKey: osCopySrcKey,
+                    destBucket: destBucket,
+                    destKey: destKey,
+                    tenantId: tenantId
+                })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Copy failed', true); return; }
+            osToast('Object copied to ' + destBucket + '/' + destKey);
+            osCloseModal('osCopyObjectModal');
+            osBrowseBucket();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    // ===== Init =====
+    async function osInit() {
+        await osLoadDashboard();
+        await osLoadBuckets();
+        osPopulateBucketSelects();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', osInit);
+    } else {
+        osInit();
+    }
+
+})();
+</script>
+{{ end }}
