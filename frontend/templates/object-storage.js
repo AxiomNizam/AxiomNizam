@@ -89,6 +89,10 @@
         if (tabId === 'os-policies') osLoadPolicies();
         if (tabId === 'os-metrics') osLoadMetrics();
         if (tabId === 'os-events') osLoadEvents();
+        if (tabId === 'os-settings') {
+            osPopulateSettingsBuckets();
+            osLoadBucketSettings();
+        }
     };
 
     // ===== Modals =====
@@ -192,6 +196,8 @@
             const data = await resp.json();
             osBucketsCache = Array.isArray(data) ? data : [];
             renderBuckets(osBucketsCache);
+            osPopulateBucketSelects();
+            osPopulateSettingsBuckets();
         } catch(e) { osToast('Error: ' + e.message, true); }
     };
 
@@ -282,6 +288,18 @@
         });
     }
 
+    function osPopulateSettingsBuckets() {
+        const sel = document.getElementById('osSettingsBucket');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">Select a bucket...</option>' + osBucketsCache.map(b => {
+            const n = b.metadata?.name || '';
+            const t = b.metadata?.tenantId || '';
+            return '<option value="' + escHtml(n) + '" data-tenant="' + escHtml(t) + '">' + escHtml(n) + ' (' + escHtml(t) + ')</option>';
+        }).join('');
+        if (current) sel.value = current;
+    }
+
     window.osBrowseBucket = async function() {
         const sel = document.getElementById('osBrowserBucket');
         const bucket = sel.value;
@@ -336,6 +354,7 @@
                 '<td>' + fmtDate(o.lastModified) + '</td>' +
                 '<td class="os-mono" style="max-width:120px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(o.etag || '-') + '</td>' +
                 '<td style="white-space:nowrap;">' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osShareObject(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Share</button> ' +
                     '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osDownloadObject(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Download</button> ' +
                     '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osShowCopySingle(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Copy</button> ' +
                     '<button class="os-btn os-btn-danger os-btn-sm" onclick="osDeleteObjectFromBrowser(\'' + escHtml(bucket) + '\',\'' + escHtml(o.key) + '\',\'' + escHtml(tenantId) + '\')">Delete</button>' +
@@ -349,6 +368,39 @@
         a.href = url;
         a.download = key.split('/').pop();
         a.click();
+    };
+
+    // ===== Share Object (Shareable URL) =====
+    window.osShareObject = async function(bucket, key, tenantId) {
+        const expiresIn = prompt('Share link expires in (seconds):\n\n• 3600 = 1 hour\n• 86400 = 1 day\n• 604800 = 7 days', '86400');
+        if (!expiresIn) return;
+        const seconds = parseInt(expiresIn);
+        if (!seconds || seconds < 60) { osToast('Minimum 60 seconds', true); return; }
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/share-object?tenantId=' + encodeURIComponent(tenantId), {
+                method: 'POST',
+                body: JSON.stringify({ key: key, expires: seconds })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Share failed', true); return; }
+            const data = await resp.json();
+            // Show share modal
+            document.getElementById('osShareURL').value = data.url || '';
+            document.getElementById('osShareExpires').textContent = fmtDate(data.expiresAt);
+            document.getElementById('osShareObjectKey').textContent = bucket + '/' + key;
+            osOpenModal('osShareObjectModal');
+            osToast('Shareable link generated');
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osCopyShareURL = function() {
+        const el = document.getElementById('osShareURL');
+        el.select();
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(el.value).then(() => osToast('Copied to clipboard'));
+        } else {
+            document.execCommand('copy');
+            osToast('Copied to clipboard');
+        }
     };
 
     window.osDeleteObjectFromBrowser = async function(bucket, key, tenantId) {
@@ -462,8 +514,8 @@
         try {
             const resp = await osFetch('/policies');
             if (!resp.ok) { osToast('Failed to load policies', true); return; }
-            osPoliciesCache = await resp.json();
-            if (!Array.isArray(osPoliciesCache)) osPoliciesCache = [];
+            const data = await resp.json();
+            osPoliciesCache = Array.isArray(data) ? data : (Array.isArray(data.policies) ? data.policies : []);
             renderPolicies(osPoliciesCache);
         } catch(e) { osToast('Error: ' + e.message, true); }
     };
@@ -480,9 +532,9 @@
                 '<td>' + escHtml(p.userId) + '</td>' +
                 '<td class="os-mono">' + escHtml(p.bucketName) + '</td>' +
                 '<td><span class="os-badge os-badge-enabled">' + escHtml(p.role) + '</span></td>' +
-                '<td class="os-mono">' + escHtml(p.prefix || '-') + '</td>' +
+                '<td class="os-mono">' + escHtml(p.prefix || '*') + '</td>' +
                 '<td style="white-space:nowrap;">' +
-                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osViewPolicyDoc(' + escHtml(JSON.stringify(JSON.stringify(p.policyJson))) + ')">View</button> ' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osViewPolicyDoc(' + escHtml(JSON.stringify(JSON.stringify(p))) + ')">View</button> ' +
                     '<button class="os-btn os-btn-danger os-btn-sm" onclick="osDeletePolicy(\'' + escHtml(p.tenantId) + '\',\'' + escHtml(p.userId) + '\',\'' + escHtml(p.bucketName) + '\')">Delete</button>' +
                 '</td></tr>';
         }).join('');
@@ -624,9 +676,12 @@
         if (evType) qs += '&type=' + encodeURIComponent(evType);
         try {
             const resp = await osFetch('/events' + qs);
-            if (!resp.ok) { osToast('Failed to load events', true); return; }
+            if (!resp.ok) {
+                document.getElementById('osEventsBody').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">Failed to load events</td></tr>';
+                return;
+            }
             const payload = await resp.json();
-            const evts = Array.isArray(payload) ? payload : (Array.isArray(payload.events) ? payload.events : []);
+            const evts = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.events) ? payload.events : []);
             renderEvents(evts);
         } catch(e) { osToast('Error loading events: ' + e.message, true); }
     };
@@ -637,7 +692,8 @@
             'object.uploaded': '#60a5fa', 'object.downloaded': '#a78bfa',
             'object.deleted': '#ef4444', 'object.copied': '#f59e0b',
             'object.multi-deleted': '#ef4444', 'policy.created': '#22c55e',
-            'policy.deleted': '#ef4444', 'presign.generated': '#06b6d4'
+            'policy.deleted': '#ef4444', 'presign.generated': '#06b6d4',
+            'object.shared': '#8b5cf6'
         };
         const color = colors[type] || '#94a3b8';
         return '<span class="os-badge" style="background:' + color + '22; color:' + color + ';">' + escHtml(type) + '</span>';
@@ -816,11 +872,242 @@
         } catch(e) { osToast('Error: ' + e.message, true); }
     };
 
+    // ===== Bucket Settings =====
+    let osSettingsBucketName = '';
+    let osSettingsTenantId = '';
+
+    window.osLoadBucketSettings = async function() {
+        const sel = document.getElementById('osSettingsBucket');
+        const bucket = sel.value;
+        if (!bucket) {
+            document.getElementById('osSettingsContent').style.display = 'none';
+            document.getElementById('osSettingsPlaceholder').style.display = '';
+            return;
+        }
+        const opt = sel.options[sel.selectedIndex];
+        const tenantId = opt.getAttribute('data-tenant') || 'default';
+        osSettingsBucketName = bucket;
+        osSettingsTenantId = tenantId;
+        document.getElementById('osSettingsContent').style.display = '';
+        document.getElementById('osSettingsPlaceholder').style.display = 'none';
+
+        const qs = '?tenantId=' + encodeURIComponent(tenantId);
+
+        // Load all settings in parallel
+        const [encResp, lockResp, corsResp, quotaResp, notifResp, policyResp] = await Promise.allSettled([
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/encryption' + qs),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/object-lock' + qs),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/cors' + qs),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/quota' + qs),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/notifications' + qs),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/policy' + qs)
+        ]);
+
+        // Encryption
+        if (encResp.status === 'fulfilled' && encResp.value.ok) {
+            const encData = await encResp.value.json();
+            const enc = encData.encryption || {};
+            document.getElementById('osEncAlgo').value = enc.algorithm || '';
+            document.getElementById('osEncKeyId').value = enc.kmsKeyId || '';
+            document.getElementById('osEncCurrent').textContent = enc.enabled ? (enc.algorithm + (enc.kmsKeyId ? ' (' + enc.kmsKeyId + ')' : '')) : 'Not Encrypted';
+        } else {
+            document.getElementById('osEncCurrent').textContent = 'Not Encrypted';
+            document.getElementById('osEncAlgo').value = '';
+            document.getElementById('osEncKeyId').value = '';
+        }
+
+        // Object Lock
+        if (lockResp.status === 'fulfilled' && lockResp.value.ok) {
+            const lockData = await lockResp.value.json();
+            const lock = lockData.objectLock || {};
+            document.getElementById('osLockMode').value = lock.mode || '';
+            document.getElementById('osLockDays').value = lock.retentionDays || 0;
+            document.getElementById('osLockCurrent').textContent = lock.enabled ? (lock.mode + ' (' + (lock.retentionDays || 0) + ' days)') : 'Disabled';
+        } else {
+            document.getElementById('osLockCurrent').textContent = 'Disabled';
+            document.getElementById('osLockMode').value = '';
+            document.getElementById('osLockDays').value = 0;
+        }
+
+        // CORS
+        if (corsResp.status === 'fulfilled' && corsResp.value.ok) {
+            const corsData = await corsResp.value.json();
+            const rules = corsData.cors || [];
+            if (rules.length > 0) {
+                document.getElementById('osCorsOrigins').value = (rules[0].allowedOrigins || []).join('\n');
+                document.getElementById('osCorsMethods').value = (rules[0].allowedMethods || []).join(', ');
+                document.getElementById('osCorsHeaders').value = (rules[0].allowedHeaders || []).join(', ');
+            } else {
+                document.getElementById('osCorsOrigins').value = '';
+                document.getElementById('osCorsMethods').value = 'GET, PUT, DELETE, HEAD';
+                document.getElementById('osCorsHeaders').value = '*';
+            }
+        } else {
+            document.getElementById('osCorsOrigins').value = '';
+            document.getElementById('osCorsMethods').value = 'GET, PUT, DELETE, HEAD';
+            document.getElementById('osCorsHeaders').value = '*';
+        }
+
+        // Quota
+        if (quotaResp.status === 'fulfilled' && quotaResp.value.ok) {
+            const q = await quotaResp.value.json();
+            setText('osQuotaLimit', q.quotaBytes ? fmtSize(q.quotaBytes) : 'Unlimited');
+            setText('osQuotaUsage', fmtSize(q.usedBytes || 0));
+            setText('osQuotaObjects', q.objectCount || 0);
+        } else {
+            setText('osQuotaLimit', 'Unlimited');
+            setText('osQuotaUsage', '-');
+            setText('osQuotaObjects', '-');
+        }
+
+        // Notifications
+        if (notifResp.status === 'fulfilled' && notifResp.value.ok) {
+            const nData = await notifResp.value.json();
+            const rules = (nData.notifications && nData.notifications.rules) || [];
+            if (rules.length > 0) {
+                document.getElementById('osNotifCurrent').innerHTML = '<p style="color:var(--text-muted); font-size:.9rem;">' + rules.length + ' notification rule(s) configured</p>';
+                const first = rules[0] || {};
+                document.getElementById('osNotifURL').value = first.url || '';
+                document.getElementById('osNotifEvents').value = (first.events || []).join(',');
+            } else {
+                document.getElementById('osNotifCurrent').innerHTML = '<p style="color:var(--text-muted); font-size:.9rem;">No notifications configured</p>';
+                document.getElementById('osNotifURL').value = '';
+            }
+        } else {
+            document.getElementById('osNotifCurrent').innerHTML = '<p style="color:var(--text-muted); font-size:.9rem;">No notifications configured</p>';
+            document.getElementById('osNotifURL').value = '';
+        }
+
+        // Bucket Policy
+        if (policyResp.status === 'fulfilled' && policyResp.value.ok) {
+            const p = await policyResp.value.json();
+            document.getElementById('osBucketPolicyJSON').value = p.policy ? (typeof p.policy === 'string' ? p.policy : JSON.stringify(p.policy, null, 2)) : '';
+        } else {
+            document.getElementById('osBucketPolicyJSON').value = '';
+        }
+    };
+
+    function osSettingsQS() {
+        return '?tenantId=' + encodeURIComponent(osSettingsTenantId);
+    }
+
+    window.osSaveEncryption = async function() {
+        const algo = document.getElementById('osEncAlgo').value;
+        if (!algo) { osToast('Select an encryption algorithm', true); return; }
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/encryption' + osSettingsQS(), {
+                method: 'PUT',
+                body: JSON.stringify({ enabled: true, algorithm: algo, kmsKeyId: document.getElementById('osEncKeyId').value.trim() })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
+            osToast('Encryption updated');
+            osLoadBucketSettings();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osRemoveEncryption = async function() {
+        if (!confirm('Remove encryption from "' + osSettingsBucketName + '"?')) return;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/encryption' + osSettingsQS(), { method: 'DELETE' });
+            if (!resp.ok) { osToast('Failed to remove encryption', true); return; }
+            osToast('Encryption removed');
+            osLoadBucketSettings();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osSaveObjectLock = async function() {
+        const mode = document.getElementById('osLockMode').value;
+        const days = parseInt(document.getElementById('osLockDays').value) || 0;
+        const enabled = !!mode;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/object-lock' + osSettingsQS(), {
+                method: 'PUT',
+                body: JSON.stringify({ enabled: enabled, mode: mode, retentionDays: days })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
+            osToast('Object lock updated');
+            osLoadBucketSettings();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osSaveCORS = async function() {
+        const origins = document.getElementById('osCorsOrigins').value.split('\n').map(s => s.trim()).filter(Boolean);
+        const methods = document.getElementById('osCorsMethods').value.split(',').map(s => s.trim()).filter(Boolean);
+        const headers = document.getElementById('osCorsHeaders').value.split(',').map(s => s.trim()).filter(Boolean);
+        if (!origins.length) { osToast('At least one origin required', true); return; }
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/cors' + osSettingsQS(), {
+                method: 'PUT',
+                body: JSON.stringify({ rules: [{ allowedOrigins: origins, allowedMethods: methods, allowedHeaders: headers }] })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
+            osToast('CORS updated');
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osRemoveCORS = async function() {
+        if (!confirm('Remove CORS configuration?')) return;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/cors' + osSettingsQS(), { method: 'DELETE' });
+            if (!resp.ok) { osToast('Failed', true); return; }
+            osToast('CORS removed');
+            document.getElementById('osCorsOrigins').value = '';
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osSaveNotifications = async function() {
+        const url = document.getElementById('osNotifURL').value.trim();
+        const events = document.getElementById('osNotifEvents').value.split(',').map(s => s.trim()).filter(Boolean);
+        if (!url) { osToast('Webhook URL required', true); return; }
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/notifications' + osSettingsQS(), {
+                method: 'PUT',
+                body: JSON.stringify({
+                    rules: [{
+                        id: 'rule-' + Date.now(),
+                        events: events,
+                        target: 'webhook',
+                        url: url
+                    }]
+                })
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
+            osToast('Notifications saved');
+            osLoadBucketSettings();
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osSaveBucketPolicy = async function() {
+        const policyText = document.getElementById('osBucketPolicyJSON').value.trim();
+        if (!policyText) { osToast('Enter a policy document', true); return; }
+        let policy;
+        try { policy = JSON.parse(policyText); } catch(e) { osToast('Invalid JSON: ' + e.message, true); return; }
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/policy' + osSettingsQS(), {
+                method: 'PUT',
+                body: JSON.stringify(policy)
+            });
+            if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
+            osToast('Bucket policy saved');
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osRemoveBucketPolicy = async function() {
+        if (!confirm('Remove bucket policy?')) return;
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/policy' + osSettingsQS(), { method: 'DELETE' });
+            if (!resp.ok) { osToast('Failed', true); return; }
+            osToast('Bucket policy removed');
+            document.getElementById('osBucketPolicyJSON').value = '';
+        } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
     // ===== Init =====
     async function osInit() {
         await osLoadDashboard();
         await osLoadBuckets();
         osPopulateBucketSelects();
+        osPopulateSettingsBuckets();
     }
 
     if (document.readyState === 'loading') {

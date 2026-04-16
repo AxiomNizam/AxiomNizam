@@ -1,4 +1,4 @@
-﻿package admin
+package admin
 
 import (
 	"context"
@@ -63,10 +63,10 @@ func NewHandler(
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	sg := rg.Group("/storage")
 	{
-		// â”€â”€ Public (no auth) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// Public (no auth)
 		sg.GET("/health", h.Health)
 
-		// â”€â”€ Authenticated â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// Authenticated
 		// IAM auth is applied at the system level (storage.go injects middleware).
 		// Here we apply storage-level role checks per route group.
 		auth := sg.Group("", h.access.RequireStorageAuth())
@@ -145,21 +145,27 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			auth.DELETE("/shares/:shareId", h.RevokeShare)
 			auth.GET("/my/shares", h.ListMyShares)
 
-			// â”€â”€ Admin-only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// Object Sharing (shareable pre-signed URLs)
+			auth.POST("/buckets/:bucket/share-object", h.access.RequireBucketAccess(models.StorageRoleReader), h.ShareObject)
+
+			// Access Policies
+			auth.POST("/policies", h.CreatePolicy)
+			auth.GET("/policies", h.ListPolicies)
+			auth.DELETE("/policies/:tenantId/:userId/:bucket", h.DeletePolicy)
+
+			// Access Keys
+			auth.POST("/access-keys", h.CreateAccessKey)
+			auth.GET("/access-keys", h.ListAccessKeys)
+			auth.DELETE("/access-keys/:keyId", h.RevokeAccessKey)
+
+			// Bucket Lifecycle
+			auth.GET("/buckets/:bucket/lifecycle", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketLifecycle)
+
+			// Admin-only
 			admin := auth.Group("", h.access.RequireStorageRole(models.StorageRoleAdmin))
 			{
 				admin.GET("/system/metrics", h.SystemMetrics)
 				admin.GET("/system/metrics/:bucket", h.BucketMetricsHandler)
-
-				// Access Keys
-				admin.POST("/access-keys", h.CreateAccessKey)
-				admin.GET("/access-keys", h.ListAccessKeys)
-				admin.DELETE("/access-keys/:keyId", h.RevokeAccessKey)
-
-				// Access Policies
-				admin.POST("/policies", h.CreatePolicy)
-				admin.GET("/policies", h.ListPolicies)
-				admin.DELETE("/policies/:tenantId/:userId/:bucket", h.DeletePolicy)
 			}
 		}
 	}
@@ -281,7 +287,8 @@ func (h *Handler) ListEvents(c *gin.Context) {
 			limit = n
 		}
 	}
-	c.JSON(http.StatusOK, h.audit.List("", "", limit))
+	eventType := c.Query("type")
+	c.JSON(http.StatusOK, h.audit.List("", eventType, limit))
 }
 
 func (h *Handler) ListBucketEvents(c *gin.Context) {
@@ -359,7 +366,7 @@ func (h *Handler) CreateBucket(c *gin.Context) {
 		SourceIP: c.ClientIP(),
 	})
 
-	log.Printf("âœ… Storage: bucket %q created for tenant %q by %s", req.Name, sc.TenantID, sc.UserID)
+	log.Printf("Storage: bucket %q created for tenant %q by %s", req.Name, sc.TenantID, sc.UserID)
 	c.JSON(http.StatusCreated, bucket)
 }
 
@@ -1230,7 +1237,7 @@ func (h *Handler) CopyObject(c *gin.Context) {
 		UserID:   sc.UserID,
 		Bucket:   req.SourceBucket,
 		Key:      req.SourceKey,
-		Details:  fmt.Sprintf("â†’ %s/%s", req.DestBucket, req.DestKey),
+		Details:  fmt.Sprintf("to %s/%s", req.DestBucket, req.DestKey),
 		SourceIP: c.ClientIP(),
 	})
 
@@ -1519,4 +1526,96 @@ func (h *Handler) DeletePolicy(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+// ---------------------------------------------------------------------------
+// Object Sharing (shareable pre-signed download URLs)
+// ---------------------------------------------------------------------------
+
+func (h *Handler) ShareObject(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		Key     string `json:"key" binding:"required"`
+		Expires int    `json:"expires"` // seconds, default 3600
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	expires := time.Duration(req.Expires) * time.Second
+	if expires <= 0 {
+		expires = time.Hour
+	}
+	if expires > 7*24*time.Hour {
+		expires = 7 * 24 * time.Hour
+	}
+
+	shareURL, err := h.client.PresignGetObject(context.Background(), b.Spec.Name, req.Key, expires)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "object.shared",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Key:      req.Key,
+		Details:  fmt.Sprintf("expires=%v", expires),
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"url":       shareURL,
+		"bucket":    bucket,
+		"key":       req.Key,
+		"expiresAt": time.Now().Add(expires).Format(time.RFC3339),
+		"expiresIn": int(expires.Seconds()),
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Bucket Lifecycle
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketLifecycle(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bucket":      b.Spec.Name,
+		"versioning":  b.Spec.Versioning,
+		"encryption":  b.Spec.Encryption,
+		"objectLock":  b.Spec.ObjectLock,
+		"quota":       b.Spec.Quota,
+		"labels":      b.Metadata.Labels,
+		"createdAt":   b.Metadata.CreatedAt,
+		"phase":       b.Status.Phase,
+		"objectCount": b.Status.ObjectCount,
+		"totalSize":   b.Status.TotalSize,
+	})
 }

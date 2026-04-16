@@ -62,7 +62,7 @@ func (a *AuditLog) List(tenantID, eventType string, limit int) []models.StorageE
 		limit = 100
 	}
 
-	var result []models.StorageEvent
+	result := make([]models.StorageEvent, 0)
 	// Iterate backwards for most recent first
 	for i := len(a.events) - 1; i >= 0 && len(result) < limit; i-- {
 		ev := a.events[i]
@@ -93,7 +93,7 @@ func (a *AuditLog) ListByBucket(bucket string, limit int) []models.StorageEvent 
 		limit = 100
 	}
 
-	var result []models.StorageEvent
+	result := make([]models.StorageEvent, 0)
 	for i := len(a.events) - 1; i >= 0 && len(result) < limit; i-- {
 		ev := a.events[i]
 		if ev.Bucket == bucket {
