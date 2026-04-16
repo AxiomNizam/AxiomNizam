@@ -95,10 +95,10 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			// Object Lock / Retention
 			auth.GET("/buckets/:bucket/object-lock", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectLockConfig)
 			auth.PUT("/buckets/:bucket/object-lock", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetObjectLockConfig)
-			auth.GET("/buckets/:bucket/objects/*key/retention", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectRetention)
-			auth.PUT("/buckets/:bucket/objects/*key/retention", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetObjectRetention)
-			auth.GET("/buckets/:bucket/objects/*key/legal-hold", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectLegalHold)
-			auth.PUT("/buckets/:bucket/objects/*key/legal-hold", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetObjectLegalHold)
+			auth.GET("/buckets/:bucket/object-retention", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectRetention)
+			auth.PUT("/buckets/:bucket/object-retention", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetObjectRetention)
+			auth.GET("/buckets/:bucket/object-legal-hold", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectLegalHold)
+			auth.PUT("/buckets/:bucket/object-legal-hold", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetObjectLegalHold)
 
 			// CORS
 			auth.GET("/buckets/:bucket/cors", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketCORS)
@@ -125,8 +125,8 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			auth.HEAD("/buckets/:bucket/objects/*key", h.access.RequireBucketAccess(models.StorageRoleReader), h.HeadObject)
 
 			// Object metadata
-			auth.GET("/buckets/:bucket/objects/*key/metadata", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectMetadata)
-			auth.PUT("/buckets/:bucket/objects/*key/metadata", h.access.RequireBucketAccess(models.StorageRoleWriter), h.PutObjectMetadata)
+			auth.GET("/buckets/:bucket/object-metadata", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectMetadata)
+			auth.PUT("/buckets/:bucket/object-metadata", h.access.RequireBucketAccess(models.StorageRoleWriter), h.PutObjectMetadata)
 
 			// Batch operations
 			auth.POST("/buckets/:bucket/multi-delete", h.access.RequireBucketAccess(models.StorageRoleWriter), h.MultiDeleteObjects)
@@ -582,7 +582,11 @@ func (h *Handler) SetObjectLockConfig(c *gin.Context) {
 func (h *Handler) GetObjectRetention(c *gin.Context) {
 	sc := access.GetStorageContext(c)
 	bucket := c.Param("bucket")
-	key := strings.TrimPrefix(c.Param("key"), "/")
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter is required"})
+		return
+	}
 	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -599,7 +603,11 @@ func (h *Handler) GetObjectRetention(c *gin.Context) {
 func (h *Handler) SetObjectRetention(c *gin.Context) {
 	sc := access.GetStorageContext(c)
 	bucket := c.Param("bucket")
-	key := strings.TrimPrefix(c.Param("key"), "/")
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter is required"})
+		return
+	}
 	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -627,7 +635,11 @@ func (h *Handler) SetObjectRetention(c *gin.Context) {
 func (h *Handler) GetObjectLegalHold(c *gin.Context) {
 	sc := access.GetStorageContext(c)
 	bucket := c.Param("bucket")
-	key := strings.TrimPrefix(c.Param("key"), "/")
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter is required"})
+		return
+	}
 	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -644,7 +656,11 @@ func (h *Handler) GetObjectLegalHold(c *gin.Context) {
 func (h *Handler) SetObjectLegalHold(c *gin.Context) {
 	sc := access.GetStorageContext(c)
 	bucket := c.Param("bucket")
-	key := strings.TrimPrefix(c.Param("key"), "/")
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter is required"})
+		return
+	}
 	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -1084,7 +1100,11 @@ func (h *Handler) ListObjects(c *gin.Context) {
 func (h *Handler) GetObjectMetadata(c *gin.Context) {
 	sc := access.GetStorageContext(c)
 	bucket := c.Param("bucket")
-	key := strings.TrimPrefix(c.Param("key"), "/")
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter is required"})
+		return
+	}
 	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -1101,7 +1121,11 @@ func (h *Handler) GetObjectMetadata(c *gin.Context) {
 func (h *Handler) PutObjectMetadata(c *gin.Context) {
 	sc := access.GetStorageContext(c)
 	bucket := c.Param("bucket")
-	key := strings.TrimPrefix(c.Param("key"), "/")
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter is required"})
+		return
+	}
 	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
