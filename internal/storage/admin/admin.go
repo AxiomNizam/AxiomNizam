@@ -1,4 +1,4 @@
-package admin
+﻿package admin
 
 import (
 	"context"
@@ -10,23 +10,23 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/controller"
 	"example.com/axiomnizam/internal/storage/events"
 	storageMetrics "example.com/axiomnizam/internal/storage/metrics"
 	"example.com/axiomnizam/internal/storage/models"
-	"example.com/axiomnizam/internal/storage/policy"
 	"example.com/axiomnizam/internal/storage/store"
 	"example.com/axiomnizam/internal/storage/tenant"
 	"github.com/gin-gonic/gin"
 )
 
-// Handler exposes the object storage API endpoints.
+// Handler exposes the object storage API endpoints with IAM-integrated access control.
 type Handler struct {
 	store      *store.BucketStore
 	client     models.Backend
 	tenant     *tenant.Manager
 	controller *controller.BucketController
-	policy     *policy.Controller
+	access     *access.Controller
 	metrics    *storageMetrics.Collector
 	audit      *events.AuditLog
 	endpoint   string
@@ -38,7 +38,7 @@ func NewHandler(
 	client models.Backend,
 	t *tenant.Manager,
 	ctrl *controller.BucketController,
-	p *policy.Controller,
+	ac *access.Controller,
 	m *storageMetrics.Collector,
 	a *events.AuditLog,
 	endpoint string,
@@ -48,7 +48,7 @@ func NewHandler(
 		client:     client,
 		tenant:     t,
 		controller: ctrl,
-		policy:     p,
+		access:     ac,
 		metrics:    m,
 		audit:      a,
 		endpoint:   endpoint,
@@ -56,286 +56,814 @@ func NewHandler(
 }
 
 // RegisterRoutes registers all object storage API routes on the given router group.
+// Routes are grouped by access level:
+//   - Public:        health check
+//   - Authenticated: all storage operations (requires IAM JWT or access key)
+//   - Admin:         system metrics, policies, access keys, shares
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	sg := rg.Group("/storage")
 	{
-		// Health & Monitoring
+		// â”€â”€ Public (no auth) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		sg.GET("/health", h.Health)
-		sg.GET("/stats", h.Stats)
-		sg.GET("/metrics", h.SystemMetrics)
-		sg.GET("/metrics/:bucket", h.BucketMetricsHandler)
 
-		// Audit Events
-		sg.GET("/events", h.ListEvents)
-		sg.GET("/events/:bucket", h.ListBucketEvents)
+		// â”€â”€ Authenticated â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// IAM auth is applied at the system level (storage.go injects middleware).
+		// Here we apply storage-level role checks per route group.
+		auth := sg.Group("", h.access.RequireStorageAuth())
+		{
+			// Stats & Monitoring (read access)
+			auth.GET("/stats", h.Stats)
+			auth.GET("/events", h.ListEvents)
+			auth.GET("/events/:bucket", h.ListBucketEvents)
 
-		// Bucket CRUD
-		sg.POST("/buckets", h.CreateBucket)
-		sg.GET("/buckets", h.ListBuckets)
-		sg.GET("/buckets/:name", h.GetBucket)
-		sg.DELETE("/buckets/:name", h.DeleteBucket)
+			// Bucket CRUD
+			auth.POST("/buckets", h.access.RequireStorageRole(models.StorageRoleWriter, models.StorageRoleAdmin), h.CreateBucket)
+			auth.GET("/buckets", h.ListBuckets)
+			auth.GET("/buckets/:bucket", h.GetBucket)
+			auth.DELETE("/buckets/:bucket", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.DeleteBucket)
 
-		// Bucket Tagging
-		sg.GET("/buckets/:name/tags", h.GetBucketTags)
-		sg.PUT("/buckets/:name/tags", h.SetBucketTags)
-		sg.DELETE("/buckets/:name/tags", h.DeleteBucketTags)
+			// Bucket Tagging
+			auth.GET("/buckets/:bucket/tags", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketTags)
+			auth.PUT("/buckets/:bucket/tags", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetBucketTags)
+			auth.DELETE("/buckets/:bucket/tags", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.DeleteBucketTags)
 
-		// Object operations
-		sg.PUT("/buckets/:name/objects/*key", h.PutObject)
-		sg.GET("/buckets/:name/objects/*key", h.GetObject)
-		sg.DELETE("/buckets/:name/objects/*key", h.DeleteObject)
-		sg.GET("/buckets/:name/objects", h.ListObjects)
+			// Bucket Encryption
+			auth.GET("/buckets/:bucket/encryption", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketEncryption)
+			auth.PUT("/buckets/:bucket/encryption", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetBucketEncryption)
+			auth.DELETE("/buckets/:bucket/encryption", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.DeleteBucketEncryption)
 
-		// Batch operations
-		sg.POST("/buckets/:name/multi-delete", h.MultiDeleteObjects)
-		sg.POST("/copy", h.CopyObject)
+			// Object Lock / Retention
+			auth.GET("/buckets/:bucket/object-lock", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectLockConfig)
+			auth.PUT("/buckets/:bucket/object-lock", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetObjectLockConfig)
+			auth.GET("/buckets/:bucket/objects/*key/retention", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectRetention)
+			auth.PUT("/buckets/:bucket/objects/*key/retention", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetObjectRetention)
+			auth.GET("/buckets/:bucket/objects/*key/legal-hold", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectLegalHold)
+			auth.PUT("/buckets/:bucket/objects/*key/legal-hold", h.access.RequireBucketAccess(models.StorageRoleWriter), h.SetObjectLegalHold)
 
-		// Pre-signed URLs
-		sg.POST("/buckets/:name/presign", h.PresignURL)
+			// CORS
+			auth.GET("/buckets/:bucket/cors", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketCORS)
+			auth.PUT("/buckets/:bucket/cors", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetBucketCORS)
+			auth.DELETE("/buckets/:bucket/cors", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.DeleteBucketCORS)
 
-		// Policies
-		sg.POST("/policies", h.CreatePolicy)
-		sg.GET("/policies", h.ListPolicies)
-		sg.DELETE("/policies/:tenantId/:userId/:bucket", h.DeletePolicy)
+			// Notifications
+			auth.GET("/buckets/:bucket/notifications", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketNotifications)
+			auth.PUT("/buckets/:bucket/notifications", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetBucketNotifications)
+
+			// Bucket Policy
+			auth.GET("/buckets/:bucket/policy", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketPolicy)
+			auth.PUT("/buckets/:bucket/policy", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetBucketPolicy)
+			auth.DELETE("/buckets/:bucket/policy", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.DeleteBucketPolicy)
+
+			// Quota
+			auth.GET("/buckets/:bucket/quota", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketQuota)
+
+			// Object operations
+			auth.PUT("/buckets/:bucket/objects/*key", h.access.RequireBucketAccess(models.StorageRoleWriter), h.PutObject)
+			auth.GET("/buckets/:bucket/objects/*key", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObject)
+			auth.DELETE("/buckets/:bucket/objects/*key", h.access.RequireBucketAccess(models.StorageRoleWriter), h.DeleteObject)
+			auth.GET("/buckets/:bucket/objects", h.access.RequireBucketAccess(models.StorageRoleReader), h.ListObjects)
+			auth.HEAD("/buckets/:bucket/objects/*key", h.access.RequireBucketAccess(models.StorageRoleReader), h.HeadObject)
+
+			// Object metadata
+			auth.GET("/buckets/:bucket/objects/*key/metadata", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetObjectMetadata)
+			auth.PUT("/buckets/:bucket/objects/*key/metadata", h.access.RequireBucketAccess(models.StorageRoleWriter), h.PutObjectMetadata)
+
+			// Batch operations
+			auth.POST("/buckets/:bucket/multi-delete", h.access.RequireBucketAccess(models.StorageRoleWriter), h.MultiDeleteObjects)
+			auth.POST("/copy", h.access.RequireStorageRole(models.StorageRoleWriter, models.StorageRoleAdmin), h.CopyObject)
+
+			// Pre-signed URLs
+			auth.POST("/buckets/:bucket/presign", h.access.RequireBucketAccess(models.StorageRoleReader), h.PresignURL)
+
+			// Bucket Sharing
+			auth.POST("/buckets/:bucket/shares", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.CreateBucketShare)
+			auth.GET("/buckets/:bucket/shares", h.access.RequireBucketAccess(models.StorageRoleReader), h.ListBucketShares)
+			auth.DELETE("/shares/:shareId", h.RevokeShare)
+			auth.GET("/my/shares", h.ListMyShares)
+
+			// â”€â”€ Admin-only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			admin := auth.Group("", h.access.RequireStorageRole(models.StorageRoleAdmin))
+			{
+				admin.GET("/system/metrics", h.SystemMetrics)
+				admin.GET("/system/metrics/:bucket", h.BucketMetricsHandler)
+
+				// Access Keys
+				admin.POST("/access-keys", h.CreateAccessKey)
+				admin.GET("/access-keys", h.ListAccessKeys)
+				admin.DELETE("/access-keys/:keyId", h.RevokeAccessKey)
+
+				// Access Policies
+				admin.POST("/policies", h.CreatePolicy)
+				admin.GET("/policies", h.ListPolicies)
+				admin.DELETE("/policies/:tenantId/:userId/:bucket", h.DeletePolicy)
+			}
+		}
 	}
 }
 
-// ---------- Health & Stats ----------
+// ---------------------------------------------------------------------------
+// Health & Monitoring
+// ---------------------------------------------------------------------------
 
 func (h *Handler) Health(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-	checkedAt := time.Now().UTC()
-
-	if err := h.client.Ping(ctx); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":    "unhealthy",
-			"error":     err.Error(),
-			"endpoint":  h.endpoint,
-			"checkedAt": checkedAt,
-		})
-		return
+	err := h.client.Ping(context.Background())
+	status := "healthy"
+	if err != nil {
+		status = "unhealthy"
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"status":    "healthy",
-		"endpoint":  h.endpoint,
-		"checkedAt": checkedAt,
+		"status":   status,
+		"backend":  "native",
+		"endpoint": h.endpoint,
+		"features": gin.H{
+			"versioning":     true,
+			"lifecycle":      true,
+			"encryption":     true,
+			"objectLock":     true,
+			"cors":           true,
+			"notifications":  true,
+			"bucketPolicy":   true,
+			"presignedUrls":  true,
+			"multiDelete":    true,
+			"serverSideCopy": true,
+			"tagging":        true,
+			"accessKeys":     true,
+			"bucketSharing":  true,
+			"quotas":         true,
+			"iamIntegrated":  true,
+		},
 	})
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	buckets := h.store.ListAll()
-	tenants := make(map[string]struct{})
-	var totalObjects, totalSize int64
+	sc := access.GetStorageContext(c)
+	tenantID := ""
+	if sc != nil {
+		tenantID = sc.TenantID
+	}
 
+	buckets := h.store.List(tenantID)
+	var totalObjects int64
+	var totalSize int64
 	for _, b := range buckets {
-		tenants[b.Metadata.TenantID] = struct{}{}
 		totalObjects += b.Status.ObjectCount
 		totalSize += b.Status.TotalSize
+	}
+
+	tenantCount := 1
+	if tenantID == "" {
+		seen := map[string]struct{}{}
+		for _, b := range h.store.ListAll() {
+			seen[b.Metadata.TenantID] = struct{}{}
+		}
+		tenantCount = len(seen)
 	}
 
 	c.JSON(http.StatusOK, models.StorageStats{
 		TotalBuckets:   len(buckets),
 		TotalObjects:   totalObjects,
 		TotalSizeBytes: totalSize,
-		TenantCount:    len(tenants),
+		TenantCount:    tenantCount,
 	})
 }
 
-// SystemMetrics returns detailed system metrics including request counts, throughput, etc.
 func (h *Handler) SystemMetrics(c *gin.Context) {
-	buckets := h.store.ListAll()
-	tenants := make(map[string]struct{})
-	var totalObjects, totalSize int64
-
-	for _, b := range buckets {
-		tenants[b.Metadata.TenantID] = struct{}{}
+	all := h.store.ListAll()
+	var totalObjects int64
+	var totalSize int64
+	for _, b := range all {
 		totalObjects += b.Status.ObjectCount
 		totalSize += b.Status.TotalSize
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-	healthy := h.client.Ping(ctx) == nil
-
-	sm := h.metrics.GetSystemMetrics(
-		len(buckets), int(totalObjects), totalSize,
-		len(tenants), len(h.policy.ListPolicies("")),
-		healthy,
-	)
-	c.JSON(http.StatusOK, sm)
-}
-
-// BucketMetricsHandler returns metrics for a specific bucket.
-func (h *Handler) BucketMetricsHandler(c *gin.Context) {
-	bucket := c.Param("bucket")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+	seen := map[string]struct{}{}
+	for _, b := range all {
+		seen[b.Metadata.TenantID] = struct{}{}
 	}
-	bm := h.metrics.GetBucketMetrics(tenantID, bucket)
-	c.JSON(http.StatusOK, bm)
+
+	err := h.client.Ping(context.Background())
+	m := h.metrics.GetSystemMetrics(
+		len(all),
+		int(totalObjects),
+		totalSize,
+		len(seen),
+		h.access.PolicyCount(),
+		err == nil,
+	)
+	m.ActiveAccessKeys = h.access.ActiveAccessKeyCount()
+	m.ActiveShares = h.access.ActiveShareCount()
+
+	c.JSON(http.StatusOK, m)
 }
 
-// ---------- Audit Events ----------
+func (h *Handler) BucketMetricsHandler(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	tenantID := ""
+	if sc != nil {
+		tenantID = sc.TenantID
+	}
+	bucket := c.Param("bucket")
+	c.JSON(http.StatusOK, h.metrics.GetBucketMetrics(tenantID, bucket))
+}
+
+// ---------------------------------------------------------------------------
+// Audit Events
+// ---------------------------------------------------------------------------
 
 func (h *Handler) ListEvents(c *gin.Context) {
-	tenantID := c.Query("tenantId")
-	eventType := c.Query("type")
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	if limit <= 0 {
-		limit = 100
+	limit := 100
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
 	}
-	evts := h.audit.List(tenantID, eventType, limit)
-	if evts == nil {
-		evts = []models.StorageEvent{}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"events": evts,
-		"count":  len(evts),
-		"total":  h.audit.Count(),
-	})
+	c.JSON(http.StatusOK, h.audit.List("", "", limit))
 }
 
 func (h *Handler) ListBucketEvents(c *gin.Context) {
 	bucket := c.Param("bucket")
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	if limit <= 0 {
-		limit = 100
+	limit := 100
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
 	}
-	evts := h.audit.ListByBucket(bucket, limit)
-	if evts == nil {
-		evts = []models.StorageEvent{}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"events": evts,
-		"count":  len(evts),
-		"bucket": bucket,
-	})
+	c.JSON(http.StatusOK, h.audit.ListByBucket(bucket, limit))
 }
 
-// ---------- Bucket CRUD ----------
-
-type createBucketRequest struct {
-	Name            string                  `json:"name" binding:"required"`
-	TenantID        string                  `json:"tenantId" binding:"required"`
-	Versioning      models.VersioningStatus `json:"versioning"`
-	LifecyclePolicy []models.LifecycleRule  `json:"lifecyclePolicy,omitempty"`
-	Region          string                  `json:"region,omitempty"`
-	Quota           int64                   `json:"quota,omitempty"`
-}
+// ---------------------------------------------------------------------------
+// Bucket CRUD
+// ---------------------------------------------------------------------------
 
 func (h *Handler) CreateBucket(c *gin.Context) {
-	start := time.Now()
-	var req createBucketRequest
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	var req struct {
+		Name       string                   `json:"name" binding:"required"`
+		Versioning models.VersioningStatus  `json:"versioning,omitempty"`
+		Quota      int64                    `json:"quota,omitempty"`
+		Encryption *models.BucketEncryption `json:"encryption,omitempty"`
+		ObjectLock *models.ObjectLockConfig `json:"objectLock,omitempty"`
+		Region     string                   `json:"region,omitempty"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.Versioning == "" {
-		req.Versioning = models.VersioningDisabled
-	}
-
 	spec := models.BucketSpec{
-		Name:            h.tenant.ResolveBucketName(req.TenantID, req.Name),
-		Versioning:      req.Versioning,
-		LifecyclePolicy: req.LifecyclePolicy,
-		Region:          req.Region,
-		Quota:           req.Quota,
+		Versioning: req.Versioning,
+		Quota:      req.Quota,
+		Region:     req.Region,
+	}
+	if req.Encryption != nil {
+		spec.Encryption = *req.Encryption
+	}
+	if req.ObjectLock != nil {
+		spec.ObjectLock = *req.ObjectLock
 	}
 
-	bucket, err := h.tenant.CreateTenantBucket(req.TenantID, req.Name, spec)
+	bucket, err := h.tenant.CreateTenantBucket(sc.TenantID, req.Name, spec)
 	if err != nil {
-		h.metrics.RecordRequest(req.TenantID, req.Name, "PUT", 0, time.Since(start), true)
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
+	bucket.Metadata.CreatedBy = sc.UserID
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := h.controller.ReconcileOne(ctx, req.TenantID, req.Name); err != nil {
-			log.Printf("⚠️  Storage: async reconcile failed for %s/%s: %v", req.TenantID, req.Name, err)
-		}
-	}()
+	// Trigger immediate reconciliation.
+	h.controller.ReconcileOne(context.Background(), sc.TenantID, req.Name)
 
-	h.metrics.RecordRequest(req.TenantID, req.Name, "PUT", 0, time.Since(start), false)
-	h.audit.Record(events.EventBucketCreated, req.TenantID, "", req.Name, "", 0, "versioning="+string(req.Versioning))
+	// Set encryption on backend if requested.
+	if req.Encryption != nil && req.Encryption.Enabled {
+		_ = h.client.SetBucketEncryption(context.Background(), bucket.Spec.Name, *req.Encryption)
+	}
+	// Set object lock on backend if requested.
+	if req.ObjectLock != nil && req.ObjectLock.Enabled {
+		_ = h.client.SetObjectLockConfig(context.Background(), bucket.Spec.Name, *req.ObjectLock)
+	}
 
+	h.audit.Record(models.StorageEvent{
+		Type:     "bucket.created",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   req.Name,
+		Details:  fmt.Sprintf("bucket %q created by %s", req.Name, sc.UserID),
+		SourceIP: c.ClientIP(),
+	})
+
+	log.Printf("âœ… Storage: bucket %q created for tenant %q by %s", req.Name, sc.TenantID, sc.UserID)
 	c.JSON(http.StatusCreated, bucket)
 }
 
 func (h *Handler) ListBuckets(c *gin.Context) {
-	tenantID := c.Query("tenantId")
-	buckets := h.store.List(tenantID)
-	if buckets == nil {
-		buckets = []*models.BucketResource{}
+	sc := access.GetStorageContext(c)
+	tenantID := ""
+	if sc != nil {
+		tenantID = sc.TenantID
 	}
-	c.JSON(http.StatusOK, buckets)
+	c.JSON(http.StatusOK, h.store.List(tenantID))
 }
 
 func (h *Handler) GetBucket(c *gin.Context) {
-	name := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+	sc := access.GetStorageContext(c)
+	tenantID := ""
+	if sc != nil {
+		tenantID = sc.TenantID
 	}
+	name := c.Param("bucket")
 
-	bucket, err := h.store.Get(tenantID, name)
+	b, err := h.store.Get(tenantID, name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, bucket)
+	c.JSON(http.StatusOK, b)
 }
 
 func (h *Handler) DeleteBucket(c *gin.Context) {
-	start := time.Now()
-	name := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
 	}
+	name := c.Param("bucket")
 
-	bucket, err := h.store.Get(tenantID, name)
+	b, err := h.store.Get(sc.TenantID, name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-	defer cancel()
-
-	if err := h.client.DeleteBucket(ctx, bucket.Spec.Name); err != nil {
-		h.metrics.RecordRequest(tenantID, name, "DELETE", 0, time.Since(start), true)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("backend delete failed: %v", err)})
+	if err := h.client.DeleteBucket(context.Background(), b.Spec.Name); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := h.store.Delete(tenantID, name); err != nil {
+	if err := h.tenant.DeleteTenantBucket(sc.TenantID, name); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.metrics.RecordRequest(tenantID, name, "DELETE", 0, time.Since(start), false)
-	h.audit.Record(events.EventBucketDeleted, tenantID, "", name, "", 0, "")
+	h.audit.Record(models.StorageEvent{
+		Type:     "bucket.deleted",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   name,
+		SourceIP: c.ClientIP(),
+	})
 
-	c.JSON(http.StatusOK, gin.H{"message": "bucket deleted", "name": name})
+	c.JSON(http.StatusOK, gin.H{"deleted": name})
 }
 
-// ---------- Object Operations ----------
+// ---------------------------------------------------------------------------
+// Bucket Tagging
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketTags(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	tags, err := h.client.GetBucketTagging(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "tags": tags})
+}
+
+func (h *Handler) SetBucketTags(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req struct {
+		Tags []models.BucketTag `json:"tags" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.PutBucketTagging(context.Background(), b.Spec.Name, req.Tags); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "tags": req.Tags})
+}
+
+func (h *Handler) DeleteBucketTags(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.DeleteBucketTagging(context.Background(), b.Spec.Name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true, "bucket": bucket})
+}
+
+// ---------------------------------------------------------------------------
+// Bucket Encryption
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketEncryption(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	enc, err := h.client.GetBucketEncryption(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "encryption": enc})
+}
+
+func (h *Handler) SetBucketEncryption(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req models.BucketEncryption
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.SetBucketEncryption(context.Background(), b.Spec.Name, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit.Record(models.StorageEvent{
+		Type: "bucket.encryption.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
+		Details: fmt.Sprintf("encryption %s enabled=%v", req.Algorithm, req.Enabled), SourceIP: c.ClientIP(),
+	})
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "encryption": req})
+}
+
+func (h *Handler) DeleteBucketEncryption(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.DeleteBucketEncryption(context.Background(), b.Spec.Name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true, "bucket": bucket})
+}
+
+// ---------------------------------------------------------------------------
+// Object Lock / Retention
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetObjectLockConfig(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	cfg, err := h.client.GetObjectLockConfig(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "objectLock": cfg})
+}
+
+func (h *Handler) SetObjectLockConfig(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req models.ObjectLockConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.SetObjectLockConfig(context.Background(), b.Spec.Name, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit.Record(models.StorageEvent{
+		Type: "bucket.objectlock.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
+		Details: fmt.Sprintf("object lock mode=%s enabled=%v", req.Mode, req.Enabled), SourceIP: c.ClientIP(),
+	})
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "objectLock": req})
+}
+
+func (h *Handler) GetObjectRetention(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	until, mode, err := h.client.GetObjectRetention(context.Background(), b.Spec.Name, key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "key": key, "retainUntil": until, "mode": mode})
+}
+
+func (h *Handler) SetObjectRetention(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req struct {
+		RetainUntil time.Time `json:"retainUntil" binding:"required"`
+		Mode        string    `json:"mode" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Mode != "GOVERNANCE" && req.Mode != "COMPLIANCE" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be GOVERNANCE or COMPLIANCE"})
+		return
+	}
+	if err := h.client.PutObjectRetention(context.Background(), b.Spec.Name, key, req.RetainUntil, req.Mode); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "key": key, "retainUntil": req.RetainUntil, "mode": req.Mode})
+}
+
+func (h *Handler) GetObjectLegalHold(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	hold, err := h.client.GetObjectLegalHold(context.Background(), b.Spec.Name, key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "key": key, "legalHold": hold})
+}
+
+func (h *Handler) SetObjectLegalHold(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req struct {
+		LegalHold bool `json:"legalHold"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.PutObjectLegalHold(context.Background(), b.Spec.Name, key, req.LegalHold); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "key": key, "legalHold": req.LegalHold})
+}
+
+// ---------------------------------------------------------------------------
+// CORS
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketCORS(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	rules, err := h.client.GetBucketCORS(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "cors": rules})
+}
+
+func (h *Handler) SetBucketCORS(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req struct {
+		Rules []models.CORSRule `json:"rules" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.SetBucketCORS(context.Background(), b.Spec.Name, req.Rules); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "cors": req.Rules})
+}
+
+func (h *Handler) DeleteBucketCORS(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.DeleteBucketCORS(context.Background(), b.Spec.Name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true, "bucket": bucket})
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketNotifications(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	cfg, err := h.client.GetBucketNotification(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "notifications": cfg})
+}
+
+func (h *Handler) SetBucketNotifications(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req models.BucketNotificationConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.SetBucketNotification(context.Background(), b.Spec.Name, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit.Record(models.StorageEvent{
+		Type: "bucket.notifications.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
+		Details: fmt.Sprintf("%d notification rules", len(req.Rules)), SourceIP: c.ClientIP(),
+	})
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "notifications": req})
+}
+
+// ---------------------------------------------------------------------------
+// Bucket Policy
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketPolicy(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	pol, err := h.client.GetBucketPolicy(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "policy": pol})
+}
+
+func (h *Handler) SetBucketPolicy(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	var req models.S3BucketPolicy
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.SetBucketPolicy(context.Background(), b.Spec.Name, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit.Record(models.StorageEvent{
+		Type: "bucket.policy.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
+		SourceIP: c.ClientIP(),
+	})
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "policy": req})
+}
+
+func (h *Handler) DeleteBucketPolicy(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.client.DeleteBucketPolicy(context.Background(), b.Spec.Name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true, "bucket": bucket})
+}
+
+// ---------------------------------------------------------------------------
+// Quota
+// ---------------------------------------------------------------------------
+
+func (h *Handler) GetBucketQuota(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	q, err := h.client.GetBucketQuota(context.Background(), b.Spec.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	q.TenantID = sc.TenantID
+	c.JSON(http.StatusOK, q)
+}
+
+// ---------------------------------------------------------------------------
+// Object Operations
+// ---------------------------------------------------------------------------
 
 func (h *Handler) PutObject(c *gin.Context) {
-	start := time.Now()
-	bucketName := c.Param("name")
-	key := strings.TrimPrefix(c.Param("key"), "/")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
 	}
 
-	bucket, err := h.store.Get(tenantID, bucketName)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "object key is required"})
+		return
+	}
+
+	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -346,118 +874,193 @@ func (h *Handler) PutObject(c *gin.Context) {
 		contentType = "application/octet-stream"
 	}
 
-	size := c.Request.ContentLength
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
-	defer cancel()
-
-	if err := h.client.PutObject(ctx, bucket.Spec.Name, key, c.Request.Body, size, contentType); err != nil {
-		h.metrics.RecordRequest(tenantID, bucketName, "PUT", size, time.Since(start), true)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("upload failed: %v", err)})
-		return
-	}
-
-	h.metrics.RecordRequest(tenantID, bucketName, "PUT", size, time.Since(start), false)
-	h.audit.Record(events.EventObjectUploaded, tenantID, "", bucketName, key, size, contentType)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "object uploaded",
-		"bucket":  bucketName,
-		"key":     key,
-		"size":    size,
-	})
-}
-
-func (h *Handler) GetObject(c *gin.Context) {
 	start := time.Now()
-	bucketName := c.Param("name")
-	key := strings.TrimPrefix(c.Param("key"), "/")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+
+	// Check for enhanced options in headers.
+	opts := models.PutObjectOptions{
+		ContentType:  contentType,
+		StorageClass: c.GetHeader("X-Storage-Class"),
 	}
 
-	bucket, err := h.store.Get(tenantID, bucketName)
+	// User metadata from X-Axiom-Meta-* headers.
+	userMeta := make(map[string]string)
+	for _, key := range []string{} {
+		_ = key
+	}
+	for k, vals := range c.Request.Header {
+		if strings.HasPrefix(strings.ToLower(k), "x-axiom-meta-") {
+			metaKey := strings.TrimPrefix(strings.ToLower(k), "x-axiom-meta-")
+			if len(vals) > 0 {
+				userMeta[metaKey] = vals[0]
+			}
+		}
+	}
+	if len(userMeta) > 0 {
+		opts.UserMetadata = userMeta
+	}
+
+	if c.GetHeader("X-Storage-Encrypt") == "true" {
+		opts.Encryption = true
+	}
+
+	err = h.client.PutObjectWithOptions(context.Background(), b.Spec.Name, key, c.Request.Body, c.Request.ContentLength, opts)
+	latency := time.Since(start)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
-	defer cancel()
-
-	obj, err := h.client.GetObject(ctx, bucket.Spec.Name, key)
-	if err != nil {
-		h.metrics.RecordRequest(tenantID, bucketName, "GET", 0, time.Since(start), true)
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-	defer obj.Close()
-
-	var objSize int64
-	info, err := h.client.StatObject(ctx, bucket.Spec.Name, key)
-	if err == nil {
-		c.Header("Content-Type", info.ContentType)
-		c.Header("Content-Length", strconv.FormatInt(info.Size, 10))
-		c.Header("ETag", info.ETag)
-		objSize = info.Size
-	}
-
-	c.Status(http.StatusOK)
-	io.Copy(c.Writer, obj)
-
-	h.metrics.RecordRequest(tenantID, bucketName, "GET", objSize, time.Since(start), false)
-	h.audit.Record(events.EventObjectDownloaded, tenantID, "", bucketName, key, objSize, "")
-}
-
-func (h *Handler) DeleteObject(c *gin.Context) {
-	start := time.Now()
-	bucketName := c.Param("name")
-	key := strings.TrimPrefix(c.Param("key"), "/")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
-	bucket, err := h.store.Get(tenantID, bucketName)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-	defer cancel()
-
-	if err := h.client.DeleteObject(ctx, bucket.Spec.Name, key); err != nil {
-		h.metrics.RecordRequest(tenantID, bucketName, "DELETE", 0, time.Since(start), true)
+		h.metrics.RecordRequest(sc.TenantID, bucket, "PUT", 0, latency, true)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.metrics.RecordRequest(tenantID, bucketName, "DELETE", 0, time.Since(start), false)
-	h.audit.Record(events.EventObjectDeleted, tenantID, "", bucketName, key, 0, "")
+	h.metrics.RecordRequest(sc.TenantID, bucket, "PUT", c.Request.ContentLength, latency, false)
 
-	c.JSON(http.StatusOK, gin.H{"message": "object deleted", "key": key})
+	h.audit.Record(models.StorageEvent{
+		Type:     "object.uploaded",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Key:      key,
+		Size:     c.Request.ContentLength,
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"bucket": bucket,
+		"key":    key,
+		"size":   c.Request.ContentLength,
+	})
 }
 
-func (h *Handler) ListObjects(c *gin.Context) {
-	bucketName := c.Param("name")
-	prefix := c.Query("prefix")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+func (h *Handler) GetObject(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
 	}
 
-	bucket, err := h.store.Get(tenantID, bucketName)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+
+	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-	defer cancel()
+	start := time.Now()
+	reader, err := h.client.GetObject(context.Background(), b.Spec.Name, key)
+	if err != nil {
+		h.metrics.RecordRequest(sc.TenantID, bucket, "GET", 0, time.Since(start), true)
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	defer reader.Close()
 
-	objects, err := h.client.ListObjects(ctx, bucket.Spec.Name, prefix)
+	// Set content type from metadata if available.
+	info, _ := h.client.StatObject(context.Background(), b.Spec.Name, key)
+	if info != nil && info.ContentType != "" {
+		c.Header("Content-Type", info.ContentType)
+		c.Header("Content-Length", strconv.FormatInt(info.Size, 10))
+		c.Header("ETag", info.ETag)
+		c.Header("Last-Modified", info.LastModified.UTC().Format(http.TimeFormat))
+		if info.StorageClass != "" {
+			c.Header("X-Storage-Class", info.StorageClass)
+		}
+	}
+
+	n, _ := io.Copy(c.Writer, reader)
+	latency := time.Since(start)
+	h.metrics.RecordRequest(sc.TenantID, bucket, "GET", n, latency, false)
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "object.downloaded",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Key:      key,
+		Size:     n,
+		SourceIP: c.ClientIP(),
+	})
+}
+
+func (h *Handler) HeadObject(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	info, err := h.client.StatObject(context.Background(), b.Spec.Name, key)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("Content-Type", info.ContentType)
+	c.Header("Content-Length", strconv.FormatInt(info.Size, 10))
+	c.Header("ETag", info.ETag)
+	c.Header("Last-Modified", info.LastModified.UTC().Format(http.TimeFormat))
+	if info.StorageClass != "" {
+		c.Header("X-Storage-Class", info.StorageClass)
+	}
+	if info.RetainUntil != nil {
+		c.Header("X-Object-Retain-Until", info.RetainUntil.Format(time.RFC3339))
+	}
+	if info.LegalHold {
+		c.Header("X-Object-Legal-Hold", "true")
+	}
+	c.Status(http.StatusOK)
+}
+
+func (h *Handler) DeleteObject(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	start := time.Now()
+	if err := h.client.DeleteObject(context.Background(), b.Spec.Name, key); err != nil {
+		h.metrics.RecordRequest(sc.TenantID, bucket, "DELETE", 0, time.Since(start), true)
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.metrics.RecordRequest(sc.TenantID, bucket, "DELETE", 0, time.Since(start), false)
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "object.deleted",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Key:      key,
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{"deleted": key, "bucket": bucket})
+}
+
+func (h *Handler) ListObjects(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	prefix := c.Query("prefix")
+
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	objects, err := h.client.ListObjects(context.Background(), b.Spec.Name, prefix)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -467,59 +1070,191 @@ func (h *Handler) ListObjects(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"bucket":  bucketName,
+		"bucket":  bucket,
 		"prefix":  prefix,
-		"objects": objects,
 		"count":   len(objects),
+		"objects": objects,
 	})
 }
 
-// ---------- Pre-signed URLs ----------
+// ---------------------------------------------------------------------------
+// Object Metadata
+// ---------------------------------------------------------------------------
 
-type presignRequest struct {
-	Key       string `json:"key" binding:"required"`
-	Method    string `json:"method"`
-	ExpiresIn int    `json:"expiresIn,omitempty"`
+func (h *Handler) GetObjectMetadata(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	meta, err := h.client.GetObjectMetadata(context.Background(), b.Spec.Name, key)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "key": key, "metadata": meta})
 }
 
-func (h *Handler) PresignURL(c *gin.Context) {
-	bucketName := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+func (h *Handler) PutObjectMetadata(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	key := strings.TrimPrefix(c.Param("key"), "/")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
 	}
-
-	var req presignRequest
+	var req struct {
+		Metadata map[string]string `json:"metadata" binding:"required"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := h.client.PutObjectMetadata(context.Background(), b.Spec.Name, key, req.Metadata); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "key": key, "metadata": req.Metadata})
+}
 
-	bucket, err := h.store.Get(tenantID, bucketName)
+// ---------------------------------------------------------------------------
+// Batch Operations
+// ---------------------------------------------------------------------------
+
+func (h *Handler) MultiDeleteObjects(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.ExpiresIn <= 0 {
-		req.ExpiresIn = 900
+	var req models.MultiDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	expires := time.Duration(req.ExpiresIn) * time.Second
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
+	keys := make([]string, len(req.Objects))
+	for i, o := range req.Objects {
+		keys[i] = o.Key
+	}
 
-	var presignedURL string
+	deleted, errors, _ := h.client.MultiDeleteObjects(context.Background(), b.Spec.Name, keys)
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "object.multi-deleted",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Details:  fmt.Sprintf("deleted %d objects, %d errors", deleted, len(errors)),
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"deleted": deleted,
+		"errors":  errors,
+	})
+}
+
+func (h *Handler) CopyObject(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	var req models.CopyObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	srcB, err := h.store.Get(sc.TenantID, req.SourceBucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "source bucket: " + err.Error()})
+		return
+	}
+	dstB, err := h.store.Get(sc.TenantID, req.DestBucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "dest bucket: " + err.Error()})
+		return
+	}
+
+	if err := h.client.CopyObject(context.Background(), srcB.Spec.Name, req.SourceKey, dstB.Spec.Name, req.DestKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "object.copied",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   req.SourceBucket,
+		Key:      req.SourceKey,
+		Details:  fmt.Sprintf("â†’ %s/%s", req.DestBucket, req.DestKey),
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"source": fmt.Sprintf("%s/%s", req.SourceBucket, req.SourceKey),
+		"dest":   fmt.Sprintf("%s/%s", req.DestBucket, req.DestKey),
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Pre-signed URLs
+// ---------------------------------------------------------------------------
+
+func (h *Handler) PresignURL(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		Key     string `json:"key" binding:"required"`
+		Method  string `json:"method"`  // "GET" or "PUT", default GET
+		Expires int    `json:"expires"` // seconds, default 3600
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	method := strings.ToUpper(req.Method)
 	if method == "" {
 		method = "GET"
 	}
+	expires := time.Duration(req.Expires) * time.Second
+	if expires <= 0 {
+		expires = time.Hour
+	}
 
+	var presignURL string
 	switch method {
 	case "GET":
-		presignedURL, err = h.client.PresignGetObject(ctx, bucket.Spec.Name, req.Key, expires)
+		presignURL, err = h.client.PresignGetObject(context.Background(), b.Spec.Name, req.Key, expires)
 	case "PUT":
-		presignedURL, err = h.client.PresignPutObject(ctx, bucket.Spec.Name, req.Key, expires)
+		presignURL, err = h.client.PresignPutObject(context.Background(), b.Spec.Name, req.Key, expires)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "method must be GET or PUT"})
 		return
@@ -530,247 +1265,230 @@ func (h *Handler) PresignURL(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.PreSignedURLResponse{
-		URL:       presignedURL,
-		ExpiresAt: time.Now().Add(expires),
+	h.audit.Record(models.StorageEvent{
+		Type:     "presign.generated",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Key:      req.Key,
+		Details:  fmt.Sprintf("method=%s expires=%v", method, expires),
+		SourceIP: c.ClientIP(),
 	})
 
-	h.audit.Record(events.EventPresignGenerated, tenantID, "", bucketName, req.Key, 0, method)
+	c.JSON(http.StatusOK, models.PreSignedURLResponse{
+		URL:       presignURL,
+		ExpiresAt: time.Now().Add(expires),
+		Method:    method,
+		Bucket:    bucket,
+		Key:       req.Key,
+	})
 }
 
-// ---------- Policies ----------
+// ---------------------------------------------------------------------------
+// Bucket Sharing
+// ---------------------------------------------------------------------------
 
-type createPolicyRequest struct {
-	TenantID   string `json:"tenantId" binding:"required"`
-	UserID     string `json:"userId" binding:"required"`
-	BucketName string `json:"bucketName" binding:"required"`
-	Role       string `json:"role" binding:"required"`
-	Prefix     string `json:"prefix,omitempty"`
-}
+func (h *Handler) CreateBucketShare(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
 
-func (h *Handler) CreatePolicy(c *gin.Context) {
-	var req createPolicyRequest
+	bucket := c.Param("bucket")
+	// Verify bucket exists.
+	if _, err := h.store.Get(sc.TenantID, bucket); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GranteeType string             `json:"granteeType" binding:"required"` // "user", "application", "service-account"
+		GranteeID   string             `json:"granteeId" binding:"required"`
+		GranteeName string             `json:"granteeName,omitempty"`
+		Role        models.StorageRole `json:"role" binding:"required"`
+		Prefix      string             `json:"prefix,omitempty"`
+		ExpiresAt   *time.Time         `json:"expiresAt,omitempty"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	role := models.StorageRole(req.Role)
-	storageBucket := h.tenant.ResolveBucketName(req.TenantID, req.BucketName)
+	share := models.BucketShare{
+		BucketName:  bucket,
+		TenantID:    sc.TenantID,
+		GranteeType: req.GranteeType,
+		GranteeID:   req.GranteeID,
+		GranteeName: req.GranteeName,
+		Role:        req.Role,
+		Prefix:      req.Prefix,
+		ExpiresAt:   req.ExpiresAt,
+		SharedBy:    sc.UserID,
+	}
 
-	tp, err := h.policy.GeneratePolicy(req.TenantID, req.UserID, storageBucket, role, req.Prefix)
+	result, err := h.access.ShareBucket(share)
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, result)
+}
+
+func (h *Handler) ListBucketShares(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	shares := h.access.ListBucketShares(sc.TenantID, bucket)
+	if shares == nil {
+		shares = []*models.BucketShare{}
+	}
+	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "shares": shares})
+}
+
+func (h *Handler) ListMyShares(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	shares := h.access.ListUserShares(sc.UserID)
+	if shares == nil {
+		shares = []*models.BucketShare{}
+	}
+	c.JSON(http.StatusOK, gin.H{"shares": shares})
+}
+
+func (h *Handler) RevokeShare(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	shareID := c.Param("shareId")
+	if err := h.access.RevokeShare(shareID, sc.UserID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"revoked": shareID})
+}
+
+// ---------------------------------------------------------------------------
+// Access Keys
+// ---------------------------------------------------------------------------
+
+func (h *Handler) CreateAccessKey(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	var req struct {
+		Name        string             `json:"name" binding:"required"`
+		Description string             `json:"description,omitempty"`
+		Role        models.StorageRole `json:"role" binding:"required"`
+		BucketScope []string           `json:"bucketScope,omitempty"`
+		ExpiresAt   *time.Time         `json:"expiresAt,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.audit.Record(events.EventPolicyCreated, req.TenantID, req.UserID, req.BucketName, "", 0, string(role))
-	c.JSON(http.StatusCreated, tp)
+	ak, err := h.access.CreateAccessKey(sc.UserID, sc.TenantID, req.Name, req.Description, req.Role, req.BucketScope, req.ExpiresAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return the full key including secret ONLY on creation.
+	c.JSON(http.StatusCreated, ak)
+}
+
+func (h *Handler) ListAccessKeys(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	keys := h.access.ListAccessKeys("", sc.TenantID)
+	if keys == nil {
+		keys = []*models.AccessKey{}
+	}
+	c.JSON(http.StatusOK, gin.H{"accessKeys": keys})
+}
+
+func (h *Handler) RevokeAccessKey(c *gin.Context) {
+	keyID := c.Param("keyId")
+	// Admin can revoke any key (userID="" bypasses ownership check).
+	if err := h.access.RevokeAccessKey(keyID, ""); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"revoked": keyID})
+}
+
+// ---------------------------------------------------------------------------
+// Access Policies
+// ---------------------------------------------------------------------------
+
+func (h *Handler) CreatePolicy(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	if sc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	var req models.TenantPolicy
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.TenantID == "" {
+		req.TenantID = sc.TenantID
+	}
+	req.GrantedBy = sc.UserID
+
+	if err := h.access.SetPolicy(req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "policy.created",
+		TenantID: req.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   req.BucketName,
+		Details:  fmt.Sprintf("role=%s for user=%s", req.Role, req.UserID),
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusCreated, req)
 }
 
 func (h *Handler) ListPolicies(c *gin.Context) {
-	tenantID := c.Query("tenantId")
-	policies := h.policy.ListPolicies(tenantID)
+	sc := access.GetStorageContext(c)
+	policies := h.access.ListPolicies(sc.TenantID)
 	if policies == nil {
 		policies = []*models.TenantPolicy{}
 	}
-	c.JSON(http.StatusOK, policies)
+	c.JSON(http.StatusOK, gin.H{"policies": policies})
 }
 
 func (h *Handler) DeletePolicy(c *gin.Context) {
+	sc := access.GetStorageContext(c)
 	tenantID := c.Param("tenantId")
 	userID := c.Param("userId")
 	bucket := c.Param("bucket")
 
-	h.policy.DeletePolicy(tenantID, userID, bucket)
-	h.audit.Record(events.EventPolicyDeleted, tenantID, userID, bucket, "", 0, "")
-	c.JSON(http.StatusOK, gin.H{"message": "policy deleted"})
-}
-
-// ---------- Bucket Tagging ----------
-
-func (h *Handler) GetBucketTags(c *gin.Context) {
-	name := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
+	// Only allow deleting own-tenant policies unless sysadmin.
+	if tenantID != sc.TenantID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete cross-tenant policy"})
+		return
 	}
 
-	bucket, err := h.store.Get(tenantID, name)
-	if err != nil {
+	if err := h.access.DeletePolicy(tenantID, userID, bucket); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	tags, err := h.client.GetBucketTagging(ctx, bucket.Spec.Name)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if tags == nil {
-		tags = []models.BucketTag{}
-	}
-	c.JSON(http.StatusOK, gin.H{"bucket": name, "tags": tags})
-}
-
-type setTagsRequest struct {
-	Tags []models.BucketTag `json:"tags" binding:"required"`
-}
-
-func (h *Handler) SetBucketTags(c *gin.Context) {
-	name := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
-	var req setTagsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	bucket, err := h.store.Get(tenantID, name)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	if err := h.client.PutBucketTagging(ctx, bucket.Spec.Name, req.Tags); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "tags updated", "bucket": name, "tags": req.Tags})
-}
-
-func (h *Handler) DeleteBucketTags(c *gin.Context) {
-	name := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
-	bucket, err := h.store.Get(tenantID, name)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	if err := h.client.DeleteBucketTagging(ctx, bucket.Spec.Name); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "tags deleted", "bucket": name})
-}
-
-// ---------- Multi-Delete ----------
-
-type multiDeleteRequest struct {
-	Keys []string `json:"keys" binding:"required"`
-}
-
-func (h *Handler) MultiDeleteObjects(c *gin.Context) {
-	start := time.Now()
-	bucketName := c.Param("name")
-	tenantID := c.Query("tenantId")
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
-	var req multiDeleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	bucket, err := h.store.Get(tenantID, bucketName)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-	defer cancel()
-
-	deleted, errs, err := h.client.MultiDeleteObjects(ctx, bucket.Spec.Name, req.Keys)
-	if err != nil {
-		h.metrics.RecordRequest(tenantID, bucketName, "DELETE", 0, time.Since(start), true)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	h.metrics.RecordRequest(tenantID, bucketName, "DELETE", 0, time.Since(start), len(errs) > 0)
-	h.audit.Record(events.EventMultiDelete, tenantID, "", bucketName, "",
-		0, fmt.Sprintf("deleted=%d errors=%d", deleted, len(errs)))
-
-	c.JSON(http.StatusOK, gin.H{
-		"deleted": deleted,
-		"errors":  errs,
-		"total":   len(req.Keys),
+	h.audit.Record(models.StorageEvent{
+		Type:     "policy.deleted",
+		TenantID: tenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		SourceIP: c.ClientIP(),
 	})
-}
 
-// ---------- Copy Object ----------
-
-type copyRequest struct {
-	SourceBucket string `json:"sourceBucket" binding:"required"`
-	SourceKey    string `json:"sourceKey" binding:"required"`
-	DestBucket   string `json:"destBucket" binding:"required"`
-	DestKey      string `json:"destKey" binding:"required"`
-	TenantID     string `json:"tenantId"`
-}
-
-func (h *Handler) CopyObject(c *gin.Context) {
-	start := time.Now()
-	var req copyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
-	srcBucket, err := h.store.Get(tenantID, req.SourceBucket)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "source bucket not found: " + err.Error()})
-		return
-	}
-
-	dstBucket, err := h.store.Get(tenantID, req.DestBucket)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "destination bucket not found: " + err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-	defer cancel()
-
-	if err := h.client.CopyObject(ctx, srcBucket.Spec.Name, req.SourceKey, dstBucket.Spec.Name, req.DestKey); err != nil {
-		h.metrics.RecordRequest(tenantID, req.DestBucket, "PUT", 0, time.Since(start), true)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	h.metrics.RecordRequest(tenantID, req.DestBucket, "PUT", 0, time.Since(start), false)
-	h.audit.Record(events.EventObjectCopied, tenantID, "",
-		req.SourceBucket, req.SourceKey, 0,
-		fmt.Sprintf("→ %s/%s", req.DestBucket, req.DestKey))
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":     "object copied",
-		"source":      req.SourceBucket + "/" + req.SourceKey,
-		"destination": req.DestBucket + "/" + req.DestKey,
-	})
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }

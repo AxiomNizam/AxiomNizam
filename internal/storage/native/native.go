@@ -1,9 +1,12 @@
-package native
+﻿package native
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -22,22 +25,23 @@ import (
 )
 
 // Backend is a self-contained, filesystem-based object storage engine.
-// It needs no external service (no MinIO, no S3) — data lives on the
+// It needs no external service (no MinIO, no S3) â€” data lives on the
 // local volume mounted into the container.
 //
 // Layout on disk:
 //
 //	<root>/
 //	  <bucket>/
-//	    .axiom/config.json          – versioning, lifecycle rules
-//	    .axiom/tags.json            – bucket tags
-//	    .axiom/objects/<key>.meta   – per-object metadata (JSON)
-//	    data/<key>                  – the actual object bytes
+//	    .axiom/config.json                â€“ versioning, lifecycle, encryption, lock, CORS, notifications
+//	    .axiom/tags.json                  â€“ bucket tags
+//	    .axiom/policy.json                â€“ S3 bucket policy
+//	    .axiom/objects/<key>.meta          â€“ per-object metadata (JSON)
+//	    data/<key>                         â€“ the actual object bytes
 type Backend struct {
 	mu       sync.RWMutex
 	root     string // absolute path of the storage root directory
 	endpoint string // human-readable label (e.g. "native://data/storage")
-	// Secret used for HMAC-signed presign tokens.
+	// Secret used for HMAC-signed presign tokens and encryption.
 	presignSecret []byte
 }
 
@@ -55,7 +59,7 @@ func New(root string, presignSecret string) (*Backend, error) {
 	if len(secret) == 0 {
 		secret = []byte("axiom-native-storage-default-key")
 	}
-	log.Printf("✅ Storage: native filesystem backend at %s", abs)
+	log.Printf("âœ… Storage: native filesystem backend at %s", abs)
 	return &Backend{
 		root:          abs,
 		endpoint:      "native://" + abs,
@@ -64,7 +68,7 @@ func New(root string, presignSecret string) (*Backend, error) {
 }
 
 // ---------------------------------------------------------------------------
-// helpers
+// helpers â€” paths
 // ---------------------------------------------------------------------------
 
 func (b *Backend) bucketDir(bucket string) string {
@@ -99,10 +103,23 @@ func (b *Backend) tagsPath(bucket string) string {
 	return filepath.Join(b.metaDir(bucket), "tags.json")
 }
 
+func (b *Backend) policyPath(bucket string) string {
+	return filepath.Join(b.metaDir(bucket), "policy.json")
+}
+
+// ---------------------------------------------------------------------------
+// helpers â€” bucket config (persisted JSON)
+// ---------------------------------------------------------------------------
+
 // bucketConfig is persisted per-bucket.
 type bucketConfig struct {
-	Versioning bool                   `json:"versioning"`
-	Lifecycle  []models.LifecycleRule `json:"lifecycle,omitempty"`
+	Versioning    bool                             `json:"versioning"`
+	Lifecycle     []models.LifecycleRule           `json:"lifecycle,omitempty"`
+	Encryption    *models.BucketEncryption         `json:"encryption,omitempty"`
+	ObjectLock    *models.ObjectLockConfig         `json:"objectLock,omitempty"`
+	CORS          []models.CORSRule                `json:"cors,omitempty"`
+	Notifications *models.BucketNotificationConfig `json:"notifications,omitempty"`
+	Quota         int64                            `json:"quota,omitempty"` // bytes, 0 = unlimited
 }
 
 func (b *Backend) readConfig(bucket string) bucketConfig {
@@ -123,12 +140,22 @@ func (b *Backend) writeConfig(bucket string, cfg bucketConfig) error {
 	return os.WriteFile(b.configPath(bucket), data, 0o640)
 }
 
+// ---------------------------------------------------------------------------
+// helpers â€” object metadata (persisted JSON per-object)
+// ---------------------------------------------------------------------------
+
 // objectMeta is persisted per-object alongside the data file.
 type objectMeta struct {
-	ContentType  string    `json:"contentType"`
-	Size         int64     `json:"size"`
-	ETag         string    `json:"etag"`
-	LastModified time.Time `json:"lastModified"`
+	ContentType  string            `json:"contentType"`
+	Size         int64             `json:"size"`
+	ETag         string            `json:"etag"`
+	LastModified time.Time         `json:"lastModified"`
+	UserMetadata map[string]string `json:"userMetadata,omitempty"`
+	Encrypted    bool              `json:"encrypted,omitempty"`
+	StorageClass string            `json:"storageClass,omitempty"`
+	RetainUntil  *time.Time        `json:"retainUntil,omitempty"`
+	RetainMode   string            `json:"retainMode,omitempty"` // "GOVERNANCE" or "COMPLIANCE"
+	LegalHold    bool              `json:"legalHold,omitempty"`
 }
 
 func (b *Backend) readObjectMeta(bucket, key string) (objectMeta, error) {
@@ -160,10 +187,51 @@ func (b *Backend) deleteObjectMeta(bucket, key string) {
 }
 
 // ---------------------------------------------------------------------------
-// Backend interface
+// helpers â€” AES-256-GCM encryption
 // ---------------------------------------------------------------------------
 
-// Ping always succeeds — the filesystem is always reachable.
+func (b *Backend) encryptionKey() []byte {
+	h := sha256.Sum256(b.presignSecret)
+	return h[:]
+}
+
+func encryptData(key, plaintext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+func decryptData(key, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	ns := gcm.NonceSize()
+	if len(ciphertext) < ns {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+	return gcm.Open(nil, ciphertext[:ns], ciphertext[ns:], nil)
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” System
+// ---------------------------------------------------------------------------
+
+// Ping always succeeds â€” the filesystem is always reachable.
 func (b *Backend) Ping(_ context.Context) error {
 	if _, err := os.Stat(b.root); err != nil {
 		return fmt.Errorf("native storage: root directory not accessible: %w", err)
@@ -176,7 +244,9 @@ func (b *Backend) Endpoint() string {
 	return b.endpoint
 }
 
-// ---- Bucket Operations ----
+// ---------------------------------------------------------------------------
+// Backend interface â€” Bucket Operations
+// ---------------------------------------------------------------------------
 
 func (b *Backend) CreateBucket(_ context.Context, name string) error {
 	b.mu.Lock()
@@ -195,7 +265,7 @@ func (b *Backend) CreateBucket(_ context.Context, name string) error {
 	if err := b.writeConfig(name, bucketConfig{}); err != nil {
 		return fmt.Errorf("native storage: init bucket config %q: %w", name, err)
 	}
-	log.Printf("✅ Storage: bucket %q created (native)", name)
+	log.Printf("âœ… Storage: bucket %q created (native)", name)
 	return nil
 }
 
@@ -214,10 +284,16 @@ func (b *Backend) DeleteBucket(_ context.Context, name string) error {
 		return fmt.Errorf("native storage: bucket %q is not empty (%d objects)", name, len(entries))
 	}
 
+	// Check object lock prevents deletion.
+	cfg := b.readConfig(name)
+	if cfg.ObjectLock != nil && cfg.ObjectLock.Enabled {
+		return fmt.Errorf("native storage: bucket %q has object lock enabled; cannot delete", name)
+	}
+
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("native storage: remove bucket %q: %w", name, err)
 	}
-	log.Printf("✅ Storage: bucket %q deleted (native)", name)
+	log.Printf("âœ… Storage: bucket %q deleted (native)", name)
 	return nil
 }
 
@@ -251,7 +327,9 @@ func (b *Backend) ListBuckets(_ context.Context) ([]string, error) {
 	return names, nil
 }
 
-// ---- Versioning ----
+// ---------------------------------------------------------------------------
+// Backend interface â€” Versioning
+// ---------------------------------------------------------------------------
 
 func (b *Backend) SetBucketVersioning(_ context.Context, bucket string, enabled bool) error {
 	b.mu.Lock()
@@ -268,7 +346,9 @@ func (b *Backend) GetBucketVersioning(_ context.Context, bucket string) (bool, e
 	return cfg.Versioning, nil
 }
 
-// ---- Lifecycle ----
+// ---------------------------------------------------------------------------
+// Backend interface â€” Lifecycle
+// ---------------------------------------------------------------------------
 
 func (b *Backend) SetBucketLifecycle(_ context.Context, bucket string, rules []models.LifecycleRule) error {
 	b.mu.Lock()
@@ -278,9 +358,209 @@ func (b *Backend) SetBucketLifecycle(_ context.Context, bucket string, rules []m
 	return b.writeConfig(bucket, cfg)
 }
 
-// ---- Object operations ----
+func (b *Backend) GetBucketLifecycle(_ context.Context, bucket string) ([]models.LifecycleRule, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	cfg := b.readConfig(bucket)
+	return cfg.Lifecycle, nil
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” Encryption
+// ---------------------------------------------------------------------------
+
+func (b *Backend) SetBucketEncryption(_ context.Context, bucket string, enc models.BucketEncryption) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cfg := b.readConfig(bucket)
+	cfg.Encryption = &enc
+	return b.writeConfig(bucket, cfg)
+}
+
+func (b *Backend) GetBucketEncryption(_ context.Context, bucket string) (*models.BucketEncryption, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	cfg := b.readConfig(bucket)
+	return cfg.Encryption, nil
+}
+
+func (b *Backend) DeleteBucketEncryption(_ context.Context, bucket string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cfg := b.readConfig(bucket)
+	cfg.Encryption = nil
+	return b.writeConfig(bucket, cfg)
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” Object Lock / Retention
+// ---------------------------------------------------------------------------
+
+func (b *Backend) SetObjectLockConfig(_ context.Context, bucket string, lockCfg models.ObjectLockConfig) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cfg := b.readConfig(bucket)
+	cfg.ObjectLock = &lockCfg
+	return b.writeConfig(bucket, cfg)
+}
+
+func (b *Backend) GetObjectLockConfig(_ context.Context, bucket string) (*models.ObjectLockConfig, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	cfg := b.readConfig(bucket)
+	return cfg.ObjectLock, nil
+}
+
+func (b *Backend) PutObjectRetention(_ context.Context, bucket, key string, until time.Time, mode string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	m, err := b.readObjectMeta(bucket, key)
+	if err != nil {
+		return fmt.Errorf("native storage: retention: object %q/%q not found: %w", bucket, key, err)
+	}
+	// COMPLIANCE mode cannot be shortened.
+	if m.RetainMode == "COMPLIANCE" && m.RetainUntil != nil && until.Before(*m.RetainUntil) {
+		return fmt.Errorf("native storage: cannot shorten COMPLIANCE retention for %q/%q", bucket, key)
+	}
+	m.RetainUntil = &until
+	m.RetainMode = mode
+	return b.writeObjectMeta(bucket, key, m)
+}
+
+func (b *Backend) GetObjectRetention(_ context.Context, bucket, key string) (*time.Time, string, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	m, err := b.readObjectMeta(bucket, key)
+	if err != nil {
+		return nil, "", fmt.Errorf("native storage: retention: object %q/%q not found: %w", bucket, key, err)
+	}
+	return m.RetainUntil, m.RetainMode, nil
+}
+
+func (b *Backend) PutObjectLegalHold(_ context.Context, bucket, key string, hold bool) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	m, err := b.readObjectMeta(bucket, key)
+	if err != nil {
+		return fmt.Errorf("native storage: legal hold: object %q/%q not found: %w", bucket, key, err)
+	}
+	m.LegalHold = hold
+	return b.writeObjectMeta(bucket, key, m)
+}
+
+func (b *Backend) GetObjectLegalHold(_ context.Context, bucket, key string) (bool, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	m, err := b.readObjectMeta(bucket, key)
+	if err != nil {
+		return false, fmt.Errorf("native storage: legal hold: object %q/%q not found: %w", bucket, key, err)
+	}
+	return m.LegalHold, nil
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” CORS
+// ---------------------------------------------------------------------------
+
+func (b *Backend) SetBucketCORS(_ context.Context, bucket string, rules []models.CORSRule) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cfg := b.readConfig(bucket)
+	cfg.CORS = rules
+	return b.writeConfig(bucket, cfg)
+}
+
+func (b *Backend) GetBucketCORS(_ context.Context, bucket string) ([]models.CORSRule, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	cfg := b.readConfig(bucket)
+	return cfg.CORS, nil
+}
+
+func (b *Backend) DeleteBucketCORS(_ context.Context, bucket string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cfg := b.readConfig(bucket)
+	cfg.CORS = nil
+	return b.writeConfig(bucket, cfg)
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” Notifications
+// ---------------------------------------------------------------------------
+
+func (b *Backend) SetBucketNotification(_ context.Context, bucket string, ncfg models.BucketNotificationConfig) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cfg := b.readConfig(bucket)
+	cfg.Notifications = &ncfg
+	return b.writeConfig(bucket, cfg)
+}
+
+func (b *Backend) GetBucketNotification(_ context.Context, bucket string) (*models.BucketNotificationConfig, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	cfg := b.readConfig(bucket)
+	return cfg.Notifications, nil
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” Bucket Policy
+// ---------------------------------------------------------------------------
+
+func (b *Backend) SetBucketPolicy(_ context.Context, bucket string, pol models.S3BucketPolicy) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	data, err := json.MarshalIndent(pol, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(b.policyPath(bucket), data, 0o640)
+}
+
+func (b *Backend) GetBucketPolicy(_ context.Context, bucket string) (*models.S3BucketPolicy, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	data, err := os.ReadFile(b.policyPath(bucket))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var pol models.S3BucketPolicy
+	if err := json.Unmarshal(data, &pol); err != nil {
+		return nil, err
+	}
+	return &pol, nil
+}
+
+func (b *Backend) DeleteBucketPolicy(_ context.Context, bucket string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if err := os.Remove(b.policyPath(bucket)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” Object Operations
+// ---------------------------------------------------------------------------
 
 func (b *Backend) PutObject(_ context.Context, bucket, key string, data io.Reader, _ int64, contentType string) error {
+	return b.putObjectInternal(bucket, key, data, contentType, nil)
+}
+
+func (b *Backend) PutObjectWithOptions(_ context.Context, bucket, key string, data io.Reader, _ int64, opts models.PutObjectOptions) error {
+	ct := opts.ContentType
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	return b.putObjectInternal(bucket, key, data, ct, &opts)
+}
+
+func (b *Backend) putObjectInternal(bucket, key string, data io.Reader, contentType string, opts *models.PutObjectOptions) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -288,25 +568,60 @@ func (b *Backend) PutObject(_ context.Context, bucket, key string, data io.Reade
 		return fmt.Errorf("native storage: bucket %q does not exist", bucket)
 	}
 
+	// Enforce retention: if existing object is under retention, deny overwrite.
+	if existing, err := b.readObjectMeta(bucket, key); err == nil {
+		if existing.RetainUntil != nil && time.Now().Before(*existing.RetainUntil) {
+			return fmt.Errorf("native storage: object %q/%q is under retention until %s", bucket, key, existing.RetainUntil.Format(time.RFC3339))
+		}
+		if existing.LegalHold {
+			return fmt.Errorf("native storage: object %q/%q is under legal hold", bucket, key)
+		}
+	}
+
+	// Enforce quota.
+	cfg := b.readConfig(bucket)
+	if cfg.Quota > 0 {
+		currentSize := b.calcBucketSizeLocked(bucket)
+		if currentSize >= cfg.Quota {
+			return fmt.Errorf("native storage: bucket %q quota exceeded (%d / %d bytes)", bucket, currentSize, cfg.Quota)
+		}
+	}
+
 	objPath := b.objectPath(bucket, key)
 	if err := os.MkdirAll(filepath.Dir(objPath), 0o750); err != nil {
 		return fmt.Errorf("native storage: create parent dirs for %q/%q: %w", bucket, key, err)
 	}
 
-	f, err := os.Create(objPath)
+	// Read all data into memory for hashing + optional encryption.
+	raw, err := io.ReadAll(data)
 	if err != nil {
-		return fmt.Errorf("native storage: create file %q/%q: %w", bucket, key, err)
+		return fmt.Errorf("native storage: read data %q/%q: %w", bucket, key, err)
 	}
 
 	hasher := md5.New()
-	w := io.MultiWriter(f, hasher)
-	n, copyErr := io.Copy(w, data)
-	closeErr := f.Close()
-	if copyErr != nil {
-		return fmt.Errorf("native storage: write %q/%q: %w", bucket, key, copyErr)
+	hasher.Write(raw)
+	etag := hex.EncodeToString(hasher.Sum(nil))
+
+	// Encrypt if bucket encryption is enabled or per-object encryption requested.
+	shouldEncrypt := false
+	if cfg.Encryption != nil && cfg.Encryption.Enabled {
+		shouldEncrypt = true
 	}
-	if closeErr != nil {
-		return fmt.Errorf("native storage: close %q/%q: %w", bucket, key, closeErr)
+	if opts != nil && opts.Encryption {
+		shouldEncrypt = true
+	}
+
+	toWrite := raw
+	if shouldEncrypt {
+		encrypted, encErr := encryptData(b.encryptionKey(), raw)
+		if encErr != nil {
+			return fmt.Errorf("native storage: encrypt %q/%q: %w", bucket, key, encErr)
+		}
+		toWrite = encrypted
+	}
+
+	if err := os.WriteFile(objPath, toWrite, 0o640); err != nil {
+		return fmt.Errorf("native storage: write %q/%q: %w", bucket, key, err)
 	}
 
 	if contentType == "" {
@@ -315,9 +630,18 @@ func (b *Backend) PutObject(_ context.Context, bucket, key string, data io.Reade
 
 	meta := objectMeta{
 		ContentType:  contentType,
-		Size:         n,
-		ETag:         hex.EncodeToString(hasher.Sum(nil)),
+		Size:         int64(len(raw)), // original size
+		ETag:         etag,
 		LastModified: time.Now().UTC(),
+		Encrypted:    shouldEncrypt,
+	}
+	if opts != nil {
+		meta.UserMetadata = opts.UserMetadata
+		meta.StorageClass = opts.StorageClass
+		meta.LegalHold = opts.LegalHold
+		if opts.RetainUntil != nil {
+			meta.RetainUntil = opts.RetainUntil
+		}
 	}
 	if err := b.writeObjectMeta(bucket, key, meta); err != nil {
 		return fmt.Errorf("native storage: write meta %q/%q: %w", bucket, key, err)
@@ -329,19 +653,40 @@ func (b *Backend) GetObject(_ context.Context, bucket, key string) (io.ReadClose
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	f, err := os.Open(b.objectPath(bucket, key))
+	objPath := b.objectPath(bucket, key)
+	data, err := os.ReadFile(objPath)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("native storage: object %q/%q not found", bucket, key)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("native storage: open %q/%q: %w", bucket, key, err)
 	}
-	return f, nil
+
+	// Decrypt if object was encrypted.
+	if m, mErr := b.readObjectMeta(bucket, key); mErr == nil && m.Encrypted {
+		plain, dErr := decryptData(b.encryptionKey(), data)
+		if dErr != nil {
+			return nil, fmt.Errorf("native storage: decrypt %q/%q: %w", bucket, key, dErr)
+		}
+		data = plain
+	}
+
+	return io.NopCloser(strings.NewReader(string(data))), nil
 }
 
 func (b *Backend) DeleteObject(_ context.Context, bucket, key string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	// Check retention / legal hold.
+	if m, err := b.readObjectMeta(bucket, key); err == nil {
+		if m.RetainUntil != nil && time.Now().Before(*m.RetainUntil) {
+			return fmt.Errorf("native storage: object %q/%q is under retention until %s", bucket, key, m.RetainUntil.Format(time.RFC3339))
+		}
+		if m.LegalHold {
+			return fmt.Errorf("native storage: object %q/%q is under legal hold", bucket, key)
+		}
+	}
 
 	if err := os.Remove(b.objectPath(bucket, key)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("native storage: delete %q/%q: %w", bucket, key, err)
@@ -377,11 +722,20 @@ func (b *Backend) ListObjects(_ context.Context, bucket, prefix string) ([]model
 			Key:          key,
 			Size:         info.Size(),
 			LastModified: info.ModTime().UTC(),
+			StorageClass: "STANDARD",
 		}
-		// Try to read cached meta for etag / content-type.
-		if m, err := b.readObjectMeta(bucket, key); err == nil {
+		// Read cached meta for etag / content-type / user metadata.
+		if m, mErr := b.readObjectMeta(bucket, key); mErr == nil {
 			obj.ETag = m.ETag
 			obj.ContentType = m.ContentType
+			obj.Size = m.Size // original size (before encryption)
+			obj.UserMetadata = m.UserMetadata
+			obj.StorageClass = m.StorageClass
+			obj.RetainUntil = m.RetainUntil
+			obj.LegalHold = m.LegalHold
+			if obj.StorageClass == "" {
+				obj.StorageClass = "STANDARD"
+			}
 		}
 		objects = append(objects, obj)
 		return nil
@@ -407,15 +761,26 @@ func (b *Backend) StatObject(_ context.Context, bucket, key string) (*models.Obj
 		Key:          key,
 		Size:         fi.Size(),
 		LastModified: fi.ModTime().UTC(),
+		StorageClass: "STANDARD",
 	}
 	if m, mErr := b.readObjectMeta(bucket, key); mErr == nil {
 		obj.ContentType = m.ContentType
 		obj.ETag = m.ETag
+		obj.Size = m.Size
+		obj.UserMetadata = m.UserMetadata
+		obj.StorageClass = m.StorageClass
+		obj.RetainUntil = m.RetainUntil
+		obj.LegalHold = m.LegalHold
+		if obj.StorageClass == "" {
+			obj.StorageClass = "STANDARD"
+		}
 	}
 	return obj, nil
 }
 
-// ---- Batch / copy ----
+// ---------------------------------------------------------------------------
+// Backend interface â€” Batch / Copy
+// ---------------------------------------------------------------------------
 
 func (b *Backend) MultiDeleteObjects(ctx context.Context, bucket string, keys []string) (int, []string, error) {
 	var deleted int
@@ -437,58 +802,42 @@ func (b *Backend) CopyObject(_ context.Context, srcBucket, srcKey, dstBucket, ds
 	srcPath := b.objectPath(srcBucket, srcKey)
 	dstPath := b.objectPath(dstBucket, dstKey)
 
-	src, err := os.Open(srcPath)
+	srcData, err := os.ReadFile(srcPath)
 	if err != nil {
 		return fmt.Errorf("native storage: copy source %q/%q: %w", srcBucket, srcKey, err)
 	}
-	defer src.Close()
 
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
 		return fmt.Errorf("native storage: copy dest dir %q/%q: %w", dstBucket, dstKey, err)
 	}
 
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		return fmt.Errorf("native storage: copy dest %q/%q: %w", dstBucket, dstKey, err)
+	if err := os.WriteFile(dstPath, srcData, 0o640); err != nil {
+		return fmt.Errorf("native storage: copy write %q/%q: %w", dstBucket, dstKey, err)
 	}
 
-	hasher := md5.New()
-	w := io.MultiWriter(dst, hasher)
-	n, copyErr := io.Copy(w, src)
-	closeErr := dst.Close()
-	if copyErr != nil {
-		return fmt.Errorf("native storage: copy write: %w", copyErr)
-	}
-	if closeErr != nil {
-		return fmt.Errorf("native storage: copy close: %w", closeErr)
-	}
-
-	// Read source meta to preserve content-type.
+	// Copy metadata, update timestamps.
 	srcMeta, _ := b.readObjectMeta(srcBucket, srcKey)
-	ct := srcMeta.ContentType
-	if ct == "" {
-		ct = "application/octet-stream"
+	dstMeta := srcMeta
+	dstMeta.LastModified = time.Now().UTC()
+
+	// Recompute ETag if not encrypted.
+	if !srcMeta.Encrypted {
+		h := md5.New()
+		h.Write(srcData)
+		dstMeta.ETag = hex.EncodeToString(h.Sum(nil))
 	}
 
-	meta := objectMeta{
-		ContentType:  ct,
-		Size:         n,
-		ETag:         hex.EncodeToString(hasher.Sum(nil)),
-		LastModified: time.Now().UTC(),
-	}
-	if err := b.writeObjectMeta(dstBucket, dstKey, meta); err != nil {
+	if err := b.writeObjectMeta(dstBucket, dstKey, dstMeta); err != nil {
 		return fmt.Errorf("native storage: copy meta: %w", err)
 	}
 
-	log.Printf("✅ Storage: copied %s/%s → %s/%s (native)", srcBucket, srcKey, dstBucket, dstKey)
+	log.Printf("âœ… Storage: copied %s/%s â†’ %s/%s (native)", srcBucket, srcKey, dstBucket, dstKey)
 	return nil
 }
 
-// ---- Pre-signed URLs ----
-//
-// For the native backend, pre-signed URLs are HMAC-signed tokens that point
-// back to the AxiomNizam API server. The token encodes bucket, key, method,
-// and expiry and is verified by the storage handler at request time.
+// ---------------------------------------------------------------------------
+// Backend interface â€” Pre-signed URLs
+// ---------------------------------------------------------------------------
 
 func (b *Backend) presignToken(method, bucket, key string, expires time.Duration) string {
 	exp := time.Now().UTC().Add(expires).Unix()
@@ -549,7 +898,9 @@ func (b *Backend) VerifyPresignToken(method, bucket, key, token string) bool {
 	return hmac.Equal([]byte(sig), []byte(expected))
 }
 
-// ---- Tagging ----
+// ---------------------------------------------------------------------------
+// Backend interface â€” Tagging
+// ---------------------------------------------------------------------------
 
 func (b *Backend) GetBucketTagging(_ context.Context, bucket string) ([]models.BucketTag, error) {
 	b.mu.RLock()
@@ -590,7 +941,34 @@ func (b *Backend) DeleteBucketTagging(_ context.Context, bucket string) error {
 	return nil
 }
 
-// ---- Utility ----
+// ---------------------------------------------------------------------------
+// Backend interface â€” Object Metadata
+// ---------------------------------------------------------------------------
+
+func (b *Backend) GetObjectMetadata(_ context.Context, bucket, key string) (map[string]string, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	m, err := b.readObjectMeta(bucket, key)
+	if err != nil {
+		return nil, fmt.Errorf("native storage: metadata %q/%q: %w", bucket, key, err)
+	}
+	return m.UserMetadata, nil
+}
+
+func (b *Backend) PutObjectMetadata(_ context.Context, bucket, key string, metadata map[string]string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	m, err := b.readObjectMeta(bucket, key)
+	if err != nil {
+		return fmt.Errorf("native storage: metadata %q/%q: %w", bucket, key, err)
+	}
+	m.UserMetadata = metadata
+	return b.writeObjectMeta(bucket, key, m)
+}
+
+// ---------------------------------------------------------------------------
+// Backend interface â€” Utility
+// ---------------------------------------------------------------------------
 
 func (b *Backend) GetBucketSize(ctx context.Context, bucket string) (int64, int64, error) {
 	objects, err := b.ListObjects(ctx, bucket, "")
@@ -604,13 +982,41 @@ func (b *Backend) GetBucketSize(ctx context.Context, bucket string) (int64, int6
 	return totalSize, int64(len(objects)), nil
 }
 
-// ---------------------------------------------------------------------------
-// Compile-time interface check (import cycle–safe: we check against a local
-// copy of the interface signature, but the real check happens when storage.go
-// assigns *Backend to a storage.Backend variable).
-// ---------------------------------------------------------------------------
+func (b *Backend) GetBucketQuota(ctx context.Context, bucket string) (*models.QuotaInfo, error) {
+	b.mu.RLock()
+	cfg := b.readConfig(bucket)
+	b.mu.RUnlock()
 
-// Ensure *Backend satisfies io.Closer for future use.
-var _ io.ReadCloser = (*os.File)(nil) // helper: os.File is a ReadCloser
-// Note: the compile-time check against storage.Backend happens in storage.go
-// to avoid an import cycle.
+	totalSize, objectCount, err := b.GetBucketSize(ctx, bucket)
+	if err != nil {
+		return nil, err
+	}
+
+	pct := float64(0)
+	if cfg.Quota > 0 {
+		pct = float64(totalSize) / float64(cfg.Quota) * 100
+	}
+
+	return &models.QuotaInfo{
+		Bucket:      bucket,
+		QuotaBytes:  cfg.Quota,
+		UsedBytes:   totalSize,
+		UsedPct:     pct,
+		ObjectCount: objectCount,
+	}, nil
+}
+
+// calcBucketSizeLocked returns total object bytes for a bucket.
+// Caller must hold b.mu (at least read).
+func (b *Backend) calcBucketSizeLocked(bucket string) int64 {
+	dataRoot := b.dataDir(bucket)
+	var total int64
+	_ = filepath.Walk(dataRoot, func(_ string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		total += info.Size()
+		return nil
+	})
+	return total
+}

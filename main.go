@@ -26,6 +26,8 @@ import (
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
 	iampkg "example.com/axiomnizam/internal/iam"
+	iamstorage "example.com/axiomnizam/internal/iam/storage"
+	iamtoken "example.com/axiomnizam/internal/iam/token"
 	"example.com/axiomnizam/internal/integration"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
@@ -1677,7 +1679,13 @@ func main() {
 	// OBJECT STORAGE MODULE (Native S3)
 	// ====================================
 	storageCfg := storage.DefaultConfig()
-	storageSys, storageErr := storage.NewSystem(storageCfg)
+	var storageIssuer *iamtoken.Issuer
+	var storageRevokedStore *iamstorage.EtcdRevokedTokenStore
+	if iamSystem != nil {
+		storageIssuer = iamSystem.Issuer
+		storageRevokedStore = iamSystem.RevokedStore
+	}
+	storageSys, storageErr := storage.NewSystem(storageCfg, storageIssuer, storageRevokedStore)
 	if storageErr != nil {
 		log.Printf("⚠️  Object storage module initialization failed: %v — storage API will be unavailable", storageErr)
 	} else {

@@ -28,17 +28,13 @@ func NewAuditLog(maxEvents int) *AuditLog {
 }
 
 // Record adds a new storage event to the audit log.
-func (a *AuditLog) Record(eventType, tenantID, userID, bucket, key string, size int64, details string) {
-	ev := models.StorageEvent{
-		ID:        uuid.New().String(),
-		Timestamp: time.Now().UTC(),
-		Type:      eventType,
-		TenantID:  tenantID,
-		UserID:    userID,
-		Bucket:    bucket,
-		Key:       key,
-		Size:      size,
-		Details:   details,
+// Accepts a pre-built StorageEvent struct.
+func (a *AuditLog) Record(ev models.StorageEvent) {
+	if ev.ID == "" {
+		ev.ID = uuid.New().String()
+	}
+	if ev.Timestamp.IsZero() {
+		ev.Timestamp = time.Now().UTC()
 	}
 
 	a.mu.Lock()
@@ -53,7 +49,7 @@ func (a *AuditLog) Record(eventType, tenantID, userID, bucket, key string, size 
 	a.events = append(a.events, ev)
 	a.mu.Unlock()
 
-	log.Printf("📝 Storage audit: %s tenant=%s bucket=%s key=%s", eventType, tenantID, bucket, key)
+	log.Printf("📝 Storage audit: %s tenant=%s bucket=%s key=%s", ev.Type, ev.TenantID, ev.Bucket, ev.Key)
 }
 
 // List returns events filtered by optional tenant and event type.
