@@ -106,9 +106,8 @@
     // ===== Dashboard =====
     window.osLoadDashboard = async function() {
         try {
-            const [statsResp, healthResp, bucketsResp, metricsResp] = await Promise.all([
+            const [statsResp, bucketsResp, metricsResp] = await Promise.all([
                 osFetch('/stats'),
-                osFetch('/health'),
                 osFetch('/buckets'),
                 osFetch('/metrics')
             ]);
@@ -120,16 +119,6 @@
                 setText('osDashBuckets', st.totalBuckets || 0);
                 setText('osDashObjects', st.totalObjects || 0);
                 setText('osDashSize', fmtSize(st.totalSizeBytes));
-            }
-            if (healthResp.ok) {
-                const h = await healthResp.json();
-                setText('osStatHealth', h.status === 'healthy' ? 'Online' : 'Offline');
-                document.getElementById('osStatHealth').style.color = h.status === 'healthy' ? '#22c55e' : '#ef4444';
-                document.getElementById('osDashHealth').textContent = JSON.stringify(h, null, 2);
-            } else {
-                setText('osStatHealth', 'Offline');
-                document.getElementById('osStatHealth').style.color = '#ef4444';
-                document.getElementById('osDashHealth').textContent = 'Storage backend unreachable';
             }
             if (bucketsResp.ok) {
                 const buckets = await bucketsResp.json();
@@ -144,6 +133,22 @@
                 setText('osDashErrors', m.totalErrors || 0);
                 const avgMs = m.totalRequests > 0 ? ((m.avgLatencyMs || 0)).toFixed(1) : '0';
                 setText('osDashLatency', avgMs + ' ms');
+
+                const backendHealthy = !!m.backendHealthy;
+                setText('osStatHealth', backendHealthy ? 'Online' : 'Offline');
+                document.getElementById('osStatHealth').style.color = backendHealthy ? '#22c55e' : '#ef4444';
+                document.getElementById('osDashHealth').textContent = JSON.stringify({
+                    status: backendHealthy ? 'healthy' : 'degraded',
+                    backendHealthy: backendHealthy,
+                    uptime: m.uptime || '-',
+                    totalRequests: m.totalRequests || 0,
+                    totalErrors: m.totalErrors || 0,
+                    avgLatencyMs: Number(m.avgLatencyMs || 0).toFixed(1)
+                }, null, 2);
+            } else {
+                setText('osStatHealth', 'Offline');
+                document.getElementById('osStatHealth').style.color = '#ef4444';
+                document.getElementById('osDashHealth').textContent = 'Storage metrics unavailable';
             }
         } catch(e) {
             document.getElementById('osDashHealth').textContent = 'Error: ' + e.message;
@@ -513,38 +518,75 @@
     // ===== Metrics =====
     window.osLoadMetrics = async function() {
         try {
-            const resp = await osFetch('/metrics');
-            if (!resp.ok) { osToast('Failed to load metrics', true); return; }
-            const m = await resp.json();
+            const [metricsResp, bucketsResp] = await Promise.all([
+                osFetch('/metrics'),
+                osFetch('/buckets')
+            ]);
+            if (!metricsResp.ok) { osToast('Failed to load metrics', true); return; }
+
+            const m = await metricsResp.json();
             setText('osMetricRequests', m.totalRequests || 0);
             setText('osMetricBytesIn', fmtSize(m.totalBytesIn));
             setText('osMetricBytesOut', fmtSize(m.totalBytesOut));
             setText('osMetricErrors', m.totalErrors || 0);
             const avgMs = m.totalRequests > 0 ? (m.avgLatencyMs || 0).toFixed(1) : '0';
             setText('osMetricAvgLatency', avgMs + ' ms');
-            setText('osMetricUptime', fmtDuration(m.uptimeSeconds));
+            setText('osMetricUptime', m.uptime || '-');
 
-            // Per-bucket metrics
-            const bm = m.bucketMetrics || {};
             const tbody = document.getElementById('osMetricsBucketBody');
-            const entries = Object.entries(bm);
-            if (!entries.length) {
+            if (!bucketsResp.ok) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">Unable to load bucket list</td></tr>';
+                return;
+            }
+
+            const buckets = await bucketsResp.json();
+            const bucketList = Array.isArray(buckets) ? buckets : [];
+            if (!bucketList.length) {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">No per-bucket metrics yet</td></tr>';
                 return;
             }
-            tbody.innerHTML = entries.map(([name, b]) => {
-                const bAvg = b.requests > 0 ? (b.avgLatencyMs || 0).toFixed(1) : '0';
+
+            const metricRows = await Promise.all(bucketList.map(async (b) => {
+                const name = (b.metadata && b.metadata.name) ? b.metadata.name : '';
+                const tenantId = (b.metadata && b.metadata.tenantId) ? b.metadata.tenantId : 'default';
+                if (!name) return null;
+                const resp = await osFetch('/metrics/' + encodeURIComponent(name) + '?tenantId=' + encodeURIComponent(tenantId));
+                if (!resp.ok) return null;
+                const bm = await resp.json();
+                return {
+                    bucketName: bm.bucketName || name,
+                    requestCount: bm.requestCount || 0,
+                    getRequests: bm.getRequests || 0,
+                    putRequests: bm.putRequests || 0,
+                    deleteRequests: bm.deleteRequests || 0,
+                    bytesIn: bm.bytesIn || 0,
+                    bytesOut: bm.bytesOut || 0,
+                    errorCount: bm.errorCount || 0,
+                    avgLatencyMs: Number(bm.avgLatencyMs || 0),
+                    lastAccessed: bm.lastAccessed || ''
+                };
+            }));
+
+            const rows = metricRows.filter(Boolean);
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">No per-bucket metrics available</td></tr>';
+                return;
+            }
+
+            rows.sort((a, b) => b.requestCount - a.requestCount);
+            tbody.innerHTML = rows.map((b) => {
+                const bAvg = b.requestCount > 0 ? b.avgLatencyMs.toFixed(1) : '0';
                 return '<tr>' +
-                    '<td><strong>' + escHtml(name) + '</strong></td>' +
-                    '<td>' + (b.requests || 0) + '</td>' +
-                    '<td>' + (b.gets || 0) + '</td>' +
-                    '<td>' + (b.puts || 0) + '</td>' +
-                    '<td>' + (b.deletes || 0) + '</td>' +
+                    '<td><strong>' + escHtml(b.bucketName) + '</strong></td>' +
+                    '<td>' + b.requestCount + '</td>' +
+                    '<td>' + b.getRequests + '</td>' +
+                    '<td>' + b.putRequests + '</td>' +
+                    '<td>' + b.deleteRequests + '</td>' +
                     '<td class="os-size">' + fmtSize(b.bytesIn) + '</td>' +
                     '<td class="os-size">' + fmtSize(b.bytesOut) + '</td>' +
-                    '<td style="color:#ef4444;">' + (b.errors || 0) + '</td>' +
+                    '<td style="color:#ef4444;">' + b.errorCount + '</td>' +
                     '<td>' + bAvg + ' ms</td>' +
-                    '<td>' + fmtDate(b.lastAccess) + '</td>' +
+                    '<td>' + fmtDate(b.lastAccessed) + '</td>' +
                 '</tr>';
             }).join('');
         } catch(e) { osToast('Error loading metrics: ' + e.message, true); }
@@ -569,8 +611,9 @@
         try {
             const resp = await osFetch('/events' + qs);
             if (!resp.ok) { osToast('Failed to load events', true); return; }
-            const evts = await resp.json();
-            renderEvents(Array.isArray(evts) ? evts : []);
+            const payload = await resp.json();
+            const evts = Array.isArray(payload) ? payload : (Array.isArray(payload.events) ? payload.events : []);
+            renderEvents(evts);
         } catch(e) { osToast('Error loading events: ' + e.message, true); }
     };
 
@@ -595,7 +638,7 @@
         tbody.innerHTML = events.map(e => {
             return '<tr>' +
                 '<td style="white-space:nowrap;">' + fmtDate(e.timestamp) + '</td>' +
-                '<td>' + eventBadge(e.eventType) + '</td>' +
+                '<td>' + eventBadge(e.type) + '</td>' +
                 '<td>' + escHtml(e.tenantId || '-') + '</td>' +
                 '<td class="os-mono">' + escHtml(e.bucket || '-') + '</td>' +
                 '<td class="os-mono" style="max-width:200px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(e.key || '-') + '</td>' +
