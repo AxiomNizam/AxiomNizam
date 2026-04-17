@@ -87,6 +87,23 @@
     .os-event-row:hover td { background:rgba(var(--primary-rgb,96,165,250),.04); }
     .os-metric-highlight { font-size:1.4rem; font-weight:700; }
     .os-tag-table td { padding:6px 10px; }
+    .os-dash-bucket-select {
+        background:none;
+        border:none;
+        color:var(--text-primary);
+        font:inherit;
+        font-weight:600;
+        cursor:pointer;
+        padding:0;
+        text-align:left;
+    }
+    .os-dash-bucket-select:hover {
+        color:var(--primary-light);
+        text-decoration:underline;
+    }
+    .os-dash-bucket-select.active {
+        color:var(--primary-light);
+    }
     @media (max-width:768px) {
         .os-grid-three { grid-template-columns:1fr; }
         .os-grid-two { grid-template-columns:1fr; }
@@ -242,7 +259,7 @@
             <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">
                 Template bucket: <span id="osDashPolicyBucketName" class="os-mono">your-bucket-name</span>
             </p>
-            <textarea id="osDashboardPolicyTemplate" rows="11" readonly style="width:100%; font-family:var(--font-mono, monospace); font-size:.85rem;"></textarea>
+            <textarea id="osDashboardPolicyTemplate" rows="11" readonly style="width:100%; background:var(--darker-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:8px; padding:14px; font-family:var(--font-mono, monospace); font-size:.85rem;"></textarea>
             <div class="os-form-actions">
                 <button class="os-btn os-btn-secondary" onclick="osCopyDashboardPolicyTemplate()">Copy Template</button>
             </div>
@@ -1088,6 +1105,6 @@
     </div>
 </div>
 
-<script src="/static/object-storage.js?v=20260417-6"></script>
+<script src="/static/object-storage.js?v=20260417-7"></script>
 {{ end }}
 

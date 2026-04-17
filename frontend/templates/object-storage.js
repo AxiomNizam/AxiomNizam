@@ -82,14 +82,29 @@
         }, null, 2);
     }
 
+    let osDashboardTemplateBucket = 'your-bucket-name';
+
     function osRenderDashboardPolicyTemplate(bucketName) {
         const b = String(bucketName || '').trim() || 'your-bucket-name';
+        osDashboardTemplateBucket = b;
         const templateEl = document.getElementById('osDashboardPolicyTemplate');
         if (templateEl) {
             templateEl.value = osBuildBucketPolicyTemplate(b);
         }
         setText('osDashPolicyBucketName', b);
+
+        document.querySelectorAll('#osDashRecentBuckets .os-dash-bucket-select').forEach(btn => {
+            if ((btn.dataset.bucket || '') === b) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
     }
+
+    window.osSelectDashboardPolicyBucket = function(bucketName) {
+        osRenderDashboardPolicyTemplate(bucketName);
+    };
 
     function osToast(msg, isErr) {
         const t = document.createElement('div');
@@ -225,7 +240,10 @@
         if (!buckets.length) { el.innerHTML = '<p style="color:var(--text-muted);">No buckets yet. Create one to get started.</p>'; return; }
         let html = '<table class="os-table"><thead><tr><th>Name</th><th>Tenant</th><th>Phase</th><th>Objects</th><th>Size</th></tr></thead><tbody>';
         buckets.forEach(b => {
-            html += '<tr><td>' + escHtml(b.metadata?.name) + '</td><td>' + escHtml(b.metadata?.tenantId) + '</td><td>' + phaseBadge(b.status?.phase) + '</td><td>' + (b.status?.objectCount||0) + '</td><td class="os-size">' + fmtSize(b.status?.totalSize) + '</td></tr>';
+            const name = (b && b.metadata && b.metadata.name) ? b.metadata.name : '';
+            const tenant = (b && b.metadata && b.metadata.tenantId) ? b.metadata.tenantId : '';
+            const selectedClass = name === osDashboardTemplateBucket ? ' active' : '';
+            html += '<tr><td><button class="os-dash-bucket-select' + selectedClass + '" data-bucket="' + escHtml(name) + '" onclick="osSelectDashboardPolicyBucket(this.dataset.bucket)">' + escHtml(name || '-') + '</button></td><td>' + escHtml(tenant) + '</td><td>' + phaseBadge(b.status?.phase) + '</td><td>' + (b.status?.objectCount||0) + '</td><td class="os-size">' + fmtSize(b.status?.totalSize) + '</td></tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
