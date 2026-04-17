@@ -8,7 +8,7 @@ import (
 	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/encryption"
 	"example.com/axiomnizam/internal/lineage"
-	"example.com/axiomnizam/internal/workflow"
+	"example.com/axiomnizam/internal/workflows"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,7 +18,7 @@ type Phase3Handlers struct {
 	encryptionMgr *encryption.FieldLevelEncryption
 	lineageMgr    *lineage.DataLineageTracker
 	auditMgr      *audit.AuditComplianceManager
-	workflowMgr   *workflow.MultiVersionWorkflowManager
+	workflowMgr   *workflows.MultiVersionWorkflowManager
 }
 
 // NewPhase3Handlers creates Phase3Handlers
@@ -26,7 +26,7 @@ func NewPhase3Handlers(
 	encMgr *encryption.FieldLevelEncryption,
 	linMgr *lineage.DataLineageTracker,
 	audMgr *audit.AuditComplianceManager,
-	wfMgr *workflow.MultiVersionWorkflowManager,
+	wfMgr *workflows.MultiVersionWorkflowManager,
 ) *Phase3Handlers {
 	return &Phase3Handlers{
 		encryptionMgr: encMgr,
@@ -529,7 +529,7 @@ func (h *Phase3Handlers) CreateWorkflow(c *gin.Context) {
 		return
 	}
 
-	wfDef := &workflow.WorkflowDefinition{
+	wfDef := &workflows.VersionedWorkflowDefinition{
 		Name:        req.Name,
 		Description: req.Description,
 		CreatedBy:   req.CreatedBy,
@@ -564,7 +564,7 @@ func (h *Phase3Handlers) PublishWorkflowVersion(c *gin.Context) {
 		return
 	}
 
-	newDef := &workflow.WorkflowDefinition{
+	newDef := &workflows.VersionedWorkflowDefinition{
 		CreatedBy: req.CreatedBy,
 		Status:    "published",
 	}

@@ -10,12 +10,21 @@ import (
 	"example.com/axiomnizam/internal/cache"
 	"example.com/axiomnizam/internal/events"
 	"example.com/axiomnizam/internal/jobs"
+	"example.com/axiomnizam/internal/rbac"
 	"example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/utils/logger"
 	"go.uber.org/zap"
 )
 
 // ControllerReconciler handles the full reconciliation lifecycle
+//
+// Deprecated (Phase 1 checklist): this type implements a legacy phased
+// reconciliation loop (initialise → admit → observe → reconcile →
+// finalize) that has been superseded by `reconciler.Reconciler` +
+// resource-specific reconcilers under `internal/resources/*`.  No
+// external caller constructs this struct any more; it remains for the
+// in-package bridge (`controller_reconciler_bridge.go`) and will be
+// removed once the phased-middleware port is complete.
 type ControllerReconciler struct {
 	Name                  string
 	Namespace             string
@@ -24,7 +33,7 @@ type ControllerReconciler struct {
 	Logger                *logger.Logger
 	EventBus              *events.EventBusWithLifecycle
 	AdmissionController   *AdmissionController
-	RBACEngine            *RBACEngine
+	RBACEngine            *rbac.Engine
 	ResourceManager       *ResourceManager
 	Informer              cache.Informer
 	Queue                 jobs.Queue
@@ -145,7 +154,7 @@ func NewControllerReconciler(
 	kind string,
 	eventBus *events.EventBusWithLifecycle,
 	admissionCtrl *AdmissionController,
-	rbacEngine *RBACEngine,
+	rbacEngine *rbac.Engine,
 	resourceMgr *ResourceManager,
 	queue jobs.Queue,
 ) *ControllerReconciler {

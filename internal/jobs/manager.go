@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/platform/timing"
 )
 
 // Scheduler implements job scheduling with cron-like expressions
@@ -90,7 +92,7 @@ func (ss *SimpleScheduler) Start(ctx context.Context, queue Queue) error {
 
 // run executes the scheduler loop
 func (ss *SimpleScheduler) run() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(timing.DefaultSchedulerTick)
 	defer ticker.Stop()
 
 	for {

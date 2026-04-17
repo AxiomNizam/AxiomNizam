@@ -18,6 +18,7 @@ type ControllerManager struct {
 	store       *apiserver.ResourceStore
 	leaderElect bool
 	namespace   string
+	elector     LeaderElector
 }
 
 // ManagedController wraps a controller with metadata
@@ -35,6 +36,23 @@ func NewControllerManager(store *apiserver.ResourceStore, leaderElect bool, name
 		leaderElect: leaderElect,
 		namespace:   namespace,
 	}
+}
+
+// WithLeaderElector registers a LeaderElector so Start can gate
+// controller startup on leadership acquisition.  Must be called before
+// Start when leaderElect=true.
+func (cm *ControllerManager) WithLeaderElector(le LeaderElector) *ControllerManager {
+	cm.elector = le
+	return cm
+}
+
+// IsLeader reports whether this manager currently holds leadership.
+// When leader election is disabled, it always returns true.
+func (cm *ControllerManager) IsLeader() bool {
+	if !cm.leaderElect {
+		return true
+	}
+	return cm.elector != nil && cm.elector.IsLeader()
 }
 
 // RegisterWorkloadController registers the workload controller
@@ -112,8 +130,39 @@ func (cm *ControllerManager) RegisterScheduleController() error {
 	return nil
 }
 
-// Start starts all registered controllers
+// LeaderElector is the minimal contract ControllerManager needs to gate
+// controller startup on leadership.  Any implementation (etcd, k8s
+// lease, redis lock) satisfies it.
+//
+// Acquire blocks until this instance becomes leader or ctx is done.
+// IsLeader is consulted by the run loop to decide whether to continue
+// reconciling; if it returns false the manager stops all controllers.
+type LeaderElector interface {
+	Acquire(ctx context.Context) error
+	IsLeader() bool
+	Resign(ctx context.Context) error
+}
+
+// Start starts all registered controllers.
+//
+// Leader-election gate (Phase 5): when `cm.leaderElect` is true and a
+// LeaderElector has been registered via WithLeaderElector, Start blocks
+// until leadership is acquired before booting controllers.  If leadership
+// is lost later, the context returned to each controller is cancelled
+// via cm.stop so they shut down cleanly.
 func (cm *ControllerManager) Start(ctx context.Context) error {
+	if cm.leaderElect {
+		if cm.elector == nil {
+			return fmt.Errorf("leader election enabled but no LeaderElector registered")
+		}
+		log.Println("leader election enabled, waiting to acquire lease...")
+		if err := cm.elector.Acquire(ctx); err != nil {
+			return fmt.Errorf("acquire leadership: %w", err)
+		}
+		log.Println("leadership acquired, starting controllers")
+		defer func() { _ = cm.elector.Resign(context.Background()) }()
+	}
+
 	cm.mu.Lock()
 	controllers := make([]ManagedController, 0, len(cm.controllers))
 	for _, ctrl := range cm.controllers {

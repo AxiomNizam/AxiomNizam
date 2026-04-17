@@ -9,7 +9,7 @@ import (
 	"example.com/axiomnizam/internal/encryption"
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/lineage"
-	"example.com/axiomnizam/internal/workflow"
+	"example.com/axiomnizam/internal/workflows"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,7 +19,7 @@ type Phase3Integration struct {
 	encryptionMgr  *encryption.FieldLevelEncryption
 	lineageMgr     *lineage.DataLineageTracker
 	auditMgr       *audit.AuditComplianceManager
-	workflowMgr    *workflow.MultiVersionWorkflowManager
+	workflowMgr    *workflows.MultiVersionWorkflowManager
 	handlers       *handlers.Phase3Handlers
 	mu             sync.RWMutex
 	initialized    bool
@@ -32,7 +32,7 @@ func NewPhase3Integration() *Phase3Integration {
 		encryptionMgr: encryption.NewFieldLevelEncryption(),
 		lineageMgr:    lineage.NewDataLineageTracker(),
 		auditMgr:      audit.NewAuditComplianceManager(),
-		workflowMgr:   workflow.NewMultiVersionWorkflowManager(),
+		workflowMgr:   workflows.NewMultiVersionWorkflowManager(),
 	}
 }
 

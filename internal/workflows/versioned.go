@@ -1,4 +1,8 @@
-package workflow
+// Merged from legacy internal/workflow package (P1.4).
+// WorkflowDefinition/WorkflowStep/WorkflowInstance were renamed to their
+// Versioned* counterparts to avoid collisions with the canonical runtime types
+// in engine.go.
+package workflows
 
 import (
 	"fmt"
@@ -6,55 +10,55 @@ import (
 	"time"
 )
 
-// WorkflowDefinition defines a workflow with versioning
-type WorkflowDefinition struct {
-	ID              string
-	Name            string
-	Version         string
-	Status          string // draft, published, deprecated
-	Steps           []*WorkflowStep
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	CreatedBy       string
-	Description     string
-	Tags            []string
+// VersionedWorkflowDefinition defines a workflow with versioning
+type VersionedWorkflowDefinition struct {
+	ID          string
+	Name        string
+	Version     string
+	Status      string // draft, published, deprecated
+	Steps       []*VersionedWorkflowStep
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	CreatedBy   string
+	Description string
+	Tags        []string
 }
 
-// WorkflowStep represents a step in workflow
-type WorkflowStep struct {
-	ID              string
-	Name            string
-	StepNumber      int
-	StepType        string // action, decision, approval, notification
-	Configuration   map[string]interface{}
-	NextStepID      string
-	ErrorHandler    string
-	Timeout         int64 // milliseconds
+// VersionedWorkflowStep represents a step in workflow
+type VersionedWorkflowStep struct {
+	ID            string
+	Name          string
+	StepNumber    int
+	StepType      string // action, decision, approval, notification
+	Configuration map[string]interface{}
+	NextStepID    string
+	ErrorHandler  string
+	Timeout       int64 // milliseconds
 }
 
-// WorkflowInstance represents an execution instance
-type WorkflowInstance struct {
-	ID              string
-	WorkflowID      string
-	WorkflowVersion string
-	Status          string // running, completed, failed, paused
-	StartedAt       time.Time
-	CompletedAt     *time.Time
-	CurrentStepID   string
+// VersionedWorkflowInstance represents an execution instance
+type VersionedWorkflowInstance struct {
+	ID               string
+	WorkflowID       string
+	WorkflowVersion  string
+	Status           string // running, completed, failed, paused
+	StartedAt        time.Time
+	CompletedAt      *time.Time
+	CurrentStepID    string
 	ExecutionHistory []*ExecutionRecord
-	ContextData     map[string]interface{}
-	Variables       map[string]interface{}
+	ContextData      map[string]interface{}
+	Variables        map[string]interface{}
 }
 
 // ExecutionRecord records step execution
 type ExecutionRecord struct {
-	StepID        string
-	StepName      string
-	ExecutedAt    time.Time
-	Duration      int64 // milliseconds
-	Status        string // success, failed, skipped
-	Output        map[string]interface{}
-	Error         string
+	StepID     string
+	StepName   string
+	ExecutedAt time.Time
+	Duration   int64  // milliseconds
+	Status     string // success, failed, skipped
+	Output     map[string]interface{}
+	Error      string
 }
 
 // WorkflowVersion represents versioned workflow
@@ -72,23 +76,23 @@ type WorkflowVersion struct {
 
 // MultiVersionWorkflowManager manages versioned workflows
 type MultiVersionWorkflowManager struct {
-	mu                sync.RWMutex
-	workflows         map[string]*WorkflowDefinition
-	versions          map[string][]*WorkflowVersion
-	instances         map[string]*WorkflowInstance
-	versionHistory    map[string][]*WorkflowDefinition
-	executionLogs     []*ExecutionRecord
-	migrations        map[string]*MigrationStrategy
-	maxInstanceSize   int
-	maxExecutionSize  int
+	mu               sync.RWMutex
+	workflows        map[string]*VersionedWorkflowDefinition
+	versions         map[string][]*WorkflowVersion
+	instances        map[string]*VersionedWorkflowInstance
+	versionHistory   map[string][]*VersionedWorkflowDefinition
+	executionLogs    []*ExecutionRecord
+	migrations       map[string]*MigrationStrategy
+	maxInstanceSize  int
+	maxExecutionSize int
 }
 
 // MigrationStrategy defines workflow migration
 type MigrationStrategy struct {
-	FromVersion string
-	ToVersion   string
-	Steps       []*MigrationStep
-	Automatic   bool
+	FromVersion      string
+	ToVersion        string
+	Steps            []*MigrationStep
+	Automatic        bool
 	RequiresApproval bool
 }
 
@@ -103,19 +107,19 @@ type MigrationStep struct {
 // NewMultiVersionWorkflowManager creates workflow manager
 func NewMultiVersionWorkflowManager() *MultiVersionWorkflowManager {
 	return &MultiVersionWorkflowManager{
-		workflows:       make(map[string]*WorkflowDefinition),
-		versions:        make(map[string][]*WorkflowVersion),
-		instances:       make(map[string]*WorkflowInstance),
-		versionHistory:  make(map[string][]*WorkflowDefinition),
-		executionLogs:   make([]*ExecutionRecord, 0),
-		migrations:      make(map[string]*MigrationStrategy),
-		maxInstanceSize: 100000,
+		workflows:        make(map[string]*VersionedWorkflowDefinition),
+		versions:         make(map[string][]*WorkflowVersion),
+		instances:        make(map[string]*VersionedWorkflowInstance),
+		versionHistory:   make(map[string][]*VersionedWorkflowDefinition),
+		executionLogs:    make([]*ExecutionRecord, 0),
+		migrations:       make(map[string]*MigrationStrategy),
+		maxInstanceSize:  100000,
 		maxExecutionSize: 50000,
 	}
 }
 
 // CreateWorkflow creates a new workflow
-func (mwm *MultiVersionWorkflowManager) CreateWorkflow(workflow *WorkflowDefinition) (*WorkflowVersion, error) {
+func (mwm *MultiVersionWorkflowManager) CreateWorkflow(workflow *VersionedWorkflowDefinition) (*WorkflowVersion, error) {
 	mwm.mu.Lock()
 	defer mwm.mu.Unlock()
 
@@ -143,13 +147,13 @@ func (mwm *MultiVersionWorkflowManager) CreateWorkflow(workflow *WorkflowDefinit
 	}
 
 	mwm.versions[workflow.ID] = []*WorkflowVersion{version}
-	mwm.versionHistory[workflow.ID] = []*WorkflowDefinition{workflow}
+	mwm.versionHistory[workflow.ID] = []*VersionedWorkflowDefinition{workflow}
 
 	return version, nil
 }
 
 // PublishWorkflowVersion publishes a new version
-func (mwm *MultiVersionWorkflowManager) PublishWorkflowVersion(workflowID string, newDef *WorkflowDefinition) (*WorkflowVersion, error) {
+func (mwm *MultiVersionWorkflowManager) PublishWorkflowVersion(workflowID string, newDef *VersionedWorkflowDefinition) (*WorkflowVersion, error) {
 	mwm.mu.Lock()
 	defer mwm.mu.Unlock()
 
@@ -191,7 +195,7 @@ func (mwm *MultiVersionWorkflowManager) PublishWorkflowVersion(workflowID string
 }
 
 // StartWorkflowInstance starts a workflow execution
-func (mwm *MultiVersionWorkflowManager) StartWorkflowInstance(workflowID, version string, contextData map[string]interface{}) (*WorkflowInstance, error) {
+func (mwm *MultiVersionWorkflowManager) StartWorkflowInstance(workflowID, version string, contextData map[string]interface{}) (*VersionedWorkflowInstance, error) {
 	mwm.mu.Lock()
 	defer mwm.mu.Unlock()
 
@@ -205,15 +209,15 @@ func (mwm *MultiVersionWorkflowManager) StartWorkflowInstance(workflowID, versio
 		version = workflow.Version
 	}
 
-	instance := &WorkflowInstance{
-		ID:              fmt.Sprintf("inst-%d", time.Now().UnixNano()),
-		WorkflowID:      workflowID,
-		WorkflowVersion: version,
-		Status:          "running",
-		StartedAt:       time.Now(),
+	instance := &VersionedWorkflowInstance{
+		ID:               fmt.Sprintf("inst-%d", time.Now().UnixNano()),
+		WorkflowID:       workflowID,
+		WorkflowVersion:  version,
+		Status:           "running",
+		StartedAt:        time.Now(),
 		ExecutionHistory: make([]*ExecutionRecord, 0),
-		ContextData:     contextData,
-		Variables:       make(map[string]interface{}),
+		ContextData:      contextData,
+		Variables:        make(map[string]interface{}),
 	}
 
 	// Set first step
@@ -290,7 +294,7 @@ func (mwm *MultiVersionWorkflowManager) GetWorkflowVersions(workflowID string) [
 }
 
 // GetWorkflowVersion gets specific workflow version
-func (mwm *MultiVersionWorkflowManager) GetWorkflowVersion(workflowID, version string) (*WorkflowDefinition, error) {
+func (mwm *MultiVersionWorkflowManager) GetWorkflowVersion(workflowID, version string) (*VersionedWorkflowDefinition, error) {
 	mwm.mu.RLock()
 	defer mwm.mu.RUnlock()
 
@@ -327,11 +331,11 @@ func (mwm *MultiVersionWorkflowManager) CreateMigrationStrategy(fromVersion, toV
 }
 
 // GetInstanceHistory gets workflow instance history
-func (mwm *MultiVersionWorkflowManager) GetInstanceHistory(workflowID string, limit int) []*WorkflowInstance {
+func (mwm *MultiVersionWorkflowManager) GetInstanceHistory(workflowID string, limit int) []*VersionedWorkflowInstance {
 	mwm.mu.RLock()
 	defer mwm.mu.RUnlock()
 
-	instances := make([]*WorkflowInstance, 0)
+	instances := make([]*VersionedWorkflowInstance, 0)
 
 	for _, inst := range mwm.instances {
 		if inst.WorkflowID == workflowID {
@@ -382,13 +386,13 @@ func (mwm *MultiVersionWorkflowManager) GetWorkflowMetrics(workflowID string) ma
 	}
 
 	return map[string]interface{}{
-		"total_instances":   len(instances),
-		"completed":         completed,
-		"failed":            failed,
-		"running":           running,
-		"success_rate":      successRate,
-		"avg_duration_ms":   avgDuration,
-		"total_versions":    len(mwm.versions[workflowID]),
+		"total_instances": len(instances),
+		"completed":       completed,
+		"failed":          failed,
+		"running":         running,
+		"success_rate":    successRate,
+		"avg_duration_ms": avgDuration,
+		"total_versions":  len(mwm.versions[workflowID]),
 	}
 }
 

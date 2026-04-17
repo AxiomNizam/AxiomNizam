@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/workqueue"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
@@ -61,6 +63,11 @@ type JobHandler struct {
 	schedulerCtx    context.Context
 	schedulerCancel context.CancelFunc
 	schedulerWG     sync.WaitGroup
+
+	// P1.5: execution is driven by a rate-limited workqueue + worker
+	// pool rather than fire-and-forget `go h.executeJob(id)` goroutines.
+	execQueue   workqueue.WorkQueue
+	execWorkers int
 }
 
 // NewJobHandler creates a new job handler
@@ -71,9 +78,11 @@ func NewJobHandler(etcd ...*clientv3.Client) *JobHandler {
 	}
 
 	h := &JobHandler{
-		jobs:     make(map[string]*JobResource),
-		etcd:     etcdClient,
-		stateKey: "axiomnizam:jobs:state",
+		jobs:        make(map[string]*JobResource),
+		etcd:        etcdClient,
+		stateKey:    "axiomnizam:jobs:state",
+		execQueue:   workqueue.NewSimpleQueue(nil),
+		execWorkers: 4,
 	}
 	h.loadState()
 	h.startScheduler()
@@ -86,10 +95,14 @@ func (h *JobHandler) Close() {
 	cancel := h.schedulerCancel
 	h.schedulerCancel = nil
 	h.schedulerCtx = nil
+	q := h.execQueue
 	h.mu.Unlock()
 
 	if cancel != nil {
 		cancel()
+	}
+	if q != nil {
+		_ = q.Shutdown()
 	}
 	h.schedulerWG.Wait()
 }
@@ -103,8 +116,12 @@ func (h *JobHandler) startScheduler() {
 	ctx, cancel := context.WithCancel(context.Background())
 	h.schedulerCtx = ctx
 	h.schedulerCancel = cancel
+	workers := h.execWorkers
+	queue := h.execQueue
 	h.mu.Unlock()
 
+	// Cron / interval scanner: re-evaluates scheduled jobs once a second
+	// and pushes due jobs onto the rate-limited workqueue.
 	h.schedulerWG.Add(1)
 	go func() {
 		defer h.schedulerWG.Done()
@@ -120,6 +137,23 @@ func (h *JobHandler) startScheduler() {
 			}
 		}
 	}()
+
+	// P1.5: worker pool that drains the execution queue.  Replaces the
+	// per-execution `go h.executeJob(id)` pattern.
+	process := func(ctx context.Context, item *workqueue.Item) error {
+		h.executeJob(item.Key)
+		return nil
+	}
+	for i := 0; i < workers; i++ {
+		h.schedulerWG.Add(1)
+		go func() {
+			defer h.schedulerWG.Done()
+			w := workqueue.NewWorker(queue, process, 5)
+			if err := w.Run(ctx); err != nil {
+				log.Printf("jobs: exec worker exited: %v", err)
+			}
+		}()
+	}
 }
 
 func getScheduleExpression(spec map[string]interface{}) (string, bool) {
@@ -235,7 +269,11 @@ func (h *JobHandler) startJobExecutionLocked(job *JobResource, trigger string) {
 	h.persistStateLocked()
 
 	jobID := job.Metadata.ID
-	go h.executeJob(jobID)
+	// P1.5: hand off to the rate-limited workqueue instead of spawning
+	// an untracked `go h.executeJob(jobID)` goroutine.
+	if h.execQueue != nil {
+		_ = h.execQueue.Add(jobID)
+	}
 }
 
 func (h *JobHandler) executeJob(jobID string) {

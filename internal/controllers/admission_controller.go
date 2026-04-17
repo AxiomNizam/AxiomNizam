@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/events"
+	"example.com/axiomnizam/internal/platform/timing"
 	"example.com/axiomnizam/internal/policies"
+	"example.com/axiomnizam/internal/rbac"
 	"example.com/axiomnizam/internal/utils/logger"
 	"go.uber.org/zap"
 )
@@ -78,8 +80,8 @@ type AdmissionController struct {
 	logger              *logger.Logger
 	eventBus            events.Bus
 	admissionPolicy     policies.PolicyEngine
-	rbacEngine          *RBACEngine
-	resourceQuotaMgr    *ResourceQuotaManager
+	rbacEngine          *rbac.Engine
+	resourceQuotaMgr    *rbac.ResourceQuotaManager
 	webhookValidators   []WebhookValidator
 	webhookMutators     []WebhookMutator
 	auditLog            []*AdmissionAuditLog
@@ -137,8 +139,8 @@ type WebhookMutator interface {
 func NewAdmissionController(
 	eventBus events.Bus,
 	admissionPolicy policies.PolicyEngine,
-	rbacEngine *RBACEngine,
-	resourceQuotaMgr *ResourceQuotaManager,
+	rbacEngine *rbac.Engine,
+	resourceQuotaMgr *rbac.ResourceQuotaManager,
 ) *AdmissionController {
 	log, _ := logger.New("development")
 	return &AdmissionController{
@@ -153,7 +155,7 @@ func NewAdmissionController(
 		maxAuditEntries:     10000,
 		metrics:             &AdmissionMetrics{PolicyViolations: make(map[string]int64), PhaseTimings: make(map[AdmissionPhase]float64)},
 		policyCache:         make(map[string]*policies.PolicyDefinition),
-		cacheTTL:            5 * time.Minute,
+		cacheTTL:            timing.DefaultAdmissionCacheTTL,
 		lastCacheInvalidate: time.Now(),
 	}
 }

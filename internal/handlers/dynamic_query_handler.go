@@ -1,5 +1,20 @@
 package handlers
 
+// SECURITY (P0.5):
+//
+// This handler exposes an unrestricted-SQL surface which historically was the
+// single largest injection risk in the platform. As of P0.5 every inbound
+// query is passed through utils.SQLInjectionProtection.ValidateSQLInput
+// before execution, and every non-SELECT statement additionally requires an
+// authenticated caller with an admin-equivalent role.
+//
+// The target architecture (Phase 1) is to model each caller-supplied query as
+// a `SQLQuery` Kind — a reconciled Resource with Spec{datasource, query,
+// params, policy} and Status{phase, rowsReturned, error} so admission and
+// RBAC are enforced by the control plane rather than by ad-hoc checks in the
+// HTTP handler. Until that lands, the guards below are the minimum defence
+// and MUST NOT be removed.
+
 import (
 	"fmt"
 	"net/http"
@@ -7,19 +22,73 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/models"
+	"example.com/axiomnizam/internal/utils"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
+// adminishRoles lists role names considered privileged enough to run
+// mutating SQL through the DynamicQuery endpoints. Kept conservative: regular
+// users cannot execute INSERT/UPDATE/DELETE/DDL even if the query parser
+// classifies the statement as "allowed".
+var adminishRoles = map[string]struct{}{
+	"admin":          {},
+	"superadmin":     {},
+	"platform-admin": {},
+	"dba":            {},
+}
+
 // DynamicQueryHandler handles dynamic SQL queries
 type DynamicQueryHandler struct {
-	db     *gorm.DB
-	logger *QueryLogger
+	db            *gorm.DB
+	logger        *QueryLogger
+	sqlProtection *utils.SQLInjectionProtection
 }
 
 // NewDynamicQueryHandler creates a new dynamic query handler
 func NewDynamicQueryHandler(db *gorm.DB, logger *QueryLogger) *DynamicQueryHandler {
-	return &DynamicQueryHandler{db: db, logger: logger}
+	return &DynamicQueryHandler{
+		db:            db,
+		logger:        logger,
+		sqlProtection: utils.NewSQLInjectionProtection(),
+	}
+}
+
+// validateIncomingQuery runs the caller-supplied SQL text through the
+// injection-protection engine before it is ever handed to the database. This
+// is the single chokepoint for all P0.5 safety checks and must be called from
+// every entry point that executes free-form SQL.
+func (h *DynamicQueryHandler) validateIncomingQuery(query string) error {
+	if h.sqlProtection == nil {
+		h.sqlProtection = utils.NewSQLInjectionProtection()
+	}
+	return h.sqlProtection.ValidateSQLInput(query)
+}
+
+// requireAdminForMutation rejects the request unless the authenticated
+// caller carries an admin-equivalent role. It is a belt-and-braces check on
+// top of the SELECT-only filter and must be invoked before any non-SELECT
+// statement reaches gorm.DB.Exec.
+func requireAdminForMutation(c *gin.Context) bool {
+	rolesVal, ok := c.Get("roles")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, models.Response{
+			Status: "error",
+			Error:  "authentication required for mutating queries",
+		})
+		return false
+	}
+	roles, _ := rolesVal.([]string)
+	for _, r := range roles {
+		if _, ok := adminishRoles[strings.ToLower(strings.TrimSpace(r))]; ok {
+			return true
+		}
+	}
+	c.JSON(http.StatusForbidden, models.Response{
+		Status: "error",
+		Error:  "admin role required for non-SELECT queries",
+	})
+	return false
 }
 
 // QueryRequest represents a dynamic query request
@@ -75,6 +144,15 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		c.JSON(http.StatusForbidden, models.Response{
 			Status: "error",
 			Error:  "Only SELECT queries are allowed for GET requests. Use POST for INSERT/UPDATE/DELETE/CREATE",
+		})
+		return
+	}
+
+	// P0.5: injection-protection filter on the GET SELECT path too.
+	if err := h.validateIncomingQuery(query); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "query rejected by SQL safety filter: " + err.Error(),
 		})
 		return
 	}
@@ -206,6 +284,18 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 		return
 	}
 
+	// P0.5: run the raw SQL through the injection-protection engine before
+	// anything else. This rejects obvious SQLi payloads (UNION-based,
+	// comment-terminated, stacked statements, forbidden keywords) even for
+	// authenticated callers.
+	if err := h.validateIncomingQuery(req.Query); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Status: "error",
+			Error:  "query rejected by SQL safety filter: " + err.Error(),
+		})
+		return
+	}
+
 	// Check if it's a SELECT query
 	if isSelectQuery(upperQuery) {
 		// Execute SELECT query
@@ -266,6 +356,10 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 		})
 	} else {
 		// Execute non-SELECT query (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER)
+		// P0.5: admin role gate for every mutating statement.
+		if !requireAdminForMutation(c) {
+			return
+		}
 		result := h.db.Exec(req.Query, req.Params...)
 		if result.Error != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -323,6 +417,16 @@ func (h *DynamicQueryHandler) BatchQueries(c *gin.Context) {
 			return
 		}
 
+		// P0.5: per-statement injection validation before anything touches
+		// the database.
+		if err := h.validateIncomingQuery(req.Query); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Status: "error",
+				Error:  fmt.Sprintf("Query %d rejected by SQL safety filter: %v", i+1, err),
+			})
+			return
+		}
+
 		if isSelectQuery(upperQuery) {
 			rows, err := h.db.Raw(req.Query, req.Params...).Rows()
 			if err != nil {
@@ -358,6 +462,10 @@ func (h *DynamicQueryHandler) BatchQueries(c *gin.Context) {
 				results = append(results, entry)
 			}
 		} else {
+			// P0.5: admin role gate for every mutating statement in the batch.
+			if !requireAdminForMutation(c) {
+				return
+			}
 			result := h.db.Exec(req.Query, req.Params...)
 			if result.Error != nil {
 				c.JSON(http.StatusInternalServerError, models.Response{
