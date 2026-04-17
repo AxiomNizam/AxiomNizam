@@ -90,15 +90,17 @@ type NotificationRule struct {
 
 // BucketSpec defines the desired state of a bucket.
 type BucketSpec struct {
-	Name            string                   `json:"name"`
-	Versioning      VersioningStatus         `json:"versioning"`
-	LifecyclePolicy []LifecycleRule          `json:"lifecyclePolicy,omitempty"`
-	Region          string                   `json:"region,omitempty"`
-	Quota           int64                    `json:"quota,omitempty"` // bytes, 0 = unlimited
-	Encryption      BucketEncryption         `json:"encryption,omitempty"`
-	ObjectLock      ObjectLockConfig         `json:"objectLock,omitempty"`
-	Notifications   BucketNotificationConfig `json:"notifications,omitempty"`
-	Public          bool                     `json:"public,omitempty"` // publicly readable
+	Name              string                   `json:"name"`
+	Versioning        VersioningStatus         `json:"versioning"`
+	LifecyclePolicy   []LifecycleRule          `json:"lifecyclePolicy,omitempty"`
+	Region            string                   `json:"region,omitempty"`
+	Quota             int64                    `json:"quota,omitempty"`             // bytes, 0 = unlimited
+	ReadOpsPerMinute  int                      `json:"readOpsPerMinute,omitempty"`  // object read ops/min, 0 = use system default
+	WriteOpsPerMinute int                      `json:"writeOpsPerMinute,omitempty"` // object write ops/min, 0 = use system default
+	Encryption        BucketEncryption         `json:"encryption,omitempty"`
+	ObjectLock        ObjectLockConfig         `json:"objectLock,omitempty"`
+	Notifications     BucketNotificationConfig `json:"notifications,omitempty"`
+	Public            bool                     `json:"public,omitempty"` // publicly readable
 }
 
 // BucketStatus represents the observed state of a bucket.
@@ -380,4 +382,14 @@ type QuotaInfo struct {
 	UsedBytes   int64   `json:"usedBytes"`
 	UsedPct     float64 `json:"usedPct"`
 	ObjectCount int64   `json:"objectCount"`
+}
+
+// BucketRateLimitInfo provides object operation rate-limit settings for a bucket.
+type BucketRateLimitInfo struct {
+	Bucket                     string `json:"bucket"`
+	TenantID                   string `json:"tenantId"`
+	ReadOpsPerMinute           int    `json:"readOpsPerMinute"`
+	WriteOpsPerMinute          int    `json:"writeOpsPerMinute"`
+	EffectiveReadOpsPerMinute  int    `json:"effectiveReadOpsPerMinute"`
+	EffectiveWriteOpsPerMinute int    `json:"effectiveWriteOpsPerMinute"`
 }

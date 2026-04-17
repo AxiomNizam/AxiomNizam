@@ -1521,6 +1521,14 @@
         }
     }
 
+    function osFormatOpsPerMinuteLabel(configured, effective) {
+        const cfg = Number(configured || 0);
+        const eff = Number(effective || 0);
+        if (cfg > 0) return cfg + '/min';
+        if (eff > 0) return 'Default (' + eff + '/min)';
+        return 'Unlimited';
+    }
+
     window.osLoadBucketSettings = async function() {
         const sel = document.getElementById('osSettingsBucket');
         const bucket = sel.value;
@@ -1540,11 +1548,12 @@
         const qs = '?tenantId=' + encodeURIComponent(tenantId);
 
         // Load all settings in parallel
-        const [encResp, lockResp, corsResp, quotaResp, notifResp, policyResp] = await Promise.allSettled([
+        const [encResp, lockResp, corsResp, quotaResp, rateResp, notifResp, policyResp] = await Promise.allSettled([
             osFetch('/buckets/' + encodeURIComponent(bucket) + '/encryption' + qs),
             osFetch('/buckets/' + encodeURIComponent(bucket) + '/object-lock' + qs),
             osFetch('/buckets/' + encodeURIComponent(bucket) + '/cors' + qs),
             osFetch('/buckets/' + encodeURIComponent(bucket) + '/quota' + qs),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/rate-limit' + qs),
             osFetch('/buckets/' + encodeURIComponent(bucket) + '/notifications' + qs),
             osFetch('/buckets/' + encodeURIComponent(bucket) + '/policy' + qs)
         ]);
@@ -1606,6 +1615,25 @@
             setText('osQuotaObjects', '-');
         }
 
+        // Object Operation Rate Limits
+        if (rateResp.status === 'fulfilled' && rateResp.value.ok) {
+            const rl = await rateResp.value.json();
+            const readConfigured = Number(rl.readOpsPerMinute || 0);
+            const writeConfigured = Number(rl.writeOpsPerMinute || 0);
+            const readEffective = Number(rl.effectiveReadOpsPerMinute || 0);
+            const writeEffective = Number(rl.effectiveWriteOpsPerMinute || 0);
+
+            document.getElementById('osRateReadLimit').value = readConfigured;
+            document.getElementById('osRateWriteLimit').value = writeConfigured;
+            setText('osRateReadCurrent', osFormatOpsPerMinuteLabel(readConfigured, readEffective));
+            setText('osRateWriteCurrent', osFormatOpsPerMinuteLabel(writeConfigured, writeEffective));
+        } else {
+            document.getElementById('osRateReadLimit').value = 0;
+            document.getElementById('osRateWriteLimit').value = 0;
+            setText('osRateReadCurrent', '-');
+            setText('osRateWriteCurrent', '-');
+        }
+
         // Notifications
         if (notifResp.status === 'fulfilled' && notifResp.value.ok) {
             const nData = await notifResp.value.json();
@@ -1636,6 +1664,38 @@
     function osSettingsQS() {
         return '?tenantId=' + encodeURIComponent(osSettingsTenantId);
     }
+
+    window.osSaveBucketRateLimit = async function() {
+        const readRaw = (document.getElementById('osRateReadLimit').value || '').trim();
+        const writeRaw = (document.getElementById('osRateWriteLimit').value || '').trim();
+
+        const readLimit = readRaw === '' ? 0 : parseInt(readRaw, 10);
+        const writeLimit = writeRaw === '' ? 0 : parseInt(writeRaw, 10);
+
+        if (isNaN(readLimit) || readLimit < 0 || isNaN(writeLimit) || writeLimit < 0) {
+            osToast('Read/Write limits must be integers >= 0', true);
+            return;
+        }
+
+        try {
+            const resp = await osFetch('/buckets/' + encodeURIComponent(osSettingsBucketName) + '/rate-limit' + osSettingsQS(), {
+                method: 'PUT',
+                body: JSON.stringify({
+                    readOpsPerMinute: readLimit,
+                    writeOpsPerMinute: writeLimit
+                })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                osToast(data.error || 'Failed to save rate limits', true);
+                return;
+            }
+            osToast('Bucket rate limits updated');
+            osLoadBucketSettings();
+        } catch (e) {
+            osToast('Error: ' + e.message, true);
+        }
+    };
 
     window.osSaveEncryption = async function() {
         const algo = document.getElementById('osEncAlgo').value;

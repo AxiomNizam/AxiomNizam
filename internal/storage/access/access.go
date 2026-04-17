@@ -18,6 +18,7 @@ import (
 	"example.com/axiomnizam/internal/iam/token"
 	"example.com/axiomnizam/internal/storage/events"
 	"example.com/axiomnizam/internal/storage/models"
+	"example.com/axiomnizam/internal/storage/store"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -33,8 +34,12 @@ type Controller struct {
 	etcd       *clientv3.Client
 	rateMu     sync.Mutex
 	rateMap    map[string]*objectRateState
-	rateLimit  int
 	rateWindow time.Duration
+
+	defaultReadRateLimit  int
+	defaultWriteRateLimit int
+
+	bucketStore *store.BucketStore
 }
 
 const (
@@ -52,22 +57,84 @@ type objectRateState struct {
 
 // NewController creates an access controller.
 func NewController(auditLog *events.AuditLog) *Controller {
-	limit := defaultObjectRateLimitPerMinute
+	legacyLimit := defaultObjectRateLimitPerMinute
 	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_RATE_LIMIT_PER_MINUTE")); s != "" {
 		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
-			limit = parsed
+			legacyLimit = parsed
+		}
+	}
+
+	readLimit := legacyLimit
+	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_READ_RATE_LIMIT_PER_MINUTE")); s != "" {
+		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
+			readLimit = parsed
+		}
+	}
+
+	writeLimit := legacyLimit
+	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_WRITE_RATE_LIMIT_PER_MINUTE")); s != "" {
+		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
+			writeLimit = parsed
 		}
 	}
 
 	return &Controller{
-		policies:   make(map[string]*models.TenantPolicy),
-		accessKeys: make(map[string]*models.AccessKey),
-		shares:     make(map[string]*models.BucketShare),
-		auditLog:   auditLog,
-		rateMap:    make(map[string]*objectRateState),
-		rateLimit:  limit,
-		rateWindow: time.Minute,
+		policies:              make(map[string]*models.TenantPolicy),
+		accessKeys:            make(map[string]*models.AccessKey),
+		shares:                make(map[string]*models.BucketShare),
+		auditLog:              auditLog,
+		rateMap:               make(map[string]*objectRateState),
+		defaultReadRateLimit:  readLimit,
+		defaultWriteRateLimit: writeLimit,
+		rateWindow:            time.Minute,
 	}
+}
+
+// SetBucketStore attaches the bucket store so the controller can resolve
+// bucket-specific settings such as object rate limits.
+func (ac *Controller) SetBucketStore(bs *store.BucketStore) {
+	ac.mu.Lock()
+	ac.bucketStore = bs
+	ac.mu.Unlock()
+}
+
+// DefaultObjectRateLimits returns global defaults used when bucket-specific
+// rate limits are not configured.
+func (ac *Controller) DefaultObjectRateLimits() (int, int) {
+	ac.mu.RLock()
+	defer ac.mu.RUnlock()
+	return ac.defaultReadRateLimit, ac.defaultWriteRateLimit
+}
+
+// EffectiveBucketObjectRateLimits returns the effective read/write object
+// rate limits for a bucket.
+func (ac *Controller) EffectiveBucketObjectRateLimits(tenantID, bucket string) (int, int) {
+	ac.mu.RLock()
+	storeRef := ac.bucketStore
+	defaultRead := ac.defaultReadRateLimit
+	defaultWrite := ac.defaultWriteRateLimit
+	ac.mu.RUnlock()
+
+	if storeRef == nil || strings.TrimSpace(tenantID) == "" || strings.TrimSpace(bucket) == "" {
+		return defaultRead, defaultWrite
+	}
+
+	b, err := storeRef.Get(strings.TrimSpace(tenantID), strings.TrimSpace(bucket))
+	if err != nil || b == nil {
+		return defaultRead, defaultWrite
+	}
+
+	read := defaultRead
+	if b.Spec.ReadOpsPerMinute > 0 {
+		read = b.Spec.ReadOpsPerMinute
+	}
+
+	write := defaultWrite
+	if b.Spec.WriteOpsPerMinute > 0 {
+		write = b.Spec.WriteOpsPerMinute
+	}
+
+	return read, write
 }
 
 // ConfigurePersistence enables etcd-backed persistence for policies, access keys,
@@ -856,25 +923,42 @@ func (ac *Controller) enforceObjectRateLimit(c *gin.Context, sc *StorageContext)
 	}
 
 	path := c.Request.URL.Path
-	if !strings.Contains(path, "/storage/buckets/") || !strings.Contains(path, "/objects") {
+	if !strings.Contains(path, "/storage/buckets/") {
 		return true
 	}
-
-	identity := c.ClientIP()
-	if sc != nil && strings.TrimSpace(sc.UserID) != "" {
-		identity = "user:" + strings.TrimSpace(sc.UserID)
-	}
-	if c.GetBool("storage_presigned_request") {
-		if ak := strings.TrimSpace(c.GetString("storage_presigned_access_key")); ak != "" {
-			identity = "ak:" + ak
-		}
+	if !strings.Contains(path, "/objects") && !strings.Contains(path, "/multi-delete") && !strings.Contains(path, "/object-metadata") {
+		return true
 	}
 
 	bucket := strings.TrimSpace(c.Param("bucket"))
 	if bucket == "" {
 		bucket = "-"
 	}
-	rateKey := strings.Join([]string{identity, strings.ToUpper(c.Request.Method), bucket}, "|")
+
+	tenantID := ""
+	if sc != nil {
+		tenantID = strings.TrimSpace(sc.TenantID)
+	}
+	if tenantID == "" {
+		tenantID = strings.TrimSpace(c.GetString("storage_presigned_tenant"))
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(c.Request.Method))
+	opClass := "read"
+	if method == http.MethodPut || method == http.MethodPost || method == http.MethodDelete || method == http.MethodPatch {
+		opClass = "write"
+	}
+
+	readLimit, writeLimit := ac.EffectiveBucketObjectRateLimits(tenantID, bucket)
+	limit := readLimit
+	if opClass == "write" {
+		limit = writeLimit
+	}
+	if limit <= 0 {
+		limit = defaultObjectRateLimitPerMinute
+	}
+
+	rateKey := strings.Join([]string{tenantID, bucket, opClass}, "|")
 
 	now := time.Now().UTC()
 	ac.rateMu.Lock()
@@ -885,7 +969,6 @@ func (ac *Controller) enforceObjectRateLimit(c *gin.Context, sc *StorageContext)
 	}
 	state.count++
 	count := state.count
-	limit := ac.rateLimit
 	resetAt := state.windowStart.Add(ac.rateWindow)
 	ac.rateMu.Unlock()
 
@@ -899,11 +982,12 @@ func (ac *Controller) enforceObjectRateLimit(c *gin.Context, sc *StorageContext)
 
 	if count > limit {
 		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-			"error":        "bucket object rate limit exceeded",
-			"limit":        limit,
-			"bucket":       bucket,
-			"retryAfter":   int(time.Until(resetAt).Seconds()),
-			"identityHint": identity,
+			"error":      "bucket object rate limit exceeded",
+			"limit":      limit,
+			"bucket":     bucket,
+			"operation":  opClass,
+			"retryAfter": int(time.Until(resetAt).Seconds()),
+			"tenantId":   tenantID,
 		})
 		return false
 	}

@@ -128,6 +128,8 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 
 			// Quota
 			auth.GET("/buckets/:bucket/quota", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketQuota)
+			auth.GET("/buckets/:bucket/rate-limit", h.access.RequireBucketAccess(models.StorageRoleReader), h.GetBucketRateLimit)
+			auth.PUT("/buckets/:bucket/rate-limit", h.access.RequireBucketAccess(models.StorageRoleAdmin), h.SetBucketRateLimit)
 
 			// Object operations
 			auth.PUT("/buckets/:bucket/objects/*key", h.access.RequireBucketAccess(models.StorageRoleWriter), h.PutObject)
@@ -209,6 +211,7 @@ func (h *Handler) Health(c *gin.Context) {
 			"accessKeys":     true,
 			"bucketSharing":  true,
 			"quotas":         true,
+			"rateLimits":     true,
 			"iamIntegrated":  true,
 		},
 	})
@@ -323,12 +326,14 @@ func (h *Handler) CreateBucket(c *gin.Context) {
 	}
 
 	var req struct {
-		Name       string                   `json:"name" binding:"required"`
-		Versioning models.VersioningStatus  `json:"versioning,omitempty"`
-		Quota      int64                    `json:"quota,omitempty"`
-		Encryption *models.BucketEncryption `json:"encryption,omitempty"`
-		ObjectLock *models.ObjectLockConfig `json:"objectLock,omitempty"`
-		Region     string                   `json:"region,omitempty"`
+		Name              string                   `json:"name" binding:"required"`
+		Versioning        models.VersioningStatus  `json:"versioning,omitempty"`
+		Quota             int64                    `json:"quota,omitempty"`
+		ReadOpsPerMinute  int                      `json:"readOpsPerMinute,omitempty"`
+		WriteOpsPerMinute int                      `json:"writeOpsPerMinute,omitempty"`
+		Encryption        *models.BucketEncryption `json:"encryption,omitempty"`
+		ObjectLock        *models.ObjectLockConfig `json:"objectLock,omitempty"`
+		Region            string                   `json:"region,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -336,9 +341,11 @@ func (h *Handler) CreateBucket(c *gin.Context) {
 	}
 
 	spec := models.BucketSpec{
-		Versioning: req.Versioning,
-		Quota:      req.Quota,
-		Region:     req.Region,
+		Versioning:        req.Versioning,
+		Quota:             req.Quota,
+		ReadOpsPerMinute:  req.ReadOpsPerMinute,
+		WriteOpsPerMinute: req.WriteOpsPerMinute,
+		Region:            req.Region,
 	}
 	if req.Encryption != nil {
 		spec.Encryption = *req.Encryption
@@ -895,6 +902,77 @@ func (h *Handler) GetBucketQuota(c *gin.Context) {
 	}
 	q.TenantID = sc.TenantID
 	c.JSON(http.StatusOK, q)
+}
+
+func (h *Handler) GetBucketRateLimit(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	effRead, effWrite := h.access.EffectiveBucketObjectRateLimits(sc.TenantID, bucket)
+	c.JSON(http.StatusOK, models.BucketRateLimitInfo{
+		Bucket:                     bucket,
+		TenantID:                   sc.TenantID,
+		ReadOpsPerMinute:           b.Spec.ReadOpsPerMinute,
+		WriteOpsPerMinute:          b.Spec.WriteOpsPerMinute,
+		EffectiveReadOpsPerMinute:  effRead,
+		EffectiveWriteOpsPerMinute: effWrite,
+	})
+}
+
+func (h *Handler) SetBucketRateLimit(c *gin.Context) {
+	sc := access.GetStorageContext(c)
+	bucket := c.Param("bucket")
+	b, err := h.store.Get(sc.TenantID, bucket)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		ReadOpsPerMinute  int `json:"readOpsPerMinute"`
+		WriteOpsPerMinute int `json:"writeOpsPerMinute"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.ReadOpsPerMinute < 0 || req.WriteOpsPerMinute < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "readOpsPerMinute and writeOpsPerMinute must be >= 0"})
+		return
+	}
+
+	b.Spec.ReadOpsPerMinute = req.ReadOpsPerMinute
+	b.Spec.WriteOpsPerMinute = req.WriteOpsPerMinute
+	if err := h.store.Update(b); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	effRead, effWrite := h.access.EffectiveBucketObjectRateLimits(sc.TenantID, bucket)
+
+	h.audit.Record(models.StorageEvent{
+		Type:     "bucket.ratelimit.set",
+		TenantID: sc.TenantID,
+		UserID:   sc.UserID,
+		Bucket:   bucket,
+		Details:  fmt.Sprintf("read=%d/min write=%d/min", req.ReadOpsPerMinute, req.WriteOpsPerMinute),
+		SourceIP: c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, models.BucketRateLimitInfo{
+		Bucket:                     bucket,
+		TenantID:                   sc.TenantID,
+		ReadOpsPerMinute:           b.Spec.ReadOpsPerMinute,
+		WriteOpsPerMinute:          b.Spec.WriteOpsPerMinute,
+		EffectiveReadOpsPerMinute:  effRead,
+		EffectiveWriteOpsPerMinute: effWrite,
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -1850,15 +1928,17 @@ func (h *Handler) GetBucketLifecycle(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"bucket":      b.Spec.Name,
-		"versioning":  b.Spec.Versioning,
-		"encryption":  b.Spec.Encryption,
-		"objectLock":  b.Spec.ObjectLock,
-		"quota":       b.Spec.Quota,
-		"labels":      b.Metadata.Labels,
-		"createdAt":   b.Metadata.CreatedAt,
-		"phase":       b.Status.Phase,
-		"objectCount": b.Status.ObjectCount,
-		"totalSize":   b.Status.TotalSize,
+		"bucket":            b.Spec.Name,
+		"versioning":        b.Spec.Versioning,
+		"encryption":        b.Spec.Encryption,
+		"objectLock":        b.Spec.ObjectLock,
+		"quota":             b.Spec.Quota,
+		"readOpsPerMinute":  b.Spec.ReadOpsPerMinute,
+		"writeOpsPerMinute": b.Spec.WriteOpsPerMinute,
+		"labels":            b.Metadata.Labels,
+		"createdAt":         b.Metadata.CreatedAt,
+		"phase":             b.Status.Phase,
+		"objectCount":       b.Status.ObjectCount,
+		"totalSize":         b.Status.TotalSize,
 	})
 }

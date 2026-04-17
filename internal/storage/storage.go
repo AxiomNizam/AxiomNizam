@@ -87,6 +87,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	metricsCollector := storageMetrics.NewCollector()
 	auditLog := events.NewAuditLog(10000)
 	accessCtrl := access.NewController(auditLog)
+	accessCtrl.SetBucketStore(bucketStore)
 	accessCtrl.ConfigurePersistence(etcdClient)
 	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint)
 

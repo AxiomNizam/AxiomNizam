@@ -815,6 +815,34 @@
                 </div>
             </div>
 
+            <!-- Bucket Object Rate Limits -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+                    Bucket Object Rate Limits
+                </h4>
+                <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">Set how many object operations this bucket allows per minute. Use 0 to apply system defaults.</p>
+                <div class="os-grid-two" style="margin-bottom:0;">
+                    <div>
+                        <div class="os-form-group">
+                            <label for="osRateReadLimit">Read Ops Per Minute</label>
+                            <input type="number" id="osRateReadLimit" min="0" step="1" value="0" placeholder="0 = default">
+                        </div>
+                        <div style="font-size:.85rem; color:var(--text-muted);">Effective: <span id="osRateReadCurrent">-</span></div>
+                    </div>
+                    <div>
+                        <div class="os-form-group">
+                            <label for="osRateWriteLimit">Write Ops Per Minute</label>
+                            <input type="number" id="osRateWriteLimit" min="0" step="1" value="0" placeholder="0 = default">
+                        </div>
+                        <div style="font-size:.85rem; color:var(--text-muted);">Effective: <span id="osRateWriteCurrent">-</span></div>
+                    </div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osSaveBucketRateLimit()">Save Rate Limits</button>
+                </div>
+            </div>
+
             <!-- Notifications -->
             <div class="os-card">
                 <h4 style="display:flex; align-items:center; gap:8px;">
@@ -859,7 +887,7 @@
         <div id="osSettingsPlaceholder" style="text-align:center; padding:60px 20px; color:var(--text-muted);">
             <svg style="width:64px; height:64px; opacity:.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <p style="margin-top:12px; font-size:1rem;">Select a bucket above to manage its settings</p>
-            <p style="font-size:.85rem;">Configure encryption, object lock, CORS, quotas, notifications, and bucket policies</p>
+            <p style="font-size:.85rem;">Configure encryption, object lock, CORS, quotas, rate limits, notifications, and bucket policies</p>
         </div>
     </div>
 </div>
@@ -1105,6 +1133,6 @@
     </div>
 </div>
 
-<script src="/static/object-storage.js?v=20260417-7"></script>
+<script src="/static/object-storage.js?v=20260417-8"></script>
 {{ end }}
 
