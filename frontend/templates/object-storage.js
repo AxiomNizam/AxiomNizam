@@ -55,9 +55,244 @@
         return isNaN(d.getTime()) ? s : d.toLocaleString();
     }
 
+    function osIntOrNull(v) {
+        const n = parseInt(v, 10);
+        return isNaN(n) ? null : n;
+    }
+
     function osFullURL(path) {
         return OS_API + path;
     }
+
+    const osBucketHoverCacheTtlMs = 10000;
+    const osBucketHoverMetricsCache = {};
+    const osBucketLiveRateState = {};
+    let osBucketHoverRequestToken = 0;
+    let osBucketHoverHideTimer = null;
+
+    function osBucketMetricsKey(bucket, tenantId) {
+        return String(tenantId || 'default').trim() + '|' + String(bucket || '').trim();
+    }
+
+    function osMethodToOpClass(method) {
+        const m = String(method || '').toUpperCase();
+        if (m === 'PUT' || m === 'POST' || m === 'DELETE' || m === 'PATCH') {
+            return 'write';
+        }
+        return 'read';
+    }
+
+    function osFormatRatePerMinute(v, showDefaultLabel) {
+        const n = Number(v || 0);
+        if (!n || n <= 0) return showDefaultLabel ? 'default' : '-';
+        return n + '/min';
+    }
+
+    function osFormatEpochSeconds(epochSeconds) {
+        const n = Number(epochSeconds || 0);
+        if (!n || n <= 0) return '-';
+        const d = new Date(n * 1000);
+        return isNaN(d.getTime()) ? '-' : d.toLocaleTimeString();
+    }
+
+    function osStoreBucketRateHeaderState(bucket, tenantId, method, limit, remaining, resetEpoch) {
+        if (limit === null || remaining === null) return;
+        const key = osBucketMetricsKey(bucket, tenantId);
+        const opClass = osMethodToOpClass(method);
+        const current = osBucketLiveRateState[key] || {};
+        current[opClass] = {
+            limit: limit,
+            remaining: remaining,
+            resetEpoch: resetEpoch,
+            updatedAt: Date.now()
+        };
+        osBucketLiveRateState[key] = current;
+    }
+
+    function osCaptureRateHeaders(bucket, tenantId, method, resp) {
+        if (!resp || !resp.headers) return;
+        const limit = osIntOrNull(resp.headers.get('X-RateLimit-Limit'));
+        const remaining = osIntOrNull(resp.headers.get('X-RateLimit-Remaining'));
+        const resetEpoch = osIntOrNull(resp.headers.get('X-RateLimit-Reset'));
+        osStoreBucketRateHeaderState(bucket, tenantId, method, limit, remaining, resetEpoch);
+    }
+
+    function osCaptureRateHeadersFromXHR(bucket, tenantId, method, xhr) {
+        if (!xhr || typeof xhr.getResponseHeader !== 'function') return;
+        const limit = osIntOrNull(xhr.getResponseHeader('X-RateLimit-Limit'));
+        const remaining = osIntOrNull(xhr.getResponseHeader('X-RateLimit-Remaining'));
+        const resetEpoch = osIntOrNull(xhr.getResponseHeader('X-RateLimit-Reset'));
+        osStoreBucketRateHeaderState(bucket, tenantId, method, limit, remaining, resetEpoch);
+    }
+
+    function osGetBucketLiveRateState(bucket, tenantId) {
+        return osBucketLiveRateState[osBucketMetricsKey(bucket, tenantId)] || {};
+    }
+
+    function osEnsureBucketHoverCard() {
+        let el = document.getElementById('osBucketHoverMetricsCard');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'osBucketHoverMetricsCard';
+            el.className = 'os-bucket-hover-metrics';
+            el.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    function osPositionBucketHoverCard(anchor, card) {
+        if (!anchor || !card) return;
+        const rect = anchor.getBoundingClientRect();
+        const margin = 10;
+
+        card.style.left = (rect.left + rect.width / 2) + 'px';
+        card.style.top = (rect.bottom + margin) + 'px';
+
+        const cRect = card.getBoundingClientRect();
+        let left = rect.left + rect.width / 2;
+        let top = rect.bottom + margin;
+
+        const minLeft = (cRect.width / 2) + 8;
+        const maxLeft = window.innerWidth - (cRect.width / 2) - 8;
+        left = Math.max(minLeft, Math.min(maxLeft, left));
+
+        if (top + cRect.height > window.innerHeight - 8) {
+            top = rect.top - cRect.height - margin;
+        }
+        if (top < 8) top = 8;
+
+        card.style.left = left + 'px';
+        card.style.top = top + 'px';
+    }
+
+    function osBuildBucketHoverContent(bucket, tenantId, metrics, rateInfo, loading, errorMsg) {
+        const live = osGetBucketLiveRateState(bucket, tenantId);
+        const liveRead = live.read;
+        const liveWrite = live.write;
+
+        const req = metrics ? (metrics.requestCount || 0) : '-';
+        const getReq = metrics ? (metrics.getRequests || 0) : '-';
+        const putReq = metrics ? (metrics.putRequests || 0) : '-';
+        const delReq = metrics ? (metrics.deleteRequests || 0) : '-';
+        const errs = metrics ? (metrics.errorCount || 0) : '-';
+        const avg = metrics && metrics.requestCount > 0 ? Number(metrics.avgLatencyMs || 0).toFixed(1) + ' ms' : '-';
+        const bytesIn = metrics ? fmtSize(metrics.bytesIn || 0) : '-';
+        const bytesOut = metrics ? fmtSize(metrics.bytesOut || 0) : '-';
+        const lastAccessed = metrics ? fmtDate(metrics.lastAccessed) : '-';
+
+        const cfgRead = rateInfo ? osFormatRatePerMinute(rateInfo.readOpsPerMinute, true) : '-';
+        const cfgWrite = rateInfo ? osFormatRatePerMinute(rateInfo.writeOpsPerMinute, true) : '-';
+        const effRead = rateInfo ? osFormatRatePerMinute(rateInfo.effectiveReadOpsPerMinute, false) : '-';
+        const effWrite = rateInfo ? osFormatRatePerMinute(rateInfo.effectiveWriteOpsPerMinute, false) : '-';
+
+        const liveReadText = liveRead ? (liveRead.remaining + '/' + liveRead.limit + ' remaining (reset ' + osFormatEpochSeconds(liveRead.resetEpoch) + ')') : 'No recent read header';
+        const liveWriteText = liveWrite ? (liveWrite.remaining + '/' + liveWrite.limit + ' remaining (reset ' + osFormatEpochSeconds(liveWrite.resetEpoch) + ')') : 'No recent write header';
+
+        let statusText = '';
+        if (loading) statusText = 'Loading latest metrics...';
+        if (errorMsg) statusText = errorMsg;
+
+        return '' +
+            '<div class="os-bucket-hover-title">' + escHtml(bucket || '-') + '</div>' +
+            '<div class="os-bucket-hover-subtitle">Tenant: ' + escHtml(tenantId || 'default') + '</div>' +
+            (statusText ? ('<div class="os-bucket-hover-status">' + escHtml(statusText) + '</div>') : '') +
+            '<div class="os-bucket-hover-grid">' +
+                '<div class="os-bucket-hover-cell"><span>Requests</span><strong>' + req + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>Errors</span><strong>' + errs + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>GET</span><strong>' + getReq + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>PUT</span><strong>' + putReq + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>DELETE</span><strong>' + delReq + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>Latency</span><strong>' + avg + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>Bytes In</span><strong>' + escHtml(bytesIn) + '</strong></div>' +
+                '<div class="os-bucket-hover-cell"><span>Bytes Out</span><strong>' + escHtml(bytesOut) + '</strong></div>' +
+            '</div>' +
+            '<div class="os-bucket-hover-rate-row"><span>Read Limit:</span><strong>' + escHtml(cfgRead) + ' (effective ' + escHtml(effRead) + ')</strong></div>' +
+            '<div class="os-bucket-hover-rate-row"><span>Write Limit:</span><strong>' + escHtml(cfgWrite) + ' (effective ' + escHtml(effWrite) + ')</strong></div>' +
+            '<div class="os-bucket-hover-rate-row"><span>Live Read Remaining:</span><strong>' + escHtml(liveReadText) + '</strong></div>' +
+            '<div class="os-bucket-hover-rate-row"><span>Live Write Remaining:</span><strong>' + escHtml(liveWriteText) + '</strong></div>' +
+            '<div class="os-bucket-hover-footer">Last accessed: ' + escHtml(lastAccessed) + '</div>';
+    }
+
+    async function osFetchBucketHoverData(bucket, tenantId) {
+        const [metricsResp, rateResp] = await Promise.all([
+            osFetch('/metrics/' + encodeURIComponent(bucket) + '?tenantId=' + encodeURIComponent(tenantId)),
+            osFetch('/buckets/' + encodeURIComponent(bucket) + '/rate-limit?tenantId=' + encodeURIComponent(tenantId))
+        ]);
+
+        let metrics = null;
+        let rateInfo = null;
+
+        if (metricsResp.ok) {
+            metrics = await metricsResp.json().catch(() => null);
+        }
+        if (rateResp.ok) {
+            rateInfo = await rateResp.json().catch(() => null);
+        }
+
+        return { metrics: metrics, rateInfo: rateInfo };
+    }
+
+    window.osShowBucketHoverMetrics = async function(anchor) {
+        if (!anchor) return;
+        if (osBucketHoverHideTimer) {
+            clearTimeout(osBucketHoverHideTimer);
+            osBucketHoverHideTimer = null;
+        }
+
+        const bucket = String(anchor.getAttribute('data-bucket') || '').trim();
+        const tenantId = String(anchor.getAttribute('data-tenant') || 'default').trim() || 'default';
+        if (!bucket) return;
+
+        const card = osEnsureBucketHoverCard();
+        const reqToken = ++osBucketHoverRequestToken;
+
+        card.innerHTML = osBuildBucketHoverContent(bucket, tenantId, null, null, true, '');
+        card.classList.add('show');
+        card.setAttribute('aria-hidden', 'false');
+        osPositionBucketHoverCard(anchor, card);
+
+        const cacheKey = osBucketMetricsKey(bucket, tenantId);
+        const cached = osBucketHoverMetricsCache[cacheKey];
+        if (cached && (Date.now() - cached.at) < osBucketHoverCacheTtlMs) {
+            card.innerHTML = osBuildBucketHoverContent(bucket, tenantId, cached.data.metrics, cached.data.rateInfo, false, '');
+            osPositionBucketHoverCard(anchor, card);
+            return;
+        }
+
+        try {
+            const data = await osFetchBucketHoverData(bucket, tenantId);
+            osBucketHoverMetricsCache[cacheKey] = { at: Date.now(), data: data };
+
+            if (reqToken !== osBucketHoverRequestToken) return;
+            card.innerHTML = osBuildBucketHoverContent(bucket, tenantId, data.metrics, data.rateInfo, false, '');
+            osPositionBucketHoverCard(anchor, card);
+        } catch (e) {
+            if (reqToken !== osBucketHoverRequestToken) return;
+            card.innerHTML = osBuildBucketHoverContent(bucket, tenantId, null, null, false, e.message || 'Failed to load metrics');
+            osPositionBucketHoverCard(anchor, card);
+        }
+    };
+
+    window.osHideBucketHoverMetrics = function(immediate) {
+        if (osBucketHoverHideTimer) {
+            clearTimeout(osBucketHoverHideTimer);
+            osBucketHoverHideTimer = null;
+        }
+        const card = document.getElementById('osBucketHoverMetricsCard');
+        if (!card) return;
+
+        const doHide = function() {
+            card.classList.remove('show');
+            card.setAttribute('aria-hidden', 'true');
+        };
+
+        if (immediate) {
+            doHide();
+            return;
+        }
+        osBucketHoverHideTimer = setTimeout(doHide, 120);
+    };
 
     function osBuildBucketPolicyTemplate(bucketName) {
         const b = String(bucketName || '').trim() || 'your-bucket-name';
@@ -126,6 +361,9 @@
 
     // ===== Tab Switching =====
     window.osSwitch = function(tabId) {
+        if (typeof window.osHideBucketHoverMetrics === 'function') {
+            window.osHideBucketHoverMetrics(true);
+        }
         if (tabId !== 'os-access-keys' && typeof window.osResetCreatedAccessKeyResult === 'function') {
             window.osResetCreatedAccessKeyResult();
         }
@@ -243,7 +481,7 @@
             const name = (b && b.metadata && b.metadata.name) ? b.metadata.name : '';
             const tenant = (b && b.metadata && b.metadata.tenantId) ? b.metadata.tenantId : '';
             const selectedClass = name === osDashboardTemplateBucket ? ' active' : '';
-            html += '<tr><td><button class="os-dash-bucket-select' + selectedClass + '" data-bucket="' + escHtml(name) + '" onclick="osSelectDashboardPolicyBucket(this.dataset.bucket)">' + escHtml(name || '-') + '</button></td><td>' + escHtml(tenant) + '</td><td>' + phaseBadge(b.status?.phase) + '</td><td>' + (b.status?.objectCount||0) + '</td><td class="os-size">' + fmtSize(b.status?.totalSize) + '</td></tr>';
+            html += '<tr><td><button type="button" class="os-dash-bucket-select' + selectedClass + '" data-bucket="' + escHtml(name) + '" data-tenant="' + escHtml(tenant || 'default') + '" onmouseenter="osShowBucketHoverMetrics(this)" onmouseleave="osHideBucketHoverMetrics()" onfocus="osShowBucketHoverMetrics(this)" onblur="osHideBucketHoverMetrics()" onclick="osSelectDashboardPolicyBucket(this.dataset.bucket)">' + escHtml(name || '-') + '</button></td><td>' + escHtml(tenant) + '</td><td>' + phaseBadge(b.status?.phase) + '</td><td>' + (b.status?.objectCount||0) + '</td><td class="os-size">' + fmtSize(b.status?.totalSize) + '</td></tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
@@ -275,7 +513,7 @@
             const s = b.spec || {};
             const st = b.status || {};
             return '<tr>' +
-                '<td><strong>' + escHtml(m.name) + '</strong></td>' +
+                '<td><span tabindex="0" class="os-bucket-hover-anchor" data-bucket="' + escHtml(m.name) + '" data-tenant="' + escHtml(m.tenantId || 'default') + '" onmouseenter="osShowBucketHoverMetrics(this)" onmouseleave="osHideBucketHoverMetrics()" onfocus="osShowBucketHoverMetrics(this)" onblur="osHideBucketHoverMetrics()"><strong>' + escHtml(m.name) + '</strong></span></td>' +
                 '<td>' + escHtml(m.tenantId) + '</td>' +
                 '<td>' + phaseBadge(st.phase) + '</td>' +
                 '<td>' + versionBadge(s.versioning) + '</td>' +
@@ -374,6 +612,7 @@
         const qs = '?tenantId=' + encodeURIComponent(tenantId) + (prefix ? '&prefix=' + encodeURIComponent(prefix) : '');
         try {
             const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/objects' + qs);
+            osCaptureRateHeaders(bucket, tenantId, 'GET', resp);
             if (!resp.ok) { osToast('Failed to list objects', true); return; }
             const data = await resp.json();
             osObjectsCache = data.objects || [];
@@ -429,6 +668,7 @@
         const path = '/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId);
         try {
             const resp = await osFetch(path, { method: 'GET' });
+            osCaptureRateHeaders(bucket, tenantId, 'GET', resp);
             if (!resp.ok) {
                 const d = await resp.json().catch(() => ({}));
                 osToast(d.error || 'Download failed', true);
@@ -721,6 +961,7 @@
         if (!confirm('Delete object "' + key + '"?')) return;
         try {
             const resp = await osFetch('/buckets/' + encodeURIComponent(bucket) + '/objects/' + encodeURIComponent(key) + '?tenantId=' + encodeURIComponent(tenantId), { method: 'DELETE' });
+            osCaptureRateHeaders(bucket, tenantId, 'DELETE', resp);
             if (!resp.ok) { osToast('Delete failed', true); return; }
             osToast('Object deleted');
             osBrowseBucket();
@@ -773,6 +1014,7 @@
                 if (e.lengthComputable) bar.style.width = Math.round(e.loaded/e.total*100) + '%';
             };
             xhr.onload = function() {
+                osCaptureRateHeadersFromXHR(bucket, tenantId, 'PUT', xhr);
                 if (xhr.status >= 200 && xhr.status < 300) {
                     osToast('Upload complete: ' + key);
                     bar.style.width = '100%';
@@ -1423,6 +1665,7 @@
                 method: 'POST',
                 body: JSON.stringify({ keys: keys })
             });
+            osCaptureRateHeaders(bucket, tenantId, 'POST', resp);
             if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Batch delete failed', true); return; }
             const data = await resp.json();
             osToast('Deleted ' + (data.deleted || 0) + ' of ' + (data.total || keys.length) + ' objects');
