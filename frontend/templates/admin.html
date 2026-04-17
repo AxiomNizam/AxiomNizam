@@ -308,6 +308,13 @@
                 <h3>Scan History</h3>
                 <div id="scanHistory"></div>
             </div>
+
+            <!-- Suspicious Files -->
+            <div class="csv-history">
+                <h3>Suspicious Files</h3>
+                <p class="upload-hint" style="margin-bottom:10px;">Files flagged as unsafe by SafeGate are listed here for later review.</p>
+                <div id="scanSuspiciousFiles"></div>
+            </div>
         </div>
     </div>
 
@@ -719,7 +726,9 @@
                     </div>
                     <div class="form-group">
                         <label for="apiPathInput">Path</label>
-                        <input type="text" id="apiPathInput" placeholder="/api/custom/..." required>
+                        <input type="text" id="apiPathInput" list="restEndpointSuggestions" placeholder="/api/custom/..." required>
+                        <small style="display:block; margin-top:6px; color:var(--text-muted);">Suggestions show existing API endpoints. Duplicate method + path is blocked.</small>
+                        <small id="apiPathDuplicateWarning" style="display:none; margin-top:6px; color:#ef4444; font-weight:600;"></small>
                     </div>
                 </div>
                 <div class="form-row">
@@ -816,7 +825,9 @@ search:string:false"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="gqlPathInput">GraphQL Endpoint</label>
-                        <input type="text" id="gqlPathInput" value="/api/graphql" placeholder="/api/graphql" required>
+                        <input type="text" id="gqlPathInput" list="graphqlEndpointSuggestions" value="/api/graphql" placeholder="/api/graphql" required>
+                        <small style="display:block; margin-top:6px; color:var(--text-muted);">Suggestions show existing GraphQL endpoints. Duplicate GraphQL endpoint entries are blocked.</small>
+                        <small id="gqlPathDuplicateWarning" style="display:none; margin-top:6px; color:#ef4444; font-weight:600;"></small>
                     </div>
                 </div>
                 <div class="form-row">
@@ -913,7 +924,8 @@ search:string:false"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="editApiPathInput">Path</label>
-                        <input type="text" id="editApiPathInput" required>
+                        <input type="text" id="editApiPathInput" list="restEndpointSuggestions" required>
+                        <small id="editApiPathDuplicateWarning" style="display:none; margin-top:6px; color:#ef4444; font-weight:600;"></small>
                     </div>
                 </div>
                 <div class="form-row">
@@ -977,8 +989,11 @@ search:string:false"></textarea>
     </div>
 </div>
 
+<datalist id="restEndpointSuggestions"></datalist>
+<datalist id="graphqlEndpointSuggestions"></datalist>
+
 <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
-<script src="/static/admin.js?v=20260406-3"></script>
+<script src="/static/admin.js?v=20260416-3"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         // Fetch IP

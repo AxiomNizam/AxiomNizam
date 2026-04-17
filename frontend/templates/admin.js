@@ -61,6 +61,10 @@ let currentDashMappings = [];
 let builderDataServers = [];
 let customAPIById = {};
 let graphQLAPIById = {};
+let existingRESTEndpoints = [];
+let existingGraphQLEndpoints = [];
+let scanHistoryById = {};
+let selectedScanReportId = '';
 let graphQLFormMode = 'create';
 let editingGraphQLApiId = '';
 let latestAdminAPIScanReport = null;
@@ -101,8 +105,12 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     loadBuilderSummary();
     loadCustomAPIs();
+    loadRESTEndpointCatalog();
     loadGraphQLBuilderSummary();
     loadGraphQLCustomAPIs();
+    loadGraphQLEndpointCatalog();
+    bindRESTEndpointValidation();
+    bindGraphQLEndpointValidation();
     loadBuilderDataSources();
     loadCSVHistory();
     loadAPIs();
@@ -400,6 +408,368 @@ function renderAPINameCell(api) {
         '</div>';
 }
 
+function normalizeRESTEndpointMethod(method) {
+    return String(method || 'GET').trim().toUpperCase();
+}
+
+function normalizeRESTEndpointPath(path) {
+    var raw = String(path || '').trim();
+    if (!raw) return '/';
+
+    var normalized = '/' + raw.replace(/^\/+/, '');
+    normalized = normalized.replace(/\/{2,}/g, '/');
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+        normalized = normalized.slice(0, -1);
+    }
+
+    if (normalized === '/api/custom') {
+        return '/';
+    }
+    if (normalized.indexOf('/api/custom/') === 0) {
+        var trimmed = normalized.substring('/api/custom'.length);
+        if (!trimmed) return '/';
+        return '/' + String(trimmed).replace(/^\/+/, '').replace(/\/{2,}/g, '/');
+    }
+
+    return normalized;
+}
+
+function toRESTEndpointCatalogEntry(api) {
+    if (!api || typeof api !== 'object') return null;
+
+    var apiType = String(api.api_type || 'rest').trim().toLowerCase();
+    if (apiType && apiType !== 'rest') return null;
+
+    var rawPath = String(api.path || '').trim();
+    if (!rawPath) return null;
+
+    return {
+        id: String(api.id || '').trim(),
+        name: String(api.name || '').trim(),
+        method: normalizeRESTEndpointMethod(api.method),
+        rawPath: rawPath,
+        normalizedPath: normalizeRESTEndpointPath(rawPath)
+    };
+}
+
+function setRESTEndpointCatalog(list) {
+    var entries = Array.isArray(list) ? list.map(toRESTEndpointCatalogEntry).filter(function(item) { return !!item; }) : [];
+    var seen = {};
+
+    existingRESTEndpoints = entries.filter(function(item) {
+        var key = item.id + '|' + item.method + '|' + item.normalizedPath;
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+    });
+
+    renderRESTEndpointSuggestions();
+}
+
+function renderRESTEndpointSuggestions() {
+    var datalist = document.getElementById('restEndpointSuggestions');
+    if (!datalist) return;
+
+    var rows = existingRESTEndpoints.slice().sort(function(a, b) {
+        var pathCmp = a.normalizedPath.localeCompare(b.normalizedPath);
+        if (pathCmp !== 0) return pathCmp;
+        return a.method.localeCompare(b.method);
+    });
+
+    var optionSeen = {};
+    var html = '';
+    rows.forEach(function(entry) {
+        var optionKey = entry.method + '|' + entry.rawPath;
+        if (optionSeen[optionKey]) return;
+        optionSeen[optionKey] = true;
+
+        var label = entry.method + ' ' + entry.normalizedPath;
+        if (entry.name) {
+            label += ' - ' + entry.name;
+        }
+
+        html += '<option value="' + escapeHtml(entry.rawPath) + '" label="' + escapeHtml(label) + '"></option>';
+    });
+
+    datalist.innerHTML = html;
+}
+
+function loadRESTEndpointCatalog() {
+    return fetchJSON('/api/v1/builder/apis?api_type=rest').then(function(d) {
+        setRESTEndpointCatalog(d.apis || []);
+        validateCreateRESTEndpoint(false);
+        validateEditRESTEndpoint(false);
+    }).catch(function() {
+        var fallback = [];
+        Object.keys(customAPIById || {}).forEach(function(id) {
+            fallback.push(customAPIById[id]);
+        });
+        if (fallback.length > 0) {
+            setRESTEndpointCatalog(fallback);
+            validateCreateRESTEndpoint(false);
+            validateEditRESTEndpoint(false);
+        }
+    });
+}
+
+function findDuplicateRESTEndpoint(method, path, excludeID) {
+    var targetMethod = normalizeRESTEndpointMethod(method);
+    var targetPath = normalizeRESTEndpointPath(path);
+    var skipID = String(excludeID || '').trim();
+
+    for (var i = 0; i < existingRESTEndpoints.length; i++) {
+        var entry = existingRESTEndpoints[i];
+        if (skipID && entry.id === skipID) continue;
+        if (entry.method === targetMethod && entry.normalizedPath === targetPath) {
+            return entry;
+        }
+    }
+
+    return null;
+}
+
+function setRESTEndpointDuplicateWarning(elementID, message) {
+    var warningEl = document.getElementById(elementID);
+    if (!warningEl) return;
+    if (message) {
+        warningEl.textContent = message;
+        warningEl.style.display = 'block';
+        return;
+    }
+
+    warningEl.textContent = '';
+    warningEl.style.display = 'none';
+}
+
+function validateCreateRESTEndpoint(showAlert) {
+    var methodEl = document.getElementById('apiMethodInput');
+    var pathEl = document.getElementById('apiPathInput');
+    if (!methodEl || !pathEl) return true;
+
+    var path = String(pathEl.value || '').trim();
+    if (!path) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var duplicate = findDuplicateRESTEndpoint(methodEl.value, path, '');
+    if (!duplicate) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var msg = 'Endpoint already exists: ' + duplicate.method + ' ' + duplicate.normalizedPath + (duplicate.name ? ' (' + duplicate.name + ')' : '');
+    pathEl.setCustomValidity(msg);
+    setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', msg);
+    if (showAlert) {
+        alert(msg);
+    }
+    return false;
+}
+
+function validateEditRESTEndpoint(showAlert) {
+    var methodEl = document.getElementById('editApiMethodInput');
+    var pathEl = document.getElementById('editApiPathInput');
+    var idEl = document.getElementById('editApiIdInput');
+    if (!methodEl || !pathEl || !idEl) return true;
+
+    var path = String(pathEl.value || '').trim();
+    if (!path) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var duplicate = findDuplicateRESTEndpoint(methodEl.value, path, idEl.value || '');
+    if (!duplicate) {
+        pathEl.setCustomValidity('');
+        setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', '');
+        return true;
+    }
+
+    var msg = 'Endpoint already exists: ' + duplicate.method + ' ' + duplicate.normalizedPath + (duplicate.name ? ' (' + duplicate.name + ')' : '');
+    pathEl.setCustomValidity(msg);
+    setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', msg);
+    if (showAlert) {
+        alert(msg);
+    }
+    return false;
+}
+
+function bindRESTEndpointValidation() {
+    var createMethodEl = document.getElementById('apiMethodInput');
+    var createPathEl = document.getElementById('apiPathInput');
+    var editMethodEl = document.getElementById('editApiMethodInput');
+    var editPathEl = document.getElementById('editApiPathInput');
+
+    if (createMethodEl && createMethodEl.dataset.endpointValidationBound !== '1') {
+        createMethodEl.addEventListener('change', function() { validateCreateRESTEndpoint(false); });
+        createMethodEl.dataset.endpointValidationBound = '1';
+    }
+    if (createPathEl && createPathEl.dataset.endpointValidationBound !== '1') {
+        createPathEl.addEventListener('input', function() { validateCreateRESTEndpoint(false); });
+        createPathEl.dataset.endpointValidationBound = '1';
+    }
+    if (editMethodEl && editMethodEl.dataset.endpointValidationBound !== '1') {
+        editMethodEl.addEventListener('change', function() { validateEditRESTEndpoint(false); });
+        editMethodEl.dataset.endpointValidationBound = '1';
+    }
+    if (editPathEl && editPathEl.dataset.endpointValidationBound !== '1') {
+        editPathEl.addEventListener('input', function() { validateEditRESTEndpoint(false); });
+        editPathEl.dataset.endpointValidationBound = '1';
+    }
+}
+
+function normalizeGraphQLEndpointMethod(method) {
+    var normalized = String(method || '').trim().toUpperCase();
+    return normalized || 'POST';
+}
+
+function normalizeGraphQLEndpointPath(path) {
+    var raw = String(path || '').trim();
+    if (!raw) {
+        raw = '/api/graphql';
+    }
+    return normalizeRESTEndpointPath(raw);
+}
+
+function toGraphQLEndpointCatalogEntry(api) {
+    if (!api || typeof api !== 'object') return null;
+
+    var apiType = String(api.api_type || 'rest').trim().toLowerCase();
+    if (apiType !== 'graphql') return null;
+
+    return {
+        id: String(api.id || '').trim(),
+        name: String(api.name || '').trim(),
+        operation: String(api.graphql_operation_name || '').trim(),
+        method: normalizeGraphQLEndpointMethod(api.method),
+        rawPath: String(api.path || '/api/graphql').trim() || '/api/graphql',
+        normalizedPath: normalizeGraphQLEndpointPath(api.path)
+    };
+}
+
+function setGraphQLEndpointCatalog(list) {
+    var entries = Array.isArray(list) ? list.map(toGraphQLEndpointCatalogEntry).filter(function(item) { return !!item; }) : [];
+    var seen = {};
+
+    existingGraphQLEndpoints = entries.filter(function(item) {
+        var key = item.id + '|' + item.method + '|' + item.normalizedPath;
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+    });
+
+    renderGraphQLEndpointSuggestions();
+}
+
+function renderGraphQLEndpointSuggestions() {
+    var datalist = document.getElementById('graphqlEndpointSuggestions');
+    if (!datalist) return;
+
+    var rows = existingGraphQLEndpoints.slice().sort(function(a, b) {
+        var pathCmp = a.normalizedPath.localeCompare(b.normalizedPath);
+        if (pathCmp !== 0) return pathCmp;
+        return a.method.localeCompare(b.method);
+    });
+
+    var optionSeen = {};
+    var html = '';
+    rows.forEach(function(entry) {
+        var optionKey = entry.method + '|' + entry.rawPath;
+        if (optionSeen[optionKey]) return;
+        optionSeen[optionKey] = true;
+
+        var label = entry.method + ' ' + entry.normalizedPath;
+        if (entry.operation) {
+            label += ' - ' + entry.operation;
+        } else if (entry.name) {
+            label += ' - ' + entry.name;
+        }
+
+        html += '<option value="' + escapeHtml(entry.rawPath) + '" label="' + escapeHtml(label) + '"></option>';
+    });
+
+    datalist.innerHTML = html;
+}
+
+function loadGraphQLEndpointCatalog() {
+    return fetchJSON('/api/v1/builder/apis?api_type=graphql').then(function(d) {
+        setGraphQLEndpointCatalog(d.apis || []);
+        validateGraphQLEndpoint(false);
+    }).catch(function() {
+        var fallback = [];
+        Object.keys(graphQLAPIById || {}).forEach(function(id) {
+            fallback.push(graphQLAPIById[id]);
+        });
+        if (fallback.length > 0) {
+            setGraphQLEndpointCatalog(fallback);
+            validateGraphQLEndpoint(false);
+        }
+    });
+}
+
+function findDuplicateGraphQLEndpoint(method, path, excludeID) {
+    var targetMethod = normalizeGraphQLEndpointMethod(method);
+    var targetPath = normalizeGraphQLEndpointPath(path);
+    var skipID = String(excludeID || '').trim();
+
+    for (var i = 0; i < existingGraphQLEndpoints.length; i++) {
+        var entry = existingGraphQLEndpoints[i];
+        if (skipID && entry.id === skipID) continue;
+        if (entry.method === targetMethod && entry.normalizedPath === targetPath) {
+            return entry;
+        }
+    }
+
+    return null;
+}
+
+function setGraphQLEndpointDuplicateWarning(message) {
+    var warningEl = document.getElementById('gqlPathDuplicateWarning');
+    if (!warningEl) return;
+    if (message) {
+        warningEl.textContent = message;
+        warningEl.style.display = 'block';
+        return;
+    }
+
+    warningEl.textContent = '';
+    warningEl.style.display = 'none';
+}
+
+function validateGraphQLEndpoint(showAlert) {
+    var pathEl = document.getElementById('gqlPathInput');
+    if (!pathEl) return true;
+
+    var effectivePath = String(pathEl.value || '').trim() || '/api/graphql';
+    var excludeID = (graphQLFormMode === 'edit' && editingGraphQLApiId) ? editingGraphQLApiId : '';
+    var duplicate = findDuplicateGraphQLEndpoint('POST', effectivePath, excludeID);
+    if (!duplicate) {
+        pathEl.setCustomValidity('');
+        setGraphQLEndpointDuplicateWarning('');
+        return true;
+    }
+
+    var msg = 'GraphQL endpoint already exists: ' + duplicate.method + ' ' + duplicate.normalizedPath + (duplicate.operation ? ' (' + duplicate.operation + ')' : (duplicate.name ? ' (' + duplicate.name + ')' : ''));
+    pathEl.setCustomValidity(msg);
+    setGraphQLEndpointDuplicateWarning(msg);
+    if (showAlert) {
+        alert(msg);
+    }
+    return false;
+}
+
+function bindGraphQLEndpointValidation() {
+    var pathEl = document.getElementById('gqlPathInput');
+    if (pathEl && pathEl.dataset.graphqlEndpointValidationBound !== '1') {
+        pathEl.addEventListener('input', function() { validateGraphQLEndpoint(false); });
+        pathEl.dataset.graphqlEndpointValidationBound = '1';
+    }
+}
+
 function loadCustomAPIs() {
     var catEl = document.getElementById('apiCategoryFilter');
     var statEl = document.getElementById('apiStatusFilter');
@@ -412,6 +782,9 @@ function loadCustomAPIs() {
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
         customAPIById = {};
+        if (!cat && !status) {
+            setRESTEndpointCatalog(list);
+        }
         var el = document.getElementById('apiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -459,6 +832,9 @@ function escapeHtml(str) {
 function closeCreateAPIModal() {
     document.getElementById('createAPIModal').style.display = 'none';
     document.getElementById('createAPIForm').reset();
+    var pathInput = document.getElementById('apiPathInput');
+    if (pathInput) pathInput.setCustomValidity('');
+    setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
     var ttlGroup = document.getElementById('cacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
     updateBuilderSourceServers();
@@ -485,6 +861,10 @@ function getSQLTemplateFromAPI(api) {
 
 function submitCreateAPI(e) {
     e.preventDefault();
+    if (!validateCreateRESTEndpoint(true)) {
+        return;
+    }
+
     var mockRaw = document.getElementById('apiMockResponseInput').value.trim();
     var mockResp = null;
     if (mockRaw) {
@@ -536,6 +916,7 @@ function submitCreateAPI(e) {
             closeCreateAPIModal();
             loadBuilderSummary();
             loadCustomAPIs();
+            loadRESTEndpointCatalog();
             addLog('Created API: ' + body.name, 'info');
         } else {
             alert(d.error || 'Failed to create API');
@@ -681,6 +1062,9 @@ function loadGraphQLCustomAPIs() {
     fetchJSON(q).then(function(d) {
         var list = d.apis || [];
         graphQLAPIById = {};
+        if (!cat && !status) {
+            setGraphQLEndpointCatalog(list);
+        }
         var el = document.getElementById('graphqlApiBuilderList');
         if (!el) return;
         if (list.length === 0) {
@@ -759,6 +1143,16 @@ function updateGraphQLBuilderSourceServers() {
 function openCreateGraphQLAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin, manager, or system-manager.'); return; }
     resetGraphQLFormMode();
+    bindGraphQLEndpointValidation();
+    loadGraphQLEndpointCatalog();
+    setGraphQLEndpointDuplicateWarning('');
+    var pathEl = document.getElementById('gqlPathInput');
+    if (pathEl) {
+        pathEl.setCustomValidity('');
+        if (!pathEl.value) {
+            pathEl.value = '/api/graphql';
+        }
+    }
     loadBuilderDataSources();
     document.getElementById('createGraphQLAPIModal').style.display = 'flex';
 }
@@ -767,9 +1161,11 @@ function closeCreateGraphQLAPIModal() {
     resetGraphQLFormMode();
     document.getElementById('createGraphQLAPIModal').style.display = 'none';
     document.getElementById('createGraphQLAPIForm').reset();
+    var pathEl = document.getElementById('gqlPathInput');
+    if (pathEl) pathEl.setCustomValidity('');
+    setGraphQLEndpointDuplicateWarning('');
     var ttlGroup = document.getElementById('gqlCacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
-    var pathEl = document.getElementById('gqlPathInput');
     if (pathEl && !pathEl.value) {
         pathEl.value = '/api/graphql';
     }
@@ -796,6 +1192,9 @@ function parseBuilderParams(raw) {
 
 function submitCreateGraphQLAPI(e) {
     e.preventDefault();
+    if (!validateGraphQLEndpoint(true)) {
+        return;
+    }
 
     var mockRaw = document.getElementById('gqlMockResponseInput').value.trim();
     var mockResp = null;
@@ -836,6 +1235,7 @@ function submitCreateGraphQLAPI(e) {
             closeCreateGraphQLAPIModal();
             loadGraphQLBuilderSummary();
             loadGraphQLCustomAPIs();
+            loadGraphQLEndpointCatalog();
             if (isEditMode) {
                 addLog('Updated GraphQL API: ' + body.name, 'info');
             } else {
@@ -864,6 +1264,7 @@ function deleteGraphQLCustomAPI(id) {
             addLog('Deleted GraphQL API: ' + id, 'warn');
             loadGraphQLBuilderSummary();
             loadGraphQLCustomAPIs();
+            loadGraphQLEndpointCatalog();
         } else {
             alert(d.error || 'Failed to delete GraphQL API');
         }
@@ -884,6 +1285,7 @@ function openEditGraphQLCustomAPI(id) {
     if (submitBtn) submitBtn.textContent = 'Save Changes';
 
     loadBuilderDataSources(function() {
+        loadGraphQLEndpointCatalog();
         document.getElementById('gqlApiNameInput').value = api.name || '';
         document.getElementById('gqlApiCategoryInput').value = api.category || 'custom';
         document.getElementById('gqlOperationNameInput').value = api.graphql_operation_name || '';
@@ -910,6 +1312,7 @@ function openEditGraphQLCustomAPI(id) {
         document.getElementById('gqlQueryParamsInput').value = qpLines.join('\n');
 
         document.getElementById('createGraphQLAPIModal').style.display = 'flex';
+        validateGraphQLEndpoint(false);
     });
 }
 
@@ -948,6 +1351,7 @@ function openEditCustomAPI(id) {
     if (!api) { alert('API details not found. Please refresh and try again.'); return; }
 
     loadBuilderDataSources(function() {
+        loadRESTEndpointCatalog();
         document.getElementById('editApiIdInput').value = api.id || '';
         document.getElementById('editApiNameInput').value = api.name || '';
         document.getElementById('editApiMethodInput').value = api.method || 'GET';
@@ -965,12 +1369,16 @@ function openEditCustomAPI(id) {
         document.getElementById('editApiRateLimitInput').value = api.rate_limit || 0;
         document.getElementById('editApiStatusInput').value = api.status || 'active';
         document.getElementById('editAPIModal').style.display = 'flex';
+        validateEditRESTEndpoint(false);
     });
 }
 
 function closeEditAPIModal() {
     document.getElementById('editAPIModal').style.display = 'none';
     document.getElementById('editAPIForm').reset();
+    var pathInput = document.getElementById('editApiPathInput');
+    if (pathInput) pathInput.setCustomValidity('');
+    setRESTEndpointDuplicateWarning('editApiPathDuplicateWarning', '');
     var ttlGroup = document.getElementById('editCacheTTLGroup');
     if (ttlGroup) ttlGroup.style.display = 'none';
 }
@@ -984,6 +1392,9 @@ function toggleEditCacheTTL() {
 function submitEditAPI(e) {
     e.preventDefault();
     if (!canModify()) { alert('You do not have permission to edit APIs. Contact an admin, manager, or system-manager.'); return; }
+    if (!validateEditRESTEndpoint(true)) {
+        return;
+    }
 
     var id = document.getElementById('editApiIdInput').value;
     if (!id) {
@@ -1017,6 +1428,7 @@ function submitEditAPI(e) {
             closeEditAPIModal();
             loadBuilderSummary();
             loadCustomAPIs();
+            loadRESTEndpointCatalog();
             addLog('Updated API: ' + id, 'info');
         } else {
             alert(d.error || 'Failed to update API');
@@ -2690,6 +3102,9 @@ function handleFileScan() {
     }).then(function(r) { return r.json(); }).then(function(d) {
         if (d.status === 'success') {
             showScanResult(d.scan);
+            if (d.scan && d.scan.id) {
+                selectedScanReportId = d.scan.id;
+            }
             addLog('Scanned file: ' + d.scan.filename + ' — ' + (d.safe ? 'SAFE' : 'THREATS FOUND'), d.safe ? 'info' : 'error');
             loadScanHistory();
         } else {
@@ -2700,7 +3115,53 @@ function handleFileScan() {
     });
 }
 
+function normalizeScanFindings(scan) {
+    if (!scan || !Array.isArray(scan.findings)) return [];
+    return scan.findings;
+}
+
+function getFindingSeverityWeight(severity) {
+    var sev = String(severity || '').toLowerCase();
+    if (sev === 'critical') return 5;
+    if (sev === 'high') return 4;
+    if (sev === 'medium') return 3;
+    if (sev === 'low') return 2;
+    if (sev === 'info') return 1;
+    return 0;
+}
+
+function getHighestFindingSeverity(findings) {
+    var highest = 'unknown';
+    var highestWeight = -1;
+    (findings || []).forEach(function(f) {
+        var candidate = String((f && f.severity) || 'unknown').toLowerCase();
+        var weight = getFindingSeverityWeight(candidate);
+        if (weight > highestWeight) {
+            highestWeight = weight;
+            highest = candidate;
+        }
+    });
+    return highest;
+}
+
+function renderFindingSeverityBadge(severity) {
+    var sev = String(severity || 'unknown').toLowerCase();
+    var cls = 'status-active';
+    if (sev === 'critical' || sev === 'high') cls = 'status-inactive';
+    else if (sev === 'medium') cls = 'status-draft';
+    return '<span class="status-badge ' + cls + '">' + escapeHtml(sev.toUpperCase()) + '</span>';
+}
+
 function showScanResult(scan) {
+    if (!scan) return;
+    var findings = normalizeScanFindings(scan);
+    var resultBox = document.getElementById('scanResult');
+    if (resultBox) resultBox.style.display = 'block';
+
+    if (scan.id) {
+        selectedScanReportId = scan.id;
+    }
+
     document.getElementById('scanFilenameDisplay').textContent = scan.filename;
     var safeBadge = scan.safe
         ? '<span class="badge badge-success">✅ SAFE</span>'
@@ -2708,14 +3169,16 @@ function showScanResult(scan) {
     document.getElementById('scanBadges').innerHTML =
         safeBadge + ' ' +
         '<span class="badge">' + formatFileSize(scan.file_size) + '</span> ' +
-        '<span class="badge">' + scan.findings.length + ' finding(s)</span>';
+        '<span class="badge">' + findings.length + ' finding(s)</span> ' +
+        (scan.id ? '<span class="badge">Report: ' + escapeHtml(scan.id) + '</span> ' : '') +
+        (scan.scanned_at ? '<span class="badge">' + escapeHtml(new Date(scan.scanned_at).toLocaleString()) + '</span>' : '');
 
     var html = '';
-    if (scan.findings.length === 0) {
+    if (findings.length === 0) {
         html = '<div class="empty-state" style="padding:10px">No security issues found.</div>';
     } else {
         html = '<table class="admin-table compact"><thead><tr><th>Severity</th><th>Scanner</th><th>Description</th><th>Details</th></tr></thead><tbody>';
-        scan.findings.forEach(function(f) {
+        findings.forEach(function(f) {
             var sevClass = f.severity === 'critical' || f.severity === 'high' ? 'status-inactive' :
                            f.severity === 'medium' ? 'status-draft' : 'status-active';
             html += '<tr><td><span class="status-badge ' + sevClass + '">' + f.severity.toUpperCase() + '</span></td>' +
@@ -2726,6 +3189,55 @@ function showScanResult(scan) {
         html += '</tbody></table>';
     }
     document.getElementById('scanFindings').innerHTML = html;
+}
+
+function viewScanReport(scanID) {
+    var id = String(scanID || '').trim();
+    if (!id) return;
+
+    var cached = scanHistoryById[id];
+    if (cached) {
+        showScanResult(cached);
+        return;
+    }
+
+    fetchJSON('/api/v1/builder/scanner/scans/' + encodeURIComponent(id)).then(function(d) {
+        if (d.status !== 'success' || !d.scan) {
+            alert(d.error || 'Scan report not found');
+            return;
+        }
+        scanHistoryById[id] = d.scan;
+        showScanResult(d.scan);
+    }).catch(function(err) {
+        alert('Failed to load scan report: ' + (err && err.message ? err.message : 'unknown error'));
+    });
+}
+
+function renderSuspiciousScanList(list) {
+    var el = document.getElementById('scanSuspiciousFiles');
+    if (!el) return;
+
+    var suspicious = (list || []).filter(function(s) { return !s.safe; });
+    if (suspicious.length === 0) {
+        el.innerHTML = '<div class="empty-state">No suspicious files found yet.</div>';
+        return;
+    }
+
+    var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Highest Severity</th><th>Findings</th><th>Date</th><th>Action</th></tr></thead><tbody>';
+    suspicious.forEach(function(s) {
+        var findings = normalizeScanFindings(s);
+        var severity = getHighestFindingSeverity(findings);
+        var safeID = String(s.id || '').replace(/'/g, "\\'");
+        html += '<tr>' +
+            '<td>' + escapeHtml(s.filename || '-') + '</td>' +
+            '<td>' + renderFindingSeverityBadge(severity) + '</td>' +
+            '<td>' + findings.length + '</td>' +
+            '<td>' + (s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-') + '</td>' +
+            '<td><button class="btn-sm btn-secondary" onclick="viewScanReport(\'' + safeID + '\')">View Report</button></td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
 }
 
 function formatFileSize(bytes) {
@@ -2753,25 +3265,40 @@ function loadScannerHealth() {
 function loadScanHistory() {
     fetchJSON('/api/v1/builder/scanner/scans').then(function(d) {
         var list = d.scans || [];
+        scanHistoryById = {};
+        list.forEach(function(s) {
+            if (s && s.id) scanHistoryById[s.id] = s;
+        });
+
         var el = document.getElementById('scanHistory');
         if (!el) return;
         if (list.length === 0) {
             el.innerHTML = '<div class="empty-state">No scans yet</div>';
+            renderSuspiciousScanList([]);
             return;
         }
-        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Size</th><th>Result</th><th>Findings</th><th>Date</th></tr></thead><tbody>';
+        var html = '<table class="admin-table compact"><thead><tr><th>File</th><th>Size</th><th>Result</th><th>Findings</th><th>Date</th><th>Action</th></tr></thead><tbody>';
         list.forEach(function(s) {
+            var findings = normalizeScanFindings(s);
             var resultBadge = s.safe
                 ? '<span class="status-badge status-active">Safe</span>'
                 : '<span class="status-badge status-inactive">Unsafe</span>';
+            var safeID = String(s.id || '').replace(/'/g, "\\'");
             html += '<tr><td>' + escapeHtml(s.filename) + '</td>' +
                 '<td>' + formatFileSize(s.file_size) + '</td>' +
                 '<td>' + resultBadge + '</td>' +
-                '<td>' + s.findings.length + '</td>' +
-                '<td>' + new Date(s.scanned_at).toLocaleString() + '</td></tr>';
+                '<td>' + findings.length + '</td>' +
+                '<td>' + new Date(s.scanned_at).toLocaleString() + '</td>' +
+                '<td><button class="btn-sm btn-secondary" onclick="viewScanReport(\'' + safeID + '\')">View Report</button></td></tr>';
         });
         html += '</tbody></table>';
         el.innerHTML = html;
+
+        renderSuspiciousScanList(list);
+
+        if (selectedScanReportId && scanHistoryById[selectedScanReportId]) {
+            showScanResult(scanHistoryById[selectedScanReportId]);
+        }
     }).catch(function() {});
 }
 
@@ -2851,7 +3378,7 @@ function deleteCustomAPI(id) {
     var apiName = api.name || id;
     if (!confirmDeleteAPI('REST API', apiName)) return;
     deleteJSON('/api/v1/builder/apis/' + id).then(function(d) {
-        if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); }
+        if (d.status === 'success' || d.status === 'ok') { addLog('Deleted API: ' + id, 'warn'); loadBuilderSummary(); loadCustomAPIs(); loadRESTEndpointCatalog(); }
         else { alert(d.error || 'Failed to delete API'); }
     });
 }
@@ -2867,6 +3394,11 @@ function deleteDashboard(dashId) {
 
 function openCreateAPIModal() {
     if (!canModify()) { alert('You do not have permission to create APIs. Contact an admin, manager, or system-manager.'); return; }
+    bindRESTEndpointValidation();
+    loadRESTEndpointCatalog();
+    setRESTEndpointDuplicateWarning('apiPathDuplicateWarning', '');
+    var pathInput = document.getElementById('apiPathInput');
+    if (pathInput) pathInput.setCustomValidity('');
     loadBuilderDataSources();
     document.getElementById('createAPIModal').style.display = 'flex';
 }

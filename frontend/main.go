@@ -155,6 +155,7 @@ func main() {
 	router.GET("/operations-center", requireFrontendRoles("admin", "system-manager", "manager"), operationsCenterHandler)
 	router.GET("/lineage-version", requireFrontendRoles("admin", "system-manager"), versionLineageHandler)
 	router.GET("/iam-admin", requireFrontendRoles("system-manager"), iamAdminHandler)
+	router.GET("/object-storage", requireFrontendRoles("system-manager"), objectStorageHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -511,6 +512,28 @@ func iamAdminHandler(c *gin.Context) {
 		"title":      "AxiomNizam - IAM Admin Console",
 		"pageName":   "iam-admin",
 		"page":       "iam-admin",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// objectStorageHandler serves the Object Storage console
+func objectStorageHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "Storage Admin"
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Object Storage",
+		"pageName":   "object-storage",
+		"page":       "object-storage",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,

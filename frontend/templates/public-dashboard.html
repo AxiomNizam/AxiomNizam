@@ -41,13 +41,14 @@
             <div class="hero-search">
                 <div class="hero-search-box">
                     <svg class="hero-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" id="featureSearch" class="hero-search-input" placeholder="Search features — API Builder, CDC, GraphQL, GIS, IAM..." autocomplete="off" spellcheck="false">
+                    <input type="text" id="featureSearch" class="hero-search-input" placeholder="Search features — API Builder, Object Storage, CDC, GraphQL, GIS, IAM..." autocomplete="off" spellcheck="false">
                     <span class="hero-search-shortcut" aria-hidden="true">/</span>
                     <button type="button" id="featureSearchClear" class="hero-search-clear" style="display:none;" aria-label="Clear search">&times;</button>
                 </div>
                 <div class="hero-search-suggestions" id="featureSearchSuggestions" aria-label="Search quick picks">
                     <button type="button" class="hero-search-chip" data-search-term="API Builder">API Builder</button>
                     <button type="button" class="hero-search-chip" data-search-term="GraphQL">GraphQL</button>
+                    <button type="button" class="hero-search-chip" data-search-term="Object Storage">Object Storage</button>
                     <button type="button" class="hero-search-chip" data-search-term="CDC">CDC</button>
                     <button type="button" class="hero-search-chip" data-search-term="GIS">GIS</button>
                     <button type="button" class="hero-search-chip" data-search-term="IAM">IAM</button>
@@ -88,6 +89,12 @@
                         <h4>Dynamic Queries</h4>
                         <p>Execute SQL queries across connected databases with schema introspection, batch operations, query logging, and performance analysis.</p>
                         <div class="feature-tags"><span class="tag">SQL</span><span class="tag">Batch</span><span class="tag">Analytics</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/object-storage')">
+                        <div class="feature-card-icon">🪣</div>
+                        <h4>Object Storage</h4>
+                        <p>S3-compatible object storage with bucket management, object browser, pre-signed/share URLs, access keys, policies, encryption, quotas, and per-bucket rate limits.</p>
+                        <div class="feature-tags"><span class="tag">S3-Compatible</span><span class="tag">Buckets</span><span class="tag">Access Keys</span></div>
                     </div>
                     <div class="feature-card" onclick="requireAuth('/admin')">
                         <div class="feature-card-icon">🤖</div>
@@ -487,7 +494,7 @@
     <section class="landing-cta">
         <div class="cta-content">
             <h2>Ready to explore?</h2>
-            <p>Sign up to access all features — API Builder, Analytics, GIS, CDC/ETL, Network Intelligence, Governance, and more.</p>
+            <p>Sign up to access all features — API Builder, Object Storage, Analytics, GIS, CDC/ETL, Network Intelligence, Governance, and more.</p>
             <div class="hero-actions">
                 {{ if .isAuth }}
                 <a href="/admin" class="hero-btn hero-btn-primary">Go to Dashboard</a>

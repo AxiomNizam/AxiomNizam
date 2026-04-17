@@ -26,6 +26,8 @@ import (
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
 	iampkg "example.com/axiomnizam/internal/iam"
+	iamstorage "example.com/axiomnizam/internal/iam/storage"
+	iamtoken "example.com/axiomnizam/internal/iam/token"
 	"example.com/axiomnizam/internal/integration"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
@@ -37,6 +39,7 @@ import (
 	"example.com/axiomnizam/internal/rbac"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
+	"example.com/axiomnizam/internal/storage"
 	"example.com/axiomnizam/internal/streaming"
 	"example.com/axiomnizam/internal/tenant"
 	"example.com/axiomnizam/internal/tracing"
@@ -1265,6 +1268,7 @@ func main() {
 		// File Scanner (SafeGate Pipeline)
 		builderAPI.POST("/scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanFile)
 		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
+		builderAPI.GET("/scanner/scans/:id", apiBuilderHandler.GetScan)
 		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
 
 		// API Scanner Reports
@@ -1671,6 +1675,26 @@ func main() {
 		log.Println("✅ IAM routes registered")
 	}
 
+	// ====================================
+	// OBJECT STORAGE MODULE (Native S3)
+	// ====================================
+	storageCfg := storage.DefaultConfig()
+	var storageIssuer *iamtoken.Issuer
+	var storageRevokedStore *iamstorage.EtcdRevokedTokenStore
+	if iamSystem != nil {
+		storageIssuer = iamSystem.Issuer
+		storageRevokedStore = iamSystem.RevokedStore
+	}
+	storageSys, storageErr := storage.NewSystem(storageCfg, storageIssuer, storageRevokedStore, conns.Etcd)
+	if storageErr != nil {
+		log.Printf("⚠️  Object storage module initialization failed: %v — storage API will be unavailable", storageErr)
+	} else {
+		storageAPI := router.Group("/api/v1")
+		storageSys.RegisterRoutes(storageAPI)
+		storageSys.Start(ctx)
+		log.Println("✅ Object Storage module started (native backend, data:", storageCfg.DataDir, ")")
+	}
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
@@ -1777,6 +1801,11 @@ func main() {
 	// Stop runtime
 	if err := rt.Stop(); err != nil {
 		log.Printf("Runtime stop error: %v", err)
+	}
+
+	// Stop object storage module
+	if storageSys != nil {
+		storageSys.Stop()
 	}
 
 	// Flush conductor stats to DB before exit
