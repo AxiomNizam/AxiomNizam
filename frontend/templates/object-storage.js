@@ -74,6 +74,10 @@
         return String(tenantId || 'default').trim() + '|' + String(bucket || '').trim();
     }
 
+    function osNormalizeName(v) {
+        return String(v || '').trim().toLowerCase();
+    }
+
     function osMethodToOpClass(method) {
         const m = String(method || '').toUpperCase();
         if (m === 'PUT' || m === 'POST' || m === 'DELETE' || m === 'PATCH') {
@@ -124,6 +128,141 @@
         const resetEpoch = osIntOrNull(xhr.getResponseHeader('X-RateLimit-Reset'));
         osStoreBucketRateHeaderState(bucket, tenantId, method, limit, remaining, resetEpoch);
     }
+
+    function osRefreshBucketNameSuggestions() {
+        const datalist = document.getElementById('osBucketNameSuggestions');
+        if (!datalist) return;
+
+        const source = (osBucketCatalogCache && osBucketCatalogCache.length) ? osBucketCatalogCache : osBucketsCache;
+        const rows = (source || []).map(b => {
+            return {
+                name: (b && b.metadata && b.metadata.name) ? String(b.metadata.name) : '',
+                tenantId: (b && b.metadata && b.metadata.tenantId) ? String(b.metadata.tenantId) : ''
+            };
+        }).filter(r => !!r.name);
+
+        rows.sort((a, b) => {
+            const byName = a.name.localeCompare(b.name);
+            if (byName !== 0) return byName;
+            return a.tenantId.localeCompare(b.tenantId);
+        });
+
+        const seen = {};
+        let html = '';
+        rows.forEach(r => {
+            const key = osNormalizeName(r.name) + '|' + osNormalizeName(r.tenantId);
+            if (seen[key]) return;
+            seen[key] = true;
+
+            const label = r.tenantId ? (r.name + ' (tenant: ' + r.tenantId + ')') : r.name;
+            html += '<option value="' + escHtml(r.name) + '" label="' + escHtml(label) + '"></option>';
+        });
+        datalist.innerHTML = html;
+    }
+
+    function osRenderAccessKeyScopeSuggestions() {
+        const host = document.getElementById('osAccessKeyScopeSuggestions');
+        if (!host) return;
+
+        const names = [];
+        const seen = {};
+        const source = (osBucketCatalogCache && osBucketCatalogCache.length) ? osBucketCatalogCache : osBucketsCache;
+        (source || []).forEach(b => {
+            const name = (b && b.metadata && b.metadata.name) ? String(b.metadata.name).trim() : '';
+            if (!name) return;
+            const k = osNormalizeName(name);
+            if (seen[k]) return;
+            seen[k] = true;
+            names.push(name);
+        });
+
+        if (!names.length) {
+            host.innerHTML = '<span style="color:var(--text-muted);">No bucket suggestions available yet</span>';
+            return;
+        }
+
+        names.sort((a, b) => a.localeCompare(b));
+        host.innerHTML = names.map(name => {
+            return '<button type="button" class="os-btn os-btn-secondary os-btn-sm" style="padding:3px 8px;" data-bucket="' + escHtml(name) + '" onclick="osAddBucketScopeSuggestion(this.dataset.bucket)">' + escHtml(name) + '</button>';
+        }).join(' ');
+    }
+
+    window.osAddBucketScopeSuggestion = function(bucketName) {
+        const input = document.getElementById('osNewAccessKeyBucketScope');
+        if (!input) return;
+
+        const add = String(bucketName || '').trim();
+        if (!add) return;
+
+        const current = String(input.value || '');
+        const parts = current.split(',').map(s => s.trim()).filter(Boolean);
+        const lower = parts.map(osNormalizeName);
+        if (lower.indexOf(osNormalizeName(add)) === -1) {
+            parts.push(add);
+        }
+        input.value = parts.join(', ');
+        input.focus();
+    };
+
+    function osFindDuplicateBucket(name, tenant) {
+        const n = osNormalizeName(name);
+        const t = osNormalizeName(tenant || 'default');
+        if (!n) return null;
+
+        const source = (osBucketCatalogCache && osBucketCatalogCache.length) ? osBucketCatalogCache : osBucketsCache;
+        let sameNameAnyTenant = null;
+        for (let i = 0; i < (source || []).length; i++) {
+            const b = source[i] || {};
+            const m = b.metadata || {};
+            const bn = osNormalizeName(m.name || '');
+            const bt = osNormalizeName(m.tenantId || 'default');
+            if (!bn || bn !== n) continue;
+
+            if (!sameNameAnyTenant) {
+                sameNameAnyTenant = { name: m.name || name, tenantId: m.tenantId || 'default' };
+            }
+            if (bt === t) {
+                return { name: m.name || name, tenantId: m.tenantId || 'default', exactTenant: true };
+            }
+        }
+
+        if (sameNameAnyTenant) {
+            return { name: sameNameAnyTenant.name, tenantId: sameNameAnyTenant.tenantId, exactTenant: false };
+        }
+        return null;
+    }
+
+    function osUpdateCreateBucketNameHint(duplicateInfo) {
+        const hint = document.getElementById('osNewBucketNameHint');
+        if (!hint) return;
+
+        if (!duplicateInfo) {
+            hint.style.color = 'var(--text-muted)';
+            hint.textContent = 'Suggestions show existing bucket names. Duplicate bucket name is blocked.';
+            return;
+        }
+
+        hint.style.color = '#f59e0b';
+        if (duplicateInfo.exactTenant) {
+            hint.textContent = 'This bucket already exists for tenant "' + duplicateInfo.tenantId + '".';
+            return;
+        }
+        hint.textContent = 'A bucket with this name already exists under tenant "' + duplicateInfo.tenantId + '".';
+    }
+
+    window.osValidateCreateBucketName = function(showToast) {
+        const name = (document.getElementById('osNewBucketName').value || '').trim();
+        const tenant = (document.getElementById('osNewBucketTenant').value || 'default').trim() || 'default';
+        const dup = osFindDuplicateBucket(name, tenant);
+
+        osUpdateCreateBucketNameHint(dup);
+        if (!dup) return true;
+
+        if (showToast) {
+            osToast('Bucket "' + name + '" already exists' + (dup.tenantId ? (' (tenant: ' + dup.tenantId + ')') : ''), true);
+        }
+        return false;
+    };
 
     function osGetBucketLiveRateState(bucket, tenantId) {
         return osBucketLiveRateState[osBucketMetricsKey(bucket, tenantId)] || {};
@@ -291,8 +430,35 @@
             doHide();
             return;
         }
-        osBucketHoverHideTimer = setTimeout(doHide, 120);
+        osBucketHoverHideTimer = setTimeout(doHide, 220);
     };
+
+    let osBucketHoverEventsBound = false;
+
+    function osBindBucketHoverEvents() {
+        if (osBucketHoverEventsBound) return;
+        osBucketHoverEventsBound = true;
+
+        const selector = '.os-dash-bucket-select, .os-bucket-hover-anchor';
+
+        document.addEventListener('mouseover', function(e) {
+            const target = e.target && e.target.closest ? e.target.closest(selector) : null;
+            if (!target) return;
+            window.osShowBucketHoverMetrics(target);
+        });
+
+        document.addEventListener('mouseout', function(e) {
+            const from = e.target && e.target.closest ? e.target.closest(selector) : null;
+            if (!from) return;
+            const to = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest(selector) : null;
+            if (to === from) return;
+            window.osHideBucketHoverMetrics();
+        });
+
+        document.addEventListener('scroll', function() {
+            window.osHideBucketHoverMetrics(true);
+        }, true);
+    }
 
     function osBuildBucketPolicyTemplate(bucketName) {
         const b = String(bucketName || '').trim() || 'your-bucket-name';
@@ -397,6 +563,7 @@
 
     // ===== Data Cache =====
     let osBucketsCache = [];
+    let osBucketCatalogCache = [];
     let osObjectsCache = [];
     let osPoliciesCache = [];
     let osAccessKeysCache = [];
@@ -422,6 +589,9 @@
             if (bucketsResp.ok) {
                 const buckets = await bucketsResp.json();
                 osBucketsCache = Array.isArray(buckets) ? buckets : [];
+                osBucketCatalogCache = osBucketsCache.slice();
+                osRefreshBucketNameSuggestions();
+                osRenderAccessKeyScopeSuggestions();
                 renderDashRecentBuckets(osBucketsCache.slice(0, 5));
                 const firstBucket = osBucketsCache.length ? (osBucketsCache[0].metadata && osBucketsCache[0].metadata.name) : '';
                 osRenderDashboardPolicyTemplate(firstBucket || 'your-bucket-name');
@@ -496,6 +666,11 @@
             if (!resp.ok) { osToast('Failed to load buckets: ' + resp.status, true); return; }
             const data = await resp.json();
             osBucketsCache = Array.isArray(data) ? data : [];
+            if (!tenant) {
+                osBucketCatalogCache = osBucketsCache.slice();
+            }
+            osRefreshBucketNameSuggestions();
+            osRenderAccessKeyScopeSuggestions();
             renderBuckets(osBucketsCache);
             osPopulateBucketSelects();
             osPopulateSettingsBuckets();
@@ -537,12 +712,17 @@
         }));
     };
 
-    window.osShowCreateBucket = function() { osOpenModal('osCreateBucketModal'); };
+    window.osShowCreateBucket = function() {
+        osRefreshBucketNameSuggestions();
+        window.osValidateCreateBucketName(false);
+        osOpenModal('osCreateBucketModal');
+    };
 
     window.osCreateBucket = async function() {
         const name = document.getElementById('osNewBucketName').value.trim();
         const tenant = document.getElementById('osNewBucketTenant').value.trim();
         if (!name || !tenant) { osToast('Name and Tenant ID required', true); return; }
+        if (!window.osValidateCreateBucketName(true)) return;
         const body = {
             name: name,
             tenantId: tenant,
@@ -556,6 +736,7 @@
             osToast('Bucket "' + name + '" created');
             osCloseModal('osCreateBucketModal');
             document.getElementById('osNewBucketName').value = '';
+            window.osValidateCreateBucketName(false);
             osLoadBuckets();
             osLoadDashboard();
         } catch(e) { osToast('Error: ' + e.message, true); }
@@ -2084,6 +2265,18 @@
         await osLoadBuckets();
         osPopulateBucketSelects();
         osPopulateSettingsBuckets();
+        osRefreshBucketNameSuggestions();
+        osRenderAccessKeyScopeSuggestions();
+        osBindBucketHoverEvents();
+
+        const newBucketInput = document.getElementById('osNewBucketName');
+        if (newBucketInput) {
+            newBucketInput.addEventListener('input', function() { window.osValidateCreateBucketName(false); });
+        }
+        const newBucketTenant = document.getElementById('osNewBucketTenant');
+        if (newBucketTenant) {
+            newBucketTenant.addEventListener('input', function() { window.osValidateCreateBucketName(false); });
+        }
     }
 
     if (document.readyState === 'loading') {
