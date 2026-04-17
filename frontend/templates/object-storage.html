@@ -431,6 +431,11 @@
         <div class="os-toolbar">
             <h3 style="margin:0;">Access Keys</h3>
             <div style="display:flex; gap:10px; align-items:center;">
+                <select id="osAccessKeysFilter" onchange="osApplyAccessKeyFilter()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.85rem;">
+                    <option value="active" selected>Active Keys</option>
+                    <option value="old">Old Keys</option>
+                    <option value="all">All Keys</option>
+                </select>
                 <span id="osAccessKeysCount" style="font-size:.85rem; color:var(--text-muted);">0 key(s)</span>
                 <button class="os-btn os-btn-secondary" onclick="osLoadAccessKeys()">Refresh</button>
             </div>
@@ -1043,6 +1048,6 @@
     </div>
 </div>
 
-<script src="/static/object-storage.js?v=20260417-4"></script>
+<script src="/static/object-storage.js?v=20260417-5"></script>
 {{ end }}
 

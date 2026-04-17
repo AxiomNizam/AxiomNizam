@@ -781,13 +781,41 @@
         return { label: 'Active', cls: 'os-badge-ready' };
     }
 
-    function renderAccessKeys(keys) {
+    let osAccessKeysViewMode = 'active';
+
+    function osAccessKeyIsOld(ak) {
+        return osAccessKeyStatusInfo(ak).label !== 'Active';
+    }
+
+    function osFilterAccessKeys(keys) {
+        const mode = osAccessKeysViewMode;
+        if (mode === 'all') return keys.slice();
+        if (mode === 'old') return keys.filter(osAccessKeyIsOld);
+        return keys.filter(ak => !osAccessKeyIsOld(ak));
+    }
+
+    window.osApplyAccessKeyFilter = function() {
+        const sel = document.getElementById('osAccessKeysFilter');
+        osAccessKeysViewMode = sel && sel.value ? sel.value : 'active';
+        const filtered = osFilterAccessKeys(osAccessKeysCache || []);
+        renderAccessKeys(filtered, (osAccessKeysCache || []).length);
+    };
+
+    function renderAccessKeys(keys, totalCount) {
         const tbody = document.getElementById('osAccessKeysBody');
         const count = document.getElementById('osAccessKeysCount');
-        if (count) count.textContent = (keys.length || 0) + ' key(s)';
+        const total = Number.isFinite(totalCount) ? totalCount : (keys.length || 0);
+        if (count) {
+            count.textContent = keys.length === total
+                ? total + ' key(s)'
+                : keys.length + ' shown of ' + total + ' key(s)';
+        }
 
         if (!keys.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="os-empty">No access keys found</td></tr>';
+            const msg = total > 0
+                ? 'No access keys found for selected filter'
+                : 'No access keys found';
+            tbody.innerHTML = '<tr><td colspan="8" class="os-empty">' + msg + '</td></tr>';
             return;
         }
 
@@ -831,10 +859,10 @@
             const data = await resp.json();
             osAccessKeysCache = Array.isArray(data) ? data : (Array.isArray(data.accessKeys) ? data.accessKeys : []);
             osAccessKeysCache.sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''));
-            renderAccessKeys(osAccessKeysCache);
+            window.osApplyAccessKeyFilter();
         } catch (e) {
             osToast('Error: ' + e.message, true);
-            renderAccessKeys([]);
+            renderAccessKeys([], 0);
         }
     };
 
