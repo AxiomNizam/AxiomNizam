@@ -55,6 +55,42 @@
         return isNaN(d.getTime()) ? s : d.toLocaleString();
     }
 
+    function osFullURL(path) {
+        return OS_API + path;
+    }
+
+    function osBuildBucketPolicyTemplate(bucketName) {
+        const b = String(bucketName || '').trim() || 'your-bucket-name';
+        return JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+                {
+                    Sid: 'AllowListBucket',
+                    Effect: 'Allow',
+                    Principal: '*',
+                    Action: ['s3:ListBucket'],
+                    Resource: ['arn:aws:s3:::' + b]
+                },
+                {
+                    Sid: 'AllowObjectReadWrite',
+                    Effect: 'Allow',
+                    Principal: '*',
+                    Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+                    Resource: ['arn:aws:s3:::' + b + '/*']
+                }
+            ]
+        }, null, 2);
+    }
+
+    function osRenderDashboardPolicyTemplate(bucketName) {
+        const b = String(bucketName || '').trim() || 'your-bucket-name';
+        const templateEl = document.getElementById('osDashboardPolicyTemplate');
+        if (templateEl) {
+            templateEl.value = osBuildBucketPolicyTemplate(b);
+        }
+        setText('osDashPolicyBucketName', b);
+    }
+
     function osToast(msg, isErr) {
         const t = document.createElement('div');
         t.className = 'os-toast ' + (isErr ? 'os-toast-error' : 'os-toast-success');
@@ -75,6 +111,9 @@
 
     // ===== Tab Switching =====
     window.osSwitch = function(tabId) {
+        if (tabId !== 'os-access-keys' && typeof window.osResetCreatedAccessKeyResult === 'function') {
+            window.osResetCreatedAccessKeyResult();
+        }
         document.querySelectorAll('.os-panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.os-tab').forEach(b => b.classList.remove('active'));
         const panel = document.getElementById(tabId);
@@ -131,6 +170,10 @@
                 const buckets = await bucketsResp.json();
                 osBucketsCache = Array.isArray(buckets) ? buckets : [];
                 renderDashRecentBuckets(osBucketsCache.slice(0, 5));
+                const firstBucket = osBucketsCache.length ? (osBucketsCache[0].metadata && osBucketsCache[0].metadata.name) : '';
+                osRenderDashboardPolicyTemplate(firstBucket || 'your-bucket-name');
+            } else {
+                osRenderDashboardPolicyTemplate('your-bucket-name');
             }
             if (healthResp.ok) {
                 const h = await healthResp.json();
@@ -782,6 +825,33 @@
     }
 
     let osAccessKeysViewMode = 'active';
+    let osCreatedAccessKeyHideTimer = null;
+
+    window.osResetCreatedAccessKeyResult = function() {
+        if (osCreatedAccessKeyHideTimer) {
+            clearTimeout(osCreatedAccessKeyHideTimer);
+            osCreatedAccessKeyHideTimer = null;
+        }
+        const resultBox = document.getElementById('osAccessKeyCreateResult');
+        const resultEmpty = document.getElementById('osAccessKeyCreateResultEmpty');
+        const idField = document.getElementById('osCreatedAccessKeyIdField');
+        const idText = document.getElementById('osCreatedAccessKeyId');
+        const secretField = document.getElementById('osCreatedAccessKeySecret');
+        if (idField) idField.value = '';
+        if (idText) idText.textContent = '';
+        if (secretField) secretField.value = '';
+        if (resultBox) resultBox.style.display = 'none';
+        if (resultEmpty) resultEmpty.style.display = '';
+    };
+
+    function osScheduleHideCreatedAccessKeyResult() {
+        if (osCreatedAccessKeyHideTimer) {
+            clearTimeout(osCreatedAccessKeyHideTimer);
+        }
+        osCreatedAccessKeyHideTimer = setTimeout(() => {
+            window.osResetCreatedAccessKeyResult();
+        }, 60000);
+    }
 
     function osAccessKeyIsOld(ak) {
         return osAccessKeyStatusInfo(ak).label !== 'Active';
@@ -843,6 +913,7 @@
 
     window.osLoadAccessKeys = async function() {
         const tbody = document.getElementById('osAccessKeysBody');
+        window.osResetCreatedAccessKeyResult();
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--text-muted);">Loading access keys...</td></tr>';
         }
@@ -921,8 +992,12 @@
             document.getElementById('osCreatedAccessKeySecret').value = data.secretAccessKey || '';
 
             osToast('Access key created');
+            osScheduleHideCreatedAccessKeyResult();
             window.osClearAccessKeyForm();
-            await window.osLoadAccessKeys();
+            const safeCreated = Object.assign({}, data || {}, { secretAccessKey: '' });
+            osAccessKeysCache = [safeCreated].concat((osAccessKeysCache || []).filter(k => (k && k.accessKeyId) !== safeCreated.accessKeyId));
+            osAccessKeysCache.sort((a, b) => Date.parse((b && b.createdAt) || '') - Date.parse((a && a.createdAt) || ''));
+            window.osApplyAccessKeyFilter();
         } catch (e) {
             osToast('Error: ' + e.message, true);
         }
@@ -946,14 +1021,18 @@
         if (!text) { osToast('No secret key to copy', true); return; }
 
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(() => osToast('Secret key copied'));
+            navigator.clipboard.writeText(text).then(() => {
+                osToast('Secret key copied and hidden');
+                window.osResetCreatedAccessKeyResult();
+            });
             return;
         }
 
         if (el) {
             el.select();
             document.execCommand('copy');
-            osToast('Secret key copied');
+            osToast('Secret key copied and hidden');
+            window.osResetCreatedAccessKeyResult();
         }
     };
 
@@ -1022,7 +1101,7 @@
             tbody.innerHTML = '<tr><td colspan="6" class="os-empty">No access policies defined</td></tr>';
             return;
         }
-        tbody.innerHTML = policies.map(p => {
+        tbody.innerHTML = policies.map((p, idx) => {
             return '<tr>' +
                 '<td>' + escHtml(p.tenantId) + '</td>' +
                 '<td>' + escHtml(p.userId) + '</td>' +
@@ -1030,8 +1109,8 @@
                 '<td><span class="os-badge os-badge-enabled">' + escHtml(p.role) + '</span></td>' +
                 '<td class="os-mono">' + escHtml(p.prefix || '*') + '</td>' +
                 '<td style="white-space:nowrap;">' +
-                    '<button class="os-btn os-btn-secondary os-btn-sm" onclick="osViewPolicyDoc(' + escHtml(JSON.stringify(JSON.stringify(p))) + ')">View</button> ' +
-                    '<button class="os-btn os-btn-danger os-btn-sm" onclick="osDeletePolicy(\'' + escHtml(p.tenantId) + '\',\'' + escHtml(p.userId) + '\',\'' + escHtml(p.bucketName) + '\')">Delete</button>' +
+                    '<button class="os-btn os-btn-secondary os-btn-sm" data-idx="' + idx + '" onclick="osViewPolicyDocByIndex(this.dataset.idx)">View</button> ' +
+                    '<button class="os-btn os-btn-danger os-btn-sm" data-tenant="' + escHtml(p.tenantId || '') + '" data-user="' + escHtml(p.userId || '') + '" data-bucket="' + escHtml(p.bucketName || '') + '" onclick="osDeletePolicyFromButton(this)">Delete</button>' +
                 '</td></tr>';
         }).join('');
     }
@@ -1066,6 +1145,24 @@
             osToast('Policy deleted');
             osLoadPolicies();
         } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osDeletePolicyFromButton = function(btn) {
+        if (!btn) return;
+        const tenantId = btn.getAttribute('data-tenant') || '';
+        const userId = btn.getAttribute('data-user') || '';
+        const bucket = btn.getAttribute('data-bucket') || '';
+        window.osDeletePolicy(tenantId, userId, bucket);
+    };
+
+    window.osViewPolicyDocByIndex = function(idx) {
+        const n = parseInt(idx, 10);
+        if (isNaN(n) || n < 0 || n >= osPoliciesCache.length) {
+            osToast('Policy not found', true);
+            return;
+        }
+        document.getElementById('osViewPolicyJSON').textContent = JSON.stringify(osPoliciesCache[n], null, 2);
+        osOpenModal('osViewPolicyModal');
     };
 
     window.osViewPolicyDoc = function(jsonStr) {
@@ -1373,6 +1470,39 @@
     let osSettingsBucketName = '';
     let osSettingsTenantId = '';
 
+    function osRenderAppAccessEndpoints(bucket, tenantId) {
+        const tbody = document.getElementById('osAppAccessEndpointsBody');
+        if (!tbody) return;
+
+        const t = String(tenantId || 'default').trim() || 'default';
+        const bucketPath = '/buckets/' + encodeURIComponent(bucket);
+        const tenantQS = '?tenantId=' + encodeURIComponent(t);
+
+        const rows = [
+            { method: 'GET', purpose: 'List objects in bucket', path: bucketPath + '/objects' + tenantQS },
+            { method: 'GET', purpose: 'Download object', path: bucketPath + '/objects/{objectKey}' + tenantQS },
+            { method: 'PUT', purpose: 'Upload or overwrite object', path: bucketPath + '/objects/{objectKey}' + tenantQS },
+            { method: 'DELETE', purpose: 'Delete object', path: bucketPath + '/objects/{objectKey}' + tenantQS },
+            { method: 'POST', purpose: 'Generate pre-signed URL', path: bucketPath + '/presign' + tenantQS },
+            { method: 'POST', purpose: 'Generate share URL', path: bucketPath + '/share-object' + tenantQS }
+        ];
+
+        tbody.innerHTML = rows.map(r => {
+            return '<tr>' +
+                '<td><span class="os-badge os-badge-enabled">' + r.method + '</span></td>' +
+                '<td>' + escHtml(r.purpose) + '</td>' +
+                '<td class="os-mono" style="max-width:420px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(osFullURL(r.path)) + '</td>' +
+            '</tr>';
+        }).join('');
+
+        setText('osAppEndpointBucket', bucket);
+        setText('osAppEndpointTenant', t);
+        const headerEl = document.getElementById('osAppEndpointAuthHeaders');
+        if (headerEl) {
+            headerEl.textContent = 'X-Storage-Access-Key: <accessKeyId>\nX-Storage-Secret-Key: <secretAccessKey>';
+        }
+    }
+
     window.osLoadBucketSettings = async function() {
         const sel = document.getElementById('osSettingsBucket');
         const bucket = sel.value;
@@ -1387,6 +1517,7 @@
         osSettingsTenantId = tenantId;
         document.getElementById('osSettingsContent').style.display = '';
         document.getElementById('osSettingsPlaceholder').style.display = 'none';
+        osRenderAppAccessEndpoints(bucket, tenantId);
 
         const qs = '?tenantId=' + encodeURIComponent(tenantId);
 
@@ -1480,7 +1611,7 @@
             const p = await policyResp.value.json();
             document.getElementById('osBucketPolicyJSON').value = p.policy ? (typeof p.policy === 'string' ? p.policy : JSON.stringify(p.policy, null, 2)) : '';
         } else {
-            document.getElementById('osBucketPolicyJSON').value = '';
+            document.getElementById('osBucketPolicyJSON').value = osBuildBucketPolicyTemplate(bucket);
         }
     };
 
@@ -1587,6 +1718,33 @@
             if (!resp.ok) { const d = await resp.json().catch(()=>({})); osToast(d.error || 'Failed', true); return; }
             osToast('Bucket policy saved');
         } catch(e) { osToast('Error: ' + e.message, true); }
+    };
+
+    window.osUseBucketPolicyTemplate = function() {
+        if (!osSettingsBucketName) {
+            osToast('Select a bucket first', true);
+            return;
+        }
+        document.getElementById('osBucketPolicyJSON').value = osBuildBucketPolicyTemplate(osSettingsBucketName);
+        osToast('Template inserted');
+    };
+
+    window.osCopyDashboardPolicyTemplate = function() {
+        const el = document.getElementById('osDashboardPolicyTemplate');
+        const text = el ? (el.value || '').trim() : '';
+        if (!text) {
+            osToast('No template available to copy', true);
+            return;
+        }
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => osToast('Policy template copied'));
+            return;
+        }
+        if (el) {
+            el.select();
+            document.execCommand('copy');
+            osToast('Policy template copied');
+        }
     };
 
     window.osRemoveBucketPolicy = async function() {

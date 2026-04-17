@@ -236,6 +236,17 @@
                 <p style="color:var(--text-muted);">Loading...</p>
             </div>
         </div>
+
+        <div class="os-card">
+            <h4>Bucket Policy (S3 JSON) Template</h4>
+            <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">
+                Template bucket: <span id="osDashPolicyBucketName" class="os-mono">your-bucket-name</span>
+            </p>
+            <textarea id="osDashboardPolicyTemplate" rows="11" readonly style="width:100%; font-family:var(--font-mono, monospace); font-size:.85rem;"></textarea>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCopyDashboardPolicyTemplate()">Copy Template</button>
+            </div>
+        </div>
     </div>
 
     <!-- ===== BUCKETS PANEL ===== -->
@@ -644,6 +655,34 @@
         </div>
 
         <div id="osSettingsContent" style="display:none;">
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+                    Application Access Endpoints
+                </h4>
+                <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">
+                    Bucket: <span id="osAppEndpointBucket" class="os-mono">-</span> &middot; Tenant: <span id="osAppEndpointTenant" class="os-mono">-</span>
+                </p>
+                <div class="os-form-group">
+                    <label for="osAppEndpointAuthHeaders">Required Headers</label>
+                    <textarea id="osAppEndpointAuthHeaders" rows="2" readonly style="font-family:var(--font-mono, monospace);"></textarea>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="os-table">
+                        <thead>
+                            <tr>
+                                <th style="width:90px;">Method</th>
+                                <th style="width:240px;">Purpose</th>
+                                <th>Full URL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="osAppAccessEndpointsBody">
+                            <tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-muted);">Select a bucket to load endpoint URLs</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Encryption -->
             <div class="os-card">
                 <h4 style="display:flex; align-items:center; gap:8px;">
@@ -793,6 +832,7 @@
                     <textarea id="osBucketPolicyJSON" rows="8" placeholder='{"Version":"2012-10-17","Statement":[...]}' style="font-family:var(--font-mono, monospace); font-size:.85rem;"></textarea>
                 </div>
                 <div class="os-form-actions">
+                    <button class="os-btn os-btn-secondary os-btn-sm" onclick="osUseBucketPolicyTemplate()">Use Template</button>
                     <button class="os-btn os-btn-danger os-btn-sm" onclick="osRemoveBucketPolicy()">Remove Policy</button>
                     <button class="os-btn os-btn-primary" onclick="osSaveBucketPolicy()">Save Policy</button>
                 </div>
@@ -1048,6 +1088,6 @@
     </div>
 </div>
 
-<script src="/static/object-storage.js?v=20260417-5"></script>
+<script src="/static/object-storage.js?v=20260417-6"></script>
 {{ end }}
 
