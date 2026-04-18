@@ -8,6 +8,7 @@ Current runtime layers (synced with README):
 - API layer: backend Gin server on port 8000 with auth, data, control-plane, and extension APIs.
 - Control-plane layer: etcd-backed resource APIs and reconcile runtime loop on a dedicated runtime port (default 8001).
 - Platform services layer: bulk/eventbus/export/webhook/stream/tenant/rbac/versioning/lineage/tracing managers, plus Conductor, IAM, and native object storage modules.
+- Internal orchestration layer: autopilot, planner, scheduler/binpack, deployment, drainer, eval broker, heartbeat, periodic dispatcher, service registry, and snapshot framing.
 
 Runtime notes:
 
@@ -30,6 +31,9 @@ Primary feature areas (synced with README):
 - Data platform APIs: ETL and CDC pipelines, connectors/catalogs/observability, and platform overview.
 - API Builder APIs: custom API CRUD/runtime invocation, CSV upload, dashboard/GIS generation, conversion workflows, file malware scan, API scan reports, and SQL assistant.
 - Extension modules: kubeplus admission/scheduler/CRD, netintel mode detectors, vectorplus similarity search, and reviewflow scoring/quality pipeline.
+- Autonomous orchestration internals: autopilot health classification, plan applier, binpack placement, canary/blue-green deployment controller, and controlled node draining.
+- Reliability internals: eval broker with ack/nack visibility timeout, heartbeat tracker, periodic scheduler/dispatcher, service registry, and snapshot stream framing.
+- API machinery internals: apimachinery utility stack, shared informer/indexer, controller manager, and queue-backed reconcile components.
 - CLI operational tooling: discovery scans, wait checks, Trivy-based scan commands, and integration governance commands.
 
 ## API Domain Coverage (Prefix Map)
@@ -46,6 +50,7 @@ Primary feature areas (synced with README):
 | IAM and OIDC | /.well-known/*, /realms/:realm/protocol/openid-connect/*, /oauth/*, /iam/* |
 | Object storage | /api/v1/storage* |
 | Runtime custom APIs | /api/custom, /api/custom/*path |
+| Frontend domain routes | /signup, /login, /conductor, /iam-admin, /object-storage, /governance, /operations-center |
 
 ## Platform Architecture
 
@@ -65,6 +70,9 @@ graph TB
         FE_Analytics["Analytics Dashboard\n(Chart.js)"]
         FE_CDCETL["CDC/ETL Dashboard"]
         FE_NetIntel["NetIntel Dashboard"]
+        FE_Conductor["Conductor Console"]
+        FE_IAM["IAM Admin Console"]
+        FE_Storage["Object Storage Console"]
     end
 
     subgraph APIServer["API Server — Port 8000"]
@@ -145,6 +153,19 @@ graph TB
         GraphQL_Engine["GraphQL\n(Dynamic Schema)"]
     end
 
+    subgraph Orchestration["Orchestration Engines (Internal)"]
+        AutoPilot["Autopilot\n(health/promote/remove)"]
+        PlannerCore["Planner Applier"]
+        BinpackCore["Binpack Scheduler"]
+        DeployCtl["Deployment Controller\n(canary/blue-green)"]
+        DrainerCtl["Node Drainer"]
+        EvalBroker["Eval Broker\n(ack/nack/visibility)"]
+        Heartbeat["Heartbeat Tracker"]
+        Periodic["Periodic Dispatcher"]
+        ServiceReg["Service Registry"]
+        Snapshot["Snapshot Framing"]
+    end
+
     subgraph Security["Policy and Security"]
         Keycloak["Keycloak\n(OIDC, Port 8080)"]
         IAMCore["IAM Core\n(OIDC + Admin APIs)"]
@@ -189,7 +210,7 @@ graph TB
     Postman -->|"HTTP + JWT"| Router
 
     %% Frontend to backend
-    FE_Server --> FE_Dash & FE_Admin & FE_GIS & FE_Analytics & FE_CDCETL & FE_NetIntel
+    FE_Server --> FE_Dash & FE_Admin & FE_GIS & FE_Analytics & FE_CDCETL & FE_NetIntel & FE_Conductor & FE_IAM & FE_Storage
     FE_Server -->|"Proxy to :8000"| Router
 
     %% Router through middleware to handlers
@@ -210,6 +231,11 @@ graph TB
     H_CDCETL --> ETL & CDC
     H_Job --> JobQueue
     H_DynQuery --> SQL_DBs
+    H_Job --> PlannerCore & DeployCtl & DrainerCtl & EvalBroker
+    H_Conductor --> ServiceReg
+    Runtime --> AutoPilot & Heartbeat & Periodic
+    PlannerCore --> BinpackCore
+    Runtime --> Snapshot
 
     %% Security
     JWT_MW --> JWT_Val

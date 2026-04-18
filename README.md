@@ -78,21 +78,29 @@ Runtime notes:
 
 ## Project Size Snapshot
 
+<!-- README_METRICS:START -->
 Code inventory snapshot (workspace scan on 2026-04-18):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 497
-- Total code lines: 198934
-- Go files (repository): 446
-- Go lines (repository): 160710
-- Internal modules: 67
-- Internal Go files: 404
-- Internal Go lines: 147444
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 582
+- Total code lines: 212254
+- Go files (repository): 531
+- Go lines (repository): 174030
+- Internal modules: 87
+- Internal Go files: 489
+- Internal Go lines: 160801
 
 Counting method used:
 
 - Excluded directories: .git, vendor, node_modules, dist, build.
 - Counts include tests and generated source files committed in this repository.
 - Line counts are physical lines across matching files.
+<!-- README_METRICS:END -->
+
+Regenerate this metrics block before release:
+
+```bash
+go run ./scripts/update_readme_metrics.go
+```
 
 ## What We Did So Far
 
@@ -243,8 +251,10 @@ Primary feature areas (validated from current route wiring and internal modules)
 - Native object storage APIs: bucket/object operations, presign/share, access keys, bucket policies, lifecycle, metrics, and governance controls.
 - Data platform APIs: ETL and CDC pipelines, connectors/catalogs/observability, and platform overview.
 - API Builder APIs: custom API CRUD/runtime invocation, CSV upload, dashboard/GIS generation, conversion workflows, file malware scan, API scan reports, and SQL assistant.
-- Domain dashboards: admin/manager/system-manager, GIS, analytics, CDC/ETL, NetIntel, governance, operations-center, lineage/version.
+- Domain dashboards: admin/manager/system-manager, GIS, analytics, CDC/ETL, NetIntel, conductor, governance, operations-center, IAM admin, object storage, and lineage/version.
 - Extension modules: kubeplus admission/scheduler/CRD, netintel mode detectors, vectorplus similarity search, and reviewflow scoring/quality pipeline.
+- Autonomous orchestration internals: autopilot health/election decisions, planner plan-applier, binpack scheduler strategies, deployment rollout controller, node drainer, eval broker, heartbeat tracker, periodic dispatcher, service registry, and snapshot framing.
+- Control-runtime style internals: apimachinery utility stack, informer cache fan-out, controller manager lifecycle, and workqueue/controller primitives.
 - CLI operational tooling: discovery scans, wait checks, Trivy-based scan commands, and integration governance commands.
 
 ## Roadmap 1-5 Feature and Command References
@@ -522,6 +532,8 @@ Implementation summary:
 Frontend routes:
 
 - /
+- /signup
+- /login
 - /admin
 - /system-manager
 - /manager
@@ -529,9 +541,12 @@ Frontend routes:
 - /analytics
 - /cdc-etl
 - /netintel
+- /conductor
 - /governance
 - /operations-center
 - /lineage-version
+- /iam-admin
+- /object-storage
 
 Frontend role normalization handles aliases such as sysadmin to system-manager.
 
@@ -827,94 +842,112 @@ This split is intentional in the current codebase.
 
 Internal scan snapshot (2026-04-18):
 
-- Module folders under internal/: 67
-- Go files under internal/: 404
-- Go lines under internal/: 129322
+- Module folders under internal/: 87
+- Go files under internal/: 489
+- Go lines under internal/: 160801
 
 Largest modules by Go lines:
 
-- handlers (36 files, 16713 lines)
-- kubeplus (6 files, 11929 lines)
-- utils (36 files, 11183 lines)
-- storage (20 files, 6868 lines)
-- platform (19 files, 6317 lines)
-- jobs (20 files, 6004 lines)
-- iam (14 files, 6000 lines)
-- netintel (5 files, 5622 lines)
-- policies (16 files, 5323 lines)
-- vectorplus (2 files, 4811 lines)
+- handlers (36 files, 18938 lines)
+- utils (36 files, 13187 lines)
+- kubeplus (6 files, 12624 lines)
+- storage (20 files, 7881 lines)
+- platform (19 files, 7281 lines)
+- jobs (20 files, 7155 lines)
+- iam (14 files, 6780 lines)
+- policies (16 files, 6219 lines)
+- netintel (5 files, 6025 lines)
+- vectorplus (2 files, 5059 lines)
 
 Full internal module inventory (alphabetical):
 
 | Module | Go Files | Go Lines |
 |---|---:|---:|
-| apibanks | 3 | 361 |
-| apiscanner | 10 | 2171 |
-| apiserver | 1 | 757 |
-| audit | 5 | 591 |
-| auth | 4 | 951 |
-| bootstrapsecrets | 1 | 88 |
-| bulk | 3 | 386 |
-| cache | 7 | 1513 |
-| cdc | 4 | 1235 |
-| client | 5 | 940 |
-| conductor | 6 | 1995 |
-| config | 1 | 251 |
-| controllers | 7 | 2157 |
-| database | 1 | 138 |
-| datasource | 1 | 115 |
-| diff | 1 | 233 |
-| distributed | 1 | 71 |
-| distributedstate | 9 | 1323 |
-| docs | 1 | 249 |
-| encryption | 4 | 931 |
-| etl | 3 | 1310 |
-| eventbus | 4 | 856 |
-| events | 6 | 1356 |
-| export | 3 | 574 |
-| graphql | 2 | 248 |
-| handlers | 36 | 16713 |
-| iam | 14 | 6000 |
-| integration | 11 | 2812 |
-| jobs | 20 | 6004 |
-| kubeplus | 6 | 11929 |
-| lineage | 4 | 1005 |
-| logging | 1 | 62 |
-| mesh | 1 | 326 |
-| metrics | 1 | 254 |
-| migrations | 1 | 116 |
-| models | 15 | 1109 |
-| netintel | 5 | 5622 |
-| output | 2 | 222 |
-| performance | 1 | 280 |
-| platform | 19 | 6317 |
-| policies | 16 | 5323 |
-| quality | 1 | 373 |
-| ratelimit | 2 | 316 |
-| rbac | 4 | 1386 |
-| reconciler | 5 | 1391 |
-| repositories | 15 | 1400 |
-| resources | 13 | 2295 |
-| reviewflow | 2 | 4585 |
-| runtime | 1 | 340 |
-| scanner | 7 | 703 |
-| scripts | 1 | 166 |
-| security | 1 | 307 |
-| serverboot | 1 | 87 |
-| services | 5 | 1045 |
-| status | 1 | 321 |
-| storage | 20 | 6868 |
-| streaming | 3 | 375 |
-| tenant | 4 | 657 |
-| tracing | 4 | 1267 |
-| trivy | 7 | 690 |
-| utils | 36 | 11183 |
-| vectorplus | 2 | 4811 |
-| versioning | 4 | 766 |
-| waitx | 11 | 1430 |
-| webhooks | 5 | 570 |
-| workflows | 2 | 740 |
-| workqueue | 1 | 356 |
+| admission | 3 | 451 |
+| apibanks | 3 | 427 |
+| apimachinery | 29 | 4577 |
+| apiscanner | 10 | 2509 |
+| apiserver | 9 | 1598 |
+| audit | 6 | 901 |
+| auth | 4 | 1108 |
+| autopilot | 1 | 164 |
+| blocking | 1 | 136 |
+| bootstrapsecrets | 1 | 102 |
+| bulk | 3 | 450 |
+| cache | 7 | 1815 |
+| cdc | 4 | 1411 |
+| client | 8 | 1570 |
+| conductor | 6 | 2232 |
+| config | 1 | 278 |
+| controller | 14 | 1561 |
+| controllers | 7 | 2521 |
+| database | 1 | 156 |
+| datasource | 1 | 137 |
+| deployment | 1 | 249 |
+| diff | 1 | 272 |
+| distributed | 1 | 194 |
+| distributedstate | 9 | 1603 |
+| docs | 1 | 291 |
+| drainer | 1 | 205 |
+| encryption | 4 | 1081 |
+| etl | 3 | 1450 |
+| evalbroker | 2 | 263 |
+| eventbus | 4 | 975 |
+| events | 6 | 1608 |
+| export | 3 | 662 |
+| graphql | 2 | 296 |
+| handlers | 36 | 18938 |
+| health | 2 | 441 |
+| heartbeat | 1 | 158 |
+| iam | 14 | 6780 |
+| informer | 2 | 457 |
+| integration | 11 | 3318 |
+| jobs | 20 | 7155 |
+| keyring | 1 | 161 |
+| kubeplus | 6 | 12624 |
+| lineage | 5 | 1408 |
+| logging | 1 | 71 |
+| mesh | 1 | 388 |
+| metrics | 1 | 300 |
+| migrations | 1 | 137 |
+| models | 15 | 1279 |
+| netintel | 5 | 6025 |
+| output | 2 | 258 |
+| performance | 1 | 328 |
+| periodic | 2 | 352 |
+| planner | 1 | 220 |
+| platform | 19 | 7281 |
+| policies | 16 | 6219 |
+| quality | 2 | 795 |
+| ratelimit | 2 | 377 |
+| rbac | 4 | 1624 |
+| repositories | 15 | 1664 |
+| resources | 13 | 2762 |
+| reviewflow | 2 | 4831 |
+| runtime | 1 | 407 |
+| scanner | 7 | 827 |
+| scheduler | 1 | 142 |
+| scripts | 1 | 177 |
+| security | 1 | 370 |
+| serverboot | 1 | 109 |
+| serviceregistry | 1 | 235 |
+| services | 5 | 1279 |
+| snapshot | 1 | 116 |
+| status | 1 | 384 |
+| storage | 20 | 7881 |
+| stream | 2 | 288 |
+| streaming | 3 | 439 |
+| template | 1 | 190 |
+| tenant | 4 | 790 |
+| tracing | 4 | 1455 |
+| trivy | 7 | 797 |
+| utils | 36 | 13187 |
+| vectorplus | 2 | 5059 |
+| versioning | 4 | 916 |
+| waitx | 11 | 1672 |
+| webhooks | 5 | 660 |
+| workflows | 2 | 879 |
+| workqueue | 4 | 1228 |
 
 ## Frontend Template Coverage
 
@@ -922,8 +955,8 @@ Implemented frontend template pages and scripts include:
 
 - Public and auth flows: dashboard, auth.
 - Role views: admin, manager, system-manager.
-- Domain dashboards: gis-dashboard, analytics-dashboard, cdc-etl-dashboard, netintel-dashboard.
-- Governance and operations: governance-dashboard, operations-center, version-lineage-dashboard.
+- Domain dashboards: gis-dashboard, analytics-dashboard, cdc-etl-dashboard, netintel-dashboard, conductor-dashboard.
+- Governance and operations: governance-dashboard, operations-center, version-lineage-dashboard, iam-admin, object-storage.
 - Shared layout and styling: layout, responsive, platform-console styles.
 
 Template files are present in frontend/templates and the frontend server routes expose the primary pages at runtime.
@@ -971,6 +1004,8 @@ Important folders:
 - internal/handlers: API handlers and feature modules
 - internal/apiserver: generic resource API server and extension route wiring
 - internal/runtime: control-plane runtime
+- internal/autopilot, internal/planner, internal/scheduler, internal/deployment, internal/drainer, internal/evalbroker, internal/heartbeat, internal/periodic, internal/serviceregistry, internal/snapshot: autonomous orchestration and dispatch primitives
+- internal/apimachinery, internal/controller, internal/informer: API machinery, controller manager, and shared informer/cache primitives
 - internal/* platform modules: bulk, eventbus, export, tenant, rbac, tracing, lineage, versioning, streaming, webhooks
 - internal/kubeplus: admission, scheduler, and CRD extension modules
 - internal/netintel/modes: mode manager and detectors
