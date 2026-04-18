@@ -45,6 +45,13 @@ AxiomNizam contains:
 
 ## Architecture and Services
 
+The current runtime architecture is layered:
+
+- Presentation layer: frontend Gin server on port 7000 with role-based dashboard routes.
+- API layer: backend Gin server on port 8000 with auth, data, control-plane, and extension APIs.
+- Control-plane layer: etcd-backed resource APIs and reconcile runtime loop on a dedicated runtime port (default 8001).
+- Platform services layer: bulk/eventbus/export/webhook/stream/tenant/rbac/versioning/lineage/tracing managers, plus Conductor, IAM, and native object storage modules.
+
 Default services in docker-compose:
 
 - axiomnizam: backend API, http://localhost:8000
@@ -61,24 +68,30 @@ Optional profile services (openclaw):
 - ollama-init: one-shot TinyLlama bootstrap (model pull)
 - valkey: cache/state support
 
-Runtime note:
+Runtime notes:
 
 - API server runs on configured API_HOST:API_PORT (default 0.0.0.0:8000).
 - Internal runtime component starts on runtime port 8001 by default.
+- Conductor routes are mounted at /api/v1/conductor and /ws/conductor when messaging backends initialize.
+- IAM routes are mounted when IAM system initialization succeeds (including /iam/* and OIDC well-known endpoints).
+- Storage routes are mounted under /api/v1/storage when object storage initialization succeeds.
 
 ## Project Size Snapshot
 
-Code inventory snapshot (workspace scan on 2026-03-19):
+Code inventory snapshot (workspace scan on 2026-04-18):
 
-- Total code files: 414
-- Total code lines: 137537
-- Go files: 401
-- Go lines: 129441
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 497
+- Total code lines: 198934
+- Go files (repository): 446
+- Go lines (repository): 160710
+- Internal modules: 67
+- Internal Go files: 404
+- Internal Go lines: 147444
 
 Counting method used:
 
-- Code file extensions included: .go, .js and others.
-- Excluded: .git and vendor directories.
+- Excluded directories: .git, vendor, node_modules, dist, build.
+- Counts include tests and generated source files committed in this repository.
 - Line counts are physical lines across matching files.
 
 ## What We Did So Far
@@ -218,24 +231,21 @@ Important sync env vars:
 
 ## Feature Coverage
 
-Primary feature areas:
+Primary feature areas (validated from current route wiring and internal modules):
 
-- REST APIs across SQL and NoSQL integrations.
-- GraphQL API endpoint with schema and playground.
-- Dashboard suite for admin, manager, system-manager, GIS, analytics, CDC/ETL, NetIntel, governance, operations-center, and lineage/version views.
-- GIS entity management and specialized GIS dashboard summaries.
-- ETL and CDC pipeline lifecycle APIs.
-- API Builder and CSV-to-visualization generation.
-- SafeGate file scanner integration backed by ClamAV.
-- NetIntel parsing, topology, anomaly, alerts, forecasts.
-- Control-plane APIs for namespaces, policies, workflows, datasources, jobs.
-- Platform services for bulk, eventbus, exports, webhooks, streaming, tenants, RBAC, versioning, lineage, tracing.
-- Data Mesh domain/product/subscription/lineage capabilities in internal mesh modules and CLI mesh commands.
-- Integration and governance analysis commands for health, alerts, catalog, compliance, quality, and lineage in CLI integration modules.
-- Kubernetes-inspired extension modules for admission decisions, scheduling heuristics, and CRD-style definitions.
-- NetIntel mode manager with detector endpoints for mode configuration, event capture, and scoring.
-- Vector search and similarity services (vectorplus) with index management and query APIs.
-- Review pipeline services (reviewflow) for staged items, transitions, and quality scoring.
+- Core API and auth: health/status/distributed, JWT/OAuth flows, token lifecycle, and token-bound rate limiting.
+- Multi-database APIs: SQL CRUD and dynamic query endpoints for MySQL, MariaDB, PostgreSQL, Percona, Oracle, plus MongoDB/Firebase user handlers.
+- GraphQL APIs with schema and playground.
+- Control-plane APIs: namespaced resources, policy/workflow resources, workflow execution history, datasource registry, and job scheduling lifecycle.
+- Platform service APIs: bulk operations, eventbus ack and DLQ replay, exports, webhooks, stream subscriptions, tenancy, RBAC access requests, versioning, lineage, and tracing.
+- Conductor APIs: producer/consumer lifecycle, backend connection management, publish/stream, and DLQ replay.
+- IAM APIs: OIDC metadata/JWKS, IAM auth, admin user/client/role operations, and IAM v2 realm/group/scope/session/event features.
+- Native object storage APIs: bucket/object operations, presign/share, access keys, bucket policies, lifecycle, metrics, and governance controls.
+- Data platform APIs: ETL and CDC pipelines, connectors/catalogs/observability, and platform overview.
+- API Builder APIs: custom API CRUD/runtime invocation, CSV upload, dashboard/GIS generation, conversion workflows, file malware scan, API scan reports, and SQL assistant.
+- Domain dashboards: admin/manager/system-manager, GIS, analytics, CDC/ETL, NetIntel, governance, operations-center, lineage/version.
+- Extension modules: kubeplus admission/scheduler/CRD, netintel mode detectors, vectorplus similarity search, and reviewflow scoring/quality pipeline.
+- CLI operational tooling: discovery scans, wait checks, Trivy-based scan commands, and integration governance commands.
 
 ## Roadmap 1-5 Feature and Command References
 
@@ -419,6 +429,48 @@ Also:
 - /api/v1/tracing/spans
 - /api/v1/tracing/ingestion/audit
 
+### Conductor Messaging APIs
+
+- /api/v1/conductor/producers*
+- /api/v1/conductor/consumers*
+- /api/v1/conductor/publish
+- /api/v1/conductor/messages
+- /api/v1/conductor/dlq*
+- /api/v1/conductor/connections*
+- /api/v1/conductor/stats
+- /api/v1/conductor/stream
+- /ws/conductor
+
+### IAM and OIDC APIs
+
+- /.well-known/openid-configuration
+- /.well-known/jwks.json
+- /realms/:realm/.well-known/openid-configuration
+- /realms/:realm/protocol/openid-connect/*
+- /oauth/authorize
+- /oauth/token
+- /iam/auth/*
+- /iam/admin/*
+- /iam/v2/*
+
+### Object Storage APIs
+
+- /api/v1/storage/health
+- /api/v1/storage/stats
+- /api/v1/storage/events*
+- /api/v1/storage/buckets*
+- /api/v1/storage/buckets/:bucket/objects*
+- /api/v1/storage/buckets/:bucket/presign
+- /api/v1/storage/buckets/:bucket/shares*
+- /api/v1/storage/policies*
+- /api/v1/storage/access-keys*
+- /api/v1/storage/system/metrics*
+
+### Runtime Custom API Execution
+
+- /api/custom
+- /api/custom/*path
+
 ### Data Platform and Specialized APIs
 
 - /api/v1/gis*
@@ -432,6 +484,7 @@ Also:
 
 API Builder details (implemented routes):
 
+- /api/v1/builder/summary
 - /api/v1/builder/apis*
 - /api/v1/builder/csv/upload
 - /api/v1/builder/csv/uploads*
@@ -444,6 +497,12 @@ API Builder details (implemented routes):
 - /api/v1/builder/scanner/scan
 - /api/v1/builder/scanner/scans
 - /api/v1/builder/scanner/health
+- /api/v1/builder/api-scanner/scan
+- /api/v1/builder/api-scanner/reports
+- /api/v1/builder/api-scanner/reports/:id
+- /api/v1/builder/api-scanner/reports/bulk-delete
+- /api/v1/builder/sql-assistant/chat
+- /api/v1/builder/dashboards/:id
 
 ## GraphQL Coverage
 
@@ -524,12 +583,14 @@ Verified top-level commands:
 - apibank
 - bulk
 - catalog
+- cert
 - completion
 - compliance
 - config
 - current-user
 - datasource
 - diff
+- discover
 - eventbus
 - events
 - exportx
@@ -545,12 +606,14 @@ Verified top-level commands:
 - policy
 - quality
 - rbacx
+- scan
 - status
 - stream
 - tenant
 - trace
 - version
 - versioning
+- wait
 - webhook
 - workflow
 
@@ -706,6 +769,35 @@ axiomnizamctl
 │  └─ list
 ├─ diff
 │  └─ diff -f resource.yaml
+├─ cert
+│  ├─ status
+│  └─ renew
+├─ discover
+│  ├─ api URL
+│  └─ domain DOMAIN
+├─ scan
+│  ├─ api URL
+│  ├─ graphql URL
+│  ├─ image IMAGE
+│  ├─ fs PATH
+│  ├─ k8s PATH
+│  └─ repo PATH
+├─ wait
+│  ├─ tcp ADDRESS [ADDRESS...]
+│  ├─ dns RECORD_TYPE ADDRESS
+│  ├─ http URL
+│  ├─ grpc-health TARGET
+│  ├─ k8s-pod
+│  ├─ mysql DSN
+│  ├─ postgresql DSN
+│  ├─ mongodb URI
+│  ├─ redis ADDRESS
+│  ├─ rabbitmq URL
+│  ├─ kafka BROKER [BROKER...]
+│  ├─ influxdb URL
+│  ├─ temporal TARGET
+│  ├─ custom COMMAND [ARGS...]
+│  └─ external WAIT4X_ARGS...
 ├─ completion [bash|zsh|fish|powershell]
 └─ version
 ```
@@ -727,23 +819,102 @@ CLI commands in this repository are a mix of:
 
 - API-backed commands: call backend REST endpoints (for example api, policy, workflow, datasource, job, tenant, rbacx, eventbus, webhook, stream, exportx, bulk, versioning, trace, lineagex).
 - Local integration commands: run local integration analyzers without requiring backend routes for every operation (for example health, alerts, metrics, catalog, compliance, quality, lineage, and parts of mesh behavior).
+- Utility commands: operational helpers and scanners (for example cert, discover, scan, wait, completion, version).
 
 This split is intentional in the current codebase.
 
 ## Internal Module Coverage
 
-Implemented internal modules include:
+Internal scan snapshot (2026-04-18):
 
-- Control-plane and runtime: apiserver, runtime, resources, reconciler, controllers, workflow, workflows, workqueue.
-- Security and auth: auth, rbac, ratelimit, encryption, security, audit.
-- Data and integration: database, repositories, services, mesh, integration, etl, cdc, eventbus, events, export, streaming, webhooks.
-- Platform operations: bulk, tenant, versioning, lineage, tracing, status, distributed, distributedstate.
-- Data quality and performance: quality, metrics, performance, scanner.
-- API/user-facing layers: handlers, graphql, models, output, client.
-- Extension modules: kubeplus/admission, kubeplus/scheduler, kubeplus/crd, netintel/modes, vectorplus, reviewflow.
-- Tooling support: internal/scripts generator for reproducible feature module regeneration.
+- Module folders under internal/: 67
+- Go files under internal/: 404
+- Go lines under internal/: 129322
 
-These module folders are present under internal/ and are part of the implemented platform surface.
+Largest modules by Go lines:
+
+- handlers (36 files, 16713 lines)
+- kubeplus (6 files, 11929 lines)
+- utils (36 files, 11183 lines)
+- storage (20 files, 6868 lines)
+- platform (19 files, 6317 lines)
+- jobs (20 files, 6004 lines)
+- iam (14 files, 6000 lines)
+- netintel (5 files, 5622 lines)
+- policies (16 files, 5323 lines)
+- vectorplus (2 files, 4811 lines)
+
+Full internal module inventory (alphabetical):
+
+| Module | Go Files | Go Lines |
+|---|---:|---:|
+| apibanks | 3 | 361 |
+| apiscanner | 10 | 2171 |
+| apiserver | 1 | 757 |
+| audit | 5 | 591 |
+| auth | 4 | 951 |
+| bootstrapsecrets | 1 | 88 |
+| bulk | 3 | 386 |
+| cache | 7 | 1513 |
+| cdc | 4 | 1235 |
+| client | 5 | 940 |
+| conductor | 6 | 1995 |
+| config | 1 | 251 |
+| controllers | 7 | 2157 |
+| database | 1 | 138 |
+| datasource | 1 | 115 |
+| diff | 1 | 233 |
+| distributed | 1 | 71 |
+| distributedstate | 9 | 1323 |
+| docs | 1 | 249 |
+| encryption | 4 | 931 |
+| etl | 3 | 1310 |
+| eventbus | 4 | 856 |
+| events | 6 | 1356 |
+| export | 3 | 574 |
+| graphql | 2 | 248 |
+| handlers | 36 | 16713 |
+| iam | 14 | 6000 |
+| integration | 11 | 2812 |
+| jobs | 20 | 6004 |
+| kubeplus | 6 | 11929 |
+| lineage | 4 | 1005 |
+| logging | 1 | 62 |
+| mesh | 1 | 326 |
+| metrics | 1 | 254 |
+| migrations | 1 | 116 |
+| models | 15 | 1109 |
+| netintel | 5 | 5622 |
+| output | 2 | 222 |
+| performance | 1 | 280 |
+| platform | 19 | 6317 |
+| policies | 16 | 5323 |
+| quality | 1 | 373 |
+| ratelimit | 2 | 316 |
+| rbac | 4 | 1386 |
+| reconciler | 5 | 1391 |
+| repositories | 15 | 1400 |
+| resources | 13 | 2295 |
+| reviewflow | 2 | 4585 |
+| runtime | 1 | 340 |
+| scanner | 7 | 703 |
+| scripts | 1 | 166 |
+| security | 1 | 307 |
+| serverboot | 1 | 87 |
+| services | 5 | 1045 |
+| status | 1 | 321 |
+| storage | 20 | 6868 |
+| streaming | 3 | 375 |
+| tenant | 4 | 657 |
+| tracing | 4 | 1267 |
+| trivy | 7 | 690 |
+| utils | 36 | 11183 |
+| vectorplus | 2 | 4811 |
+| versioning | 4 | 766 |
+| waitx | 11 | 1430 |
+| webhooks | 5 | 570 |
+| workflows | 2 | 740 |
+| workqueue | 1 | 356 |
 
 ## Frontend Template Coverage
 
@@ -817,28 +988,23 @@ This appendix maps implemented features to concrete source evidence (module to r
 
 | Feature | Route Wiring Evidence | Module/Handler Evidence |
 |---|---|---|
-| Auth login | main.go:274 (/auth/login) | internal/handlers/auth_handler.go |
-| GraphQL | main.go:334 (/api/graphql) | internal/handlers/graphql_handler.go |
-| Health/status/distributed | main.go:266, main.go:267, main.go:268 | internal/handlers/handlers.go |
-| Dynamic SQL query | main.go:409 (/api/mysql/query) | internal/handlers/dynamic_query_handler.go |
-| Transform rules | main.go:469 (/api/transform/rules) | internal/handlers/transformation_handler.go |
-| Platform users | main.go:503 (/api/v1/users) | internal/handlers/user_handler.go |
-| CLI auth APIs | main.go:528 (/api/v1/auth/login) | internal/handlers/cli_auth_handler.go |
-| Kubernetes-style namespaced resources | main.go:538 (group /api/v1/namespaces) | internal/handlers/resource_handler.go |
-| Streaming websocket | main.go:649 (/ws/stream) | internal/streaming/ and internal/handlers/phase3_handlers.go |
-| Tenants | main.go:664 (group /api/v1/tenants) | internal/tenant/ |
-| RBAC service APIs | main.go:678 (group /api/v1/rbac) | internal/rbac/ |
-| Lineage APIs | main.go:709 (group /api/v1/lineage) | internal/lineage/ |
-| Tracing APIs | main.go:723 (group /api/v1/tracing) | internal/tracing/ |
-| GIS APIs | main.go:739 (group /api/v1/gis) | internal/handlers/gis_handler.go |
-| ETL APIs | main.go:792 (group /api/v1/etl) | internal/handlers/cdc_etl_handler.go |
-| CDC APIs | main.go:811 (group /api/v1/cdc) | internal/handlers/cdc_etl_handler.go |
-| Data platform overview | main.go:827 (/api/v1/data-platform/overview) | internal/handlers/cdc_etl_handler.go |
-| API Builder and scanner | main.go:834 (group /api/v1/builder) | internal/handlers/api_builder_handler.go, internal/scanner/ |
-| NetIntel | main.go:875 (group /api/v1/netintel) | internal/handlers/netintel_handler.go, internal/netintel/ |
-| Bulk operations | main.go:599 (group /api/v1/bulk/operations) | internal/bulk/ |
-| Exports | main.go:624 (group /api/v1/exports) | internal/export/ |
-| Webhooks | main.go:637 (group /api/v1/webhooks) | internal/webhooks/ |
+| Auth login and token lifecycle | main.go route registration for /auth/* | internal/handlers/auth_handler.go |
+| GraphQL | main.go route registration for /api/graphql* | internal/handlers/graphql_handler.go |
+| Health/status/distributed | main.go route registration for /health, /status, /distributed | internal/handlers/handlers.go |
+| Dynamic SQL queries and stats | main.go route registration for /api/{db}/query, /schema, /logs, /stats | internal/handlers/dynamic_query_handler.go |
+| Transformation rules and execution | main.go route registration for /api/transform/* | internal/handlers/transformation_handler.go |
+| Control-plane resources | main.go route registration for /api/v1/namespaces/* and /api/v1/{apis,policies,workflows} | internal/handlers/resource_handler.go |
+| Data source and job orchestration | main.go route registration for /api/v1/datasources* and /api/v1/jobs* | internal/handlers/datasource_handler.go, internal/handlers/job_handler.go |
+| Platform services (bulk/eventbus/export/webhook/stream/tenant/rbac/versioning/lineage/tracing) | main.go route groups under /api/v1/* | internal/bulk/, internal/eventbus/, internal/export/, internal/webhooks/, internal/streaming/, internal/tenant/, internal/rbac/, internal/versioning/, internal/lineage/, internal/tracing/ |
+| Conductor | main.go + internal/conductor route registration for /api/v1/conductor* and /ws/conductor | internal/conductor/ |
+| GIS and analytics dashboards | main.go route groups /api/v1/gis*, /api/v1/analytics* | internal/handlers/gis_handler.go, internal/handlers/analytics_handler.go |
+| ETL and CDC platform | main.go route groups /api/v1/etl*, /api/v1/cdc*, /api/v1/data-platform/overview | internal/handlers/cdc_etl_handler.go, internal/etl/, internal/cdc/ |
+| API Builder runtime and scanning | main.go route group /api/v1/builder* and runtime /api/custom* | internal/handlers/api_builder_handler.go, internal/scanner/, internal/apiscanner/ |
+| NetIntel and mode manager | main.go route group /api/v1/netintel* | internal/handlers/netintel_handler.go, internal/netintel/ |
+| Kubeplus admission/scheduler/CRD | main.go route group /api/v1/kubeplus* | internal/kubeplus/ |
+| Vector similarity and reviewflow | main.go route groups /api/v1/vectorplus* and /api/v1/reviewflow* | internal/vectorplus/, internal/reviewflow/ |
+| IAM and OIDC | main.go IAM registration block and /iam* routes | internal/iam/ |
+| Native object storage | main.go storage registration block under /api/v1/storage* | internal/storage/ |
 
 ### CLI Command Evidence
 
