@@ -50,7 +50,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -203,80 +202,13 @@ func main() {
 	// Create tables
 	createTables(conns)
 
-	openPostgresByNames := func(label string, dbNames []string) (*gorm.DB, string, error) {
-		const attemptErrFmt = "%s (%s)"
-		seen := make(map[string]struct{}, len(dbNames))
-		attemptErrors := make([]string, 0, len(dbNames))
-
-		for _, candidate := range dbNames {
-			name := strings.TrimSpace(candidate)
-			if name == "" {
-				continue
-			}
-			if _, exists := seen[name]; exists {
-				continue
-			}
-			seen[name] = struct{}{}
-
-			dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
-				cfg.PostgreSQL.Host, cfg.PostgreSQL.User, cfg.PostgreSQL.Password,
-				name, cfg.PostgreSQL.Port, cfg.PostgreSQL.SSLMode)
-
-			db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-			if err != nil {
-				attemptErrors = append(attemptErrors, fmt.Sprintf(attemptErrFmt, name, err.Error()))
-				continue
-			}
-
-			sqlDB, err := db.DB()
-			if err != nil {
-				attemptErrors = append(attemptErrors, fmt.Sprintf(attemptErrFmt, name, err.Error()))
-				continue
-			}
-			if err := sqlDB.Ping(); err != nil {
-				attemptErrors = append(attemptErrors, fmt.Sprintf(attemptErrFmt, name, err.Error()))
-				continue
-			}
-
-			return db, name, nil
-		}
-
-		if len(attemptErrors) == 0 {
-			return nil, "", fmt.Errorf("no database candidates configured")
-		}
-
-		return nil, "", fmt.Errorf("%s database candidates failed: %s", label, strings.Join(attemptErrors, " | "))
-	}
-
-	// Connect to the train database (separate PostgreSQL database — Indian Railways)
-	var trainDB *gorm.DB
-	trainDBNameCandidates := []string{
-		strings.TrimSpace(os.Getenv("TRAIN_DATABASE")),
-		"train",
-		cfg.PostgreSQL.Database,
-	}
-	if db, dbName, err := openPostgresByNames("train", trainDBNameCandidates); err == nil {
-		trainDB = db
-		log.Printf("✅ Train database (PostgreSQL/India) connected: %s", dbName)
-	} else {
-		log.Printf("⚠️  Train database connection failed: %v — Indian train GIS APIs will be unavailable", err)
-	}
-
-	// Connect to the bd-train database (Bangladesh Railways)
-	var bdTrainDB *gorm.DB
-	bdTrainDBNameCandidates := []string{
-		strings.TrimSpace(os.Getenv("BD_TRAIN_DATABASE")),
-		strings.TrimSpace(os.Getenv("BD_TRAIN_DB")),
-		"bd-train",
-		"bd_train",
-		cfg.PostgreSQL.Database,
-	}
-	if db, dbName, err := openPostgresByNames("bd-train", bdTrainDBNameCandidates); err == nil {
-		bdTrainDB = db
-		log.Printf("✅ BD-Train database (PostgreSQL/Bangladesh) connected: %s", dbName)
-	} else {
-		log.Printf("⚠️  BD-Train database connection failed: %v — Bangladesh train GIS APIs will be unavailable", err)
-	}
+	// NOTE: Legacy train / bd-train GIS PostgreSQL connections and their
+	// handlers (GISTrainHandler, GISBDTrainHandler) were removed as part of
+	// the Kubernetes-style control-plane refactor. GIS APIs are now authored
+	// via the API Builder, which persists artifacts through the
+	// ResourceStore -> Controller -> Reconciler pipeline. External railway
+	// datasets should be exposed through DataSource resources and reached
+	// only from reconcilers, never from HTTP handlers.
 
 	// ====================================
 	// IAM SYSTEM INITIALIZATION
@@ -1138,43 +1070,10 @@ func main() {
 		gisSpecAPI.GET("/:type/summary", gisSpecHandler.GetDashboardSummary)
 	}
 
-	// GIS Train/Railway dashboard — Indian Railways (PostgreSQL train database)
-	if trainDB != nil {
-		trainHandler := handlers.NewGISTrainHandler(trainDB)
-		trainAPI := router.Group("/api/v1/gis/trains", authMiddleware)
-		{
-			trainAPI.GET("", trainHandler.ListTrains)
-			trainAPI.GET("/search", trainHandler.SearchTrains)
-			trainAPI.GET("/stations", trainHandler.ListStations)
-			trainAPI.GET("/stations/:code", trainHandler.GetStation)
-			trainAPI.GET("/stats", trainHandler.GetTrainStats)
-			trainAPI.GET("/dashboard", trainHandler.GetTrainDashboard)
-			trainAPI.GET("/dashboard/summary", trainHandler.GetTrainDashboardSummary)
-			trainAPI.GET("/:id", trainHandler.GetTrain)
-			trainAPI.GET("/:id/route", trainHandler.GetTrainRoute)
-		}
-		log.Println("✅ Indian Railway GIS routes registered")
-	}
-
-	// GIS Train/Railway dashboard — Bangladesh Railways (PostgreSQL bd-train database)
-	if bdTrainDB != nil {
-		bdTrainHandler := handlers.NewGISBDTrainHandler(bdTrainDB)
-		bdTrainAPI := router.Group("/api/v1/gis/bd-trains", authMiddleware)
-		{
-			bdTrainAPI.GET("", bdTrainHandler.ListTrains)
-			bdTrainAPI.GET("/search", bdTrainHandler.SearchTrains)
-			bdTrainAPI.GET("/stations", bdTrainHandler.ListStations)
-			bdTrainAPI.GET("/stations/:name", bdTrainHandler.GetStation)
-			bdTrainAPI.GET("/stats", bdTrainHandler.GetStats)
-			bdTrainAPI.GET("/trips", bdTrainHandler.ListTrips)
-			bdTrainAPI.GET("/trips/:id/seats", bdTrainHandler.GetTripSeats)
-			bdTrainAPI.GET("/dashboard", bdTrainHandler.GetDashboard)
-			bdTrainAPI.GET("/dashboard/summary", bdTrainHandler.GetDashboardSummary)
-			bdTrainAPI.GET("/:id", bdTrainHandler.GetTrain)
-			bdTrainAPI.GET("/:id/route", bdTrainHandler.GetTrainRoute)
-		}
-		log.Println("✅ Bangladesh Railway GIS routes registered")
-	}
+	// GIS Train/Railway handlers (Indian + Bangladesh Railways) have been
+	// removed. These previously held *gorm.DB directly and bypassed the
+	// control plane entirely. Equivalent endpoints must now be authored in
+	// the API Builder using DataSource resources.
 
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
 	analyticsHandler := handlers.NewAnalyticsHandler()
