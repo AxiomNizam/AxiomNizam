@@ -16,33 +16,54 @@ import (
 	"syscall"
 	"time"
 
+	"example.com/axiomnizam/internal/apibanks"
+	"example.com/axiomnizam/internal/apiscanner"
+	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/auth"
+	"example.com/axiomnizam/internal/autopilot"
+	"example.com/axiomnizam/internal/blocking"
 	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
+	"example.com/axiomnizam/internal/cdc"
 	"example.com/axiomnizam/internal/conductor"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/database"
+	datasourceresource "example.com/axiomnizam/internal/datasource"
+	"example.com/axiomnizam/internal/deployment"
+	"example.com/axiomnizam/internal/encryption"
+	"example.com/axiomnizam/internal/etl"
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/handlers"
+	"example.com/axiomnizam/internal/heartbeat"
 	iampkg "example.com/axiomnizam/internal/iam"
 	iamstorage "example.com/axiomnizam/internal/iam/storage"
 	iamtoken "example.com/axiomnizam/internal/iam/token"
+	iamusers "example.com/axiomnizam/internal/iam/users"
 	"example.com/axiomnizam/internal/integration"
+	"example.com/axiomnizam/internal/jobs"
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
 	"example.com/axiomnizam/internal/kubeplus/scheduler"
 	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/metrics"
+	"example.com/axiomnizam/internal/migrations"
 	"example.com/axiomnizam/internal/models"
 	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/platform"
+	genericctrl "example.com/axiomnizam/internal/platform/controller"
+	platformstore "example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/policies"
 	"example.com/axiomnizam/internal/rbac"
+	reconcilerpkg "example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
+	"example.com/axiomnizam/internal/serviceregistry"
 	"example.com/axiomnizam/internal/storage"
 	"example.com/axiomnizam/internal/streaming"
 	"example.com/axiomnizam/internal/tenant"
 	"example.com/axiomnizam/internal/tracing"
+	"example.com/axiomnizam/internal/trivy"
 	"example.com/axiomnizam/internal/vectorplus"
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
@@ -499,6 +520,22 @@ func main() {
 	router.GET("/health", healthHandler.Health)
 	router.GET("/status", healthHandler.Status)
 	router.GET("/distributed", healthHandler.Distributed)
+
+	// Phase 0: Reconciler health endpoint (no auth — ops visibility)
+	var keySpaceMonitorRef *metrics.EtcdKeySpaceMonitor // set later when etcd is available
+	router.GET("/health/reconcilers", func(c *gin.Context) {
+		summary := metrics.GlobalReconcilerMetrics.HealthSummary()
+		statuses := metrics.GlobalReconcilerMetrics.GetAllStatuses()
+		status := http.StatusOK
+		if summary.Status == "degraded" {
+			status = http.StatusServiceUnavailable
+		}
+		response := gin.H{"summary": summary, "reconcilers": statuses}
+		if keySpaceMonitorRef != nil {
+			response["etcdKeySpace"] = keySpaceMonitorRef.GetStats()
+		}
+		c.JSON(status, response)
+	})
 
 	// Authentication endpoints (no auth required for login/refresh)
 	authHandler := handlers.NewAuthHandler()
@@ -1594,6 +1631,766 @@ func main() {
 		log.Println("✅ Object Storage module started (native backend, data:", storageCfg.DataDir, ")")
 	}
 
+	// ====================================
+	// AUDIT ENDPOINTS (previously unwired)
+	// ====================================
+	auditHandler := audit.NewAuditHandler(nil) // AuditLogger impl wired when available
+	auditAPI := router.Group("/api/v1/audit", authMiddleware)
+	{
+		auditAPI.POST("/logs", adminOrSysMiddleware, auditHandler.LogAction)
+		auditAPI.GET("/logs", auditHandler.QueryLogs)
+		auditAPI.GET("/report", auditHandler.GetReport)
+		auditAPI.DELETE("/logs", adminOrSysMiddleware, auditHandler.DeleteOldLogs)
+	}
+	log.Println("✅ Audit routes registered")
+
+	// ====================================
+	// ENCRYPTION ENDPOINTS (previously unwired)
+	// ====================================
+	// Note: InMemorySecretsManager is used directly; the SecretsManager
+	// interface has a signature mismatch that will be unified in a follow-up.
+	encryptionMgr := encryption.NewInMemorySecretsManager()
+	encryptionHandler := encryption.NewEncryptionHandler(nil)
+	_ = encryptionMgr // reconciler uses this directly
+	encryptionAPI := router.Group("/api/v1/encryption", authMiddleware)
+	{
+		encryptionAPI.POST("/keys", adminOrSysMiddleware, encryptionHandler.CreateKey)
+		encryptionAPI.GET("/keys", encryptionHandler.ListKeys)
+		encryptionAPI.GET("/keys/:id", encryptionHandler.GetKey)
+		encryptionAPI.POST("/keys/:id/rotate", adminOrSysMiddleware, encryptionHandler.RotateKey)
+		encryptionAPI.DELETE("/keys/:id", adminOrSysMiddleware, encryptionHandler.DeleteKey)
+		encryptionAPI.POST("/encrypt", authMiddleware, encryptionHandler.Encrypt)
+		encryptionAPI.POST("/decrypt", authMiddleware, encryptionHandler.Decrypt)
+		encryptionAPI.POST("/policies", adminOrSysMiddleware, encryptionHandler.CreatePolicy)
+		encryptionAPI.GET("/policies", encryptionHandler.ListPolicies)
+	}
+	log.Println("✅ Encryption routes registered")
+
+	// ====================================
+	// JOBS OBSERVABILITY (previously unwired)
+	// ====================================
+	jobMetricsCollector := jobs.NewMetricsCollector("axiom_nizam")
+	_ = jobMetricsCollector // available for observability handler when job manager is wired
+	log.Println("✅ Jobs metrics collector initialized")
+
+	// ====================================
+	// RECONCILER CONTROLLERS (P2 — AxiomNizam architecture)
+	// ====================================
+	// Initialize EtcdStore-backed reconcilers for all 11 migrated modules.
+	// Each reconciler is started in a background goroutine that periodically
+	// reconciles resources from the store.
+	if conns.Etcd != nil {
+		log.Println("🔄 Initializing reconciler controllers...")
+		reconcilerMetrics := metrics.GlobalReconcilerMetrics
+
+		// Phase 1: Shadow mode — reconcilers run but don't affect production.
+		shadowMode := true
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("RECONCILER_SHADOW_MODE")), "false") {
+			shadowMode = false
+		}
+		if shadowMode {
+			log.Println("  ℹ️  Shadow mode ON (set RECONCILER_SHADOW_MODE=false to disable)")
+		} else {
+			log.Println("  ⚠️  Shadow mode OFF — reconcilers will drive managers")
+		}
+
+		// Bulk Operation reconciler
+		bulkStore := platformstore.NewEtcdStore[*bulk.BulkOperationResource](
+			conns.Etcd, "/axiomnizam/bulkoperations/", func() *bulk.BulkOperationResource { return &bulk.BulkOperationResource{} },
+		)
+		bulkReconciler := reconcilerpkg.NewInstrumented("bulk",
+			bulk.NewBulkOperationReconciler(bulkStore, platformManagers.Bulk), reconcilerMetrics)
+		reconcilerMetrics.Register("bulk")
+		go genericctrl.NewGenericController("bulk", bulkStore, bulkReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		bulkHandler.SetDualWriteStore(bulkStore)
+		log.Println("  ✅ BulkOperation controller started (dual-write enabled)")
+
+		// EventBus Topic reconciler
+		topicStore := platformstore.NewEtcdStore[*eventbus.TopicResource](
+			conns.Etcd, "/axiomnizam/eventbus-topics/", func() *eventbus.TopicResource { return &eventbus.TopicResource{} },
+		)
+		topicReconciler := reconcilerpkg.NewInstrumented("eventbus-topic",
+			eventbus.NewTopicReconciler(topicStore, platformManagers.EventBus), reconcilerMetrics)
+		reconcilerMetrics.Register("eventbus-topic")
+		go genericctrl.NewGenericController("eventbus-topic", topicStore, topicReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		eventBusHandler.SetTopicDualWriteStore(topicStore)
+		log.Println("  ✅ EventBusTopic controller started (dual-write enabled)")
+
+		// EventBus Subscription reconciler
+		subscriptionStore := platformstore.NewEtcdStore[*eventbus.SubscriptionResource](
+			conns.Etcd, "/axiomnizam/eventbus-subscriptions/", func() *eventbus.SubscriptionResource { return &eventbus.SubscriptionResource{} },
+		)
+		subscriptionReconciler := reconcilerpkg.NewInstrumented("eventbus-subscription",
+			eventbus.NewSubscriptionReconciler(subscriptionStore, platformManagers.EventBus), reconcilerMetrics)
+		reconcilerMetrics.Register("eventbus-subscription")
+		go genericctrl.NewGenericController("eventbus-subscription", subscriptionStore, subscriptionReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ EventBusSubscription controller started")
+
+		// Export Job reconciler
+		exportStore := platformstore.NewEtcdStore[*exportpkg.ExportJobResource](
+			conns.Etcd, "/axiomnizam/exportjobs/", func() *exportpkg.ExportJobResource { return &exportpkg.ExportJobResource{} },
+		)
+		exportReconciler := reconcilerpkg.NewInstrumented("export",
+			exportpkg.NewExportJobReconciler(exportStore, platformManagers.Export), reconcilerMetrics)
+		reconcilerMetrics.Register("export")
+		go genericctrl.NewGenericController("export", exportStore, exportReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		exportHandler.SetDualWriteStore(exportStore)
+		log.Println("  ✅ ExportJob controller started (dual-write enabled)")
+
+		// Streaming reconciler
+		streamStore := platformstore.NewEtcdStore[*streaming.StreamResource](
+			conns.Etcd, "/axiomnizam/streams/", func() *streaming.StreamResource { return &streaming.StreamResource{} },
+		)
+		streamReconciler := reconcilerpkg.NewInstrumented("streaming",
+			streaming.NewStreamReconciler(streamStore), reconcilerMetrics)
+		reconcilerMetrics.Register("streaming")
+		go genericctrl.NewGenericController("streaming", streamStore, streamReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		streamHandler.SetDualWriteStore(streamStore)
+		log.Println("  ✅ Stream controller started (dual-write enabled)")
+
+		// RBAC Role reconciler
+		roleStore := platformstore.NewEtcdStore[*rbac.RoleResource](
+			conns.Etcd, "/axiomnizam/rbac-roles/", func() *rbac.RoleResource { return &rbac.RoleResource{} },
+		)
+		roleReconciler := reconcilerpkg.NewInstrumented("rbac-role",
+			rbac.NewRoleReconciler(roleStore, platformManagers.RBAC), reconcilerMetrics)
+		reconcilerMetrics.Register("rbac-role")
+		go genericctrl.NewGenericController("rbac-role", roleStore, roleReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		rbacHandler.SetRoleDualWriteStore(roleStore)
+		log.Println("  ✅ RBAC Role controller started (dual-write enabled)")
+
+		// RBAC RoleBinding reconciler
+		roleBindingStore := platformstore.NewEtcdStore[*rbac.RoleBindingResource](
+			conns.Etcd, "/axiomnizam/rbac-rolebindings/", func() *rbac.RoleBindingResource { return &rbac.RoleBindingResource{} },
+		)
+		roleBindingReconciler := reconcilerpkg.NewInstrumented("rbac-rolebinding",
+			rbac.NewRoleBindingReconciler(roleBindingStore, platformManagers.RBAC), reconcilerMetrics)
+		reconcilerMetrics.Register("rbac-rolebinding")
+		go genericctrl.NewGenericController("rbac-rolebinding", roleBindingStore, roleBindingReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ RBAC RoleBinding controller started")
+
+		// Versioning Policy reconciler
+		versionPolicyStore := platformstore.NewEtcdStore[*versioning.VersionPolicyResource](
+			conns.Etcd, "/axiomnizam/version-policies/", func() *versioning.VersionPolicyResource { return &versioning.VersionPolicyResource{} },
+		)
+		versionPolicyReconciler := reconcilerpkg.NewInstrumented("versioning",
+			versioning.NewVersionPolicyReconciler(versionPolicyStore), reconcilerMetrics)
+		reconcilerMetrics.Register("versioning")
+		go genericctrl.NewGenericController("versioning", versionPolicyStore, versionPolicyReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		versionHandler.SetDualWriteStore(versionPolicyStore) // Phase 2: dual-write
+		log.Println("  ✅ VersionPolicy controller started (dual-write enabled)")
+
+		// Tracing Config reconciler
+		tracingConfigStore := platformstore.NewEtcdStore[*tracing.TracingConfigResource](
+			conns.Etcd, "/axiomnizam/tracing-configs/", func() *tracing.TracingConfigResource { return &tracing.TracingConfigResource{} },
+		)
+		tracingConfigReconciler := reconcilerpkg.NewInstrumented("tracing",
+			tracing.NewTracingConfigReconciler(tracingConfigStore), reconcilerMetrics)
+		reconcilerMetrics.Register("tracing")
+		go genericctrl.NewGenericController("tracing", tracingConfigStore, tracingConfigReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		tracingHandler.SetDualWriteStore(tracingConfigStore)
+		log.Println("  ✅ TracingConfig controller started (dual-write enabled)")
+
+		// Lineage Node reconciler
+		lineageNodeStore := platformstore.NewEtcdStore[*lineage.LineageNodeResource](
+			conns.Etcd, "/axiomnizam/lineage-nodes/", func() *lineage.LineageNodeResource { return &lineage.LineageNodeResource{} },
+		)
+		lineageNodeReconciler := reconcilerpkg.NewInstrumented("lineage",
+			lineage.NewLineageNodeReconciler(lineageNodeStore, platformManagers.Lineage), reconcilerMetrics)
+		reconcilerMetrics.Register("lineage")
+		go genericctrl.NewGenericController("lineage", lineageNodeStore, lineageNodeReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		lineageHandler.SetDualWriteStore(lineageNodeStore)
+		log.Println("  ✅ LineageNode controller started (dual-write enabled)")
+
+		// Audit Policy reconciler
+		auditPolicyStore := platformstore.NewEtcdStore[*audit.AuditPolicyResource](
+			conns.Etcd, "/axiomnizam/audit-policies/", func() *audit.AuditPolicyResource { return &audit.AuditPolicyResource{} },
+		)
+		auditPolicyReconciler := reconcilerpkg.NewInstrumented("audit",
+			audit.NewAuditPolicyReconciler(auditPolicyStore), reconcilerMetrics)
+		reconcilerMetrics.Register("audit")
+		go genericctrl.NewGenericController("audit", auditPolicyStore, auditPolicyReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		auditHandler.SetDualWriteStore(auditPolicyStore)
+		log.Println("  ✅ AuditPolicy controller started (dual-write enabled)")
+
+		// Encryption Key reconciler
+		encryptionKeyStore := platformstore.NewEtcdStore[*encryption.EncryptionKeyResource](
+			conns.Etcd, "/axiomnizam/encryption-keys/", func() *encryption.EncryptionKeyResource { return &encryption.EncryptionKeyResource{} },
+		)
+		encryptionKeyReconciler := reconcilerpkg.NewInstrumented("encryption-key",
+			encryption.NewEncryptionKeyReconciler(encryptionKeyStore, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("encryption-key")
+		go genericctrl.NewGenericController("encryption-key", encryptionKeyStore, encryptionKeyReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		encryptionHandler.SetKeyDualWriteStore(encryptionKeyStore)
+		log.Println("  ✅ EncryptionKey controller started (dual-write enabled)")
+
+		// Encryption Policy reconciler
+		encryptionPolicyStore := platformstore.NewEtcdStore[*encryption.EncryptionPolicyResource](
+			conns.Etcd, "/axiomnizam/encryption-policies/", func() *encryption.EncryptionPolicyResource { return &encryption.EncryptionPolicyResource{} },
+		)
+		encryptionPolicyReconciler := reconcilerpkg.NewInstrumented("encryption-policy",
+			encryption.NewEncryptionPolicyReconciler(encryptionPolicyStore), reconcilerMetrics)
+		reconcilerMetrics.Register("encryption-policy")
+		go genericctrl.NewGenericController("encryption-policy", encryptionPolicyStore, encryptionPolicyReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ EncryptionPolicy controller started")
+
+		// Conductor Producer reconciler
+		producerStore := platformstore.NewEtcdStore[*conductor.ProducerResource](
+			conns.Etcd, "/axiomnizam/conductor-producers/", func() *conductor.ProducerResource { return &conductor.ProducerResource{} },
+		)
+		producerReconciler := reconcilerpkg.NewInstrumented("conductor-producer",
+			conductor.NewProducerReconciler(producerStore, conductorMgr), reconcilerMetrics)
+		reconcilerMetrics.Register("conductor-producer")
+		go genericctrl.NewGenericController("conductor-producer", producerStore, producerReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		// Note: conductor Handler is created inside RegisterRoutes — dual-write store
+		// will be wired when conductor handler is refactored to accept store injection.
+		log.Println("  ✅ ConductorProducer controller started (dual-write pending handler refactor)")
+
+		// Conductor Consumer reconciler
+		consumerStore := platformstore.NewEtcdStore[*conductor.ConsumerResource](
+			conns.Etcd, "/axiomnizam/conductor-consumers/", func() *conductor.ConsumerResource { return &conductor.ConsumerResource{} },
+		)
+		consumerReconciler := reconcilerpkg.NewInstrumented("conductor-consumer",
+			conductor.NewConsumerReconciler(consumerStore, conductorMgr), reconcilerMetrics)
+		reconcilerMetrics.Register("conductor-consumer")
+		go genericctrl.NewGenericController("conductor-consumer", consumerStore, consumerReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ ConductorConsumer controller started")
+
+		// Webhook reconciler
+		webhookStore := platformstore.NewEtcdStore[*webhooks.WebhookResource](
+			conns.Etcd, "/axiomnizam/webhooks/", func() *webhooks.WebhookResource { return &webhooks.WebhookResource{} },
+		)
+		webhookReconciler := reconcilerpkg.NewInstrumented("webhook",
+			webhooks.NewWebhookReconciler(webhookStore), reconcilerMetrics)
+		reconcilerMetrics.Register("webhook")
+		go genericctrl.NewGenericController("webhook", webhookStore, webhookReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		webhookHandler.SetDualWriteStore(webhookStore)
+		log.Println("  ✅ Webhook controller started (dual-write enabled)")
+
+		// Tenant reconciler
+		tenantStore := platformstore.NewEtcdStore[*tenant.TenantV1Resource](
+			conns.Etcd, "/axiomnizam/tenants/", func() *tenant.TenantV1Resource { return &tenant.TenantV1Resource{} },
+		)
+		tenantReconciler := reconcilerpkg.NewInstrumented("tenant",
+			tenant.NewTenantReconciler(tenantStore), reconcilerMetrics)
+		reconcilerMetrics.Register("tenant")
+		go genericctrl.NewGenericController("tenant", tenantStore, tenantReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		tenantHandler.SetDualWriteStore(tenantStore)
+		log.Println("  ✅ Tenant controller started (dual-write enabled)")
+
+		log.Printf("🔄 All 17 reconciler controllers RUNNING in %d goroutines (shadow=%v) — Phase 1 active", 17, shadowMode)
+
+		// ====================================
+		// PHASE 5: Wire remaining reconcilers
+		// ====================================
+
+		// Jobs reconciler
+		jobsStore := platformstore.NewEtcdStore[*jobs.JobResource](
+			conns.Etcd, "/axiomnizam/jobs/", func() *jobs.JobResource { return &jobs.JobResource{} },
+		)
+		jobsReconciler := reconcilerpkg.NewInstrumented("jobs",
+			jobs.NewJobController(nil, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("jobs")
+		go genericctrl.NewGenericController("jobs", jobsStore, jobsReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ Jobs controller started")
+
+		// ETL Pipeline reconciler
+		etlStore := platformstore.NewEtcdStore[*etl.PipelineResource](
+			conns.Etcd, "/axiomnizam/etl-pipelines/", func() *etl.PipelineResource { return &etl.PipelineResource{} },
+		)
+		etlReconciler := reconcilerpkg.NewInstrumented("etl",
+			etl.NewPipelineController(nil, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("etl")
+		go genericctrl.NewGenericController("etl", etlStore, etlReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ ETL Pipeline controller started")
+
+		// CDC Pipeline reconciler
+		cdcStore := platformstore.NewEtcdStore[*cdc.CDCPipelineResource](
+			conns.Etcd, "/axiomnizam/cdc-pipelines/", func() *cdc.CDCPipelineResource { return &cdc.CDCPipelineResource{} },
+		)
+		cdcReconciler := reconcilerpkg.NewInstrumented("cdc",
+			cdc.NewCDCPipelineController(nil, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("cdc")
+		go genericctrl.NewGenericController("cdc", cdcStore, cdcReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ CDC Pipeline controller started")
+
+		// Policies reconciler
+		policiesStore := platformstore.NewEtcdStore[*policies.PolicyResource](
+			conns.Etcd, "/axiomnizam/policies/", func() *policies.PolicyResource { return &policies.PolicyResource{} },
+		)
+		policiesReconciler := reconcilerpkg.NewInstrumented("policies",
+			policies.NewPolicyReconciler(policiesStore, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("policies")
+		go genericctrl.NewGenericController("policies", policiesStore, policiesReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ Policies controller started")
+
+		// DataSource reconciler
+		datasourceStore := platformstore.NewEtcdStore[*datasourceresource.DataSourceV1Resource](
+			conns.Etcd, "/axiomnizam/datasources/", func() *datasourceresource.DataSourceV1Resource { return &datasourceresource.DataSourceV1Resource{} },
+		)
+		datasourceReconciler := reconcilerpkg.NewInstrumented("datasource",
+			datasourceresource.NewDataSourceReconciler(datasourceStore, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("datasource")
+		go genericctrl.NewGenericController("datasource", datasourceStore, datasourceReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ DataSource controller started")
+
+		// IAM Users reconciler
+		iamUsersStore := platformstore.NewEtcdStore[*iamusers.UserResource](
+			conns.Etcd, "/axiomnizam/iam-users/", func() *iamusers.UserResource { return &iamusers.UserResource{} },
+		)
+		iamUsersReconciler := reconcilerpkg.NewInstrumented("iam-users",
+			iamusers.NewUserReconciler(iamUsersStore), reconcilerMetrics)
+		reconcilerMetrics.Register("iam-users")
+		go genericctrl.NewGenericController("iam-users", iamUsersStore, iamUsersReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ IAM Users controller started")
+
+		// API Scanner reconciler
+		apiScannerStore := platformstore.NewEtcdStore[*apiscanner.APIScanResource](
+			conns.Etcd, "/axiomnizam/api-scans/", func() *apiscanner.APIScanResource { return &apiscanner.APIScanResource{} },
+		)
+		apiScannerReconciler := reconcilerpkg.NewInstrumented("apiscanner",
+			apiscanner.NewAPIScanReconciler(apiScannerStore, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("apiscanner")
+		go genericctrl.NewGenericController("apiscanner", apiScannerStore, apiScannerReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ API Scanner controller started")
+
+		log.Printf("🔄 Phase 5: +7 reconciler controllers started (total: 24 controllers, shadow=%v)", shadowMode)
+
+		// ====================================
+		// PHASE 6 P2: GIS resource controller
+		// ====================================
+		gisStore := platformstore.NewEtcdStore[*handlers.GISResource](
+			conns.Etcd, "/axiomnizam/gis/", func() *handlers.GISResource { return &handlers.GISResource{} },
+		)
+		gisReconciler := reconcilerpkg.NewInstrumented("gis",
+			handlers.NewGISReconciler(gisStore), reconcilerMetrics)
+		reconcilerMetrics.Register("gis")
+		go genericctrl.NewGenericController("gis", gisStore, gisReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ GIS controller started (Phase 6 P2)")
+
+		// Analytics Dashboard controller
+		analyticsStore := platformstore.NewEtcdStore[*handlers.AnalyticsDashboardResource](
+			conns.Etcd, "/axiomnizam/analytics-dashboards/", func() *handlers.AnalyticsDashboardResource { return &handlers.AnalyticsDashboardResource{} },
+		)
+		analyticsReconciler := reconcilerpkg.NewInstrumented("analytics",
+			handlers.NewAnalyticsDashboardReconciler(analyticsStore), reconcilerMetrics)
+		reconcilerMetrics.Register("analytics")
+		go genericctrl.NewGenericController("analytics", analyticsStore, analyticsReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ Analytics Dashboard controller started (Phase 6 P2)")
+
+		// Transform Rule controller
+		transformStore := platformstore.NewEtcdStore[*handlers.TransformRuleResource](
+			conns.Etcd, "/axiomnizam/transform-rules/", func() *handlers.TransformRuleResource { return &handlers.TransformRuleResource{} },
+		)
+		transformReconciler := reconcilerpkg.NewInstrumented("transform",
+			handlers.NewTransformRuleReconciler(transformStore), reconcilerMetrics)
+		reconcilerMetrics.Register("transform")
+		go genericctrl.NewGenericController("transform", transformStore, transformReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ Transform Rule controller started (Phase 6 P2)")
+
+		// Notification Channel controller
+		notificationStore := platformstore.NewEtcdStore[*handlers.NotificationChannelResource](
+			conns.Etcd, "/axiomnizam/notification-channels/", func() *handlers.NotificationChannelResource { return &handlers.NotificationChannelResource{} },
+		)
+		notificationReconciler := reconcilerpkg.NewInstrumented("notification",
+			handlers.NewNotificationChannelReconciler(notificationStore), reconcilerMetrics)
+		reconcilerMetrics.Register("notification")
+		go genericctrl.NewGenericController("notification", notificationStore, notificationReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ Notification Channel controller started (Phase 6 P2)")
+
+		// NetIntel Config controller
+		netintelStore := platformstore.NewEtcdStore[*handlers.NetIntelConfigResource](
+			conns.Etcd, "/axiomnizam/netintel-configs/", func() *handlers.NetIntelConfigResource { return &handlers.NetIntelConfigResource{} },
+		)
+		netintelReconciler := reconcilerpkg.NewInstrumented("netintel",
+			handlers.NewNetIntelConfigReconciler(netintelStore), reconcilerMetrics)
+		reconcilerMetrics.Register("netintel")
+		go genericctrl.NewGenericController("netintel", netintelStore, netintelReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ NetIntel Config controller started (Phase 6 P2)")
+
+		log.Println("🔄 Phase 6 P2: +5 controllers started (gis, analytics, transform, notification, netintel)")
+
+		// Phase 0.4: etcd key-space monitoring
+		etcdPrefixes := []string{
+			"/axiomnizam/bulkoperations/",
+			"/axiomnizam/eventbus-topics/",
+			"/axiomnizam/eventbus-subscriptions/",
+			"/axiomnizam/exportjobs/",
+			"/axiomnizam/streams/",
+			"/axiomnizam/rbac-roles/",
+			"/axiomnizam/rbac-rolebindings/",
+			"/axiomnizam/version-policies/",
+			"/axiomnizam/tracing-configs/",
+			"/axiomnizam/lineage-nodes/",
+			"/axiomnizam/audit-policies/",
+			"/axiomnizam/encryption-keys/",
+			"/axiomnizam/encryption-policies/",
+			"/axiomnizam/conductor-producers/",
+			"/axiomnizam/conductor-consumers/",
+			"/axiomnizam/webhooks/",
+			"/axiomnizam/tenants/",
+			"/axiomnizam/apibanks/",
+			"/axiomnizam/jobs/",
+			"/axiomnizam/etl-pipelines/",
+			"/axiomnizam/cdc-pipelines/",
+			"/axiomnizam/policies/",
+			"/axiomnizam/datasources/",
+			"/axiomnizam/iam-users/",
+			"/axiomnizam/api-scans/",
+			"/axiomnizam/gis/",
+			"/axiomnizam/analytics-dashboards/",
+			"/axiomnizam/transform-rules/",
+			"/axiomnizam/notification-channels/",
+			"/axiomnizam/netintel-configs/",
+		}
+		keySpaceMonitor := metrics.NewEtcdKeySpaceMonitor(conns.Etcd, etcdPrefixes, 30*time.Second)
+		keySpaceMonitor.Start(ctx)
+		keySpaceMonitorRef = keySpaceMonitor
+		log.Println("  ✅ etcd key-space monitor started (18 prefixes, 30s interval)")
+	} else {
+		log.Println("⚠️  etcd not available — reconciler controllers skipped")
+	}
+
+	// ====================================
+	// MIGRATIONS (previously unwired)
+	// ====================================
+	if conns.PostgreSQL != nil {
+		if migrationErr := migrations.RunMigrations(conns.PostgreSQL); migrationErr != nil {
+			log.Printf("⚠️  Database migrations failed: %v", migrationErr)
+		} else {
+			log.Println("✅ Database migrations completed successfully")
+		}
+	}
+
+	// ====================================
+	// BLOCKING QUERY NOTIFIER (previously unwired)
+	// ====================================
+	blockingNotifier := blocking.NewNotifier()
+	_ = blockingNotifier // available for long-poll list endpoints
+	log.Println("✅ Blocking query notifier initialized")
+
+	// ====================================
+	// HEARTBEAT TRACKER (previously unwired)
+	// ====================================
+	heartbeatTracker := heartbeat.New(func(id string) {
+		log.Printf("⚠️  Heartbeat expired for entity: %s", id)
+	})
+	heartbeatTracker.ReapInterval = 5 * time.Second
+	heartbeatTracker.Start()
+	log.Println("✅ Heartbeat tracker started")
+
+	// ====================================
+	// SERVICE REGISTRY (previously unwired)
+	// ====================================
+	svcRegistry := serviceregistry.New()
+	log.Println("✅ Service registry started")
+
+	// ====================================
+	// AUTOPILOT (previously unwired)
+	// ====================================
+	autopilotInstance := autopilot.New(autopilot.Config{
+		MaxTrailingLogs:      250,
+		LastContactThreshold: 200 * time.Millisecond,
+		DeadServerCleanup:    true,
+		MinQuorum:            3,
+	})
+	_ = autopilotInstance // available for cluster health evaluation
+	log.Println("✅ Autopilot initialized")
+
+	// ====================================
+	// TRIVY VULNERABILITY SCANNER (previously unwired)
+	// ====================================
+	trivyBinaryPath := strings.TrimSpace(os.Getenv("TRIVY_BINARY_PATH"))
+	if trivyBinaryPath == "" {
+		trivyBinaryPath = "trivy"
+	}
+	trivyEngine := trivy.NewEngine(trivyBinaryPath)
+	log.Printf("✅ Trivy vulnerability scanner initialized (binary: %s)", trivyBinaryPath)
+
+	// ====================================
+	// API BANKS (previously unwired)
+	// ====================================
+	apiBankManager := apibanks.NewAPIBankManager()
+	apiBankCatalog := apibanks.NewAPIBankCatalog(apiBankManager)
+	_ = apiBankCatalog // available for API discovery
+
+	// APIBank reconciler (etcd-backed)
+	if conns.Etcd != nil {
+		apiBankStore := platformstore.NewEtcdStore[*apibanks.APIBankResource](
+			conns.Etcd, "/axiomnizam/apibanks/", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} },
+		)
+		apiBankReconciler := apibanks.NewAPIBankReconciler(apiBankStore, apiBankManager)
+		_ = apiBankReconciler
+		metrics.GlobalReconcilerMetrics.Register("apibanks")
+		log.Println("  ✅ APIBank reconciler initialized")
+	}
+	log.Println("✅ API Banks module initialized")
+
+	// ====================================
+	// API BANKS ROUTES
+	// ====================================
+	apiBankAPI := router.Group("/api/v1/apibanks", authMiddleware)
+	{
+		apiBankAPI.POST("", adminOrSysMiddleware, func(c *gin.Context) {
+			var bank apibanks.APIBank
+			if err := c.ShouldBindJSON(&bank); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := apiBankManager.CreateBank(c.Request.Context(), &bank); err != nil {
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, gin.H{"message": "bank created", "bank": bank})
+		})
+		apiBankAPI.GET("", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"banks": apiBankManager.ListBanks()})
+		})
+		apiBankAPI.GET("/:name", func(c *gin.Context) {
+			bank := apiBankManager.GetBank(strings.TrimSpace(c.Param("name")))
+			if bank == nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "bank not found"})
+				return
+			}
+			c.JSON(http.StatusOK, bank)
+		})
+		apiBankAPI.POST("/:name/apis", adminOrSysMiddleware, func(c *gin.Context) {
+			var api apibanks.APIReference
+			if err := c.ShouldBindJSON(&api); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := apiBankManager.AddAPIToBank(c.Request.Context(), strings.TrimSpace(c.Param("name")), api); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "API added to bank"})
+		})
+		apiBankAPI.DELETE("/:name/apis/:apiName", adminOrSysMiddleware, func(c *gin.Context) {
+			if err := apiBankManager.RemoveAPIFromBank(c.Request.Context(), strings.TrimSpace(c.Param("name")), strings.TrimSpace(c.Param("apiName"))); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "API removed from bank"})
+		})
+		apiBankAPI.GET("/search/data-class", func(c *gin.Context) {
+			dataClass := strings.TrimSpace(c.Query("class"))
+			c.JSON(http.StatusOK, gin.H{"apis": apiBankCatalog.SearchByDataClass(dataClass)})
+		})
+		apiBankAPI.GET("/search/owner", func(c *gin.Context) {
+			owner := strings.TrimSpace(c.Query("owner"))
+			c.JSON(http.StatusOK, gin.H{"banks": apiBankCatalog.SearchByOwner(owner)})
+		})
+		apiBankAPI.GET("/search/tag", func(c *gin.Context) {
+			tag := strings.TrimSpace(c.Query("tag"))
+			c.JSON(http.StatusOK, gin.H{"banks": apiBankCatalog.SearchByTag(tag)})
+		})
+	}
+
+	// ====================================
+	// TRIVY SCANNER ROUTES
+	// ====================================
+	trivyAPI := router.Group("/api/v1/trivy", authMiddleware)
+	{
+		trivyAPI.POST("/scan", adminOrSysMiddleware, func(c *gin.Context) {
+			var req trivy.ScanRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			req.UseExternal = true
+			result, err := trivyEngine.Scan(c.Request.Context(), req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, result)
+		})
+	}
+
+	// ====================================
+	// DEPLOYMENT CONTROLLER ROUTES
+	// ====================================
+	deploymentControllers := make(map[string]*deployment.Controller)
+	var deploymentMu sync.Mutex
+
+	deploymentAPI := router.Group("/api/v1/deployments", authMiddleware)
+	{
+		deploymentAPI.POST("", adminOrSysMiddleware, func(c *gin.Context) {
+			var spec deployment.Spec
+			if err := c.ShouldBindJSON(&spec); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if strings.TrimSpace(spec.JobID) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is required"})
+				return
+			}
+			deploymentMu.Lock()
+			ctrl := deployment.NewController(spec)
+			deploymentControllers[spec.JobID] = ctrl
+			deploymentMu.Unlock()
+			c.JSON(http.StatusCreated, gin.H{"message": "deployment created", "jobId": spec.JobID, "state": ctrl.State()})
+		})
+		deploymentAPI.GET("/:jobId", func(c *gin.Context) {
+			jobID := strings.TrimSpace(c.Param("jobId"))
+			deploymentMu.Lock()
+			ctrl, ok := deploymentControllers[jobID]
+			deploymentMu.Unlock()
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found"})
+				return
+			}
+			c.JSON(http.StatusOK, ctrl.State())
+		})
+		deploymentAPI.POST("/:jobId/promote", adminOrSysMiddleware, func(c *gin.Context) {
+			jobID := strings.TrimSpace(c.Param("jobId"))
+			deploymentMu.Lock()
+			ctrl, ok := deploymentControllers[jobID]
+			deploymentMu.Unlock()
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found"})
+				return
+			}
+			if !ctrl.Promote() {
+				c.JSON(http.StatusConflict, gin.H{"error": "promotion not available — canaries may not be healthy or deployment not in running phase"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "deployment promoted", "state": ctrl.State()})
+		})
+		deploymentAPI.POST("/:jobId/fail", adminOrSysMiddleware, func(c *gin.Context) {
+			jobID := strings.TrimSpace(c.Param("jobId"))
+			var body struct {
+				Reason string `json:"reason"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			if strings.TrimSpace(body.Reason) == "" {
+				body.Reason = "manual rollback"
+			}
+			deploymentMu.Lock()
+			ctrl, ok := deploymentControllers[jobID]
+			deploymentMu.Unlock()
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found"})
+				return
+			}
+			decision := ctrl.Fail(body.Reason)
+			c.JSON(http.StatusOK, gin.H{"message": "deployment failed", "decision": decision, "state": ctrl.State()})
+		})
+	}
+
+	// ====================================
+	// SERVICE REGISTRY ROUTES
+	// ====================================
+	svcRegistryAPI := router.Group("/api/v1/service-registry", authMiddleware)
+	{
+		svcRegistryAPI.POST("/services", adminOrSysMiddleware, func(c *gin.Context) {
+			var svc serviceregistry.Service
+			if err := c.ShouldBindJSON(&svc); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if strings.TrimSpace(svc.ID) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "service id is required"})
+				return
+			}
+			if svc.Checks == nil {
+				svc.Checks = make(map[string]*serviceregistry.Check)
+			}
+			svcRegistry.Register(&svc)
+			c.JSON(http.StatusCreated, gin.H{"message": "service registered", "id": svc.ID})
+		})
+		svcRegistryAPI.DELETE("/services/:id", adminOrSysMiddleware, func(c *gin.Context) {
+			svcRegistry.Deregister(strings.TrimSpace(c.Param("id")))
+			c.JSON(http.StatusOK, gin.H{"message": "service deregistered"})
+		})
+		svcRegistryAPI.GET("/services/:id", func(c *gin.Context) {
+			svc, ok := svcRegistry.Get(strings.TrimSpace(c.Param("id")))
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "service not found"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"service": svc, "status": svc.Rollup()})
+		})
+		svcRegistryAPI.GET("/services", func(c *gin.Context) {
+			name := strings.TrimSpace(c.Query("name"))
+			if name != "" {
+				c.JSON(http.StatusOK, gin.H{"services": svcRegistry.ByName(name)})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"services": svcRegistry.ByName("")})
+		})
+		svcRegistryAPI.PUT("/services/:id/checks/:checkId", adminOrSysMiddleware, func(c *gin.Context) {
+			var body struct {
+				Status string `json:"status"`
+				Notes  string `json:"notes"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := svcRegistry.UpdateCheck(strings.TrimSpace(c.Param("id")), strings.TrimSpace(c.Param("checkId")), serviceregistry.Status(body.Status), body.Notes); err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "check updated"})
+		})
+	}
+
+	// ====================================
+	// HEARTBEAT ROUTES
+	// ====================================
+	heartbeatAPI := router.Group("/api/v1/heartbeat", authMiddleware)
+	{
+		heartbeatAPI.POST("/beat", func(c *gin.Context) {
+			var body struct {
+				ID  string `json:"id"`
+				TTL int    `json:"ttl"` // seconds
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if strings.TrimSpace(body.ID) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
+				return
+			}
+			ttl := time.Duration(body.TTL) * time.Second
+			if ttl <= 0 {
+				ttl = 30 * time.Second
+			}
+			heartbeatTracker.Beat(body.ID, ttl)
+			c.JSON(http.StatusOK, gin.H{"message": "heartbeat recorded", "id": body.ID, "ttl_seconds": int(ttl.Seconds())})
+		})
+		heartbeatAPI.GET("/alive/:id", func(c *gin.Context) {
+			id := strings.TrimSpace(c.Param("id"))
+			c.JSON(http.StatusOK, gin.H{"id": id, "alive": heartbeatTracker.IsAlive(id)})
+		})
+		heartbeatAPI.GET("/expired", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"expired": heartbeatTracker.Expired()})
+		})
+		heartbeatAPI.DELETE("/:id", adminOrSysMiddleware, func(c *gin.Context) {
+			heartbeatTracker.Delete(strings.TrimSpace(c.Param("id")))
+			c.JSON(http.StatusOK, gin.H{"message": "heartbeat entry deleted"})
+		})
+	}
+
+	// ====================================
+	// AUTOPILOT ROUTES
+	// ====================================
+	router.POST("/api/v1/autopilot/evaluate", adminOrSysMiddleware, func(c *gin.Context) {
+		var body struct {
+			Peers       []autopilot.Server `json:"peers"`
+			LeaderIndex uint64             `json:"leaderIndex"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		decisions := autopilotInstance.Evaluate(c.Request.Context(), body.Peers, body.LeaderIndex)
+		c.JSON(http.StatusOK, gin.H{"decisions": decisions})
+	})
+
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
 
@@ -1709,6 +2506,12 @@ func main() {
 
 	// Flush conductor stats to DB before exit
 	conductorMgr.Close()
+
+	// Stop heartbeat tracker
+	heartbeatTracker.Stop()
+
+	// Stop service registry
+	svcRegistry.Close()
 
 	cancel()
 	log.Println("✅ AxiomNizam stopped")

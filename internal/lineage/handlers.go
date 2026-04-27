@@ -8,7 +8,8 @@ import (
 
 // LineageHandler handles lineage endpoints
 type LineageHandler struct {
-	manager LineageManager
+	manager        LineageManager
+	dualWriteStore LineageDualWriteStore
 }
 
 // NewLineageHandler creates handler

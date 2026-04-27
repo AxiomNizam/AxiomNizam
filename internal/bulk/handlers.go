@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// BulkHandler handles bulk operation endpoints
 type BulkHandler struct {
-	manager BulkManager
+	manager        BulkManager
+	dualWriteStore BulkDualWriteStore
 }
 
 // NewBulkHandler creates handler
@@ -22,6 +22,19 @@ func (h *BulkHandler) SubmitBulkOperation(c *gin.Context) {
 	var req BulkOperationRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		op := &BulkOperation{TenantID: req.TenantID, Type: req.Type, Items: req.Items, Options: req.Options}
+		resource := h.buildOperationResource(op)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "bulk operation resource created"})
 		return
 	}
 
@@ -40,6 +53,7 @@ func (h *BulkHandler) SubmitBulkOperation(c *gin.Context) {
 		return
 	}
 
+	h.dualWriteOperation(created)
 	c.JSON(http.StatusAccepted, created)
 }
 

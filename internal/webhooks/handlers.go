@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// WebhookHandler handles webhook endpoints
 type WebhookHandler struct {
-	manager WebhookManager
+	manager        WebhookManager
+	dualWriteStore WebhookDualWriteStore
 }
 
 // NewWebhookHandler creates handler
@@ -25,23 +25,29 @@ func (h *WebhookHandler) CreateWebhook(c *gin.Context) {
 		return
 	}
 
-	webhook := &Webhook{
-		Name:        req.Name,
-		Description: req.Description,
-		URL:         req.URL,
-		Secret:      req.Secret,
-		Events:      req.Events,
-		Filters:     req.Filters,
-		Active:      true,
-		CreatedAt:   time.Now(),
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		wh := &Webhook{Name: req.Name, Description: req.Description, URL: req.URL, Secret: req.Secret, Events: req.Events, Active: true}
+		resource := h.buildWebhookResource(wh)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "webhook resource created"})
+		return
 	}
 
+	webhook := &Webhook{
+		Name: req.Name, Description: req.Description, URL: req.URL, Secret: req.Secret,
+		Events: req.Events, Filters: req.Filters, Active: true, CreatedAt: time.Now(),
+	}
 	created, err := h.manager.CreateWebhook(webhook)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
+	h.dualWriteWebhook(created)
 	c.JSON(http.StatusCreated, created)
 }
 

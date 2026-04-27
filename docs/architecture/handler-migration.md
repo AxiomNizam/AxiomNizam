@@ -1,8 +1,16 @@
 # Handler Migration to Control-Plane Architecture
 
-**Status:** In progress
+**Status:** In progress (Phase 0 observability complete)
 **Owner:** Platform team
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-25
+
+**Recent changes (2026-04-25):**
+- Wired 8 previously unwired modules: `apibanks`, `migrations`, `blocking`, `trivy`, `heartbeat`, `autopilot`, `deployment`, `serviceregistry`
+- Added per-module reconciler metrics (`internal/metrics/reconciler_metrics.go`)
+- Added `GET /health/reconcilers` endpoint
+- Registered all 18 reconcilers with Phase 0 metrics tracking
+- New routes: `/api/v1/apibanks`, `/api/v1/trivy`, `/api/v1/deployments`, `/api/v1/service-registry`, `/api/v1/heartbeat`, `/api/v1/autopilot/evaluate`
+
 
 ## Target architecture
 
@@ -146,4 +154,35 @@ Priority:
   keep flagging them?
 - Do we want a single `GISDashboard` kind with a `type` discriminator, or
   separate kinds (`AgricultureDashboard`, `MedicalDashboard`, …)?
+
+---
+
+## P2 Resource-ification Status (2026-04-25)
+
+The following 11 modules now have `resource.go` + `reconciler.go` files
+implementing `reconciler.Reconciler` with proper TypeMeta/ObjectMeta/Spec/Status
+and ObservedGeneration tracking. All 17 reconcilers are initialized with
+`EtcdStore[T]` in `main.go`.
+
+| Module | Resource Types | Reconcilers | EtcdStore | Controller Loop |
+|---|---|---|---|---|
+| bulk | `BulkOperationResource` | `BulkOperationReconciler` | ✅ | ⚠️ initialized, not looping |
+| eventbus | `TopicResource`, `SubscriptionResource` | `TopicReconciler`, `SubscriptionReconciler` | ✅ | ⚠️ initialized, not looping |
+| export | `ExportJobResource` | `ExportJobReconciler` | ✅ | ⚠️ initialized, not looping |
+| streaming | `StreamResource` | `StreamReconciler` | ✅ | ⚠️ initialized, not looping |
+| rbac | `RoleResource`, `RoleBindingResource` | `RoleReconciler`, `RoleBindingReconciler` | ✅ | ⚠️ initialized, not looping |
+| versioning | `VersionPolicyResource` | `VersionPolicyReconciler` | ✅ | ⚠️ initialized, not looping |
+| tracing | `TracingConfigResource` | `TracingConfigReconciler` | ✅ | ⚠️ initialized, not looping |
+| lineage | `LineageNodeResource` | `LineageNodeReconciler` | ✅ | ⚠️ initialized, not looping |
+| audit | `AuditPolicyResource` | `AuditPolicyReconciler` | ✅ | ⚠️ initialized, not looping |
+| encryption | `EncryptionKeyResource`, `EncryptionPolicyResource` | `EncryptionKeyReconciler`, `EncryptionPolicyReconciler` | ✅ | ⚠️ initialized, not looping |
+| conductor | `ProducerResource`, `ConsumerResource` | `ProducerReconciler`, `ConsumerReconciler` | ✅ | ⚠️ initialized, not looping |
+| webhooks | `WebhookResource` | `WebhookReconciler` | ✅ | ⚠️ initialized, not looping |
+| tenant | `TenantV1Resource` | `TenantReconciler` | ✅ | ⚠️ initialized, not looping |
+
+**Next step:** Wire these to `GenericController[T]` in shadow mode per
+[MIGRATION_PLAN.md](./MIGRATION_PLAN.md) Phase 1.
+
+Additionally, audit (`/api/v1/audit/*`) and encryption (`/api/v1/encryption/*`)
+routes are now mounted in `main.go` with proper auth middleware.
 

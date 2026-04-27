@@ -1,0 +1,155 @@
+package conductor
+
+// Reconciler for ProducerResource and ConsumerResource.
+
+import (
+	"context"
+	"time"
+
+	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/reconciler"
+	"example.com/axiomnizam/internal/resources"
+)
+
+// ProducerReconciler reconciles ProducerResource objects.
+type ProducerReconciler struct {
+	store   store.ResourceStore[*ProducerResource]
+	manager *Manager
+}
+
+// NewProducerReconciler builds a reconciler.
+func NewProducerReconciler(rs store.ResourceStore[*ProducerResource], mgr *Manager) *ProducerReconciler {
+	return &ProducerReconciler{store: rs, manager: mgr}
+}
+
+// Reconcile implements `reconciler.Reconciler`.
+func (r *ProducerReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
+	res, ok := obj.(*ProducerResource)
+	if !ok {
+		return reconciler.ReconcileResult{Error: conductorErr("conductor: producer reconciler received wrong type")}
+	}
+
+	now := time.Now()
+	status := res.Status
+
+	target := StatusStopped
+	if res.Spec.Active {
+		target = StatusActive
+	}
+
+	// Sync producer to manager.
+	if r.manager != nil && res.Spec.Active {
+		existing, _ := r.manager.GetProducer(res.Name)
+		if existing == nil {
+			req := &CreateProducerRequest{
+				Name:        res.Name,
+				Backend:     res.Spec.Backend,
+				Exchange:    res.Spec.Exchange,
+				RoutingKey:  res.Spec.RoutingKey,
+				Topic:       res.Spec.Topic,
+				ContentType: res.Spec.ContentType,
+				Headers:     res.Spec.Headers,
+				Config:      res.Spec.Config,
+			}
+			_, _ = r.manager.CreateProducer(req)
+		}
+	}
+
+	status.ProducerStatus = target
+	status.Phase = target
+	status.ObservedGeneration = res.Generation
+	status.LastTransitionTime = now
+	status.Conditions = upsertConductorCondition(status.Conditions, resources.Condition{
+		Type: "Ready", Status: conductorBoolStatus(res.Spec.Active),
+		Reason: target, Message: "producer reconciled",
+		LastTransitionTime: now,
+	})
+	res.Status = status
+
+	if r.store != nil {
+		_ = r.store.Update(ctx, res)
+	}
+	return reconciler.ReconcileResult{}
+}
+
+// ConsumerReconciler reconciles ConsumerResource objects.
+type ConsumerReconciler struct {
+	store   store.ResourceStore[*ConsumerResource]
+	manager *Manager
+}
+
+// NewConsumerReconciler builds a reconciler.
+func NewConsumerReconciler(rs store.ResourceStore[*ConsumerResource], mgr *Manager) *ConsumerReconciler {
+	return &ConsumerReconciler{store: rs, manager: mgr}
+}
+
+// Reconcile implements `reconciler.Reconciler`.
+func (r *ConsumerReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
+	res, ok := obj.(*ConsumerResource)
+	if !ok {
+		return reconciler.ReconcileResult{Error: conductorErr("conductor: consumer reconciler received wrong type")}
+	}
+
+	now := time.Now()
+	status := res.Status
+
+	target := StatusStopped
+	if res.Spec.Active {
+		target = StatusActive
+	}
+
+	// Sync consumer to manager.
+	if r.manager != nil && res.Spec.Active {
+		existing, _ := r.manager.GetConsumer(res.Name)
+		if existing == nil {
+			req := &CreateConsumerRequest{
+				Name:          res.Name,
+				Backend:       res.Spec.Backend,
+				Queue:         res.Spec.Queue,
+				Exchange:      res.Spec.Exchange,
+				RoutingKey:    res.Spec.RoutingKey,
+				Topic:         res.Spec.Topic,
+				ConsumerGroup: res.Spec.ConsumerGroup,
+				Config:        res.Spec.Config,
+			}
+			_, _ = r.manager.CreateConsumer(req)
+		}
+	}
+
+	status.ConsumerStatus = target
+	status.Phase = target
+	status.ObservedGeneration = res.Generation
+	status.LastTransitionTime = now
+	status.Conditions = upsertConductorCondition(status.Conditions, resources.Condition{
+		Type: "Ready", Status: conductorBoolStatus(res.Spec.Active),
+		Reason: target, Message: "consumer reconciled",
+		LastTransitionTime: now,
+	})
+	res.Status = status
+
+	if r.store != nil {
+		_ = r.store.Update(ctx, res)
+	}
+	return reconciler.ReconcileResult{}
+}
+
+func upsertConductorCondition(conditions []resources.Condition, cond resources.Condition) []resources.Condition {
+	for i, existing := range conditions {
+		if existing.Type == cond.Type {
+			conditions[i] = cond
+			return conditions
+		}
+	}
+	return append(conditions, cond)
+}
+
+func conductorBoolStatus(b bool) string {
+	if b {
+		return "True"
+	}
+	return "False"
+}
+
+type conductorErr string
+
+func (e conductorErr) Error() string { return string(e) }

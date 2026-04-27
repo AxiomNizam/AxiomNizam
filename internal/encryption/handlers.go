@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// EncryptionHandler handles encryption endpoints
 type EncryptionHandler struct {
-	manager SecretsManager
+	manager            SecretsManager
+	keyDualWriteStore  EncryptionKeyDualWriteStore
 }
 
 // NewEncryptionHandler creates handler
