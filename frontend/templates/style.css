@@ -4794,3 +4794,64 @@ body {
 }
 
 /* End Techno Matte Override */
+
+
+/* ====================================
+   AxiomNizam Custom SVG Icons
+   Replaces emoji icons with inline SVGs
+   ==================================== */
+
+.ax-icon {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: -0.125em;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+
+/* Larger icons in cards and feature sections */
+.card-icon .ax-icon,
+.feature-card-icon .ax-icon,
+.category-icon .ax-icon {
+    width: 2em;
+    height: 2em;
+}
+
+/* Button icons */
+button .ax-icon,
+.btn .ax-icon,
+.btn-secondary .ax-icon,
+.btn-primary .ax-icon {
+    width: 1em;
+    height: 1em;
+    margin-right: 0.25em;
+}
+
+/* Nav icons */
+.nav-icon .ax-icon {
+    width: 1.25em;
+    height: 1.25em;
+}
+
+/* Tab icons */
+.tab-icon .ax-icon {
+    width: 1.125em;
+    height: 1.125em;
+}
+
+/* KPI card icons */
+.ni-kpi-icon .ax-icon,
+.kpi-icon .ax-icon {
+    width: 1.5em;
+    height: 1.5em;
+    color: var(--primary-color);
+}
+
+/* Modal header icons */
+.modal-box h3 .ax-icon {
+    width: 1.25em;
+    height: 1.25em;
+    margin-right: 0.5em;
+}
