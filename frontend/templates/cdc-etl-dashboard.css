@@ -6,9 +6,9 @@
 .cdc-etl-tabs {
     display: flex;
     gap: 0;
-    border-bottom: 2px solid var(--border-color, #e0e0e0);
+    border-bottom: 2px solid var(--border-color, #334155);
     margin-bottom: 24px;
-    background: var(--card-bg, #fff);
+    background: var(--card-bg, #1e293b);
     border-radius: 8px 8px 0 0;
     overflow: hidden;
 }
@@ -30,7 +30,7 @@
 
 .cdc-etl-tab:hover {
     background: var(--hover-bg, #f5f5f5);
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .cdc-etl-tab.active {
@@ -57,8 +57,8 @@
 }
 
 .kpi-card {
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e0e0e0);
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
     padding: 20px;
     display: flex;
@@ -97,8 +97,8 @@
 
 /* Pipeline Table */
 .pipeline-table-wrap {
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e0e0e0);
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
     overflow: hidden;
     margin-bottom: 24px;
@@ -109,7 +109,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    border-bottom: 1px solid var(--border-color, #334155);
 }
 
 .pipeline-table-header h3 {
@@ -150,15 +150,15 @@
     color: var(--text-secondary, #888);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
-    background: var(--table-header-bg, #fafafa);
+    border-bottom: 1px solid var(--border-color, #334155);
+    background: var(--table-header-bg, #1e293b);
 }
 
 .pipeline-table td {
     padding: 14px 16px;
     font-size: 13px;
     border-bottom: 1px solid var(--border-color, #f0f0f0);
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .pipeline-table tr:hover {
@@ -223,7 +223,7 @@
 
 .action-btn {
     background: transparent;
-    border: 1px solid var(--border-color, #e0e0e0);
+    border: 1px solid var(--border-color, #334155);
     padding: 4px 8px;
     border-radius: 4px;
     cursor: pointer;
@@ -266,8 +266,8 @@
 }
 
 .chart-card {
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e0e0e0);
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
     padding: 20px;
 }
@@ -276,7 +276,7 @@
     margin: 0 0 16px 0;
     font-size: 14px;
     font-weight: 600;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .chart-card canvas {
@@ -293,8 +293,8 @@
 }
 
 .connector-card {
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e0e0e0);
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
     padding: 14px;
     text-align: left;
@@ -347,7 +347,7 @@
 .connector-card .connector-name {
     font-size: 13px;
     font-weight: 700;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
     line-height: 1.25;
 }
 
@@ -398,8 +398,8 @@
     gap: 10px;
     margin-bottom: 18px;
     align-items: center;
-    background: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e0e0e0);
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
     padding: 12px;
 }
@@ -416,8 +416,8 @@
     border-radius: 6px;
     padding: 9px 11px;
     font-size: 13px;
-    background: var(--input-bg, #fff);
-    color: var(--text-primary, #222);
+    background: var(--input-bg, #0f172a);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .connector-toolbar input:focus,
@@ -460,14 +460,14 @@
     flex-wrap: wrap;
     gap: 10px;
     font-size: 13px;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .connector-flags label {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid var(--border-color, #e0e0e0);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 999px;
     padding: 6px 10px;
     background: rgba(79, 70, 229, 0.05);
@@ -483,7 +483,7 @@
 .connector-credential-title {
     font-size: 12px;
     font-weight: 700;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
     margin-bottom: 10px;
     letter-spacing: 0.3px;
     text-transform: uppercase;
@@ -517,9 +517,9 @@
 }
 
 .cdc-etl-dashboard .feature-card {
-    border: 1px solid var(--border-color, #e0e0e0);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
-    background: var(--card-bg, #fff);
+    background: var(--card-bg, #1e293b);
     padding: 14px;
 }
 
@@ -531,19 +531,20 @@
     letter-spacing: 0.6px;
     border-radius: 999px;
     padding: 2px 8px;
-    color: #1d4ed8;
-    background: rgba(0, 140, 99, 0.1);
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
 }
 
 .cdc-etl-dashboard .feature-card h4 {
     margin: 8px 0 6px;
     font-size: 15px;
+    color: var(--text-primary, #e2e8f0);
 }
 
 .cdc-etl-dashboard .feature-card p {
     margin: 0;
     font-size: 13px;
-    color: var(--text-secondary, #6b7280);
+    color: var(--text-secondary, #94a3b8);
 }
 
 .blueprint-grid {
@@ -554,9 +555,9 @@
 }
 
 .blueprint-card {
-    border: 1px solid var(--border-color, #e5e7eb);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 10px;
-    background: var(--card-bg, #fff);
+    background: var(--card-bg, #1e293b);
     padding: 14px;
     display: flex;
     flex-direction: column;
@@ -598,7 +599,7 @@
     font-size: 16px;
     font-weight: 600;
     margin: 0 0 16px 0;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -625,7 +626,7 @@
 
 .error-type {
     font-weight: 500;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .error-count {
@@ -643,7 +644,7 @@
 }
 
 .step-node {
-    background: var(--card-bg, #fff);
+    background: var(--card-bg, #1e293b);
     border: 2px solid var(--primary, #4f46e5);
     border-radius: 8px;
     padding: 10px 16px;
@@ -681,7 +682,7 @@
 }
 
 .cdc-etl-modal {
-    background: var(--card-bg, #fff);
+    background: var(--card-bg, #1e293b);
     border-radius: 12px;
     width: 90%;
     max-width: 600px;
@@ -705,7 +706,7 @@
     font-size: 13px;
     font-weight: 600;
     margin-bottom: 6px;
-    color: var(--text-primary, #333);
+    color: var(--text-primary, #e2e8f0);
 }
 
 .modal-form-group input,
@@ -713,11 +714,11 @@
 .modal-form-group textarea {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid var(--border-color, #e0e0e0);
+    border: 1px solid var(--border-color, #334155);
     border-radius: 6px;
     font-size: 13px;
-    background: var(--input-bg, #fff);
-    color: var(--text-primary, #333);
+    background: var(--input-bg, #0f172a);
+    color: var(--text-primary, #e2e8f0);
     box-sizing: border-box;
 }
 
@@ -752,7 +753,7 @@
 
 .btn-cancel {
     background: transparent;
-    border: 1px solid var(--border-color, #e0e0e0);
+    border: 1px solid var(--border-color, #334155);
     padding: 8px 20px;
     border-radius: 6px;
     cursor: pointer;
