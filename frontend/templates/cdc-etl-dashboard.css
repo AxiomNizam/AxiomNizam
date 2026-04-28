@@ -311,7 +311,7 @@
 }
 
 .connector-card .connector-icon {
-    font-size: 24px;
+    font-size: 0;
     margin-bottom: 10px;
     width: 42px;
     height: 42px;
@@ -319,7 +319,29 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(79, 70, 229, 0.09);
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    padding: 8px;
+}
+.connector-card .connector-icon svg {
+    width: 24px;
+    height: 24px;
+}
+.connector-card:nth-child(3n+2) .connector-icon {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+.connector-card:nth-child(3n+3) .connector-icon {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+.connector-card:nth-child(5n+4) .connector-icon {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+}
+.connector-card:nth-child(7n+5) .connector-icon {
+    background: rgba(236, 72, 153, 0.1);
+    color: #ec4899;
 }
 
 .connector-card .connector-name {

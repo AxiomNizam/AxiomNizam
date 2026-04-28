@@ -455,7 +455,38 @@
     gap: 0.6rem;
     align-items: flex-start;
 }
-.ni-logtype-icon { font-size: 1.4rem; }
+.ni-logtype-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+    padding: 5px;
+}
+.ni-logtype-icon svg {
+    width: 20px;
+    height: 20px;
+}
+.ni-logtype-card:nth-child(3n+2) .ni-logtype-icon {
+    background: rgba(59, 130, 246, 0.12);
+    color: #3b82f6;
+}
+.ni-logtype-card:nth-child(3n+3) .ni-logtype-icon {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}
+.ni-logtype-card:nth-child(4n+4) .ni-logtype-icon {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+}
+.ni-logtype-card:nth-child(5n+5) .ni-logtype-icon {
+    background: rgba(139, 92, 246, 0.12);
+    color: #8b5cf6;
+}
 .ni-logtype-info h4 {
     margin: 0;
     font-size: 0.85rem;

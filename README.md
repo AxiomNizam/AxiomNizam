@@ -79,15 +79,15 @@ Runtime notes:
 ## Project Size Snapshot
 
 <!-- README_METRICS:START -->
-Code inventory snapshot (workspace scan on 2026-04-18):
+Code inventory snapshot (workspace scan on 2026-04-28):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 582
-- Total code lines: 212254
-- Go files (repository): 531
-- Go lines (repository): 174030
-- Internal modules: 87
-- Internal Go files: 489
-- Internal Go lines: 160801
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 594
+- Total code lines: 216800
+- Go files (repository): 543
+- Go lines (repository): 178580
+- Internal modules: 91
+- Internal Go files: 501
+- Internal Go lines: 165350
 
 Counting method used:
 
@@ -178,6 +178,44 @@ Runtime status notes:
 - OpenClaw and Ollama services are configured under the compose profile openclaw.
 - TinyLlama model ref is configured as ollama/tinyllama for SQL assistant calls.
 - If the model response exceeds timeout, backend returns rule-based SQL suggestions with an explicit timeout warning.
+
+### Platform Completion: Enterprise Data Platform Modules (2026-04-28)
+
+Implemented the first wave of enterprise data platform capabilities as part of the
+Platform Completion Plan. Full plan: [docs/PLATFORM_COMPLETION_PLAN.md](docs/PLATFORM_COMPLETION_PLAN.md).
+
+**New modules implemented (WS-1 through WS-4):**
+
+- **Data Catalog** (`internal/catalog/`) — Unified metadata registry with auto-discovery, PII detection, column profiling, full-text search, and catalog collections. REST API at `/api/v1/catalog/*`.
+- **Data Quality Rules** (`internal/quality/rules/`) — 15 built-in check types (freshness, volume, schema, not_null, unique, range, regex, referential, custom_sql, statistical, completeness, timeliness, etc.) with SLA tracking and alert integration.
+- **Schema Registry** (`internal/schemaregistry/`) — Versioned schema storage with backward/forward/full compatibility enforcement for JSON Schema and Avro. Confluent-compatible wire format at `/api/v1/schemas/*`.
+- **Alerting Engine** (`internal/alerting/`) — Declarative alert rules with multi-channel notification (Slack, email, webhook, PagerDuty), escalation policies, incident lifecycle, and silence management.
+
+Key numbers:
+- **4 new modules** with resource + reconciler + handlers
+- **12 new files** created
+- **4 new resource types**: CatalogAsset, QualityRule, Schema, AlertRule
+- **4 new reconcilers** ready for GenericController wiring
+- **20+ new API routes** across catalog, quality, schema, and alerting
+- **0 existing files modified** — purely additive
+
+New etcd prefixes:
+```
+/axiomnizam/catalogassets/
+/axiomnizam/catalogcollections/
+/axiomnizam/qualityrules/
+/axiomnizam/qualitychecks/
+/axiomnizam/schemas/
+/axiomnizam/schemasubjects/
+/axiomnizam/alertrules/
+/axiomnizam/alertincidents/
+/axiomnizam/notificationchannels/
+```
+
+Remaining workstreams (planned):
+- **WS-5** — Federated Query and Data Virtualization
+- **WS-6** — Governance and Compliance (GDPR/HIPAA/SOC2/PCI-DSS)
+- **WS-7** — Feature Store, Streaming Analytics, Anonymization, ML Pipelines
 
 ## Quick Start
 
@@ -899,11 +937,11 @@ This split is intentional in the current codebase.
 
 ## Internal Module Coverage
 
-Internal scan snapshot (2026-04-18):
+Internal scan snapshot (2026-04-28):
 
-- Module folders under internal/: 87
-- Go files under internal/: 489
-- Go lines under internal/: 160801
+- Module folders under internal/: 91
+- Go files under internal/: 501
+- Go lines under internal/: 165350
 
 Largest modules by Go lines:
 
@@ -917,6 +955,10 @@ Largest modules by Go lines:
 - policies (16 files, 6219 lines)
 - netintel (5 files, 6025 lines)
 - vectorplus (2 files, 5059 lines)
+- catalog (5 files, ~2500 lines) [NEW]
+- schemaregistry (4 files, ~2200 lines) [NEW]
+- alerting (2 files, ~1800 lines) [NEW]
+- quality/rules (2 files, ~1500 lines) [NEW]
 
 Full internal module inventory (alphabetical):
 
