@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
 )
@@ -65,9 +66,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, obj reconciler.Resource)
 	})
 	res.Status = status
 
-	if r.store != nil {
-		_ = r.store.Update(ctx, res)
-	}
+	storeutil.Update(ctx, r.store, res) //nolint:errcheck
 	return reconciler.ReconcileResult{}
 }
 
@@ -108,9 +107,7 @@ func (r *RoleBindingReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 	})
 	res.Status = status
 
-	if r.store != nil {
-		_ = r.store.Update(ctx, res)
-	}
+	storeutil.Update(ctx, r.store, res) //nolint:errcheck
 	return reconciler.ReconcileResult{}
 }
 

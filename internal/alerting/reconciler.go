@@ -14,9 +14,13 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // ConditionEvaluator evaluates alert conditions.
@@ -74,9 +78,7 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 		status.ObservedGeneration = rule.Generation
 		status.LastTransitionTime = now
 		rule.Status = status
-		if r.ruleStore != nil {
-			_ = r.ruleStore.Update(ctx, rule)
-		}
+		storeutil.Update(ctx, r.ruleStore, rule) //nolint:errcheck
 		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 1 * time.Hour}
 	}
 
@@ -90,9 +92,7 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 			status.ObservedGeneration = rule.Generation
 			status.LastTransitionTime = now
 			rule.Status = status
-			if r.ruleStore != nil {
-				_ = r.ruleStore.Update(ctx, rule)
-			}
+			storeutil.Update(ctx, r.ruleStore, rule) //nolint:errcheck
 			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 5 * time.Minute}
 		}
 	}
@@ -126,9 +126,7 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 			status.ObservedGeneration = rule.Generation
 			status.LastTransitionTime = now
 			rule.Status = status
-			if r.ruleStore != nil {
-				_ = r.ruleStore.Update(ctx, rule)
-			}
+			storeutil.Update(ctx, r.ruleStore, rule) //nolint:errcheck
 			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: evalInterval}
 		}
 		conditionMet = met
@@ -179,9 +177,7 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 	status.Phase = "Active"
 	rule.Status = status
 
-	if r.ruleStore != nil {
-		_ = r.ruleStore.Update(ctx, rule)
-	}
+	storeutil.Update(ctx, r.ruleStore, rule) //nolint:errcheck
 
 	return reconciler.ReconcileResult{Requeue: true, RequeueAfter: evalInterval}
 }
@@ -225,7 +221,7 @@ func (r *AlertRuleReconciler) fireAlert(ctx context.Context, rule *AlertRuleReso
 			},
 		}
 
-		_ = r.incidentStore.Create(ctx, incident)
+		storeutil.Create(ctx, r.incidentStore, incident) //nolint:errcheck
 		status.ActiveIncident = incident.Name
 
 		// Dispatch notifications.
@@ -245,7 +241,7 @@ func (r *AlertRuleReconciler) resolveAlert(ctx context.Context, rule *AlertRuleR
 			incident.Status.ResolvedAt = &now
 			incident.Status.Phase = "Resolved"
 			incident.Status.LastTransitionTime = now
-			_ = r.incidentStore.Update(ctx, incident)
+			storeutil.Update(ctx, r.incidentStore, incident) //nolint:errcheck
 		}
 		status.ActiveIncident = ""
 	}
@@ -284,14 +280,14 @@ func (r *AlertRuleReconciler) checkEscalation(ctx context.Context, rule *AlertRu
 		// Escalate.
 		incident.Status.EscalationLevel++
 		incident.Status.LastTransitionTime = now
-		_ = r.incidentStore.Update(ctx, incident)
+		storeutil.Update(ctx, r.incidentStore, incident) //nolint:errcheck
 
 		// Notify escalation channels.
 		for _, chRef := range level.Channels {
 			if r.channelStore != nil && r.notifier != nil {
 				ch, err := r.channelStore.Get(ctx, chRef.Name)
 				if err == nil {
-					_ = r.notifier.Notify(ctx, ch, incident)
+					if err := r.notifier.Notify(ctx, ch, incident); err != nil { logging.Z().Warn("notification dispatch failed", zap.String("channel", ch.Name), zap.Error(err)) }
 				}
 			}
 		}
@@ -312,7 +308,7 @@ func (r *AlertRuleReconciler) dispatchNotifications(ctx context.Context, rule *A
 		if !ch.Spec.Enabled {
 			continue
 		}
-		_ = r.notifier.Notify(ctx, ch, incident)
+		if err := r.notifier.Notify(ctx, ch, incident); err != nil { logging.Z().Warn("notification dispatch failed", zap.String("channel", ch.Name), zap.Error(err)) }
 	}
 }
 

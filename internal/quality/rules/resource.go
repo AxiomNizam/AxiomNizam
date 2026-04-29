@@ -137,6 +137,11 @@ type CompletenessRule struct {
 	Threshold float64 `json:"threshold"` // Min completeness ratio (0-1)
 }
 
+type RowCountChangeRule struct {
+	MaxChangePct  float64 `json:"maxChangePct"`  // Max allowed % change
+	PreviousCount int64   `json:"previousCount"` // Previous row count (updated by reconciler)
+}
+
 type TimelinessRule struct {
 	MaxDelay        string `json:"maxDelay"`        // Max acceptable delay: "5m", "1h"
 	TimestampColumn string `json:"timestampColumn"`
@@ -187,6 +192,7 @@ type QualityRuleSpec struct {
 	CustomSQL      *CustomSQLRule      `json:"customSQL,omitempty"`
 	Statistical    *StatisticalRule    `json:"statistical,omitempty"`
 	Completeness   *CompletenessRule   `json:"completeness,omitempty"`
+	RowCountChange *RowCountChangeRule `json:"rowCountChange,omitempty"`
 	Timeliness     *TimelinessRule     `json:"timeliness,omitempty"`
 
 	// Alerting

@@ -1,0 +1,408 @@
+package governance
+
+// =====================================================
+// WS-6 — Governance REST API Handlers
+//
+// Provides CRUD for compliance policies, retention policies,
+// access requests, and erasure workflows.
+// =====================================================
+
+import (
+	"net/http"
+	"time"
+
+	"example.com/axiomnizam/internal/platform/store"
+	"github.com/gin-gonic/gin"
+)
+
+// GovernanceHandlers provides REST API handlers for governance.
+type GovernanceHandlers struct {
+	policyStore    store.ResourceStore[*CompliancePolicyResource]
+	retentionStore store.ResourceStore[*RetentionPolicyResource]
+	accessStore    store.ResourceStore[*AccessRequestResource]
+}
+
+// NewGovernanceHandlers creates new handlers.
+func NewGovernanceHandlers(
+	policyStore store.ResourceStore[*CompliancePolicyResource],
+	retentionStore store.ResourceStore[*RetentionPolicyResource],
+	accessStore store.ResourceStore[*AccessRequestResource],
+) *GovernanceHandlers {
+	return &GovernanceHandlers{
+		policyStore:    policyStore,
+		retentionStore: retentionStore,
+		accessStore:    accessStore,
+	}
+}
+
+// RegisterRoutes registers governance API routes.
+func (h *GovernanceHandlers) RegisterRoutes(rg *gin.RouterGroup) {
+	gov := rg.Group("/governance")
+	{
+		// Compliance policies
+		gov.GET("/policies", h.ListPolicies)
+		gov.GET("/policies/:name", h.GetPolicy)
+		gov.POST("/policies", h.CreatePolicy)
+		gov.PUT("/policies/:name", h.UpdatePolicy)
+		gov.DELETE("/policies/:name", h.DeletePolicy)
+		gov.POST("/policies/:name/audit", h.TriggerAudit)
+
+		// Retention policies
+		gov.GET("/retention", h.ListRetentionPolicies)
+		gov.GET("/retention/:name", h.GetRetentionPolicy)
+		gov.POST("/retention", h.CreateRetentionPolicy)
+		gov.DELETE("/retention/:name", h.DeleteRetentionPolicy)
+
+		// Access requests
+		gov.GET("/access", h.ListAccessRequests)
+		gov.GET("/access/:name", h.GetAccessRequest)
+		gov.POST("/access", h.CreateAccessRequest)
+		gov.POST("/access/:name/approve", h.ApproveAccessRequest)
+		gov.POST("/access/:name/deny", h.DenyAccessRequest)
+		gov.POST("/access/:name/revoke", h.RevokeAccessRequest)
+
+		// Summary
+		gov.GET("/summary", h.GetSummary)
+	}
+}
+
+// --- Compliance Policy Handlers ---
+
+func (h *GovernanceHandlers) ListPolicies(c *gin.Context) {
+	policies, err := h.policyStore.List(c.Request.Context(), "")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	frameworkFilter := c.Query("framework")
+	var filtered []*CompliancePolicyResource
+	for _, p := range policies {
+		if frameworkFilter != "" && string(p.Spec.Framework) != frameworkFilter {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"policies": filtered, "count": len(filtered)})
+}
+
+func (h *GovernanceHandlers) GetPolicy(c *gin.Context) {
+	name := c.Param("name")
+	policy, err := h.policyStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		return
+	}
+	c.JSON(http.StatusOK, policy)
+}
+
+func (h *GovernanceHandlers) CreatePolicy(c *gin.Context) {
+	var policy CompliancePolicyResource
+	if err := c.ShouldBindJSON(&policy); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	policy.Kind = CompliancePolicyKind
+	policy.APIVersion = CompliancePolicyAPIVersion
+	now := time.Now()
+	policy.CreatedAt = now
+	policy.Generation = 1
+	policy.Status.Phase = "Pending"
+
+	if err := h.policyStore.Create(c.Request.Context(), &policy); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, policy)
+}
+
+func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
+	name := c.Param("name")
+	existing, err := h.policyStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		return
+	}
+
+	var updated CompliancePolicyResource
+	if err := c.ShouldBindJSON(&updated); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated.ObjectMeta = existing.ObjectMeta
+	updated.Generation = existing.Generation + 1
+	updated.Status = existing.Status
+
+	if err := h.policyStore.Update(c.Request.Context(), &updated); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+func (h *GovernanceHandlers) DeletePolicy(c *gin.Context) {
+	name := c.Param("name")
+	if err := h.policyStore.Delete(c.Request.Context(), name); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": name})
+}
+
+func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
+	name := c.Param("name")
+	policy, err := h.policyStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		return
+	}
+
+	policy.Generation++
+	if err := h.policyStore.Update(c.Request.Context(), policy); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "audit triggered", "policy": name})
+}
+
+// --- Retention Policy Handlers ---
+
+func (h *GovernanceHandlers) ListRetentionPolicies(c *gin.Context) {
+	policies, err := h.retentionStore.List(c.Request.Context(), "")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"retentionPolicies": policies, "count": len(policies)})
+}
+
+func (h *GovernanceHandlers) GetRetentionPolicy(c *gin.Context) {
+	name := c.Param("name")
+	policy, err := h.retentionStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "retention policy not found", "name": name})
+		return
+	}
+	c.JSON(http.StatusOK, policy)
+}
+
+func (h *GovernanceHandlers) CreateRetentionPolicy(c *gin.Context) {
+	var policy RetentionPolicyResource
+	if err := c.ShouldBindJSON(&policy); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	policy.Kind = RetentionPolicyKind
+	policy.APIVersion = RetentionPolicyAPIVersion
+	now := time.Now()
+	policy.CreatedAt = now
+	policy.Generation = 1
+	policy.Status.Phase = "Pending"
+
+	if err := h.retentionStore.Create(c.Request.Context(), &policy); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, policy)
+}
+
+func (h *GovernanceHandlers) DeleteRetentionPolicy(c *gin.Context) {
+	name := c.Param("name")
+	if err := h.retentionStore.Delete(c.Request.Context(), name); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "retention policy not found", "name": name})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": name})
+}
+
+// --- Access Request Handlers ---
+
+func (h *GovernanceHandlers) ListAccessRequests(c *gin.Context) {
+	requests, err := h.accessStore.List(c.Request.Context(), "")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	statusFilter := c.Query("status")
+	var filtered []*AccessRequestResource
+	for _, req := range requests {
+		if statusFilter != "" && req.Status.ApprovalStatus != statusFilter {
+			continue
+		}
+		filtered = append(filtered, req)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"accessRequests": filtered, "count": len(filtered)})
+}
+
+func (h *GovernanceHandlers) GetAccessRequest(c *gin.Context) {
+	name := c.Param("name")
+	req, err := h.accessStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		return
+	}
+	c.JSON(http.StatusOK, req)
+}
+
+func (h *GovernanceHandlers) CreateAccessRequest(c *gin.Context) {
+	var req AccessRequestResource
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	req.Kind = AccessRequestKind
+	req.APIVersion = AccessRequestAPIVersion
+	now := time.Now()
+	req.CreatedAt = now
+	req.Generation = 1
+	req.Status.Phase = "Pending"
+	req.Status.ApprovalStatus = "pending"
+
+	if err := h.accessStore.Create(c.Request.Context(), &req); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, req)
+}
+
+func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
+	name := c.Param("name")
+	req, err := h.accessStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		return
+	}
+
+	var body struct {
+		ApprovedBy string `json:"approvedBy"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	now := time.Now()
+	req.Status.ApprovalStatus = "approved"
+	req.Status.ApprovedBy = append(req.Status.ApprovedBy, body.ApprovedBy)
+	req.Status.GrantedAt = &now
+	req.Status.Phase = "Approved"
+	req.Status.LastTransitionTime = now
+
+	// Calculate expiry.
+	if req.Spec.Duration != "" && req.Spec.Duration != "permanent" {
+		if d, err := time.ParseDuration(req.Spec.Duration); err == nil {
+			expires := now.Add(d)
+			req.Status.ExpiresAt = &expires
+		}
+	}
+
+	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"approved": true, "request": name, "expiresAt": req.Status.ExpiresAt})
+}
+
+func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
+	name := c.Param("name")
+	req, err := h.accessStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		return
+	}
+
+	var body struct {
+		DeniedBy string `json:"deniedBy"`
+		Reason   string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	now := time.Now()
+	req.Status.ApprovalStatus = "denied"
+	req.Status.DeniedBy = body.DeniedBy
+	req.Status.DenyReason = body.Reason
+	req.Status.Phase = "Denied"
+	req.Status.LastTransitionTime = now
+
+	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"denied": true, "request": name})
+}
+
+func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
+	name := c.Param("name")
+	req, err := h.accessStore.Get(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		return
+	}
+
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	now := time.Now()
+	req.Status.ApprovalStatus = "revoked"
+	req.Status.RevokedAt = &now
+	req.Status.RevokeReason = body.Reason
+	req.Status.Phase = "Revoked"
+	req.Status.LastTransitionTime = now
+
+	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"revoked": true, "request": name})
+}
+
+// --- Summary ---
+
+func (h *GovernanceHandlers) GetSummary(c *gin.Context) {
+	policies, _ := h.policyStore.List(c.Request.Context(), "")
+	requests, _ := h.accessStore.List(c.Request.Context(), "")
+
+	var totalPolicies, compliantPolicies, nonCompliantPolicies int
+	var totalViolations int
+	var avgScore float64
+
+	for _, p := range policies {
+		totalPolicies++
+		if p.Status.Compliant {
+			compliantPolicies++
+		} else {
+			nonCompliantPolicies++
+		}
+		totalViolations += len(p.Status.Violations)
+		avgScore += p.Status.ComplianceScore
+	}
+	if totalPolicies > 0 {
+		avgScore /= float64(totalPolicies)
+	}
+
+	var pendingRequests, approvedRequests int
+	for _, r := range requests {
+		switch r.Status.ApprovalStatus {
+		case "pending":
+			pendingRequests++
+		case "approved":
+			approvedRequests++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"totalPolicies":        totalPolicies,
+		"compliantPolicies":    compliantPolicies,
+		"nonCompliantPolicies": nonCompliantPolicies,
+		"totalViolations":      totalViolations,
+		"avgComplianceScore":   avgScore,
+		"pendingAccessRequests": pendingRequests,
+		"activeAccessGrants":   approvedRequests,
+	})
+}

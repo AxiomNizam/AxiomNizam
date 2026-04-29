@@ -1,10 +1,10 @@
 # AxiomNizam — Platform Completion Plan
 
-**Version:** 1.1  
+**Version:** 1.5  
 **Date:** 2026-04-28  
-**Status:** In Progress — WS-1, WS-2, WS-3, WS-4 partially implemented  
+**Status:** In Progress — All 7 workstreams have substantial implementations  
 **Author:** Platform Architecture Team  
-**Last Updated:** 2026-04-28
+**Last Updated:** 2026-04-29
 
 ---
 
@@ -13,6 +13,173 @@
 AxiomNizam is already a powerful declarative control-plane with 33 reconcilers, 88 internal modules, and 174K+ lines of Go. This document defines the roadmap to transform it from a strong data platform into a **complete, production-grade enterprise data platform** that competes with Databricks, Snowflake, and Confluent — while maintaining the unique K8s-style declarative architecture.
 
 **Scope:** 25 new capabilities across 7 workstreams, estimated 12-16 weeks of engineering.
+
+---
+
+## Implementation Progress Tracker
+
+> This section tracks actual implementation status against the plan. Updated as modules are completed.
+
+### Overall Status
+
+| Workstream | Status | Files Planned | Files Implemented | Completion |
+|-----------|--------|---------------|-------------------|------------|
+| WS-1: Data Catalog and Metadata | 🟡 In Progress | 9 | 6 | ~75% |
+| WS-2: Data Quality and Contracts | 🟢 Near Complete | 10 | 8 | ~80% |
+| WS-3: Schema Registry and Evolution | 🟡 In Progress | 9 | 5 | ~60% |
+| WS-4: Observability and Alerting | 🟢 Near Complete | 15 | 11 | ~75% |
+| WS-5: Federated Query and Virtualization | 🟡 In Progress | 14 | 7 | ~50% |
+| WS-6: Governance and Compliance | 🟡 In Progress | 13 | 5 | ~40% |
+| WS-7: Advanced Analytics and ML | 🟡 In Progress | 22 | 14 | ~65% |
+
+### Detailed Module Status
+
+#### WS-1: Data Catalog and Metadata
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 1.1 Catalog Core | `internal/catalog/resource.go` | Done | `CatalogAssetResource` + `CatalogCollectionResource` with full interface impl |
+| 1.1 Catalog Core | `internal/catalog/reconciler.go` | Done | Full reconcile loop: observe/diff/act/status, freshness calc, scan scheduling |
+| 1.1 Catalog Core | `internal/catalog/scanner.go` | Done | Auto-discovery with multi-database/schema scanning, exclusion patterns |
+| 1.1 Catalog Core | `internal/catalog/handlers.go` | Done | Full REST API: CRUD, search, scan, domains, statistics, collections |
+| 1.1 Catalog Core | `internal/catalog/indexer.go` | Done | In-memory inverted index with tokenization, weighted scoring, faceted filtering, pagination |
+| 1.1 Catalog Core | `internal/catalog/models.go` | Missing | Models inlined in resource.go (acceptable) |
+| 1.2 Metadata Enrichment | `internal/catalog/enrichment.go` | Done | PII detection (15 patterns), auto-classification, column profiling |
+| 1.2 Metadata Enrichment | Enrichment reconciler | Missing | Scheduled enrichment reconciler not yet separate |
+| 1.3 Catalog UI | `frontend/templates/catalog-dashboard.*` | Missing | No frontend dashboard yet |
+
+#### WS-2: Data Quality and Contracts
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 2.1 Quality Rules | `internal/quality/rules/resource.go` | Done | `QualityRuleResource` + `QualityCheckResource` with full interface impl |
+| 2.1 Quality Rules | `internal/quality/rules/reconciler.go` | Done | Full reconcile loop with check execution, SLA evaluation, scheduling |
+| 2.1 Quality Rules | `internal/quality/rules/engine.go` | Done | 9 check types: freshness, volume, not_null, unique, custom_sql, range, completeness, row_count_change, statistical |
+| 2.1 Quality Rules | `internal/quality/rules/handlers.go` | Done | Full REST API: CRUD, manual trigger, check history, asset score, summary |
+| 2.1 Quality Rules | `internal/quality/rules/alerting.go` | Done | Alert integration with SLA breach escalation and deduplication |
+| 2.1 Quality Rules | `internal/quality/rules/checks.go` | Missing | Additional check types (schema, regex, referential, distribution, timeliness) |
+| 2.2 Data Contracts | `internal/contracts/resource.go` | Done | `DataContractResource` with schema, SLA, quality, compatibility specs |
+| 2.2 Data Contracts | `internal/contracts/reconciler.go` | Done | Full reconcile: schema validation, quality check, freshness SLA, violation detection |
+| 2.2 Data Contracts | `internal/contracts/validator.go` | Done | Breaking change detection: backward/forward/full compat, type narrowing/widening |
+| 2.2 Data Contracts | `internal/contracts/handlers.go` | Done | REST API: CRUD, violations, validate trigger |
+| 2.3 Quality Dashboard | `frontend/templates/quality-dashboard.*` | Missing | No frontend dashboard yet |
+
+#### WS-3: Schema Registry and Evolution
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 3.1 Schema Registry | `internal/schemaregistry/resource.go` | Done | `SchemaResource` + `SchemaSubjectResource`, full types + compatibility modes |
+| 3.1 Schema Registry | `internal/schemaregistry/reconciler.go` | Done | Full reconcile: fingerprint, compat check, version assignment, subject update |
+| 3.1 Schema Registry | `internal/schemaregistry/compatibility.go` | Done | JSON Schema + Avro backward/forward/full checking |
+| 3.1 Schema Registry | `internal/schemaregistry/handlers.go` | Done | Confluent-compatible API: subjects, versions, register, compat check, config |
+| 3.1 Schema Registry | `internal/schemaregistry/cache.go` | Done | In-memory cache with ID, subject+version, and latest lookups; hit/miss stats |
+| 3.1 Schema Registry | `internal/schemaregistry/serializer.go` | Missing | Protobuf parsing not yet implemented |
+| 3.2 Schema Evolution | `internal/schemaregistry/evolution/` | Missing | Migration planner, dual-write, consumer tracking not yet created |
+
+#### WS-4: Observability and Alerting
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 4.1 Alert Rules | `internal/alerting/resource.go` | Done | `AlertRuleResource` + `AlertIncidentResource` + `NotificationChannelResource` |
+| 4.1 Alert Rules | `internal/alerting/reconciler.go` | Done | Full reconcile: evaluation, fire/resolve, escalation, notification dispatch |
+| 4.1 Alert Rules | `internal/alerting/handlers.go` | Done | Full REST API: rules CRUD, silence/unsilence, incidents ack/resolve, channels CRUD, test, summary |
+| 4.1 Alert Rules | `internal/alerting/channels.go` | Done | Multi-channel dispatch: Slack, email (SMTP), webhook, PagerDuty, Microsoft Teams |
+| 4.1 Alert Rules | `internal/alerting/evaluator.go` | Missing | Condition evaluation engine not yet separate |
+| 4.1 Alert Rules | `internal/alerting/silencer.go` | Missing | Alert suppression and maintenance windows (basic silence in handlers) |
+| 4.3 SLO Tracking | `internal/slo/resource.go` | Done | `SLOResource` with target, window, SLI indicator, burn rate alerts |
+| 4.3 SLO Tracking | `internal/slo/reconciler.go` | Done | Full reconcile: SLI calculation, error budget, burn rate, time-to-exhaust |
+| 4.3 SLO Tracking | `internal/slo/handlers.go` | Done | REST API: CRUD, budget details, all-status summary |
+| 4.4 Cost Attribution | `internal/costing/resource.go` | Done | `CostPolicyResource` + `UsageRecordResource` with quotas, rate cards |
+| 4.4 Cost Attribution | `internal/costing/reconciler.go` | Done | Full reconcile: usage aggregation, quota checking, period management |
+| 4.4 Cost Attribution | `internal/costing/handlers.go` | Done | REST API: policies CRUD, usage reports, tenant breakdown, cost report |
+| 4.4 Cost Attribution | `internal/costing/tracker.go` | ✅ Done | Real-time usage tracking middleware: API, query, pipeline, storage tracking with batched writes |
+
+#### WS-5: Federated Query and Virtualization
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 5.1 Federated Query | `internal/federation/resource.go` | ✅ Done | `VirtualTableResource` + `FederatedQueryResource` with plan nodes, query formats |
+| 5.1 Federated Query | `internal/federation/reconciler.go` | ✅ Done | Full reconcile: source health probing, table validation, estimated rows |
+| 5.1 Federated Query | `internal/federation/planner.go` | ✅ Done | SQL table reference extraction, catalog resolution, plan tree generation |
+| 5.1 Federated Query | `internal/federation/handlers.go` | ✅ Done | REST API: virtual tables CRUD, query execution, EXPLAIN, query history |
+| 5.1 Federated Query | `internal/federation/executor.go` | ✅ Done | Parallel sub-query execution with concurrency control and error aggregation |
+| 5.1 Federated Query | `internal/federation/merger.go` | ✅ Done | Result set merging: UNION, INNER JOIN (hash), LEFT JOIN, sort, limit |
+| 5.1 Federated Query | `internal/federation/optimizer.go` | ✅ Done | Cost-based optimization: predicate/projection/limit push-down, join reordering, recommendations |
+| 5.1 Federated Query | `internal/federation/cache.go` | ❌ Missing | Result caching layer |
+| 5.2 Materialized Views | `internal/federation/materialized/` | ❌ Missing | Pre-computed query results |
+| 5.3 Query Profiler | `internal/federation/profiler/` | ❌ Missing | Execution analysis and recommendations |
+
+#### WS-6: Governance and Compliance
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 6.1 Compliance Policies | `internal/governance/resource.go` | ✅ Done | `CompliancePolicyResource` + `RetentionPolicyResource` + `AccessRequestResource` |
+| 6.1 Compliance Policies | `internal/governance/reconciler.go` | ✅ Done | Full reconcile: scope-based asset audit, 5 rule types (encryption, retention, masking, audit, access) |
+| 6.1 Compliance Policies | `internal/governance/handlers.go` | ✅ Done | REST API: policies CRUD, retention CRUD, access requests with approve/deny/revoke, summary |
+| 6.1 Compliance Policies | `internal/governance/enforcer.go` | ❌ Missing | Real-time policy enforcement engine |
+| 6.1 Compliance Policies | `internal/governance/erasure.go` | ✅ Done | Right-to-erasure workflow: subject data scan, cascading deletion, compliance certificate with SHA-256 proof hash |
+| 6.1 Compliance Policies | `internal/governance/classification.go` | ❌ Missing | Auto-classification rules |
+| 6.1 Compliance Policies | `internal/governance/reports.go` | ✅ Done | Compliance report generation: per-framework reports, violation summaries, actionable recommendations |
+| 6.2 Retention Engine | `internal/governance/retention/` | ❌ Missing | Automated data lifecycle management |
+| 6.3 Access Governance | `internal/governance/access/` | ❌ Missing | Access certification campaigns |
+
+#### WS-7: Advanced Analytics and ML
+
+| Module | File | Status | Notes |
+|--------|------|--------|-------|
+| 7.1 Feature Store | `internal/featurestore/resource.go` | ✅ Done | `FeatureGroupResource` with entity keys, feature specs, online/offline store configs |
+| 7.1 Feature Store | `internal/featurestore/reconciler.go` | ✅ Done | Full reconcile: scheduled materialization, freshness tracking, store status |
+| 7.1 Feature Store | `internal/featurestore/handlers.go` | ✅ Done | REST API: groups CRUD, trigger materialize, online serving endpoint |
+| 7.1 Feature Store | `internal/featurestore/online.go` | ❌ Missing | Online serving backend (Redis/Postgres point lookups) |
+| 7.1 Feature Store | `internal/featurestore/offline.go` | ❌ Missing | Offline serving backend (batch for training) |
+| 7.1 Feature Store | `internal/featurestore/registry.go` | ❌ Missing | Feature metadata registry |
+| 7.2 Streaming Analytics | `internal/streamanalytics/resource.go` | ✅ Done | `StreamJobResource` with window specs, aggregations, filters, sinks |
+| 7.2 Streaming Analytics | `internal/streamanalytics/reconciler.go` | ✅ Done | Full reconcile: job lifecycle (start/stop/checkpoint), lag monitoring |
+| 7.2 Streaming Analytics | `internal/streamanalytics/handlers.go` | ✅ Done | REST API: jobs CRUD, start/stop controls |
+| 7.2 Streaming Analytics | `internal/streamanalytics/window.go` | ✅ Done | Window + WindowManager: tumbling/sliding windows, event collection, aggregation flush, group-by support |
+| 7.2 Streaming Analytics | `internal/streamanalytics/aggregator.go` | ❌ Missing | Aggregation engine |
+| 7.2 Streaming Analytics | `internal/streamanalytics/sink.go` | ❌ Missing | Output sinks (database, webhook, event bus) |
+| 7.3 Anonymization | `internal/anonymization/resource.go` | ✅ Done | `AnonymizationPolicyResource` with 8 masking techniques, scope, output modes |
+| 7.3 Anonymization | `internal/anonymization/reconciler.go` | ✅ Done | Full reconcile: scheduled execution, asset/column/row tracking |
+| 7.3 Anonymization | `internal/anonymization/handlers.go` | ✅ Done | REST API: policies CRUD, trigger run |
+| 7.3 Anonymization | `internal/anonymization/masker.go` | ✅ Done | 8 masking techniques: hash (HMAC-SHA256), redact, partial (email-aware), tokenize, noise, generalize, synthetic, shuffle |
+| 7.3 Anonymization | `internal/anonymization/synthetic.go` | ❌ Missing | Synthetic data generator |
+| 7.4 ML Pipelines | `internal/mlpipeline/resource.go` | ✅ Done | `MLPipelineResource` + `ModelDeploymentResource` with steps, canary, autoscale |
+| 7.4 ML Pipelines | `internal/mlpipeline/reconciler.go` | ✅ Done | Full reconcile: step-by-step execution with dependency resolution, failure handling |
+| 7.4 ML Pipelines | `internal/mlpipeline/handlers.go` | ✅ Done | REST API: pipelines CRUD, trigger run, deployments CRUD |
+
+### Implementation Quality Assessment
+
+All implemented modules follow the established AxiomNizam patterns:
+
+- Declarative resources with `TypeMeta + ObjectMeta + Spec + Status`
+- Reconcile loops with observe/diff/act/update-status pattern
+- Proper `resources.Resource` interface implementation
+- Condition-based status reporting via `upsertCondition`
+- Requeue with backoff on errors
+- Store-based persistence via `store.ResourceStore[T]`
+- Gin-based REST handlers with proper route registration
+
+### Current Platform Metrics
+
+| Metric | Baseline (Plan) | Current |
+|--------|-----------------|---------|
+| Internal modules | 88 | 97+ (13 new modules across all 7 workstreams) |
+| Active reconciler controllers | 33 | 33+ (13 new reconcilers wired via feature flags) |
+| Resource types | 30+ | 53+ (23 new resource types across all workstreams) |
+| etcd prefixes | 30 | 30+ (new prefixes for all new resource types) |
+| Go lines | 174,000+ | ~206,000+ |
+| Files implemented (new) | 0 | 56 |
+| Files remaining | 101 | ~35 (mostly frontend dashboards and secondary utilities) |
+
+### Next Steps (Recommended Priority)
+
+1. **Complete WS-5** — Add result caching layer; create materialized views and query profiler sub-modules
+2. **Complete WS-6** — Add auto-classification rules, enforcer, retention engine, access certification
+3. **Complete WS-7** — Add online/offline serving backends, streaming aggregator + sink, synthetic data generator
+4. **Complete WS-3** — Add Protobuf serializer; create schema evolution manager
+5. **Complete WS-1/WS-4** — Add enrichment reconciler, alerting evaluator/silencer
+6. **Frontend dashboards** — Build all 9 planned dashboards
 
 ---
 
@@ -1896,7 +2063,20 @@ After all 7 workstreams are complete, AxiomNizam will cover:
 
 This plan adds 22 new modules (101 files, ~41,600 lines) to AxiomNizam, bringing the total to 110 internal modules, 53 reconciler controllers, and 54+ etcd prefixes. The platform will cover 92% of enterprise data platform requirements while maintaining its unique declarative architecture advantage.
 
-**Start with WS-1 (Catalog)** — it is the foundation everything else builds on.
+**Current progress (as of 2026-04-29):** 56 files implemented across 13 modules covering all 7 workstreams. Beyond the foundational resource/reconciler/handler triplets, execution engines are now in place: federated query executor with parallel sub-query execution and hash-join merging, cost-based query optimizer, GDPR erasure workflow with compliance certificates, compliance report generator, 8 anonymization masking functions, streaming windowing engine, and real-time usage tracking middleware. All code compiles cleanly.
+
+| Category | Files Implemented | Files Remaining |
+|----------|-------------------|-----------------|
+| Resource definitions | 13 | 0 |
+| Reconcilers | 13 | 0 |
+| REST handlers | 13 | 0 |
+| Execution engines and utilities | 17 | ~26 |
+| Frontend dashboards | 0 | 9 |
+| **Total** | **56** | **~35** |
+
+**What's functional:** Every module has its core resource types, reconcile loops, and REST APIs. The federation module can plan, execute, and merge cross-source queries. Governance can audit assets, generate compliance reports, and process GDPR erasure requests. Anonymization has all 8 masking techniques implemented. Streaming analytics has windowed aggregation. Cost attribution tracks API, query, pipeline, and storage usage.
+
+**What remains:** Result caching (federation), materialized views, schema evolution manager, auto-classification, online/offline feature serving backends, streaming sinks, synthetic data generator, and all 9 frontend dashboards.
 
 ---
 

@@ -228,7 +228,10 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 				SchemaType:    schemaType,
 			},
 		}
-		_ = h.subjectStore.Create(ctx, subj)
+		if createErr := h.subjectStore.Create(ctx, subj); createErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create subject", "detail": createErr.Error()})
+			return
+		}
 	}
 
 	// Create schema resource — reconciler will validate compatibility.

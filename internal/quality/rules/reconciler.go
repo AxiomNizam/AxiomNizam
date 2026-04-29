@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
 )
@@ -93,9 +94,7 @@ func (r *QualityRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 		status.ObservedGeneration = rule.Generation
 		status.LastTransitionTime = now
 		rule.Status = status
-		if r.store != nil {
-			_ = r.store.Update(ctx, rule)
-		}
+		storeutil.Update(ctx, r.store, rule) //nolint:errcheck
 		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 1 * time.Hour}
 	}
 
@@ -119,9 +118,7 @@ func (r *QualityRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 		status.ObservedGeneration = rule.Generation
 		status.LastTransitionTime = now
 		rule.Status = status
-		if r.store != nil {
-			_ = r.store.Update(ctx, rule)
-		}
+		storeutil.Update(ctx, r.store, rule) //nolint:errcheck
 		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 5 * time.Minute}
 	}
 
@@ -189,9 +186,7 @@ func (r *QualityRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 	status.LastTransitionTime = now
 	rule.Status = status
 
-	if r.store != nil {
-		_ = r.store.Update(ctx, rule)
-	}
+	storeutil.Update(ctx, r.store, rule) //nolint:errcheck
 
 	return reconciler.ReconcileResult{
 		Requeue:      true,

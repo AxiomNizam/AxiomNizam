@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
 )
@@ -70,9 +71,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.ObservedGeneration = asset.Generation
 		status.LastTransitionTime = now
 		asset.Status = status
-		if r.store != nil {
-			_ = r.store.Update(ctx, asset)
-		}
+		storeutil.Update(ctx, r.store, asset) //nolint:errcheck
 		return reconciler.ReconcileResult{}
 	}
 
@@ -85,9 +84,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 			status.ObservedGeneration = asset.Generation
 			status.LastTransitionTime = now
 			asset.Status = status
-			if r.store != nil {
-				_ = r.store.Update(ctx, asset)
-			}
+			storeutil.Update(ctx, r.store, asset) //nolint:errcheck
 		}
 		// Requeue for next scan interval.
 		return reconciler.ReconcileResult{
@@ -107,9 +104,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.ObservedGeneration = asset.Generation
 		status.LastTransitionTime = now
 		asset.Status = status
-		if r.store != nil {
-			_ = r.store.Update(ctx, asset)
-		}
+		storeutil.Update(ctx, r.store, asset) //nolint:errcheck
 		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 5 * time.Minute}
 	}
 
@@ -133,9 +128,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.ObservedGeneration = asset.Generation
 		status.LastTransitionTime = now
 		asset.Status = status
-		if r.store != nil {
-			_ = r.store.Update(ctx, asset)
-		}
+		storeutil.Update(ctx, r.store, asset) //nolint:errcheck
 		// Retry with backoff.
 		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
 	}
@@ -174,9 +167,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		asset.Spec.Columns = result.Columns
 	}
 
-	if r.store != nil {
-		_ = r.store.Update(ctx, asset)
-	}
+	storeutil.Update(ctx, r.store, asset) //nolint:errcheck
 
 	// Requeue for next scan.
 	return reconciler.ReconcileResult{

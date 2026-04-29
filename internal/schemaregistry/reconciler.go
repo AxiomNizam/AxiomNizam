@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
 )
@@ -112,9 +113,7 @@ func (r *SchemaReconciler) Reconcile(ctx context.Context, obj reconciler.Resourc
 			status.ObservedGeneration = schema.Generation
 			status.LastTransitionTime = now
 			schema.Status = status
-			if r.schemaStore != nil {
-				_ = r.schemaStore.Update(ctx, schema)
-			}
+			storeutil.Update(ctx, r.schemaStore, schema) //nolint:errcheck
 			return reconciler.ReconcileResult{}
 		}
 	}
@@ -142,9 +141,7 @@ func (r *SchemaReconciler) Reconcile(ctx context.Context, obj reconciler.Resourc
 		status.CompatibleWith = append(status.CompatibleWith, previousSchema.Status.Version)
 		// Unmark previous as latest.
 		previousSchema.Status.IsLatest = false
-		if r.schemaStore != nil {
-			_ = r.schemaStore.Update(ctx, previousSchema)
-		}
+		storeutil.Update(ctx, r.schemaStore, previousSchema) //nolint:errcheck
 	}
 
 	status.Conditions = upsertCondition(status.Conditions, resources.Condition{
@@ -165,7 +162,7 @@ func (r *SchemaReconciler) Reconcile(ctx context.Context, obj reconciler.Resourc
 	schema.Status = status
 
 	if r.schemaStore != nil {
-		_ = r.schemaStore.Update(ctx, schema)
+		storeutil.Update(ctx, r.schemaStore, schema) //nolint:errcheck
 	}
 
 	// Update subject status.
@@ -246,7 +243,7 @@ func (r *SchemaReconciler) updateSubjectStatus(ctx context.Context, schema *Sche
 	subj.Status.VersionCount++
 	subj.Status.LastTransitionTime = now
 
-	_ = r.subjectStore.Update(ctx, subj)
+	storeutil.Update(ctx, r.subjectStore, subj) //nolint:errcheck
 }
 
 // computeFingerprint generates a SHA-256 hash of the schema content.

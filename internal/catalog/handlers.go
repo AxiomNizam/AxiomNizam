@@ -266,6 +266,7 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 
 	// Create CatalogAssetResources for discovered assets.
 	now := time.Now()
+	var scanErrors []string
 	for _, discovered := range result.DiscoveredAssets {
 		assetName := fmt.Sprintf("%s.%s.%s", discovered.Database, discovered.Schema, discovered.Name)
 		asset := &CatalogAssetResource{
@@ -314,15 +315,35 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 				existing.Status.ColumnCount = len(discovered.Columns)
 				existing.Status.LastScannedAt = &now
 				existing.UpdatedAt = now
-				_ = h.assetStore.Update(c.Request.Context(), existing)
-				result.AssetsUpdated++
+				if updateErr := h.assetStore.Update(c.Request.Context(), existing); updateErr != nil {
+					scanErrors = append(scanErrors, fmt.Sprintf("failed to update %s: %v", assetName, updateErr))
+				} else {
+					result.AssetsUpdated++
+				}
+			} else {
+				scanErrors = append(scanErrors, fmt.Sprintf("failed to create %s: %v", assetName, err))
 			}
 		} else {
 			result.AssetsCreated++
 		}
 	}
 
-	c.JSON(http.StatusOK, result)
+	response := gin.H{
+		"dataSourceRef":  result.DataSourceRef,
+		"assetsFound":    result.AssetsFound,
+		"assetsCreated":  result.AssetsCreated,
+		"assetsUpdated":  result.AssetsUpdated,
+		"duration":       result.Duration.String(),
+	}
+	if len(scanErrors) > 0 {
+		response["errors"] = scanErrors
+		response["partialFailure"] = true
+	}
+	if len(result.Errors) > 0 {
+		response["scanErrors"] = result.Errors
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // ListDomains returns all unique business domains.
