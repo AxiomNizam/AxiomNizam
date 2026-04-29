@@ -217,6 +217,55 @@ Remaining workstreams (planned):
 - **WS-6** — Governance and Compliance (GDPR/HIPAA/SOC2/PCI-DSS)
 - **WS-7** — Feature Store, Streaming Analytics, Anonymization, ML Pipelines
 
+### etcd Replacement: Nomad-Style Embedded Storage (2026-04-29) ✅
+
+Completed the phased migration from external etcd to an embedded Raft + go-memdb + BoltDB
+storage layer, inspired by HashiCorp Nomad's architecture. Full plan:
+[docs/ETCD_REPLACEMENT_PLAN.md](docs/ETCD_REPLACEMENT_PLAN.md).
+
+**All 7 phases complete:**
+
+- **Phase 1 ✅** — `MemDBStore[T]`: in-memory `ResourceStore[T]` implementation using `hashicorp/go-memdb` with primary key and namespace secondary indexes.
+- **Phase 2 ✅** — Raft FSM: Finite State Machine with Apply/Snapshot/Restore, JSON-encoded command dispatch, and full state serialisation for Raft compaction.
+- **Phase 3 ✅** — Raft Server: embedded `hashicorp/raft` node with BoltDB log+stable stores, TCP transport, file-based snapshots, single-node bootstrap.
+- **Phase 4 ✅** — `RaftStore[T]`: unified `ResourceStore[T]` that reads from go-memdb and writes through Raft consensus.
+- **Phase 5 ✅** — Feature-flagged integration: `BackendManager` wired into `main.go` with `STORAGE_BACKEND=raft`. All 30 reconciler stores use backend-agnostic `NewStore` factory.
+- **Phase 6 ✅** — Direct etcd user migration: `KVStore` interface with `EtcdKVStore` and `MemDBKVStore` implementations for workflows, vectorplus, reviewflow, storage, and IAM modules.
+- **Phase 7 ✅** — etcd made optional: etcd connection skipped when `STORAGE_BACKEND=raft`, docker-compose etcd service moved to profile, `depends_on` removed.
+
+Key numbers:
+- **11 new files** created across `internal/platform/store/`, `internal/platform/raft/`, and `internal/platform/featureflags/`
+- **3 new dependencies**: `hashicorp/go-memdb`, `hashicorp/raft`, `hashicorp/raft-boltdb/v2`
+- **4 store implementations**: `EtcdStore[T]`, `MemDBStore[T]`, `RaftStore[T]`, plus `KVStore` (etcd + memdb)
+- **30 store creations** in main.go migrated to backend-agnostic `NewStore`
+- **etcd is now optional** — not required when `STORAGE_BACKEND=raft`
+
+New files:
+```
+internal/platform/store/memdb_schema.go   — go-memdb table/index schema definitions
+internal/platform/store/memdb_store.go    — MemDBStore[T] implementation
+internal/platform/store/raft_store.go     — RaftStore[T] implementation
+internal/platform/store/backend.go        — BackendManager + NewStore factory
+internal/platform/store/tables.go         — Central resource table registry
+internal/platform/store/kvstore.go        — KVStore interface + EtcdKVStore + MemDBKVStore
+internal/platform/raft/commands.go        — Raft log entry command types
+internal/platform/raft/fsm.go            — Raft FSM (Apply/Snapshot/Restore)
+internal/platform/raft/config.go         — Raft server configuration
+internal/platform/raft/server.go         — Raft server lifecycle and peer management
+```
+
+To run with embedded Raft (no etcd needed):
+```bash
+export STORAGE_BACKEND=raft
+docker compose up -d  # etcd will not start
+```
+
+To run with etcd (default, backward-compatible):
+```bash
+export STORAGE_BACKEND=etcd  # or leave unset
+docker compose --profile etcd up -d
+```
+
 ## Quick Start
 
 ### Docker Compose (recommended)

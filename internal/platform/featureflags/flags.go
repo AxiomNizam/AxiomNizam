@@ -68,6 +68,23 @@ func normalizeModule(module string) string {
 	return s
 }
 
+// StorageBackendIsRaft returns true when STORAGE_BACKEND=raft.
+// When true, the platform uses embedded Raft + go-memdb instead of
+// etcd for resource persistence.  Default is false (etcd).
+func StorageBackendIsRaft() bool {
+	return envBool("STORAGE_BACKEND_RAFT")
+}
+
+// StorageBackend returns the raw STORAGE_BACKEND env var value.
+// Valid values: "etcd" (default), "raft".
+func StorageBackend() string {
+	raw := strings.TrimSpace(os.Getenv("STORAGE_BACKEND"))
+	if raw == "" {
+		return "etcd"
+	}
+	return strings.ToLower(raw)
+}
+
 // Reset clears the cache — used in tests.
 func Reset() {
 	mu.Lock()

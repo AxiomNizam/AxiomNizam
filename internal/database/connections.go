@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"example.com/axiomnizam/internal/config"
@@ -101,8 +103,11 @@ func InitConnections(cfg *config.Config) *Connections {
 		log.Printf("❌ Elasticsearch connection failed: %v", err)
 	}
 
-	// etcd
-	if client, err := etcdclient.New(etcdclient.Config{
+	// etcd — skip when using embedded Raft storage backend
+	storageBackend := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_BACKEND")))
+	if storageBackend == "raft" {
+		log.Println("ℹ️  etcd skipped (STORAGE_BACKEND=raft — using embedded Raft storage)")
+	} else if client, err := etcdclient.New(etcdclient.Config{
 		Endpoints:   []string{fmt.Sprintf("%s:%s", cfg.Etcd.Host, cfg.Etcd.Port)},
 		DialTimeout: 5 * time.Second,
 	}); err == nil {

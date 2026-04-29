@@ -26,7 +26,7 @@ services:
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
     depends_on:
       # - valkey
-      - etcd
+      # - etcd  # Not required when STORAGE_BACKEND=raft
       # - mysql
       # - mariadb
       - postgres
@@ -151,10 +151,15 @@ services:
   #     - valkey-data:/data
   #   command: valkey-server --appendonly yes --dir /data
 
-  # etcd
+  # etcd — required for STORAGE_BACKEND=etcd (default).
+  # When using STORAGE_BACKEND=raft, etcd is not needed.
+  # To run without etcd: docker compose up -d --no-deps etcd
   etcd:
     image: quay.io/coreos/etcd:v3.5.9
     container_name: etcd
+    profiles:
+      - etcd
+      - default
     ports:
       - "2379:2379"
       - "2380:2380"

@@ -52,6 +52,7 @@ import (
 	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/platform"
 	genericctrl "example.com/axiomnizam/internal/platform/controller"
+	"example.com/axiomnizam/internal/platform/featureflags"
 	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/policies"
 	"example.com/axiomnizam/internal/rbac"
@@ -209,7 +210,7 @@ func main() {
 
 	// Initialize all connections
 	conns := database.InitConnections(cfg)
-	if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd); secretErr != nil {
+	if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
 		log.Printf("⚠️  DEMO_JWT_SECRET synchronization failed: %v", secretErr)
 	} else {
 		log.Println("✅ DEMO_JWT_SECRET synchronized for replica-safe token validation")
@@ -1676,11 +1677,29 @@ func main() {
 	// ====================================
 	// RECONCILER CONTROLLERS (P2 — AxiomNizam architecture)
 	// ====================================
-	// Initialize EtcdStore-backed reconcilers for all 11 migrated modules.
+	// Initialize ResourceStore-backed reconcilers for all migrated modules.
 	// Each reconciler is started in a background goroutine that periodically
 	// reconciles resources from the store.
-	if conns.Etcd != nil {
-		log.Println("🔄 Initializing reconciler controllers...")
+	//
+	// Storage backend is selected by STORAGE_BACKEND env var:
+	//   "etcd" (default) — uses EtcdStore[T] backed by external etcd
+	//   "raft"           — uses RaftStore[T] backed by embedded Raft + go-memdb
+	storageBackend := featureflags.StorageBackend()
+	var backendMgr *platformstore.BackendManager
+
+	if storageBackend == "raft" || conns.Etcd != nil {
+		// Initialize the backend manager.
+		var bmErr error
+		backendMgr, bmErr = platformstore.NewBackendManager(platformstore.AllResourceTables())
+		if bmErr != nil {
+			log.Fatalf("Failed to initialize storage backend: %v", bmErr)
+		}
+		if backendMgr.IsEtcd() {
+			backendMgr.SetEtcdClient(conns.Etcd)
+		}
+		defer backendMgr.Close()
+
+		log.Printf("🔄 Initializing reconciler controllers (backend=%s)...", storageBackend)
 		reconcilerMetrics := metrics.GlobalReconcilerMetrics
 
 		// Phase 1: Shadow mode — reconcilers run but don't affect production.
@@ -1695,9 +1714,7 @@ func main() {
 		}
 
 		// Bulk Operation reconciler
-		bulkStore := platformstore.NewEtcdStore[*bulk.BulkOperationResource](
-			conns.Etcd, "/axiomnizam/bulkoperations/", func() *bulk.BulkOperationResource { return &bulk.BulkOperationResource{} },
-		)
+		bulkStore := platformstore.NewStore[*bulk.BulkOperationResource](backendMgr, "bulkoperations", func() *bulk.BulkOperationResource { return &bulk.BulkOperationResource{} })
 		bulkReconciler := reconcilerpkg.NewInstrumented("bulk",
 			bulk.NewBulkOperationReconciler(bulkStore, platformManagers.Bulk), reconcilerMetrics)
 		reconcilerMetrics.Register("bulk")
@@ -1706,9 +1723,7 @@ func main() {
 		log.Println("  ✅ BulkOperation controller started (dual-write enabled)")
 
 		// EventBus Topic reconciler
-		topicStore := platformstore.NewEtcdStore[*eventbus.TopicResource](
-			conns.Etcd, "/axiomnizam/eventbus-topics/", func() *eventbus.TopicResource { return &eventbus.TopicResource{} },
-		)
+		topicStore := platformstore.NewStore[*eventbus.TopicResource](backendMgr, "eventbus-topics", func() *eventbus.TopicResource { return &eventbus.TopicResource{} })
 		topicReconciler := reconcilerpkg.NewInstrumented("eventbus-topic",
 			eventbus.NewTopicReconciler(topicStore, platformManagers.EventBus), reconcilerMetrics)
 		reconcilerMetrics.Register("eventbus-topic")
@@ -1717,9 +1732,7 @@ func main() {
 		log.Println("  ✅ EventBusTopic controller started (dual-write enabled)")
 
 		// EventBus Subscription reconciler
-		subscriptionStore := platformstore.NewEtcdStore[*eventbus.SubscriptionResource](
-			conns.Etcd, "/axiomnizam/eventbus-subscriptions/", func() *eventbus.SubscriptionResource { return &eventbus.SubscriptionResource{} },
-		)
+		subscriptionStore := platformstore.NewStore[*eventbus.SubscriptionResource](backendMgr, "eventbus-subscriptions", func() *eventbus.SubscriptionResource { return &eventbus.SubscriptionResource{} })
 		subscriptionReconciler := reconcilerpkg.NewInstrumented("eventbus-subscription",
 			eventbus.NewSubscriptionReconciler(subscriptionStore, platformManagers.EventBus), reconcilerMetrics)
 		reconcilerMetrics.Register("eventbus-subscription")
@@ -1727,9 +1740,7 @@ func main() {
 		log.Println("  ✅ EventBusSubscription controller started")
 
 		// Export Job reconciler
-		exportStore := platformstore.NewEtcdStore[*exportpkg.ExportJobResource](
-			conns.Etcd, "/axiomnizam/exportjobs/", func() *exportpkg.ExportJobResource { return &exportpkg.ExportJobResource{} },
-		)
+		exportStore := platformstore.NewStore[*exportpkg.ExportJobResource](backendMgr, "exportjobs", func() *exportpkg.ExportJobResource { return &exportpkg.ExportJobResource{} })
 		exportReconciler := reconcilerpkg.NewInstrumented("export",
 			exportpkg.NewExportJobReconciler(exportStore, platformManagers.Export), reconcilerMetrics)
 		reconcilerMetrics.Register("export")
@@ -1738,9 +1749,7 @@ func main() {
 		log.Println("  ✅ ExportJob controller started (dual-write enabled)")
 
 		// Streaming reconciler
-		streamStore := platformstore.NewEtcdStore[*streaming.StreamResource](
-			conns.Etcd, "/axiomnizam/streams/", func() *streaming.StreamResource { return &streaming.StreamResource{} },
-		)
+		streamStore := platformstore.NewStore[*streaming.StreamResource](backendMgr, "streams", func() *streaming.StreamResource { return &streaming.StreamResource{} })
 		streamReconciler := reconcilerpkg.NewInstrumented("streaming",
 			streaming.NewStreamReconciler(streamStore), reconcilerMetrics)
 		reconcilerMetrics.Register("streaming")
@@ -1749,9 +1758,7 @@ func main() {
 		log.Println("  ✅ Stream controller started (dual-write enabled)")
 
 		// RBAC Role reconciler
-		roleStore := platformstore.NewEtcdStore[*rbac.RoleResource](
-			conns.Etcd, "/axiomnizam/rbac-roles/", func() *rbac.RoleResource { return &rbac.RoleResource{} },
-		)
+		roleStore := platformstore.NewStore[*rbac.RoleResource](backendMgr, "rbac-roles", func() *rbac.RoleResource { return &rbac.RoleResource{} })
 		roleReconciler := reconcilerpkg.NewInstrumented("rbac-role",
 			rbac.NewRoleReconciler(roleStore, platformManagers.RBAC), reconcilerMetrics)
 		reconcilerMetrics.Register("rbac-role")
@@ -1760,9 +1767,7 @@ func main() {
 		log.Println("  ✅ RBAC Role controller started (dual-write enabled)")
 
 		// RBAC RoleBinding reconciler
-		roleBindingStore := platformstore.NewEtcdStore[*rbac.RoleBindingResource](
-			conns.Etcd, "/axiomnizam/rbac-rolebindings/", func() *rbac.RoleBindingResource { return &rbac.RoleBindingResource{} },
-		)
+		roleBindingStore := platformstore.NewStore[*rbac.RoleBindingResource](backendMgr, "rbac-rolebindings", func() *rbac.RoleBindingResource { return &rbac.RoleBindingResource{} })
 		roleBindingReconciler := reconcilerpkg.NewInstrumented("rbac-rolebinding",
 			rbac.NewRoleBindingReconciler(roleBindingStore, platformManagers.RBAC), reconcilerMetrics)
 		reconcilerMetrics.Register("rbac-rolebinding")
@@ -1770,9 +1775,7 @@ func main() {
 		log.Println("  ✅ RBAC RoleBinding controller started")
 
 		// Versioning Policy reconciler
-		versionPolicyStore := platformstore.NewEtcdStore[*versioning.VersionPolicyResource](
-			conns.Etcd, "/axiomnizam/version-policies/", func() *versioning.VersionPolicyResource { return &versioning.VersionPolicyResource{} },
-		)
+		versionPolicyStore := platformstore.NewStore[*versioning.VersionPolicyResource](backendMgr, "version-policies", func() *versioning.VersionPolicyResource { return &versioning.VersionPolicyResource{} })
 		versionPolicyReconciler := reconcilerpkg.NewInstrumented("versioning",
 			versioning.NewVersionPolicyReconciler(versionPolicyStore), reconcilerMetrics)
 		reconcilerMetrics.Register("versioning")
@@ -1781,9 +1784,7 @@ func main() {
 		log.Println("  ✅ VersionPolicy controller started (dual-write enabled)")
 
 		// Tracing Config reconciler
-		tracingConfigStore := platformstore.NewEtcdStore[*tracing.TracingConfigResource](
-			conns.Etcd, "/axiomnizam/tracing-configs/", func() *tracing.TracingConfigResource { return &tracing.TracingConfigResource{} },
-		)
+		tracingConfigStore := platformstore.NewStore[*tracing.TracingConfigResource](backendMgr, "tracing-configs", func() *tracing.TracingConfigResource { return &tracing.TracingConfigResource{} })
 		tracingConfigReconciler := reconcilerpkg.NewInstrumented("tracing",
 			tracing.NewTracingConfigReconciler(tracingConfigStore), reconcilerMetrics)
 		reconcilerMetrics.Register("tracing")
@@ -1792,9 +1793,7 @@ func main() {
 		log.Println("  ✅ TracingConfig controller started (dual-write enabled)")
 
 		// Lineage Node reconciler
-		lineageNodeStore := platformstore.NewEtcdStore[*lineage.LineageNodeResource](
-			conns.Etcd, "/axiomnizam/lineage-nodes/", func() *lineage.LineageNodeResource { return &lineage.LineageNodeResource{} },
-		)
+		lineageNodeStore := platformstore.NewStore[*lineage.LineageNodeResource](backendMgr, "lineage-nodes", func() *lineage.LineageNodeResource { return &lineage.LineageNodeResource{} })
 		lineageNodeReconciler := reconcilerpkg.NewInstrumented("lineage",
 			lineage.NewLineageNodeReconciler(lineageNodeStore, platformManagers.Lineage), reconcilerMetrics)
 		reconcilerMetrics.Register("lineage")
@@ -1803,9 +1802,7 @@ func main() {
 		log.Println("  ✅ LineageNode controller started (dual-write enabled)")
 
 		// Audit Policy reconciler
-		auditPolicyStore := platformstore.NewEtcdStore[*audit.AuditPolicyResource](
-			conns.Etcd, "/axiomnizam/audit-policies/", func() *audit.AuditPolicyResource { return &audit.AuditPolicyResource{} },
-		)
+		auditPolicyStore := platformstore.NewStore[*audit.AuditPolicyResource](backendMgr, "audit-policies", func() *audit.AuditPolicyResource { return &audit.AuditPolicyResource{} })
 		auditPolicyReconciler := reconcilerpkg.NewInstrumented("audit",
 			audit.NewAuditPolicyReconciler(auditPolicyStore), reconcilerMetrics)
 		reconcilerMetrics.Register("audit")
@@ -1814,9 +1811,7 @@ func main() {
 		log.Println("  ✅ AuditPolicy controller started (dual-write enabled)")
 
 		// Encryption Key reconciler
-		encryptionKeyStore := platformstore.NewEtcdStore[*encryption.EncryptionKeyResource](
-			conns.Etcd, "/axiomnizam/encryption-keys/", func() *encryption.EncryptionKeyResource { return &encryption.EncryptionKeyResource{} },
-		)
+		encryptionKeyStore := platformstore.NewStore[*encryption.EncryptionKeyResource](backendMgr, "encryption-keys", func() *encryption.EncryptionKeyResource { return &encryption.EncryptionKeyResource{} })
 		encryptionKeyReconciler := reconcilerpkg.NewInstrumented("encryption-key",
 			encryption.NewEncryptionKeyReconciler(encryptionKeyStore, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("encryption-key")
@@ -1825,9 +1820,7 @@ func main() {
 		log.Println("  ✅ EncryptionKey controller started (dual-write enabled)")
 
 		// Encryption Policy reconciler
-		encryptionPolicyStore := platformstore.NewEtcdStore[*encryption.EncryptionPolicyResource](
-			conns.Etcd, "/axiomnizam/encryption-policies/", func() *encryption.EncryptionPolicyResource { return &encryption.EncryptionPolicyResource{} },
-		)
+		encryptionPolicyStore := platformstore.NewStore[*encryption.EncryptionPolicyResource](backendMgr, "encryption-policies", func() *encryption.EncryptionPolicyResource { return &encryption.EncryptionPolicyResource{} })
 		encryptionPolicyReconciler := reconcilerpkg.NewInstrumented("encryption-policy",
 			encryption.NewEncryptionPolicyReconciler(encryptionPolicyStore), reconcilerMetrics)
 		reconcilerMetrics.Register("encryption-policy")
@@ -1835,9 +1828,7 @@ func main() {
 		log.Println("  ✅ EncryptionPolicy controller started")
 
 		// Conductor Producer reconciler
-		producerStore := platformstore.NewEtcdStore[*conductor.ProducerResource](
-			conns.Etcd, "/axiomnizam/conductor-producers/", func() *conductor.ProducerResource { return &conductor.ProducerResource{} },
-		)
+		producerStore := platformstore.NewStore[*conductor.ProducerResource](backendMgr, "conductor-producers", func() *conductor.ProducerResource { return &conductor.ProducerResource{} })
 		producerReconciler := reconcilerpkg.NewInstrumented("conductor-producer",
 			conductor.NewProducerReconciler(producerStore, conductorMgr), reconcilerMetrics)
 		reconcilerMetrics.Register("conductor-producer")
@@ -1847,9 +1838,7 @@ func main() {
 		log.Println("  ✅ ConductorProducer controller started (dual-write pending handler refactor)")
 
 		// Conductor Consumer reconciler
-		consumerStore := platformstore.NewEtcdStore[*conductor.ConsumerResource](
-			conns.Etcd, "/axiomnizam/conductor-consumers/", func() *conductor.ConsumerResource { return &conductor.ConsumerResource{} },
-		)
+		consumerStore := platformstore.NewStore[*conductor.ConsumerResource](backendMgr, "conductor-consumers", func() *conductor.ConsumerResource { return &conductor.ConsumerResource{} })
 		consumerReconciler := reconcilerpkg.NewInstrumented("conductor-consumer",
 			conductor.NewConsumerReconciler(consumerStore, conductorMgr), reconcilerMetrics)
 		reconcilerMetrics.Register("conductor-consumer")
@@ -1857,9 +1846,7 @@ func main() {
 		log.Println("  ✅ ConductorConsumer controller started")
 
 		// Webhook reconciler
-		webhookStore := platformstore.NewEtcdStore[*webhooks.WebhookResource](
-			conns.Etcd, "/axiomnizam/webhooks/", func() *webhooks.WebhookResource { return &webhooks.WebhookResource{} },
-		)
+		webhookStore := platformstore.NewStore[*webhooks.WebhookResource](backendMgr, "webhooks", func() *webhooks.WebhookResource { return &webhooks.WebhookResource{} })
 		webhookReconciler := reconcilerpkg.NewInstrumented("webhook",
 			webhooks.NewWebhookReconciler(webhookStore), reconcilerMetrics)
 		reconcilerMetrics.Register("webhook")
@@ -1868,9 +1855,7 @@ func main() {
 		log.Println("  ✅ Webhook controller started (dual-write enabled)")
 
 		// Tenant reconciler
-		tenantStore := platformstore.NewEtcdStore[*tenant.TenantV1Resource](
-			conns.Etcd, "/axiomnizam/tenants/", func() *tenant.TenantV1Resource { return &tenant.TenantV1Resource{} },
-		)
+		tenantStore := platformstore.NewStore[*tenant.TenantV1Resource](backendMgr, "tenants", func() *tenant.TenantV1Resource { return &tenant.TenantV1Resource{} })
 		tenantReconciler := reconcilerpkg.NewInstrumented("tenant",
 			tenant.NewTenantReconciler(tenantStore), reconcilerMetrics)
 		reconcilerMetrics.Register("tenant")
@@ -1885,9 +1870,7 @@ func main() {
 		// ====================================
 
 		// Jobs reconciler
-		jobsStore := platformstore.NewEtcdStore[*jobs.JobResource](
-			conns.Etcd, "/axiomnizam/jobs/", func() *jobs.JobResource { return &jobs.JobResource{} },
-		)
+		jobsStore := platformstore.NewStore[*jobs.JobResource](backendMgr, "jobs", func() *jobs.JobResource { return &jobs.JobResource{} })
 		jobsReconciler := reconcilerpkg.NewInstrumented("jobs",
 			jobs.NewJobController(nil, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("jobs")
@@ -1895,9 +1878,7 @@ func main() {
 		log.Println("  ✅ Jobs controller started")
 
 		// ETL Pipeline reconciler
-		etlStore := platformstore.NewEtcdStore[*etl.PipelineResource](
-			conns.Etcd, "/axiomnizam/etl-pipelines/", func() *etl.PipelineResource { return &etl.PipelineResource{} },
-		)
+		etlStore := platformstore.NewStore[*etl.PipelineResource](backendMgr, "etl-pipelines", func() *etl.PipelineResource { return &etl.PipelineResource{} })
 		etlReconciler := reconcilerpkg.NewInstrumented("etl",
 			etl.NewPipelineController(nil, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("etl")
@@ -1905,9 +1886,7 @@ func main() {
 		log.Println("  ✅ ETL Pipeline controller started")
 
 		// CDC Pipeline reconciler
-		cdcStore := platformstore.NewEtcdStore[*cdc.CDCPipelineResource](
-			conns.Etcd, "/axiomnizam/cdc-pipelines/", func() *cdc.CDCPipelineResource { return &cdc.CDCPipelineResource{} },
-		)
+		cdcStore := platformstore.NewStore[*cdc.CDCPipelineResource](backendMgr, "cdc-pipelines", func() *cdc.CDCPipelineResource { return &cdc.CDCPipelineResource{} })
 		cdcReconciler := reconcilerpkg.NewInstrumented("cdc",
 			cdc.NewCDCPipelineController(nil, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("cdc")
@@ -1915,9 +1894,7 @@ func main() {
 		log.Println("  ✅ CDC Pipeline controller started")
 
 		// Policies reconciler
-		policiesStore := platformstore.NewEtcdStore[*policies.PolicyResource](
-			conns.Etcd, "/axiomnizam/policies/", func() *policies.PolicyResource { return &policies.PolicyResource{} },
-		)
+		policiesStore := platformstore.NewStore[*policies.PolicyResource](backendMgr, "policies", func() *policies.PolicyResource { return &policies.PolicyResource{} })
 		policiesReconciler := reconcilerpkg.NewInstrumented("policies",
 			policies.NewPolicyReconciler(policiesStore, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("policies")
@@ -1925,9 +1902,7 @@ func main() {
 		log.Println("  ✅ Policies controller started")
 
 		// DataSource reconciler
-		datasourceStore := platformstore.NewEtcdStore[*datasourceresource.DataSourceV1Resource](
-			conns.Etcd, "/axiomnizam/datasources/", func() *datasourceresource.DataSourceV1Resource { return &datasourceresource.DataSourceV1Resource{} },
-		)
+		datasourceStore := platformstore.NewStore[*datasourceresource.DataSourceV1Resource](backendMgr, "datasources", func() *datasourceresource.DataSourceV1Resource { return &datasourceresource.DataSourceV1Resource{} })
 		datasourceReconciler := reconcilerpkg.NewInstrumented("datasource",
 			datasourceresource.NewDataSourceReconciler(datasourceStore, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("datasource")
@@ -1935,9 +1910,7 @@ func main() {
 		log.Println("  ✅ DataSource controller started")
 
 		// IAM Users reconciler
-		iamUsersStore := platformstore.NewEtcdStore[*iamusers.UserResource](
-			conns.Etcd, "/axiomnizam/iam-users/", func() *iamusers.UserResource { return &iamusers.UserResource{} },
-		)
+		iamUsersStore := platformstore.NewStore[*iamusers.UserResource](backendMgr, "iam-users", func() *iamusers.UserResource { return &iamusers.UserResource{} })
 		iamUsersReconciler := reconcilerpkg.NewInstrumented("iam-users",
 			iamusers.NewUserReconciler(iamUsersStore), reconcilerMetrics)
 		reconcilerMetrics.Register("iam-users")
@@ -1945,9 +1918,7 @@ func main() {
 		log.Println("  ✅ IAM Users controller started")
 
 		// API Scanner reconciler
-		apiScannerStore := platformstore.NewEtcdStore[*apiscanner.APIScanResource](
-			conns.Etcd, "/axiomnizam/api-scans/", func() *apiscanner.APIScanResource { return &apiscanner.APIScanResource{} },
-		)
+		apiScannerStore := platformstore.NewStore[*apiscanner.APIScanResource](backendMgr, "api-scans", func() *apiscanner.APIScanResource { return &apiscanner.APIScanResource{} })
 		apiScannerReconciler := reconcilerpkg.NewInstrumented("apiscanner",
 			apiscanner.NewAPIScanReconciler(apiScannerStore, nil), reconcilerMetrics)
 		reconcilerMetrics.Register("apiscanner")
@@ -1959,9 +1930,7 @@ func main() {
 		// ====================================
 		// PHASE 6 P2: GIS resource controller
 		// ====================================
-		gisStore := platformstore.NewEtcdStore[*handlers.GISResource](
-			conns.Etcd, "/axiomnizam/gis/", func() *handlers.GISResource { return &handlers.GISResource{} },
-		)
+		gisStore := platformstore.NewStore[*handlers.GISResource](backendMgr, "gis", func() *handlers.GISResource { return &handlers.GISResource{} })
 		gisReconciler := reconcilerpkg.NewInstrumented("gis",
 			handlers.NewGISReconciler(gisStore), reconcilerMetrics)
 		reconcilerMetrics.Register("gis")
@@ -1969,9 +1938,7 @@ func main() {
 		log.Println("  ✅ GIS controller started (Phase 6 P2)")
 
 		// Analytics Dashboard controller
-		analyticsStore := platformstore.NewEtcdStore[*handlers.AnalyticsDashboardResource](
-			conns.Etcd, "/axiomnizam/analytics-dashboards/", func() *handlers.AnalyticsDashboardResource { return &handlers.AnalyticsDashboardResource{} },
-		)
+		analyticsStore := platformstore.NewStore[*handlers.AnalyticsDashboardResource](backendMgr, "analytics-dashboards", func() *handlers.AnalyticsDashboardResource { return &handlers.AnalyticsDashboardResource{} })
 		analyticsReconciler := reconcilerpkg.NewInstrumented("analytics",
 			handlers.NewAnalyticsDashboardReconciler(analyticsStore), reconcilerMetrics)
 		reconcilerMetrics.Register("analytics")
@@ -1979,9 +1946,7 @@ func main() {
 		log.Println("  ✅ Analytics Dashboard controller started (Phase 6 P2)")
 
 		// Transform Rule controller
-		transformStore := platformstore.NewEtcdStore[*handlers.TransformRuleResource](
-			conns.Etcd, "/axiomnizam/transform-rules/", func() *handlers.TransformRuleResource { return &handlers.TransformRuleResource{} },
-		)
+		transformStore := platformstore.NewStore[*handlers.TransformRuleResource](backendMgr, "transform-rules", func() *handlers.TransformRuleResource { return &handlers.TransformRuleResource{} })
 		transformReconciler := reconcilerpkg.NewInstrumented("transform",
 			handlers.NewTransformRuleReconciler(transformStore), reconcilerMetrics)
 		reconcilerMetrics.Register("transform")
@@ -1989,9 +1954,7 @@ func main() {
 		log.Println("  ✅ Transform Rule controller started (Phase 6 P2)")
 
 		// Notification Channel controller
-		notificationStore := platformstore.NewEtcdStore[*handlers.NotificationChannelResource](
-			conns.Etcd, "/axiomnizam/notification-channels/", func() *handlers.NotificationChannelResource { return &handlers.NotificationChannelResource{} },
-		)
+		notificationStore := platformstore.NewStore[*handlers.NotificationChannelResource](backendMgr, "notification-channels", func() *handlers.NotificationChannelResource { return &handlers.NotificationChannelResource{} })
 		notificationReconciler := reconcilerpkg.NewInstrumented("notification",
 			handlers.NewNotificationChannelReconciler(notificationStore), reconcilerMetrics)
 		reconcilerMetrics.Register("notification")
@@ -1999,9 +1962,7 @@ func main() {
 		log.Println("  ✅ Notification Channel controller started (Phase 6 P2)")
 
 		// NetIntel Config controller
-		netintelStore := platformstore.NewEtcdStore[*handlers.NetIntelConfigResource](
-			conns.Etcd, "/axiomnizam/netintel-configs/", func() *handlers.NetIntelConfigResource { return &handlers.NetIntelConfigResource{} },
-		)
+		netintelStore := platformstore.NewStore[*handlers.NetIntelConfigResource](backendMgr, "netintel-configs", func() *handlers.NetIntelConfigResource { return &handlers.NetIntelConfigResource{} })
 		netintelReconciler := reconcilerpkg.NewInstrumented("netintel",
 			handlers.NewNetIntelConfigReconciler(netintelStore), reconcilerMetrics)
 		reconcilerMetrics.Register("netintel")
@@ -2114,11 +2075,9 @@ func main() {
 	apiBankCatalog := apibanks.NewAPIBankCatalog(apiBankManager)
 	_ = apiBankCatalog // available for API discovery
 
-	// APIBank reconciler (etcd-backed)
-	if conns.Etcd != nil {
-		apiBankStore := platformstore.NewEtcdStore[*apibanks.APIBankResource](
-			conns.Etcd, "/axiomnizam/apibanks/", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} },
-		)
+	// APIBank reconciler (storage-backed)
+	if backendMgr != nil {
+		apiBankStore := platformstore.NewStore[*apibanks.APIBankResource](backendMgr, "apibanks", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} })
 		apiBankReconciler := apibanks.NewAPIBankReconciler(apiBankStore, apiBankManager)
 		_ = apiBankReconciler
 		metrics.GlobalReconcilerMetrics.Register("apibanks")
@@ -2546,7 +2505,7 @@ const (
 	demoJWTSecretEtcdKey  = "iam:bootstrap:demo-jwt-secret"
 )
 
-func ensureSharedDemoJWTSecret(pg *gorm.DB, etcd *clientv3.Client) (string, error) {
+func ensureSharedDemoJWTSecret(pg *gorm.DB, etcd *clientv3.Client, kv platformstore.KVStore) (string, error) {
 	if configured := strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")); configured != "" {
 		if pg != nil {
 			resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
@@ -2573,18 +2532,44 @@ func ensureSharedDemoJWTSecret(pg *gorm.DB, etcd *clientv3.Client) (string, erro
 			auth.SetDemoJWTSecret(resolved)
 			return resolved, nil
 		}
-		log.Printf("⚠️  postgres bootstrap for DEMO_JWT_SECRET failed, falling back to etcd: %v", err)
+		log.Printf("⚠️  postgres bootstrap for DEMO_JWT_SECRET failed, falling back to KV store: %v", err)
 	}
 
-	resolved, err := ensureSharedDemoJWTSecretFromEtcd(etcd)
+	resolved, err := ensureSharedDemoJWTSecretFromKV(kv, etcd)
 	if err != nil {
 		return "", err
 	}
 	if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
-		return "", fmt.Errorf("setting DEMO_JWT_SECRET from etcd: %w", err)
+		return "", fmt.Errorf("setting DEMO_JWT_SECRET from KV store: %w", err)
 	}
 	auth.SetDemoJWTSecret(resolved)
 	return resolved, nil
+}
+
+// ensureSharedDemoJWTSecretFromKV uses the KVStore abstraction (works
+// with both etcd and Raft backends).  Falls back to raw etcd if KV is nil.
+func ensureSharedDemoJWTSecretFromKV(kv platformstore.KVStore, etcd *clientv3.Client) (string, error) {
+	if kv != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		candidate, err := generateBootstrapSecret(48)
+		if err != nil {
+			return "", err
+		}
+
+		resolved, _, err := kv.CAS(ctx, demoJWTSecretEtcdKey, candidate)
+		if err != nil {
+			return "", fmt.Errorf("persisting demo token secret via KV store: %w", err)
+		}
+		if resolved == "" {
+			return "", fmt.Errorf("demo token secret CAS returned empty value")
+		}
+		return resolved, nil
+	}
+
+	// Fallback to raw etcd client.
+	return ensureSharedDemoJWTSecretFromEtcd(etcd)
 }
 
 func ensureSharedDemoJWTSecretFromEtcd(etcd *clientv3.Client) (string, error) {
