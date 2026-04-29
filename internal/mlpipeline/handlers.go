@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -49,7 +50,10 @@ func (h *MLPipelineHandlers) ListPipelines(c *gin.Context) {
 }
 
 func (h *MLPipelineHandlers) GetPipeline(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	pipeline, err := h.pipelineStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "pipeline not found", "name": name})
@@ -79,7 +83,10 @@ func (h *MLPipelineHandlers) CreatePipeline(c *gin.Context) {
 }
 
 func (h *MLPipelineHandlers) UpdatePipeline(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.pipelineStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "pipeline not found", "name": name})
@@ -101,7 +108,10 @@ func (h *MLPipelineHandlers) UpdatePipeline(c *gin.Context) {
 }
 
 func (h *MLPipelineHandlers) DeletePipeline(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.pipelineStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "pipeline not found", "name": name})
 		return
@@ -110,7 +120,10 @@ func (h *MLPipelineHandlers) DeletePipeline(c *gin.Context) {
 }
 
 func (h *MLPipelineHandlers) TriggerRun(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	pipeline, err := h.pipelineStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "pipeline not found", "name": name})
@@ -136,7 +149,10 @@ func (h *MLPipelineHandlers) ListDeployments(c *gin.Context) {
 }
 
 func (h *MLPipelineHandlers) GetDeployment(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	deployment, err := h.deploymentStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found", "name": name})
@@ -166,7 +182,10 @@ func (h *MLPipelineHandlers) CreateDeployment(c *gin.Context) {
 }
 
 func (h *MLPipelineHandlers) DeleteDeployment(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.deploymentStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found", "name": name})
 		return

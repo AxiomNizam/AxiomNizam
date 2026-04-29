@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"example.com/axiomnizam/internal/resources"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -80,7 +81,10 @@ func (h *SchemaRegistryHandlers) ListSubjects(c *gin.Context) {
 
 // ListVersions returns all versions for a subject.
 func (h *SchemaRegistryHandlers) ListVersions(c *gin.Context) {
-	subject := c.Param("subject")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	schemas, err := h.schemaStore.List(ctx, "")
@@ -106,8 +110,14 @@ func (h *SchemaRegistryHandlers) ListVersions(c *gin.Context) {
 
 // GetSchemaByVersion returns a specific schema version.
 func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
-	subject := c.Param("subject")
-	versionStr := c.Param("version")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
+	versionStr := validate.PathParam(c, "version")
+	if versionStr == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	var targetVersion int
@@ -160,7 +170,10 @@ func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
 
 // RegisterSchema registers a new schema version for a subject.
 func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
-	subject := c.Param("subject")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
 
 	var req struct {
 		SchemaType string            `json:"schemaType"`
@@ -250,8 +263,14 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 
 // DeleteSchemaVersion soft-deletes a schema version.
 func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
-	subject := c.Param("subject")
-	versionStr := c.Param("version")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
+	versionStr := validate.PathParam(c, "version")
+	if versionStr == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	version, err := strconv.Atoi(versionStr)
@@ -282,7 +301,10 @@ func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
 
 // GetSchemaByID returns a schema by its global ID.
 func (h *SchemaRegistryHandlers) GetSchemaByID(c *gin.Context) {
-	idStr := c.Param("id")
+	idStr := validate.PathParam(c, "id")
+	if idStr == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -314,7 +336,10 @@ func (h *SchemaRegistryHandlers) GetSchemaByID(c *gin.Context) {
 
 // SetSubjectCompatibility updates the compatibility mode for a subject.
 func (h *SchemaRegistryHandlers) SetSubjectCompatibility(c *gin.Context) {
-	subject := c.Param("subject")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	var req struct {
@@ -345,7 +370,10 @@ func (h *SchemaRegistryHandlers) SetSubjectCompatibility(c *gin.Context) {
 
 // GetSubjectCompatibility returns the compatibility mode for a subject.
 func (h *SchemaRegistryHandlers) GetSubjectCompatibility(c *gin.Context) {
-	subject := c.Param("subject")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	subj, err := h.subjectStore.Get(ctx, subject)
@@ -361,8 +389,14 @@ func (h *SchemaRegistryHandlers) GetSubjectCompatibility(c *gin.Context) {
 
 // CheckCompatibility tests if a schema is compatible without registering it.
 func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
-	subject := c.Param("subject")
-	versionStr := c.Param("version")
+	subject := validate.PathParam(c, "subject")
+	if subject == "" {
+		return
+	}
+	versionStr := validate.PathParam(c, "version")
+	if versionStr == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	var req struct {

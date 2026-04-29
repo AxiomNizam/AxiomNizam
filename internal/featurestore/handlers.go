@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -39,7 +40,10 @@ func (h *FeatureStoreHandlers) ListGroups(c *gin.Context) {
 }
 
 func (h *FeatureStoreHandlers) GetGroup(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	group, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
@@ -68,7 +72,10 @@ func (h *FeatureStoreHandlers) CreateGroup(c *gin.Context) {
 }
 
 func (h *FeatureStoreHandlers) UpdateGroup(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
@@ -90,7 +97,10 @@ func (h *FeatureStoreHandlers) UpdateGroup(c *gin.Context) {
 }
 
 func (h *FeatureStoreHandlers) DeleteGroup(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
 		return
@@ -99,7 +109,10 @@ func (h *FeatureStoreHandlers) DeleteGroup(c *gin.Context) {
 }
 
 func (h *FeatureStoreHandlers) TriggerMaterialize(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	group, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})

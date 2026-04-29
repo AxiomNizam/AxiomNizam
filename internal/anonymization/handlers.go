@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -38,7 +39,10 @@ func (h *AnonymizationHandlers) ListPolicies(c *gin.Context) {
 }
 
 func (h *AnonymizationHandlers) GetPolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	policy, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -67,7 +71,10 @@ func (h *AnonymizationHandlers) CreatePolicy(c *gin.Context) {
 }
 
 func (h *AnonymizationHandlers) UpdatePolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -89,7 +96,10 @@ func (h *AnonymizationHandlers) UpdatePolicy(c *gin.Context) {
 }
 
 func (h *AnonymizationHandlers) DeletePolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
 		return
@@ -98,7 +108,10 @@ func (h *AnonymizationHandlers) DeletePolicy(c *gin.Context) {
 }
 
 func (h *AnonymizationHandlers) TriggerRun(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	policy, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})

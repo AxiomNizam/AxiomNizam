@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,7 +61,10 @@ func (h *SLOHandlers) ListSLOs(c *gin.Context) {
 
 // GetSLO returns a single SLO.
 func (h *SLOHandlers) GetSLO(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	s, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
@@ -94,7 +98,10 @@ func (h *SLOHandlers) CreateSLO(c *gin.Context) {
 
 // UpdateSLO updates an existing SLO.
 func (h *SLOHandlers) UpdateSLO(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
@@ -121,7 +128,10 @@ func (h *SLOHandlers) UpdateSLO(c *gin.Context) {
 
 // DeleteSLO deletes an SLO.
 func (h *SLOHandlers) DeleteSLO(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
 		return
@@ -131,7 +141,10 @@ func (h *SLOHandlers) DeleteSLO(c *gin.Context) {
 
 // GetBudget returns the error budget details for an SLO.
 func (h *SLOHandlers) GetBudget(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	s, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})

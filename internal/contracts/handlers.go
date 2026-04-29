@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -77,7 +78,10 @@ func (h *ContractHandlers) ListContracts(c *gin.Context) {
 
 // GetContract returns a single contract by name.
 func (h *ContractHandlers) GetContract(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	contract, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
@@ -118,7 +122,10 @@ func (h *ContractHandlers) CreateContract(c *gin.Context) {
 
 // UpdateContract updates an existing data contract.
 func (h *ContractHandlers) UpdateContract(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
@@ -145,7 +152,10 @@ func (h *ContractHandlers) UpdateContract(c *gin.Context) {
 
 // DeleteContract deletes a data contract.
 func (h *ContractHandlers) DeleteContract(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
 		return
@@ -155,7 +165,10 @@ func (h *ContractHandlers) DeleteContract(c *gin.Context) {
 
 // GetViolations returns current violations for a contract.
 func (h *ContractHandlers) GetViolations(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	contract, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
@@ -172,7 +185,10 @@ func (h *ContractHandlers) GetViolations(c *gin.Context) {
 
 // ValidateContract triggers an immediate validation of the contract.
 func (h *ContractHandlers) ValidateContract(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	contract, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -39,7 +40,10 @@ func (h *StreamAnalyticsHandlers) ListJobs(c *gin.Context) {
 }
 
 func (h *StreamAnalyticsHandlers) GetJob(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	job, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
@@ -69,7 +73,10 @@ func (h *StreamAnalyticsHandlers) CreateJob(c *gin.Context) {
 }
 
 func (h *StreamAnalyticsHandlers) UpdateJob(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
@@ -91,7 +98,10 @@ func (h *StreamAnalyticsHandlers) UpdateJob(c *gin.Context) {
 }
 
 func (h *StreamAnalyticsHandlers) DeleteJob(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
 		return
@@ -100,7 +110,10 @@ func (h *StreamAnalyticsHandlers) DeleteJob(c *gin.Context) {
 }
 
 func (h *StreamAnalyticsHandlers) StartJob(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	job, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
@@ -113,7 +126,10 @@ func (h *StreamAnalyticsHandlers) StartJob(c *gin.Context) {
 }
 
 func (h *StreamAnalyticsHandlers) StopJob(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	job, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"example.com/axiomnizam/internal/resources"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -120,7 +121,10 @@ func (h *CatalogHandlers) ListAssets(c *gin.Context) {
 
 // GetAsset returns a specific catalog asset.
 func (h *CatalogHandlers) GetAsset(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	asset, err := h.assetStore.Get(ctx, name)
@@ -165,7 +169,10 @@ func (h *CatalogHandlers) CreateAsset(c *gin.Context) {
 
 // UpdateAsset updates an existing catalog asset.
 func (h *CatalogHandlers) UpdateAsset(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	existing, err := h.assetStore.Get(ctx, name)
@@ -194,7 +201,10 @@ func (h *CatalogHandlers) UpdateAsset(c *gin.Context) {
 
 // DeleteAsset removes a catalog asset.
 func (h *CatalogHandlers) DeleteAsset(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	if err := h.assetStore.Delete(ctx, name); err != nil {
@@ -237,7 +247,10 @@ func (h *CatalogHandlers) SearchAssets(c *gin.Context) {
 
 // ScanDataSource triggers a discovery scan of a datasource.
 func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
-	datasource := c.Param("datasource")
+	datasource := validate.PathParam(c, "datasource")
+	if datasource == "" {
+		return
+	}
 
 	if h.scanner == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "catalog scanner not configured"})
@@ -472,7 +485,10 @@ func (h *CatalogHandlers) CreateCollection(c *gin.Context) {
 
 // GetCollection returns a specific collection.
 func (h *CatalogHandlers) GetCollection(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	ctx := c.Request.Context()
 
 	collection, err := h.collectionStore.Get(ctx, name)

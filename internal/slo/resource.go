@@ -70,19 +70,19 @@ type BurnRateAlert struct {
 
 type SLOSpec struct {
 	// DisplayName is the human-readable SLO name
-	DisplayName string `json:"displayName"`
+	DisplayName string `json:"displayName" binding:"required"`
 
 	// Description of what this SLO measures
 	Description string `json:"description,omitempty"`
 
 	// Service is what service/component this SLO covers
-	Service string `json:"service"`
+	Service string `json:"service" binding:"required"`
 
 	// Target is the SLO target (e.g. 0.999 = 99.9%)
-	Target float64 `json:"target"`
+	Target float64 `json:"target" binding:"required,gt=0,lt=1"`
 
 	// Window is the evaluation window (e.g. "30d", "7d")
-	Window string `json:"window"`
+	Window string `json:"window" binding:"required"`
 
 	// Indicator defines how to measure the SLI
 	Indicator SLISpec `json:"indicator"`

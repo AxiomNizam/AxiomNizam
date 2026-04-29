@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -94,7 +95,10 @@ func (h *AlertHandlers) ListRules(c *gin.Context) {
 
 // GetRule returns a single alert rule.
 func (h *AlertHandlers) GetRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -128,7 +132,10 @@ func (h *AlertHandlers) CreateRule(c *gin.Context) {
 
 // UpdateRule updates an existing alert rule.
 func (h *AlertHandlers) UpdateRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -155,7 +162,10 @@ func (h *AlertHandlers) UpdateRule(c *gin.Context) {
 
 // DeleteRule deletes an alert rule.
 func (h *AlertHandlers) DeleteRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.ruleStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
 		return
@@ -165,7 +175,10 @@ func (h *AlertHandlers) DeleteRule(c *gin.Context) {
 
 // SilenceRule silences an alert rule for a specified duration.
 func (h *AlertHandlers) SilenceRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -206,7 +219,10 @@ func (h *AlertHandlers) SilenceRule(c *gin.Context) {
 
 // UnsilenceRule removes silence from an alert rule.
 func (h *AlertHandlers) UnsilenceRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -252,7 +268,10 @@ func (h *AlertHandlers) ListIncidents(c *gin.Context) {
 
 // GetIncident returns a single incident.
 func (h *AlertHandlers) GetIncident(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	incident, err := h.incidentStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found", "name": name})
@@ -263,7 +282,10 @@ func (h *AlertHandlers) GetIncident(c *gin.Context) {
 
 // AcknowledgeIncident marks an incident as acknowledged.
 func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	incident, err := h.incidentStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found", "name": name})
@@ -285,7 +307,10 @@ func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
 
 // ResolveIncident manually resolves an incident.
 func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	incident, err := h.incidentStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found", "name": name})
@@ -322,7 +347,10 @@ func (h *AlertHandlers) ListChannels(c *gin.Context) {
 
 // GetChannel returns a single notification channel.
 func (h *AlertHandlers) GetChannel(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	channel, err := h.channelStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
@@ -356,7 +384,10 @@ func (h *AlertHandlers) CreateChannel(c *gin.Context) {
 
 // UpdateChannel updates a notification channel.
 func (h *AlertHandlers) UpdateChannel(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.channelStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
@@ -382,7 +413,10 @@ func (h *AlertHandlers) UpdateChannel(c *gin.Context) {
 
 // DeleteChannel deletes a notification channel.
 func (h *AlertHandlers) DeleteChannel(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.channelStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
 		return
@@ -392,7 +426,10 @@ func (h *AlertHandlers) DeleteChannel(c *gin.Context) {
 
 // TestChannel sends a test notification through a channel.
 func (h *AlertHandlers) TestChannel(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	channel, err := h.channelStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})

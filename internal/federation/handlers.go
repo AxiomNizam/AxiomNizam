@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,7 +71,10 @@ func (h *FederationHandlers) ListVirtualTables(c *gin.Context) {
 }
 
 func (h *FederationHandlers) GetVirtualTable(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	vt, err := h.vtStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "virtual table not found", "name": name})
@@ -101,7 +105,10 @@ func (h *FederationHandlers) CreateVirtualTable(c *gin.Context) {
 }
 
 func (h *FederationHandlers) UpdateVirtualTable(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.vtStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "virtual table not found", "name": name})
@@ -126,7 +133,10 @@ func (h *FederationHandlers) UpdateVirtualTable(c *gin.Context) {
 }
 
 func (h *FederationHandlers) DeleteVirtualTable(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.vtStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "virtual table not found", "name": name})
 		return
@@ -251,7 +261,10 @@ func (h *FederationHandlers) ListQueries(c *gin.Context) {
 }
 
 func (h *FederationHandlers) GetQuery(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	query, err := h.queryStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "query not found", "name": name})

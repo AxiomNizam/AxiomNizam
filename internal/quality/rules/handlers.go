@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -101,7 +102,10 @@ func (h *QualityRulesHandlers) ListRules(c *gin.Context) {
 
 // GetRule returns a single quality rule by name.
 func (h *QualityRulesHandlers) GetRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -142,7 +146,10 @@ func (h *QualityRulesHandlers) CreateRule(c *gin.Context) {
 
 // UpdateRule updates an existing quality rule.
 func (h *QualityRulesHandlers) UpdateRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -170,7 +177,10 @@ func (h *QualityRulesHandlers) UpdateRule(c *gin.Context) {
 
 // DeleteRule deletes a quality rule.
 func (h *QualityRulesHandlers) DeleteRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.ruleStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
 		return
@@ -180,7 +190,10 @@ func (h *QualityRulesHandlers) DeleteRule(c *gin.Context) {
 
 // RunRule manually triggers a quality rule evaluation.
 func (h *QualityRulesHandlers) RunRule(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
@@ -235,7 +248,10 @@ func (h *QualityRulesHandlers) ListChecks(c *gin.Context) {
 
 // GetCheck returns a single check result.
 func (h *QualityRulesHandlers) GetCheck(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	check, err := h.checkStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "check not found", "name": name})
@@ -246,7 +262,10 @@ func (h *QualityRulesHandlers) GetCheck(c *gin.Context) {
 
 // GetAssetScore returns the quality score for a catalog asset.
 func (h *QualityRulesHandlers) GetAssetScore(c *gin.Context) {
-	asset := c.Param("asset")
+	asset := validate.PathParam(c, "asset")
+	if asset == "" {
+		return
+	}
 
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -88,7 +89,10 @@ func (h *GovernanceHandlers) ListPolicies(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) GetPolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	policy, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -119,7 +123,10 @@ func (h *GovernanceHandlers) CreatePolicy(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -144,7 +151,10 @@ func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) DeletePolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.policyStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
 		return
@@ -153,7 +163,10 @@ func (h *GovernanceHandlers) DeletePolicy(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	policy, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -180,7 +193,10 @@ func (h *GovernanceHandlers) ListRetentionPolicies(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) GetRetentionPolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	policy, err := h.retentionStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "retention policy not found", "name": name})
@@ -211,7 +227,10 @@ func (h *GovernanceHandlers) CreateRetentionPolicy(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) DeleteRetentionPolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.retentionStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "retention policy not found", "name": name})
 		return
@@ -241,7 +260,10 @@ func (h *GovernanceHandlers) ListAccessRequests(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) GetAccessRequest(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
@@ -273,7 +295,10 @@ func (h *GovernanceHandlers) CreateAccessRequest(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
@@ -308,7 +333,10 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
@@ -336,7 +364,10 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})

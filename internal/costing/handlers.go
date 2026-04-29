@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
 )
 
@@ -58,7 +59,10 @@ func (h *CostHandlers) ListPolicies(c *gin.Context) {
 
 // GetPolicy returns a single cost policy.
 func (h *CostHandlers) GetPolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	policy, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -92,7 +96,10 @@ func (h *CostHandlers) CreatePolicy(c *gin.Context) {
 
 // UpdatePolicy updates an existing cost policy.
 func (h *CostHandlers) UpdatePolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	existing, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
@@ -119,7 +126,10 @@ func (h *CostHandlers) UpdatePolicy(c *gin.Context) {
 
 // DeletePolicy deletes a cost policy.
 func (h *CostHandlers) DeletePolicy(c *gin.Context) {
-	name := c.Param("name")
+	name := validate.PathParam(c, "name")
+	if name == "" {
+		return
+	}
 	if err := h.policyStore.Delete(c.Request.Context(), name); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
 		return
@@ -155,7 +165,10 @@ func (h *CostHandlers) GetUsage(c *gin.Context) {
 
 // GetTenantUsage returns usage for a specific tenant.
 func (h *CostHandlers) GetTenantUsage(c *gin.Context) {
-	tenant := c.Param("tenant")
+	tenant := validate.PathParam(c, "tenant")
+	if tenant == "" {
+		return
+	}
 
 	records, err := h.usageStore.List(c.Request.Context(), "")
 	if err != nil {
