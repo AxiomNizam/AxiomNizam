@@ -331,29 +331,23 @@ func (s *MemDBKVStore) CAS(ctx context.Context, key, value string) (string, bool
 }
 
 // kvExtract reads Data and ExpiresAt from a raw go-memdb entry,
-// handling both *kvEntry (from MemDBKVStore) and entries inserted
-// by the Raft FSM which may have a different concrete type.
+// handling both *kvEntry (from MemDBKVStore) and *kvFSMEntry
+// (from the Raft FSM) which have the same field layout.
 func kvExtract(raw interface{}) (data []byte, expiresAt time.Time) {
 	if e, ok := raw.(*kvEntry); ok {
 		return e.Data, e.ExpiresAt
 	}
-	// Fallback: use reflection-free field access via interface.
-	type hasData interface{ getData() []byte }
-	if d, ok := raw.(hasData); ok {
-		return d.getData(), time.Time{}
+	// For FSM-inserted entries (different Go type, same field names),
+	// use a structural interface to extract fields without importing
+	// the raft package (which would create a circular dependency).
+	type dataGetter interface {
+		GetData() []byte
 	}
-	// Last resort: JSON round-trip.
-	b, _ := json.Marshal(raw)
-	var m map[string]json.RawMessage
-	_ = json.Unmarshal(b, &m)
-	if d, ok := m["Data"]; ok {
-		var s string
-		if json.Unmarshal(d, &s) == nil {
-			return []byte(s), time.Time{}
-		}
-		return d, time.Time{}
+	if d, ok := raw.(dataGetter); ok {
+		return d.GetData(), time.Time{}
 	}
-	return nil, time.Time{}
+	// Fallback: use struct field access via the kvCompat adapter.
+	return kvExtractViaReflect(raw)
 }
 
 // kvExtractFull reads Key, Data, and ExpiresAt from a raw entry.
@@ -361,23 +355,41 @@ func kvExtractFull(raw interface{}) (key string, data []byte, expiresAt time.Tim
 	if e, ok := raw.(*kvEntry); ok {
 		return e.Key, e.Data, e.ExpiresAt
 	}
-	// For FSM-inserted entries, extract Key and Data.
-	type keyed interface{ getKey() string }
-	b, _ := json.Marshal(raw)
-	var m map[string]json.RawMessage
-	_ = json.Unmarshal(b, &m)
-	if k, ok := m["Key"]; ok {
-		_ = json.Unmarshal(k, &key)
+	return kvExtractFullViaReflect(raw)
+}
+
+// kvExtractViaReflect handles entries from the Raft FSM which have
+// the same field names but a different Go type.
+func kvExtractViaReflect(raw interface{}) ([]byte, time.Time) {
+	// Use JSON round-trip as a safe fallback.
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, time.Time{}
 	}
-	if d, ok := m["Data"]; ok {
-		var s string
-		if json.Unmarshal(d, &s) == nil {
-			data = []byte(s)
-		} else {
-			data = d
-		}
+	var m struct {
+		Data      []byte    `json:"Data"`
+		ExpiresAt time.Time `json:"ExpiresAt"`
 	}
-	return key, data, time.Time{}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, time.Time{}
+	}
+	return m.Data, m.ExpiresAt
+}
+
+func kvExtractFullViaReflect(raw interface{}) (string, []byte, time.Time) {
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return "", nil, time.Time{}
+	}
+	var m struct {
+		Key       string    `json:"Key"`
+		Data      []byte    `json:"Data"`
+		ExpiresAt time.Time `json:"ExpiresAt"`
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return "", nil, time.Time{}
+	}
+	return m.Key, m.Data, m.ExpiresAt
 }
 
 // setTTL records TTL metadata for a key (used in Raft mode where the
@@ -479,10 +491,4 @@ func KVTableSchema() *memdb.TableSchema {
 			},
 		},
 	}
-}
-
-// init registers a helper to include the _kv table in JSON snapshots.
-func init() {
-	// Register kvEntry type for go-memdb.
-	_ = json.Marshal // ensure json is used
 }

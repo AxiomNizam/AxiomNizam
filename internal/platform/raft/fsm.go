@@ -18,6 +18,7 @@ package raft
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 	"io"
 	"sync"
 
@@ -204,11 +205,14 @@ type fsmEntry struct {
 	Data      []byte
 }
 
-// kvFSMEntry is the envelope for the _kv table.  It has a Key and
-// Data field matching the kvEntry schema in the store package.
+// kvFSMEntry is the envelope for the _kv table.  It has the same
+// fields as kvEntry in the store package so go-memdb type assertions
+// work correctly when the store reads entries inserted by the FSM.
 type kvFSMEntry struct {
-	Key  string
-	Data []byte
+	Key       string
+	Namespace string    // unused for KV, but matches kvEntry schema
+	Data      []byte
+	ExpiresAt time.Time // zero means no expiry
 }
 
 // makeEntry creates the correct entry type for the given table.

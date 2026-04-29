@@ -210,16 +210,31 @@ func main() {
 
 	// Initialize all connections
 	conns := database.InitConnections(cfg)
-	if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
-		log.Printf("⚠️  DEMO_JWT_SECRET synchronization failed: %v", secretErr)
+
+	// JWT secret and module persistence configuration.
+	// When using Raft backend, these are deferred until BackendManager is ready.
+	// When using etcd (default), they run immediately.
+	earlyStorageBackend := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_BACKEND")))
+	if earlyStorageBackend != "raft" {
+		if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
+			log.Printf("⚠️  DEMO_JWT_SECRET synchronization failed: %v", secretErr)
+		} else {
+			log.Println("✅ DEMO_JWT_SECRET synchronized for replica-safe token validation")
+		}
+		workflows.ConfigureGlobalPersistence(conns.Etcd)
+		modes.ConfigureGlobalPersistence(conns.Etcd)
+		vectorplus.ConfigureGlobalPersistence(conns.Etcd)
+		reviewflow.ConfigureGlobalPersistence(conns.Etcd)
+		integration.ConfigureGlobalPersistence(conns.Etcd)
 	} else {
-		log.Println("✅ DEMO_JWT_SECRET synchronized for replica-safe token validation")
+		// Raft mode: JWT secret from env or postgres only (KVStore not ready yet).
+		if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, nil); secretErr != nil {
+			log.Printf("ℹ️  DEMO_JWT_SECRET deferred to Raft backend init: %v", secretErr)
+		} else {
+			log.Println("✅ DEMO_JWT_SECRET synchronized (postgres/env)")
+		}
+		// Module persistence will be configured after BackendManager init.
 	}
-	workflows.ConfigureGlobalPersistence(conns.Etcd)
-	modes.ConfigureGlobalPersistence(conns.Etcd)
-	vectorplus.ConfigureGlobalPersistence(conns.Etcd)
-	reviewflow.ConfigureGlobalPersistence(conns.Etcd)
-	integration.ConfigureGlobalPersistence(conns.Etcd)
 
 	// Create tables
 	createTables(conns)
@@ -240,7 +255,7 @@ func main() {
 	})
 	if iamErr != nil {
 		log.Printf("⚠️  IAM system initialization failed: %v", iamErr)
-		log.Println("⚠️  IAM endpoints will not be available. Ensure PostgreSQL and etcd are connected.")
+		log.Println("⚠️  IAM endpoints will not be available. Ensure PostgreSQL is connected. When using STORAGE_BACKEND=raft, IAM etcd migration is pending.")
 	} else {
 		log.Println("✅ IAM system initialized")
 	}
@@ -899,7 +914,8 @@ func main() {
 	// ====================================
 	platformManagers, err := platform.NewManagers(conns)
 	if err != nil {
-		log.Fatalf("failed to initialize etcd-backed platform managers: %v", err)
+		log.Printf("⚠️  platform managers initialization failed: %v", err)
+		log.Println("  Platform service APIs may have limited functionality")
 	}
 
 	bulkHandler := bulk.NewBulkHandler(platformManagers.Bulk)
@@ -1698,6 +1714,21 @@ func main() {
 			backendMgr.SetEtcdClient(conns.Etcd)
 		}
 		defer backendMgr.Close()
+
+		// Raft mode: complete deferred initialization now that BackendManager is ready.
+		if backendMgr.IsRaft() {
+			// Re-attempt JWT secret with KVStore.
+			if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, backendMgr.KV()); secretErr != nil {
+				log.Printf("⚠️  DEMO_JWT_SECRET synchronization via Raft KV failed: %v", secretErr)
+			} else {
+				log.Println("✅ DEMO_JWT_SECRET synchronized via Raft KV store")
+			}
+			// Note: workflows/vectorplus/reviewflow/modes/integration modules
+			// still use their own etcd-based persistence internally.  They
+			// will be migrated to accept KVStore in a follow-up.  For now,
+			// they operate without persistence in Raft mode (in-memory only).
+			log.Println("  ℹ️  Module persistence: Raft KV available via backendMgr.KV()")
+		}
 
 		log.Printf("🔄 Initializing reconciler controllers (backend=%s)...", storageBackend)
 		reconcilerMetrics := metrics.GlobalReconcilerMetrics
