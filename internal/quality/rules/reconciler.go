@@ -13,10 +13,14 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // QualityChecker executes quality checks against datasources.
@@ -84,6 +88,7 @@ func (r *QualityRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("quality: reconciler received non-QualityRuleResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", rule.GetKey()), zap.String("kind", rule.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := rule.Status
@@ -119,7 +124,8 @@ func (r *QualityRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 		status.LastTransitionTime = now
 		rule.Status = status
 		storeutil.Update(ctx, r.store, rule) //nolint:errcheck
-		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 5 * time.Minute}
+		logging.Z().Warn("reconciliation error", zap.String("name", rule.GetKey()), zap.Error(fmt.Errorf("quality checker not available")))
+		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 	}
 
 	start := time.Now()
@@ -139,6 +145,7 @@ func (r *QualityRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Re
 			Reason: "CheckError", Message: fmt.Sprintf("check execution failed: %v", err),
 			LastTransitionTime: now,
 		})
+		logging.Z().Warn("reconciliation error", zap.String("name", rule.GetKey()), zap.Error(err))
 	} else if output.Passed {
 		// Check passed.
 		status.LastResult = CheckResultPass

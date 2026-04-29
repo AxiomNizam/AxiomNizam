@@ -16,10 +16,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // Global schema ID counter (in production, this would be persisted in etcd).
@@ -58,6 +61,7 @@ func (r *SchemaReconciler) Reconcile(ctx context.Context, obj reconciler.Resourc
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("schema: reconciler received non-SchemaResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", schema.GetKey()), zap.String("kind", schema.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := schema.Status

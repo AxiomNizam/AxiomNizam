@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // CostHandlers provides REST API handlers for cost attribution.
@@ -51,6 +53,7 @@ func (h *CostHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *CostHandlers) ListPolicies(c *gin.Context) {
 	policies, err := h.policyStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListPolicies"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -117,6 +120,7 @@ func (h *CostHandlers) UpdatePolicy(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.policyStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdatePolicy"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -141,6 +145,7 @@ func (h *CostHandlers) DeletePolicy(c *gin.Context) {
 func (h *CostHandlers) GetUsage(c *gin.Context) {
 	records, err := h.usageStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetUsage"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -172,6 +177,7 @@ func (h *CostHandlers) GetTenantUsage(c *gin.Context) {
 
 	records, err := h.usageStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetTenantUsage"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

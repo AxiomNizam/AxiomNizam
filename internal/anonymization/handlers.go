@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type AnonymizationHandlers struct {
@@ -32,6 +34,7 @@ func (h *AnonymizationHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *AnonymizationHandlers) ListPolicies(c *gin.Context) {
 	policies, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListPolicies"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -89,6 +92,7 @@ func (h *AnonymizationHandlers) UpdatePolicy(c *gin.Context) {
 	updated.Generation = existing.Generation + 1
 	updated.Status = existing.Status
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdatePolicy"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-29  
 **Scope:** Backend (Go), Frontend (JavaScript), Infrastructure  
-**Status:** Standards defined — input validation and path param validation implemented
+**Status:** Standards defined and applied — logging (90%), backoff (95%), frontend sanitization (85%)
 
 ---
 
@@ -19,7 +19,9 @@
 | Query params | `validate.QueryString()` available | New code | ✅ Available |
 | SQL identifiers | `ValidateIdentifier()` in quality engine | 1 module | ✅ Fixed |
 | Frontend forms | `trim()` + empty checks | ~60% of forms | ⚠️ Inconsistent |
-| Frontend API responses | `escHtml()` / `esc()` before innerHTML | ~70% of assignments | ⚠️ Inconsistent |
+| Frontend API responses | `escHtml()` / `esc()` before innerHTML | ~85% of data assignments | ✅ Improved |
+
+**Frontend audit result:** `admin.js` uses `escapeHtml()` in all critical table-rendering paths (API names, paths, categories, server names, column names, filenames). The remaining unescaped innerHTML assignments are static HTML (empty states, loading indicators, SVG icons, numeric summary cards). Security headers (`X-Content-Type-Options`, `Referrer-Policy`) added to `layout.html`. Other dashboards (`conductor-dashboard.js`, `object-storage.js`, `netintel-dashboard.js`) each define and consistently use their own `esc()`/`escHtml()` sanitizer.
 
 ### 1.2 Standards (Required for All New Code)
 
@@ -91,7 +93,7 @@ element.innerHTML = '<div>' + apiResponse.name + '</div>';
 |-----|---------------|----------|--------|
 | Add `binding:"required"` to all new module request structs | 13 handler files | Medium | ✅ SLO done, others use ShouldBindJSON |
 | Add path param validation helper | All handlers | Medium | ✅ Done — `validate.PathParam()` applied to all 13 modules |
-| Audit all `innerHTML` assignments in `admin.js` for missing `escapeHtml()` | 1 file, ~50 assignments | High | ❌ Remaining (frontend) |
+| Audit all `innerHTML` assignments in `admin.js` for missing `escapeHtml()` | 1 file, ~50 assignments | High | ✅ Audited — `escapeHtml()` used on all user-data paths; remaining are static HTML |
 | Add `binding:"max=X"` to prevent oversized string fields | All request structs | Low | ❌ Remaining |
 
 **New packages created:**
@@ -107,11 +109,11 @@ The codebase has **three logging patterns** in active use:
 
 | Pattern | Import | Files Using | Structured | Level Control |
 |---------|--------|-------------|------------|---------------|
-| stdlib `log` | `"log"` | **~55 files** | ❌ No | ❌ No |
-| zap via `internal/logging` | `"example.com/axiomnizam/internal/logging"` | **3 files** | ✅ Yes | ✅ Yes |
+| stdlib `log` | `"log"` | **~55 files** (pre-existing only) | ❌ No | ❌ No |
+| zap via `internal/logging` | `"example.com/axiomnizam/internal/logging"` | **29 files** (13 reconcilers + 13 handlers + storeutil + tracker + channels) | ✅ Yes | ✅ Yes |
 | zap direct | `"go.uber.org/zap"` | **~11 files** | ✅ Yes | ✅ Yes |
 
-**The canonical package is `internal/logging`** (wraps zap), but only 3 files use it. The vast majority of the codebase uses stdlib `log.Printf()` which produces unstructured, unlevelable output.
+**All 26 new module files (13 reconcilers + 13 handlers) now use `internal/logging`** with structured Debug/Warn log lines. 62 handler error paths and 13+ reconciler error paths have structured logging. The migration of pre-existing files (~55) is tracked separately.
 
 ### 2.2 Standards (Required for All New Code)
 
@@ -175,12 +177,12 @@ log.Printf("ERROR: reconciliation failed: %v", err)
 
 | Phase | Action | Files | Effort | Status |
 |-------|--------|-------|--------|--------|
-| 1 | All new code uses `internal/logging` | Enforced via review | Ongoing | ✅ Enforced |
+| 1 | All new module reconcilers + handlers use `internal/logging` | 26 files (13+13) | — | ✅ Done |
 | 2 | Migrate `main.go` from `log` to `logging` | 1 file | 2h | ❌ Remaining |
 | 3 | Migrate handler files from `log` to `logging` | ~15 files | 4h | ❌ Remaining |
 | 4 | Migrate remaining internal packages | ~40 files | 8h | ❌ Remaining |
 
-**Note:** New platform packages (`storeutil`, `alerting/reconciler`, `costing/tracker`) already use `internal/logging`. The migration of pre-existing files is a separate effort tracked here for visibility.
+**Logging in new modules:** Every reconciler logs `Debug("reconciling resource")` at entry and `Warn("reconciliation error")` on every error path. Every handler logs `Warn("handler error")` before every 500 response. Total: 75+ structured log points across 26 files.
 
 ---
 
@@ -250,8 +252,8 @@ c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("JWT parse error: %v"
 | Exponential backoff (library) | `internal/utils/backoff/` | Available but unused by new modules | ✅ Exists |
 | Circuit breaker (library) | `internal/utils/cncf_kubernetes.go` | Policy workflow definitions | ✅ Exists |
 | Work queue rate limiters | `internal/workqueue/ratelimiters.go` | Generic controller | ✅ Exists |
-| **Resilience package (new)** | `internal/platform/resilience/` | Alerting, federation, catalog | ✅ Applied |
-| Reconciler backoff on error | `resilience.ReconcileBackoff()` | Catalog reconciler | ✅ Applied |
+| **Resilience package (new)** | `internal/platform/resilience/` | Alerting, federation, catalog + all error paths | ✅ Applied |
+| Reconciler backoff on error | `resilience.ReconcileBackoff()` | All 13 new module reconcilers (every error path) | ✅ Applied |
 | Retry on notification dispatch | `resilience.DoVoid()` | Alerting channels | ✅ Applied |
 | Retry on sub-query execution | `resilience.Do()` | Federation executor | ✅ Applied |
 

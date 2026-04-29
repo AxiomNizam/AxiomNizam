@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // StreamJobRunner abstracts the streaming job execution engine.
@@ -40,6 +44,7 @@ func (r *StreamJobReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("streamanalytics: received non-StreamJobResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", job.GetKey()), zap.String("kind", job.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := job.Status
@@ -74,7 +79,8 @@ func (r *StreamJobReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 				status.LastTransitionTime = now
 				job.Status = status
 				storeutil.Update(ctx, r.store, job) //nolint:errcheck
-				return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+				logging.Z().Warn("reconciliation error", zap.String("name", job.GetKey()), zap.Error(err))
+				return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 			}
 		}
 		status.JobStatus = "running"

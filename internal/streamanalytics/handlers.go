@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type StreamAnalyticsHandlers struct {
@@ -33,6 +35,7 @@ func (h *StreamAnalyticsHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *StreamAnalyticsHandlers) ListJobs(c *gin.Context) {
 	jobs, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListJobs"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -91,6 +94,7 @@ func (h *StreamAnalyticsHandlers) UpdateJob(c *gin.Context) {
 	updated.Generation = existing.Generation + 1
 	updated.Status = existing.Status
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateJob"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

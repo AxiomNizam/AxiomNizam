@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // FeatureMaterializer abstracts the feature materialization pipeline.
@@ -35,6 +39,7 @@ func (r *FeatureGroupReconciler) Reconcile(ctx context.Context, obj reconciler.R
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("featurestore: received non-FeatureGroupResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", fg.GetKey()), zap.String("kind", fg.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := fg.Status
@@ -78,7 +83,8 @@ func (r *FeatureGroupReconciler) Reconcile(ctx context.Context, obj reconciler.R
 			status.LastTransitionTime = now
 			fg.Status = status
 			storeutil.Update(ctx, r.store, fg) //nolint:errcheck
-			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 1 * time.Minute}
+			logging.Z().Warn("reconciliation error", zap.String("name", fg.GetKey()), zap.Error(err))
+			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 		}
 
 		status.EntityCount = result.EntityCount

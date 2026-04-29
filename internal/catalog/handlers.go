@@ -23,11 +23,13 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"example.com/axiomnizam/internal/resources"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // CatalogHandlers provides HTTP handlers for catalog operations.
@@ -86,6 +88,7 @@ func (h *CatalogHandlers) ListAssets(c *gin.Context) {
 
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListAssets"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list assets", "detail": err.Error()})
 		return
 	}
@@ -192,6 +195,7 @@ func (h *CatalogHandlers) UpdateAsset(c *gin.Context) {
 	existing.UpdatedAt = time.Now()
 
 	if err := h.assetStore.Update(ctx, existing); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateAsset"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update asset", "detail": err.Error()})
 		return
 	}
@@ -226,6 +230,7 @@ func (h *CatalogHandlers) SearchAssets(c *gin.Context) {
 	ctx := c.Request.Context()
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "SearchAssets"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search assets"})
 		return
 	}
@@ -273,6 +278,7 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 
 	result, err := h.scanner.Scan(ctx, req)
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ScanDataSource"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "scan failed", "detail": err.Error()})
 		return
 	}
@@ -364,6 +370,7 @@ func (h *CatalogHandlers) ListDomains(c *gin.Context) {
 	ctx := c.Request.Context()
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListDomains"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list assets"})
 		return
 	}
@@ -393,6 +400,7 @@ func (h *CatalogHandlers) GetStatistics(c *gin.Context) {
 	ctx := c.Request.Context()
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetStatistics"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to compute statistics"})
 		return
 	}
@@ -446,6 +454,7 @@ func (h *CatalogHandlers) ListCollections(c *gin.Context) {
 	ctx := c.Request.Context()
 	collections, err := h.collectionStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListCollections"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list collections"})
 		return
 	}

@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // QualityRulesHandlers provides REST API handlers for quality rules.
@@ -66,6 +68,7 @@ func (h *QualityRulesHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *QualityRulesHandlers) ListRules(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListRules"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -168,6 +171,7 @@ func (h *QualityRulesHandlers) UpdateRule(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.ruleStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateRule"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -207,6 +211,7 @@ func (h *QualityRulesHandlers) RunRule(c *gin.Context) {
 
 	output, err := h.engine.Evaluate(c.Request.Context(), rule)
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "RunRule"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -221,6 +226,7 @@ func (h *QualityRulesHandlers) RunRule(c *gin.Context) {
 func (h *QualityRulesHandlers) ListChecks(c *gin.Context) {
 	checks, err := h.checkStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListChecks"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -269,6 +275,7 @@ func (h *QualityRulesHandlers) GetAssetScore(c *gin.Context) {
 
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetAssetScore"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -312,6 +319,7 @@ func (h *QualityRulesHandlers) GetAssetScore(c *gin.Context) {
 func (h *QualityRulesHandlers) GetSummary(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetSummary"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

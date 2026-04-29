@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // ContractHandlers provides REST API handlers for data contracts.
@@ -44,6 +46,7 @@ func (h *ContractHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *ContractHandlers) ListContracts(c *gin.Context) {
 	contracts, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListContracts"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -143,6 +146,7 @@ func (h *ContractHandlers) UpdateContract(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateContract"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -198,6 +202,7 @@ func (h *ContractHandlers) ValidateContract(c *gin.Context) {
 	// Bump generation to trigger reconciler re-evaluation.
 	contract.Generation++
 	if err := h.store.Update(c.Request.Context(), contract); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ValidateContract"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

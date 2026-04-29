@@ -18,10 +18,13 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // CostReconciler reconciles cost policies.
@@ -47,6 +50,7 @@ func (r *CostReconciler) Reconcile(ctx context.Context, obj reconciler.Resource)
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("costing: reconciler received non-CostPolicyResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", policy.GetKey()), zap.String("kind", policy.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := policy.Status

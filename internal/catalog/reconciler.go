@@ -13,11 +13,14 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // DataSourceConnector abstracts connecting to a datasource and introspecting schema.
@@ -61,6 +64,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("catalog: reconciler received non-CatalogAssetResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", asset.GetKey()), zap.String("kind", asset.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := asset.Status
@@ -106,7 +110,8 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.LastTransitionTime = now
 		asset.Status = status
 		storeutil.Update(ctx, r.store, asset) //nolint:errcheck
-		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 5 * time.Minute}
+		logging.Z().Warn("reconciliation error", zap.String("name", asset.GetKey()), zap.Error(fmt.Errorf("datasource connector not available")))
+		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 	}
 
 	// Execute introspection.
@@ -131,6 +136,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.LastTransitionTime = now
 		asset.Status = status
 		storeutil.Update(ctx, r.store, asset) //nolint:errcheck
+		logging.Z().Warn("reconciliation error", zap.String("name", asset.GetKey()), zap.Error(err))
 		// Retry with exponential backoff based on consecutive failures.
 		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(status.ConsecutiveScanFailures)}
 	}

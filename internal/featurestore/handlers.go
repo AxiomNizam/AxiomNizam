@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type FeatureStoreHandlers struct {
@@ -33,6 +35,7 @@ func (h *FeatureStoreHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *FeatureStoreHandlers) ListGroups(c *gin.Context) {
 	groups, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListGroups"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -90,6 +93,7 @@ func (h *FeatureStoreHandlers) UpdateGroup(c *gin.Context) {
 	updated.Generation = existing.Generation + 1
 	updated.Status = existing.Status
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateGroup"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

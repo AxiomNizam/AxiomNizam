@@ -18,10 +18,13 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // DataSourceProber abstracts health-checking and metadata lookup for datasources.
@@ -56,6 +59,7 @@ func (r *VirtualTableReconciler) Reconcile(ctx context.Context, obj reconciler.R
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("federation: reconciler received non-VirtualTableResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", vt.GetKey()), zap.String("kind", vt.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := vt.Status

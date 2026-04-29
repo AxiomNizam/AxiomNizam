@@ -19,11 +19,13 @@ import (
 	"strconv"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"example.com/axiomnizam/internal/resources"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // SchemaRegistryHandlers provides HTTP handlers for schema registry operations.
@@ -67,6 +69,7 @@ func (h *SchemaRegistryHandlers) ListSubjects(c *gin.Context) {
 	ctx := c.Request.Context()
 	subjects, err := h.subjectStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListSubjects"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list subjects"})
 		return
 	}
@@ -89,6 +92,7 @@ func (h *SchemaRegistryHandlers) ListVersions(c *gin.Context) {
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListVersions"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
 		return
 	}
@@ -134,6 +138,7 @@ func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetSchemaByVersion"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
 		return
 	}
@@ -242,6 +247,7 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 			},
 		}
 		if createErr := h.subjectStore.Create(ctx, subj); createErr != nil {
+			logging.Z().Warn("handler error", zap.String("op", "RegisterSchema.createSubject"), zap.Error(createErr))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create subject", "detail": createErr.Error()})
 			return
 		}
@@ -249,6 +255,7 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 
 	// Create schema resource — reconciler will validate compatibility.
 	if err := h.schemaStore.Create(ctx, schema); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "RegisterSchema"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register schema", "detail": err.Error()})
 		return
 	}
@@ -281,6 +288,7 @@ func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "DeleteSchemaVersion"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
 		return
 	}
@@ -288,6 +296,7 @@ func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
 	for _, s := range schemas {
 		if s.Spec.Subject == subject && s.Status.Version == version {
 			if err := h.schemaStore.Delete(ctx, s.Name); err != nil {
+				logging.Z().Warn("handler error", zap.String("op", "DeleteSchemaVersion.delete"), zap.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete schema"})
 				return
 			}
@@ -315,6 +324,7 @@ func (h *SchemaRegistryHandlers) GetSchemaByID(c *gin.Context) {
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetSchemaByID"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search schemas"})
 		return
 	}
@@ -361,6 +371,7 @@ func (h *SchemaRegistryHandlers) SetSubjectCompatibility(c *gin.Context) {
 	subj.UpdatedAt = time.Now()
 
 	if err := h.subjectStore.Update(ctx, subj); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "SetSubjectCompatibility"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update subject"})
 		return
 	}
@@ -423,6 +434,7 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "CheckCompatibility"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
 		return
 	}

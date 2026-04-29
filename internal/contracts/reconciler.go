@@ -19,10 +19,14 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // CatalogAssetLookup abstracts looking up catalog asset metadata.
@@ -67,6 +71,7 @@ func (r *DataContractReconciler) Reconcile(ctx context.Context, obj reconciler.R
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("contracts: reconciler received non-DataContractResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", contract.GetKey()), zap.String("kind", contract.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := contract.Status
@@ -99,7 +104,8 @@ func (r *DataContractReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.LastTransitionTime = now
 		contract.Status = status
 		storeutil.Update(ctx, r.store, contract) //nolint:errcheck
-		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+		logging.Z().Warn("reconciliation error", zap.String("name", contract.GetKey()), zap.Error(fmt.Errorf("catalog lookup not available")))
+		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 	}
 
 	// Validate schema.
@@ -117,7 +123,8 @@ func (r *DataContractReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.LastTransitionTime = now
 		contract.Status = status
 		storeutil.Update(ctx, r.store, contract) //nolint:errcheck
-		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+		logging.Z().Warn("reconciliation error", zap.String("name", contract.GetKey()), zap.Error(err))
+		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 	}
 
 	// Check schema violations.

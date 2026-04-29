@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // StepExecutor abstracts executing individual ML pipeline steps.
@@ -30,6 +33,7 @@ func (r *MLPipelineReconciler) Reconcile(ctx context.Context, obj reconciler.Res
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("mlpipeline: received non-MLPipelineResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", pipeline.GetKey()), zap.String("kind", pipeline.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := pipeline.Status
@@ -107,6 +111,7 @@ func (r *MLPipelineReconciler) Reconcile(ctx context.Context, obj reconciler.Res
 				endedAt := time.Now()
 				ss.EndedAt = &endedAt
 				pipelineFailed = true
+				logging.Z().Warn("reconciliation error", zap.String("name", pipeline.GetKey()), zap.Error(err))
 			} else if result != nil {
 				*ss = *result
 			}

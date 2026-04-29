@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // FederationHandlers provides REST API handlers for federation.
@@ -64,6 +66,7 @@ func (h *FederationHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *FederationHandlers) ListVirtualTables(c *gin.Context) {
 	tables, err := h.vtStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListVirtualTables"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -126,6 +129,7 @@ func (h *FederationHandlers) UpdateVirtualTable(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.vtStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateVirtualTable"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -254,6 +258,7 @@ func (h *FederationHandlers) ExplainQuery(c *gin.Context) {
 func (h *FederationHandlers) ListQueries(c *gin.Context) {
 	queries, err := h.queryStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListQueries"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

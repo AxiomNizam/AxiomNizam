@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // AlertHandlers provides REST API handlers for alerting.
@@ -74,6 +76,7 @@ func (h *AlertHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *AlertHandlers) ListRules(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListRules"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -153,6 +156,7 @@ func (h *AlertHandlers) UpdateRule(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.ruleStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateRule"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -206,6 +210,7 @@ func (h *AlertHandlers) SilenceRule(c *gin.Context) {
 	rule.Generation++
 
 	if err := h.ruleStore.Update(c.Request.Context(), rule); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "SilenceRule"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -234,6 +239,7 @@ func (h *AlertHandlers) UnsilenceRule(c *gin.Context) {
 	rule.Generation++
 
 	if err := h.ruleStore.Update(c.Request.Context(), rule); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UnsilenceRule"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -247,6 +253,7 @@ func (h *AlertHandlers) UnsilenceRule(c *gin.Context) {
 func (h *AlertHandlers) ListIncidents(c *gin.Context) {
 	incidents, err := h.incidentStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListIncidents"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -298,6 +305,7 @@ func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
 	incident.Status.LastTransitionTime = now
 
 	if err := h.incidentStore.Update(c.Request.Context(), incident); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "AcknowledgeIncident"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -323,6 +331,7 @@ func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
 	incident.Status.LastTransitionTime = now
 
 	if err := h.incidentStore.Update(c.Request.Context(), incident); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ResolveIncident"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -336,6 +345,7 @@ func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
 func (h *AlertHandlers) ListChannels(c *gin.Context) {
 	channels, err := h.channelStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListChannels"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -404,6 +414,7 @@ func (h *AlertHandlers) UpdateChannel(c *gin.Context) {
 	updated.Generation = existing.Generation + 1
 
 	if err := h.channelStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateChannel"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

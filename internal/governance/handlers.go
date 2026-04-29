@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // GovernanceHandlers provides REST API handlers for governance.
@@ -72,6 +74,7 @@ func (h *GovernanceHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *GovernanceHandlers) ListPolicies(c *gin.Context) {
 	policies, err := h.policyStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListPolicies"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -144,6 +147,7 @@ func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.policyStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdatePolicy"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -175,6 +179,7 @@ func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
 
 	policy.Generation++
 	if err := h.policyStore.Update(c.Request.Context(), policy); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "TriggerAudit"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -186,6 +191,7 @@ func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
 func (h *GovernanceHandlers) ListRetentionPolicies(c *gin.Context) {
 	policies, err := h.retentionStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListRetentionPolicies"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -243,6 +249,7 @@ func (h *GovernanceHandlers) DeleteRetentionPolicy(c *gin.Context) {
 func (h *GovernanceHandlers) ListAccessRequests(c *gin.Context) {
 	requests, err := h.accessStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListAccessRequests"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -326,6 +333,7 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 	}
 
 	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ApproveAccessRequest"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -357,6 +365,7 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 	req.Status.LastTransitionTime = now
 
 	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "DenyAccessRequest"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -387,6 +396,7 @@ func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
 	req.Status.LastTransitionTime = now
 
 	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "RevokeAccessRequest"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

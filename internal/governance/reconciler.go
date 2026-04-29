@@ -19,10 +19,14 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // AssetAuditor abstracts looking up catalog assets for compliance auditing.
@@ -65,6 +69,7 @@ func (r *CompliancePolicyReconciler) Reconcile(ctx context.Context, obj reconcil
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("governance: reconciler received non-CompliancePolicyResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", policy.GetKey()), zap.String("kind", policy.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := policy.Status
@@ -107,7 +112,8 @@ func (r *CompliancePolicyReconciler) Reconcile(ctx context.Context, obj reconcil
 			status.LastTransitionTime = now
 			policy.Status = status
 			storeutil.Update(ctx, r.store, policy) //nolint:errcheck
-			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 1 * time.Minute}
+			logging.Z().Warn("reconciliation error", zap.String("name", policy.GetKey()), zap.Error(err))
+			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 		}
 	}
 

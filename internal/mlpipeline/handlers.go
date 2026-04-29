@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type MLPipelineHandlers struct {
@@ -43,6 +45,7 @@ func (h *MLPipelineHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *MLPipelineHandlers) ListPipelines(c *gin.Context) {
 	pipelines, err := h.pipelineStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListPipelines"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -101,6 +104,7 @@ func (h *MLPipelineHandlers) UpdatePipeline(c *gin.Context) {
 	updated.Generation = existing.Generation + 1
 	updated.Status = existing.Status
 	if err := h.pipelineStore.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdatePipeline"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -142,6 +146,7 @@ func (h *MLPipelineHandlers) TriggerRun(c *gin.Context) {
 func (h *MLPipelineHandlers) ListDeployments(c *gin.Context) {
 	deployments, err := h.deploymentStore.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListDeployments"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

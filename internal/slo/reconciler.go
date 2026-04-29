@@ -19,10 +19,14 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
+
+	"go.uber.org/zap"
 )
 
 // MetricsQuerier abstracts querying metrics for SLI calculation.
@@ -57,6 +61,7 @@ func (r *SLOReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) 
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("slo: reconciler received non-SLOResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", slo.GetKey()), zap.String("kind", slo.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := slo.Status
@@ -100,7 +105,8 @@ func (r *SLOReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) 
 			status.LastTransitionTime = now
 			slo.Status = status
 			storeutil.Update(ctx, r.store, slo) //nolint:errcheck
-			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+			logging.Z().Warn("reconciliation error", zap.String("name", slo.GetKey()), zap.Error(err))
+			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 		}
 
 		totalEvents, err = r.metrics.QueryCounter(ctx, slo.Spec.Indicator.TotalQuery, window)
@@ -114,7 +120,8 @@ func (r *SLOReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) 
 			status.LastTransitionTime = now
 			slo.Status = status
 			storeutil.Update(ctx, r.store, slo) //nolint:errcheck
-			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+			logging.Z().Warn("reconciliation error", zap.String("name", slo.GetKey()), zap.Error(err))
+			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 		}
 	}
 

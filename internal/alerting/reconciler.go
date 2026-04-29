@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
@@ -67,6 +68,7 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("alerting: received non-AlertRuleResource")}
 	}
+	logging.Z().Debug("reconciling resource", zap.String("name", rule.GetKey()), zap.String("kind", rule.GetTypeMeta().Kind))
 
 	now := time.Now()
 	status := rule.Status
@@ -127,7 +129,8 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 			status.LastTransitionTime = now
 			rule.Status = status
 			storeutil.Update(ctx, r.ruleStore, rule) //nolint:errcheck
-			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: evalInterval}
+			logging.Z().Warn("reconciliation error", zap.String("name", rule.GetKey()), zap.Error(err))
+			return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(1)}
 		}
 		conditionMet = met
 		conditionMsg = msg

@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // SLOHandlers provides REST API handlers for SLOs.
@@ -43,6 +45,7 @@ func (h *SLOHandlers) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *SLOHandlers) ListSLOs(c *gin.Context) {
 	slos, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "ListSLOs"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -119,6 +122,7 @@ func (h *SLOHandlers) UpdateSLO(c *gin.Context) {
 	updated.Status = existing.Status
 
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "UpdateSLO"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -170,6 +174,7 @@ func (h *SLOHandlers) GetBudget(c *gin.Context) {
 func (h *SLOHandlers) GetAllStatus(c *gin.Context) {
 	slos, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
+		logging.Z().Warn("handler error", zap.String("op", "GetAllStatus"), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
