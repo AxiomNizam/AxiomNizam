@@ -241,7 +241,92 @@ c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("JWT parse error: %v"
 
 ---
 
-## 4. API Design Standards
+## 4. Retry, Backoff & Circuit Breaker
+
+### 4.1 Current State
+
+| Pattern | Package | Used By | Status |
+|---------|---------|---------|--------|
+| Exponential backoff (library) | `internal/utils/backoff/` | Available but unused by new modules | ✅ Exists |
+| Circuit breaker (library) | `internal/utils/cncf_kubernetes.go` | Policy workflow definitions | ✅ Exists |
+| Work queue rate limiters | `internal/workqueue/ratelimiters.go` | Generic controller | ✅ Exists |
+| **Resilience package (new)** | `internal/platform/resilience/` | Alerting, federation, catalog | ✅ Applied |
+| Reconciler backoff on error | `resilience.ReconcileBackoff()` | Catalog reconciler | ✅ Applied |
+| Retry on notification dispatch | `resilience.DoVoid()` | Alerting channels | ✅ Applied |
+| Retry on sub-query execution | `resilience.Do()` | Federation executor | ✅ Applied |
+
+### 4.2 Standards
+
+**Reconciler error requeue — use exponential backoff, not fixed intervals:**
+
+```go
+// GOOD — exponential backoff based on consecutive failures
+status.ConsecutiveFailures++
+return reconciler.ReconcileResult{
+    Requeue:      true,
+    RequeueAfter: resilience.ReconcileBackoff(status.ConsecutiveFailures),
+}
+// Produces: 5s → 10s → 20s → 40s → 80s → 160s → 300s (capped at 5min)
+
+// BAD — fixed interval hammers a failing dependency
+return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+```
+
+**External calls — use retry with backoff:**
+
+```go
+// GOOD — retry with exponential backoff and jitter
+result, err := resilience.Do(ctx, resilience.Config{
+    MaxAttempts:  3,
+    InitialDelay: 200 * time.Millisecond,
+    MaxDelay:     5 * time.Second,
+    Name:         "datasource-query",
+}, func(ctx context.Context) (*Result, error) {
+    return queryDatasource(ctx, dsRef, sql)
+})
+
+// BAD — single attempt, no retry
+result, err := queryDatasource(ctx, dsRef, sql)
+```
+
+**Notification/webhook delivery — use circuit breaker + retry:**
+
+```go
+// GOOD — circuit breaker prevents hammering a down channel
+cb := resilience.NewCircuitBreaker("slack-webhook", 5, 30*time.Second)
+err := cb.Execute(ctx, func(ctx context.Context) error {
+    return sendSlackMessage(ctx, webhookURL, payload)
+})
+// After 5 consecutive failures: circuit opens for 30s
+// After 30s: half-open, allows 1 test request
+// After 2 successes in half-open: circuit closes
+```
+
+### 4.3 When to Use Each Pattern
+
+| Scenario | Pattern | Config |
+|----------|---------|--------|
+| Reconciler error requeue | `ReconcileBackoff(failures)` | 5s base, 5min cap |
+| Datasource query | `Do()` with 2-3 attempts | 200ms initial, 2s max |
+| Notification dispatch | `DoVoid()` with 3 attempts | 500ms initial, 5s max |
+| External API call | `Do()` + circuit breaker | 3 attempts + CB(5 failures, 30s) |
+| Store operations | No retry (etcd handles it) | Single attempt via storeutil |
+| Health probes | `Do()` with 2 attempts | 100ms initial, 1s max |
+
+### 4.4 Anti-Patterns to Avoid
+
+| Anti-Pattern | Why It's Bad | Fix |
+|-------------|-------------|-----|
+| Fixed retry interval | Thundering herd on recovery | Use exponential backoff with jitter |
+| Unlimited retries | Resource exhaustion | Cap at 3-5 attempts |
+| Retry non-idempotent operations | Duplicate side effects | Only retry reads and idempotent writes |
+| No circuit breaker on external calls | Cascading failures | Wrap with `CircuitBreaker.Execute()` |
+| Retry on context cancellation | Wastes resources | Check `ctx.Done()` before retry |
+| Same retry config everywhere | Over/under-retrying | Tune per dependency (DB fast, webhook slow) |
+
+---
+
+## 5. API Design Standards
 
 ### 4.1 Response Format
 
@@ -298,7 +383,7 @@ All API responses MUST follow this structure:
 
 ---
 
-## 5. Reconciler Standards
+## 6. Reconciler Standards
 
 ### 5.1 Required Pattern
 
@@ -342,7 +427,7 @@ func (r *MyReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) r
 
 ---
 
-## 6. Frontend Standards
+## 7. Frontend Standards
 
 ### 6.1 Output Encoding
 
@@ -399,7 +484,7 @@ function submitForm() {
 
 ---
 
-## 7. Dependency & Import Standards
+## 8. Dependency & Import Standards
 
 ### 7.1 Import Order
 
@@ -436,10 +521,12 @@ import (
 | `md5.Sum()` for new code | Broken hash | `sha256.Sum256()` |
 | `innerHTML = untrustedData` | XSS | `escHtml(data)` or `textContent` |
 | Hardcoded secrets in source | Credential leak | Environment variables / secrets manager |
+| Fixed retry interval on error | Thundering herd | `resilience.ReconcileBackoff()` or `resilience.Do()` |
+| No retry on external calls | Silent single-point failure | `resilience.Do()` with 2-3 attempts |
 
 ---
 
-## 8. Testing Standards
+## 9. Testing Standards
 
 ### 8.1 Required Tests
 
@@ -460,7 +547,7 @@ internal/<module>/<specific>_test.go
 
 ---
 
-## 9. Compliance Checklist (For Code Review)
+## 10. Compliance Checklist (For Code Review)
 
 Use this checklist for every PR:
 
@@ -478,6 +565,9 @@ Use this checklist for every PR:
 □ No MD5 or SHA1 for new code
 □ Context cancellation checked in loops over external calls
 □ Feature-flagged via RECONCILER_ENABLED_<MODULE>
+□ Reconciler error requeue uses resilience.ReconcileBackoff (not fixed intervals)
+□ External calls (DB, API, webhook) use resilience.Do() with retry
+□ High-traffic external dependencies wrapped with CircuitBreaker
 ```
 
 ---

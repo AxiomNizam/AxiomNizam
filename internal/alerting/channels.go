@@ -17,6 +17,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"example.com/axiomnizam/internal/platform/resilience"
 )
 
 // NotificationMessage is the payload sent to a channel.
@@ -45,8 +47,22 @@ func NewChannelDispatcher() *ChannelDispatcher {
 	}
 }
 
-// Dispatch sends a notification through the specified channel.
+// Dispatch sends a notification through the specified channel with retry.
 func (d *ChannelDispatcher) Dispatch(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+	return resilience.DoVoid(ctx, resilience.Config{
+		MaxAttempts:  3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     5 * time.Second,
+		Multiplier:   2.0,
+		Jitter:       true,
+		Name:         "notify-" + channel.Name,
+	}, func(ctx context.Context) error {
+		return d.dispatchOnce(ctx, channel, msg)
+	})
+}
+
+// dispatchOnce sends a single notification attempt.
+func (d *ChannelDispatcher) dispatchOnce(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
 	switch ChannelType(channel.Spec.Type) {
 	case ChannelTypeSlack:
 		return d.sendSlack(ctx, channel, msg)

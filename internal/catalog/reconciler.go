@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
@@ -120,6 +121,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 	if err != nil {
 		status.ScanError = err.Error()
 		status.FreshnessStatus = "unknown"
+		status.ConsecutiveScanFailures++
 		status.Conditions = upsertCondition(status.Conditions, resources.Condition{
 			Type: "Ready", Status: "False",
 			Reason: "ScanFailed", Message: fmt.Sprintf("introspection failed: %v", err),
@@ -129,8 +131,8 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 		status.LastTransitionTime = now
 		asset.Status = status
 		storeutil.Update(ctx, r.store, asset) //nolint:errcheck
-		// Retry with backoff.
-		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: 30 * time.Second}
+		// Retry with exponential backoff based on consecutive failures.
+		return reconciler.ReconcileResult{Requeue: true, RequeueAfter: resilience.ReconcileBackoff(status.ConsecutiveScanFailures)}
 	}
 
 	// Update status with introspection results.
@@ -141,6 +143,7 @@ func (r *CatalogAssetReconciler) Reconcile(ctx context.Context, obj reconciler.R
 	status.LastScannedAt = &now
 	status.LastModifiedAt = result.ModifiedAt
 	status.ScanError = ""
+	status.ConsecutiveScanFailures = 0
 	status.Phase = "Active"
 
 	// Determine freshness.

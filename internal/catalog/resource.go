@@ -197,6 +197,9 @@ type CatalogAssetResourceStatus struct {
 	// ScanError records the last scan error if any
 	ScanError string `json:"scanError,omitempty"`
 
+	// ConsecutiveScanFailures tracks sequential scan failures for backoff
+	ConsecutiveScanFailures int `json:"consecutiveScanFailures,omitempty"`
+
 	// ProfiledAt is when column profiling was last run
 	ProfiledAt *time.Time `json:"profiledAt,omitempty"`
 

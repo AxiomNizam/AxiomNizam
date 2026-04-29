@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/platform/resilience"
 )
 
 // DataSourceExecutor abstracts executing SQL against a single datasource.
@@ -82,7 +84,14 @@ func (e *QueryExecutor) ExecuteAll(ctx context.Context, subQueries []SubQuery, m
 			}
 			defer func() { <-sem }()
 
-			rs, err := e.dsExecutor.Execute(ctx, query.DataSourceRef, query.SQL, maxRows)
+			rs, err := resilience.Do(ctx, resilience.Config{
+				MaxAttempts:  2,
+				InitialDelay: 200 * time.Millisecond,
+				MaxDelay:     2 * time.Second,
+				Name:         "subquery-" + query.DataSourceRef,
+			}, func(ctx context.Context) (*ResultSet, error) {
+				return e.dsExecutor.Execute(ctx, query.DataSourceRef, query.SQL, maxRows)
+			})
 			results[idx] = SubQueryResult{
 				SubQuery: query,
 				Result:   rs,
