@@ -1771,6 +1771,12 @@ func main() {
 					if iamSystem.Authorizer != nil {
 						authHandler.SetIAMAuthorizer(iamSystem.Authorizer)
 					}
+
+					// Wire IAM into storage system (deferred).
+					if storageSys != nil && iamSystem.Issuer != nil {
+						storageSys.SetIAM(iamSystem.Issuer, iamSystem.RevokedStore)
+						log.Println("✅ Storage: IAM middleware attached (deferred, Raft KV backend)")
+					}
 				}
 			}
 

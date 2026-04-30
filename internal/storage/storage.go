@@ -40,8 +40,17 @@ type System struct {
 	Config     Config
 
 	// IAM references (nil when IAM is not available).
+	// These may be set after construction via SetIAM() when IAM init
+	// is deferred (Raft mode).
 	iamIssuer       *token.Issuer
 	iamRevokedStore *iamStorage.EtcdRevokedTokenStore
+}
+
+// SetIAM sets the IAM issuer and revoked token store after construction.
+// Used when IAM initialization is deferred (e.g., STORAGE_BACKEND=raft).
+func (s *System) SetIAM(issuer *token.Issuer, revokedStore *iamStorage.EtcdRevokedTokenStore) {
+	s.iamIssuer = issuer
+	s.iamRevokedStore = revokedStore
 }
 
 // Config holds configuration for the native object storage backend.
@@ -119,11 +128,9 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 	}
 	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, presignedLimit)
 
-	var jwtAuth gin.HandlerFunc
-	if s.iamIssuer != nil {
-		jwtAuth = iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
-	}
-
+	// JWT auth is resolved at request time (not route-registration time)
+	// so that the IAM issuer can be set after routes are registered
+	// (deferred IAM init in Raft mode).
 	rg.Use(func(c *gin.Context) {
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c.Request = r
@@ -137,7 +144,8 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 				c.Set("storage_presigned_user", info.UserID)
 			}
 
-			if !c.GetBool("storage_presigned_request") && jwtAuth != nil {
+			if !c.GetBool("storage_presigned_request") && s.iamIssuer != nil {
+				jwtAuth := iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
 				jwtAuth(c)
 				return
 			}
