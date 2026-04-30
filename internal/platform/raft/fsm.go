@@ -36,6 +36,16 @@ type FSM struct {
 	// tables tracks all registered table names so Snapshot can
 	// iterate them.
 	tables []string
+
+	// metrics tracks FSM operation counters and timing.
+	metrics *Metrics
+
+	// logger provides structured logging for FSM operations.
+	logger interface {
+		Info(msg string, args ...interface{})
+		Warn(msg string, args ...interface{})
+		Error(msg string, args ...interface{})
+	}
 }
 
 // NewFSM creates a new FSM backed by the given go-memdb instance.
@@ -43,9 +53,24 @@ type FSM struct {
 // snapshot all of them.
 func NewFSM(db *memdb.MemDB, tables []string) *FSM {
 	return &FSM{
-		db:     db,
-		tables: tables,
+		db:      db,
+		tables:  tables,
+		metrics: NewMetrics(),
 	}
+}
+
+// SetLogger sets the structured logger for the FSM.
+func (f *FSM) SetLogger(l interface {
+	Info(msg string, args ...interface{})
+	Warn(msg string, args ...interface{})
+	Error(msg string, args ...interface{})
+}) {
+	f.logger = l
+}
+
+// Metrics returns the FSM metrics for external reporting.
+func (f *FSM) GetMetrics() *Metrics {
+	return f.metrics
 }
 
 // Apply is called by Raft when a log entry is committed.  It decodes
@@ -54,21 +79,47 @@ func NewFSM(db *memdb.MemDB, tables []string) *FSM {
 // The return value is made available via raft.ApplyFuture.Response().
 // We return nil on success or an error string on failure.
 func (f *FSM) Apply(log *hraft.Log) interface{} {
+	start := time.Now()
+
 	cmd, err := DecodeCommand(log.Data)
 	if err != nil {
+		f.metrics.RecordApplyError()
+		if f.logger != nil {
+			f.logger.Error("fsm: decode command failed", "error", err, "index", log.Index)
+		}
 		return fmt.Errorf("fsm: %w", err)
 	}
 
+	var result interface{}
 	switch cmd.Type {
 	case CommandCreate:
-		return f.applyCreate(cmd)
+		result = f.applyCreate(cmd)
 	case CommandUpdate:
-		return f.applyUpdate(cmd)
+		result = f.applyUpdate(cmd)
 	case CommandDelete:
-		return f.applyDelete(cmd)
+		result = f.applyDelete(cmd)
 	default:
+		f.metrics.RecordApplyError()
+		if f.logger != nil {
+			f.logger.Error("fsm: unknown command type", "type", cmd.Type, "index", log.Index)
+		}
 		return fmt.Errorf("fsm: unknown command type %d", cmd.Type)
 	}
+
+	duration := time.Since(start)
+	if result != nil {
+		if _, isErr := result.(error); isErr {
+			f.metrics.RecordApplyError()
+			if f.logger != nil {
+				f.logger.Warn("fsm: apply failed", "type", cmd.Type.String(),
+					"table", cmd.Table, "key", cmd.Key, "error", result, "index", log.Index)
+			}
+		}
+	} else {
+		f.metrics.RecordApply(cmd.Type, duration)
+	}
+
+	return result
 }
 
 func (f *FSM) applyCreate(cmd *Command) interface{} {
@@ -136,10 +187,11 @@ func (f *FSM) applyDelete(cmd *Command) interface{} {
 // Snapshot returns an FSMSnapshot that captures the current state of
 // all tables.  Called by Raft for log compaction.
 func (f *FSM) Snapshot() (hraft.FSMSnapshot, error) {
+	start := time.Now()
+
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	// Collect all entries from all tables.
 	var entries []snapshotEntry
 
 	txn := f.db.Txn(false)
@@ -148,19 +200,39 @@ func (f *FSM) Snapshot() (hraft.FSMSnapshot, error) {
 	for _, table := range f.tables {
 		it, err := txn.Get(table, "id")
 		if err != nil {
+			f.metrics.RecordSnapshotError()
 			return nil, fmt.Errorf("fsm: snapshot table %q: %w", table, err)
 		}
 		for raw := it.Next(); raw != nil; raw = it.Next() {
-			e := raw.(*fsmEntry)
-			entries = append(entries, snapshotEntry{
-				Table:     table,
-				Key:       e.Key,
-				Namespace: e.Namespace,
-				Data:      e.Data,
-			})
+			se := snapshotEntry{Table: table}
+
+			// Handle both fsmEntry and kvFSMEntry types.
+			switch e := raw.(type) {
+			case *fsmEntry:
+				se.Key = e.Key
+				se.Namespace = e.Namespace
+				se.Data = e.Data
+			case *kvFSMEntry:
+				se.Key = e.Key
+				se.Data = e.Data
+			default:
+				// Fallback: JSON round-trip for unknown types.
+				b, _ := json.Marshal(raw)
+				var m map[string]json.RawMessage
+				_ = json.Unmarshal(b, &m)
+				if k, ok := m["Key"]; ok {
+					_ = json.Unmarshal(k, &se.Key)
+				}
+				if d, ok := m["Data"]; ok {
+					se.Data = d
+				}
+			}
+
+			entries = append(entries, se)
 		}
 	}
 
+	f.metrics.RecordSnapshot(time.Since(start))
 	return &FSMSnapshot{entries: entries}, nil
 }
 
@@ -181,10 +253,18 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 	// Rebuild: write all entries in a single transaction.
 	txn := f.db.Txn(true)
 	for _, se := range entries {
-		entry := &fsmEntry{
-			Key:       se.Key,
-			Namespace: se.Namespace,
-			Data:      se.Data,
+		var entry interface{}
+		if se.Table == "_kv" {
+			entry = &kvFSMEntry{
+				Key:  se.Key,
+				Data: se.Data,
+			}
+		} else {
+			entry = &fsmEntry{
+				Key:       se.Key,
+				Namespace: se.Namespace,
+				Data:      se.Data,
+			}
 		}
 		if err := txn.Insert(se.Table, entry); err != nil {
 			txn.Abort()
@@ -192,6 +272,11 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 		}
 	}
 	txn.Commit()
+
+	f.metrics.RestoreCount.Add(1)
+	if f.logger != nil {
+		f.logger.Info("fsm: state restored", "entries", len(entries))
+	}
 	return nil
 }
 

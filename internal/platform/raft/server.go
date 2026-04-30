@@ -38,7 +38,8 @@ type Server struct {
 	stable    hraft.StableStore
 	snapshots hraft.SnapshotStore
 
-	logger hclog.Logger
+	logger  hclog.Logger
+	metrics *Metrics
 }
 
 // NewServer creates and starts an embedded Raft server.
@@ -58,11 +59,16 @@ func NewServer(cfg *Config, db *memdb.MemDB, tables []string) (*Server, error) {
 	})
 
 	s := &Server{
-		config: cfg,
-		db:     db,
-		fsm:    NewFSM(db, tables),
-		logger: logger,
+		config:  cfg,
+		db:      db,
+		fsm:     NewFSM(db, tables),
+		logger:  logger,
+		metrics: NewMetrics(),
 	}
+
+	// Wire logger into FSM for structured logging.
+	s.fsm.SetLogger(logger)
+	s.fsm.metrics = s.metrics
 
 	if err := s.setupRaft(); err != nil {
 		return nil, fmt.Errorf("raft server: %w", err)
@@ -154,7 +160,14 @@ func (s *Server) setupRaft() error {
 
 // Apply submits a pre-encoded command to the Raft leader.  Blocks
 // until the log entry is committed or the timeout expires.
+//
+// Returns ErrNotLeader if this node is not the leader.  Callers
+// should retry on the leader node.
 func (s *Server) Apply(data []byte, timeout time.Duration) error {
+	if s.raft.State() != hraft.Leader {
+		return ErrNotLeader
+	}
+
 	f := s.raft.Apply(data, timeout)
 	if err := f.Error(); err != nil {
 		return fmt.Errorf("raft apply: %w", err)
@@ -167,6 +180,9 @@ func (s *Server) Apply(data []byte, timeout time.Duration) error {
 	}
 	return nil
 }
+
+// ErrNotLeader is returned when a write is attempted on a non-leader node.
+var ErrNotLeader = fmt.Errorf("node is not the leader")
 
 // IsLeader returns true if this node is the current Raft leader.
 func (s *Server) IsLeader() bool {
@@ -191,10 +207,75 @@ func (s *Server) DB() *memdb.MemDB {
 	return s.db
 }
 
-// Shutdown gracefully stops the Raft server.
+// Shutdown gracefully stops the Raft server and closes all stores.
 func (s *Server) Shutdown() error {
+	s.logger.Info("shutting down raft server")
+
 	f := s.raft.Shutdown()
+	if err := f.Error(); err != nil {
+		s.logger.Error("raft shutdown error", "error", err)
+	}
+
+	// Close BoltDB stores to release file locks.
+	if closer, ok := s.logStore.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			s.logger.Error("log store close error", "error", err)
+		}
+	}
+	if closer, ok := s.stable.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			s.logger.Error("stable store close error", "error", err)
+		}
+	}
+
 	return f.Error()
+}
+
+// GetMetrics returns the Raft subsystem metrics.
+func (s *Server) GetMetrics() *Metrics {
+	return s.metrics
+}
+
+// Stats returns Raft internal stats (term, commit index, etc.).
+func (s *Server) Stats() map[string]string {
+	return s.raft.Stats()
+}
+
+// LastContact returns the time since this node last heard from the
+// leader.  Useful for health checks.
+func (s *Server) LastContact() time.Time {
+	return s.raft.LastContact()
+}
+
+// LeaderWithID returns the address and ID of the current leader.
+func (s *Server) LeaderWithID() (string, string) {
+	addr, id := s.raft.LeaderWithID()
+	return string(addr), string(id)
+}
+
+// GetConfiguration returns the current Raft cluster configuration
+// (list of servers, their roles, and suffrage).
+func (s *Server) GetConfiguration() ([]PeerInfo, error) {
+	future := s.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return nil, err
+	}
+	var peers []PeerInfo
+	for _, srv := range future.Configuration().Servers {
+		peers = append(peers, PeerInfo{
+			ID:       string(srv.ID),
+			Address:  string(srv.Address),
+			Suffrage: srv.Suffrage.String(),
+		})
+	}
+	return peers, nil
+}
+
+// PeerInfo describes a server in the Raft cluster.
+type PeerInfo struct {
+	ID       string `json:"id"`
+	Address  string `json:"address"`
+	Suffrage string `json:"suffrage"`
 }
 
 // AddPeer adds a new voting server to the Raft cluster.
