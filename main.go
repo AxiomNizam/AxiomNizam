@@ -250,13 +250,22 @@ func main() {
 	// ====================================
 	// IAM SYSTEM INITIALIZATION
 	// ====================================
-	iamSystem, iamErr := iampkg.NewSystem(conns.PostgreSQL, conns.Etcd, iampkg.Config{
-		IssuerURL: strings.TrimSpace(os.Getenv("IAM_ISSUER_URL")),
-	})
+	var iamSystem *iampkg.System
+	var iamErr error
+
+	if earlyStorageBackend != "raft" {
+		// etcd mode: initialize IAM immediately.
+		iamSystem, iamErr = iampkg.NewSystem(conns.PostgreSQL, conns.Etcd, iampkg.Config{
+			IssuerURL: strings.TrimSpace(os.Getenv("IAM_ISSUER_URL")),
+		})
+	} else {
+		// Raft mode: IAM will be initialized after BackendManager is ready.
+		log.Println("ℹ️  IAM initialization deferred (STORAGE_BACKEND=raft — waiting for Raft KV)")
+	}
 	if iamErr != nil {
 		log.Printf("⚠️  IAM system initialization failed: %v", iamErr)
-		log.Println("⚠️  IAM endpoints will not be available. Ensure PostgreSQL is connected. When using STORAGE_BACKEND=raft, IAM etcd migration is pending.")
-	} else {
+		log.Println("⚠️  IAM endpoints will not be available. Ensure PostgreSQL is connected.")
+	} else if iamSystem != nil {
 		log.Println("✅ IAM system initialized")
 	}
 
@@ -1717,16 +1726,54 @@ func main() {
 
 		// Raft mode: complete deferred initialization now that BackendManager is ready.
 		if backendMgr.IsRaft() {
+			// Wait for Raft leader election before writing (single-node
+			// election typically completes in ~1-2 seconds).
+			log.Println("  ⏳ Waiting for Raft leader election...")
+			for i := 0; i < 20; i++ {
+				if backendMgr.RaftServer.IsLeader() {
+					break
+				}
+				time.Sleep(250 * time.Millisecond)
+			}
+			if backendMgr.RaftServer.IsLeader() {
+				log.Println("  ✅ Raft node is leader")
+			} else {
+				log.Println("  ⚠️  Raft node is not leader yet (writes may fail until election completes)")
+			}
+
 			// Re-attempt JWT secret with KVStore.
 			if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, backendMgr.KV()); secretErr != nil {
 				log.Printf("⚠️  DEMO_JWT_SECRET synchronization via Raft KV failed: %v", secretErr)
 			} else {
 				log.Println("✅ DEMO_JWT_SECRET synchronized via Raft KV store")
 			}
-			// Note: workflows/vectorplus/reviewflow/modes/integration modules
-			// still use their own etcd-based persistence internally.  They
-			// will be migrated to accept KVStore in a follow-up.  For now,
-			// they operate without persistence in Raft mode (in-memory only).
+
+			// Initialize IAM with KVStore backend.
+			if iamSystem == nil {
+				iamSystem, iamErr = iampkg.NewSystem(conns.PostgreSQL, nil, iampkg.Config{
+					IssuerURL: strings.TrimSpace(os.Getenv("IAM_ISSUER_URL")),
+				}, backendMgr.KV())
+				if iamErr != nil {
+					log.Printf("⚠️  IAM system initialization via Raft KV failed: %v", iamErr)
+				} else {
+					log.Println("✅ IAM system initialized via Raft KV store")
+					// Register IAM routes now (deferred from early init).
+					iamSystem.RegisterRoutes(router)
+					log.Println("✅ IAM routes registered (deferred, Raft KV backend)")
+
+					// Wire IAM into auth handler.
+					if iamSystem.PGStore != nil {
+						authHandler.SetIdentityProviderStore(iamSystem.PGStore)
+					}
+					if iamSystem.Users != nil {
+						authHandler.SetIAMUserRepository(iamSystem.Users)
+					}
+					if iamSystem.Authorizer != nil {
+						authHandler.SetIAMAuthorizer(iamSystem.Authorizer)
+					}
+				}
+			}
+
 			log.Println("  ℹ️  Module persistence: Raft KV available via backendMgr.KV()")
 		}
 

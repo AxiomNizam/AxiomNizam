@@ -402,10 +402,10 @@ func (s *MemDBKVStore) setTTL(key string, expiresAt time.Time) {
 		txn.Abort()
 		return
 	}
-	entry := raw.(*kvEntry)
+	data, _ := kvExtract(raw)
 	updated := &kvEntry{
-		Key:       entry.Key,
-		Data:      entry.Data,
+		Key:       key,
+		Data:      data,
 		ExpiresAt: expiresAt,
 	}
 	if err := txn.Insert(kvTableName, updated); err != nil {
@@ -440,8 +440,8 @@ func (s *MemDBKVStore) reapExpired() {
 	now := time.Now()
 	var toDelete []interface{}
 	for raw := it.Next(); raw != nil; raw = it.Next() {
-		entry := raw.(*kvEntry)
-		if !entry.ExpiresAt.IsZero() && now.After(entry.ExpiresAt) {
+		_, expiresAt := kvExtract(raw)
+		if !expiresAt.IsZero() && now.After(expiresAt) {
 			toDelete = append(toDelete, raw)
 		}
 	}

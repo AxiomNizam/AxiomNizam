@@ -272,7 +272,7 @@ Post-implementation audit (2026-04-29): fixed 3 runtime bugs that would have pre
 - FSM/KVStore type mismatch: aligned `kvFSMEntry` fields with `kvEntry` schema, added JSON-based fallback extraction
 - Module persistence wiring: `ConfigureGlobalPersistence` calls skipped when etcd is nil (Raft mode), with deferred KV init after BackendManager
 - Platform managers: removed hard etcd requirement — managers now work in-memory when etcd is nil (Raft mode)
-- IAM system: non-fatal when etcd is unavailable (IAM etcd migration is a follow-up)
+- IAM system: migrated to use `KVStore` interface — IAM now works with both etcd and Raft backends. Added `iamBackend` interface, `kvStoreBackend` adapter, and `NewKV*Repository` constructors. IAM initialization deferred to after BackendManager in Raft mode. IAM routes registered after deferred init. Raft leader election wait added before KV writes.
 
 ## Quick Start
 

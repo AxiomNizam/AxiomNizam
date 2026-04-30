@@ -244,7 +244,7 @@ func (s *etcdStore) delPrefix(prefix string) error {
 
 // EtcdClientRepository stores OAuth clients in etcd.
 type EtcdClientRepository struct {
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdClientRepository(c *clientv3.Client) *EtcdClientRepository {
@@ -303,7 +303,7 @@ func (r *EtcdClientRepository) ListClients() ([]*oauth.OAuthClient, error) {
 
 // EtcdCodeRepository stores short-lived auth codes in etcd with TTL.
 type EtcdCodeRepository struct {
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdCodeRepository(c *clientv3.Client) *EtcdCodeRepository {
@@ -345,7 +345,7 @@ func (r *EtcdCodeRepository) InvalidateCode(code string) error {
 
 // EtcdRefreshTokenRepository manages refresh tokens in etcd.
 type EtcdRefreshTokenRepository struct {
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdRefreshTokenRepository(c *clientv3.Client) *EtcdRefreshTokenRepository {
@@ -439,7 +439,7 @@ func (r *EtcdRefreshTokenRepository) RevokeBySessionID(sessionID string) error {
 // EtcdRoleRepository persists IAM roles in etcd.
 type EtcdRoleRepository struct {
 	mu    sync.RWMutex
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdRoleRepository(c *clientv3.Client) *EtcdRoleRepository {
@@ -520,7 +520,7 @@ func (r *EtcdRoleRepository) DeleteRole(id string) error {
 // EtcdRoleBindingRepository stores user-role bindings in etcd.
 type EtcdRoleBindingRepository struct {
 	mu    sync.RWMutex
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdRoleBindingRepository(c *clientv3.Client) *EtcdRoleBindingRepository {
@@ -579,7 +579,7 @@ func (r *EtcdRoleBindingRepository) ListAllBindings() ([]*authz.RoleBinding, err
 
 // EtcdSessionRepository stores sessions with TTL.
 type EtcdSessionRepository struct {
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdSessionRepository(c *clientv3.Client) *EtcdSessionRepository {
@@ -638,7 +638,7 @@ func (r *EtcdSessionRepository) RevokeByUserID(userID string) error {
 
 // EtcdRevokedTokenStore tracks revoked JTIs to prevent replay.
 type EtcdRevokedTokenStore struct {
-	store *etcdStore
+	store iamBackend
 }
 
 func NewEtcdRevokedTokenStore(c *clientv3.Client) *EtcdRevokedTokenStore {

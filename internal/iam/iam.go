@@ -22,6 +22,7 @@ import (
 	"example.com/axiomnizam/internal/iam/pgstore"
 	"example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"github.com/gin-gonic/gin"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"gorm.io/gorm"
@@ -189,13 +190,18 @@ func generateRSAPrivateKeyPEM() (string, error) {
 }
 
 // NewSystem initialises the complete IAM system.
-// Requires a PostgreSQL connection (for users) and an etcd client (for everything else).
-func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config) (*System, error) {
+// Requires a PostgreSQL connection (for users).
+// For KV storage: uses etcd if available, otherwise KVStore (Raft backend).
+func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config, kvOpt ...platformstore.KVStore) (*System, error) {
 	if pg == nil {
 		return nil, errors.New("IAM requires a PostgreSQL connection")
 	}
-	if etcd == nil {
-		return nil, errors.New("IAM requires an etcd connection")
+	var kv platformstore.KVStore
+	if len(kvOpt) > 0 && kvOpt[0] != nil {
+		kv = kvOpt[0]
+	}
+	if etcd == nil && kv == nil {
+		return nil, errors.New("IAM requires an etcd connection or KVStore")
 	}
 
 	// Token issuer
@@ -234,6 +240,17 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config) (*System, error) 
 	refreshRepo := storage.NewEtcdRefreshTokenRepository(etcd)
 	codeRepo := storage.NewEtcdCodeRepository(etcd)
 	revokedStore := storage.NewEtcdRevokedTokenStore(etcd)
+
+	if etcd == nil && kv != nil {
+		// Use KVStore-backed repositories (Raft mode).
+		clientRepo = storage.NewKVClientRepository(kv)
+		roleRepo = storage.NewKVRoleRepository(kv)
+		bindingRepo = storage.NewKVRoleBindingRepository(kv)
+		sessionRepo = storage.NewKVSessionRepository(kv)
+		refreshRepo = storage.NewKVRefreshTokenRepository(kv)
+		codeRepo = storage.NewKVCodeRepository(kv)
+		revokedStore = storage.NewKVRevokedTokenStore(kv)
+	}
 
 	// Seed system roles
 	if err := storage.SeedSystemRoles(roleRepo); err != nil {
