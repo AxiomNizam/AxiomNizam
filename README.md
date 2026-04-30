@@ -39,7 +39,7 @@ AxiomNizam contains:
 - Frontend dashboard server in Go (Gin + templates) on port 7000.
 - Keycloak-based authentication and token validation.
 - Fine-grained RBAC middleware for auth-only and admin/system-manager routes.
-- Platform services backed by etcd for multi-tenant operations.
+- Platform services backed by embedded Raft storage (default) or external etcd for multi-tenant operations.
 - Query logging, API metrics, and rate limiting.
 - Data tooling: API Builder, CSV upload, dashboard generation, GIS conversion, and file malware scanning.
 
@@ -49,8 +49,13 @@ The current runtime architecture is layered:
 
 - Presentation layer: frontend Gin server on port 7000 with role-based dashboard routes.
 - API layer: backend Gin server on port 8000 with auth, data, control-plane, and extension APIs.
-- Control-plane layer: etcd-backed resource APIs and reconcile runtime loop on a dedicated runtime port (default 8001).
+- Control-plane layer: resource APIs and reconcile runtime loop backed by embedded Raft (default) or external etcd, on a dedicated runtime port (default 8001).
 - Platform services layer: bulk/eventbus/export/webhook/stream/tenant/rbac/versioning/lineage/tracing managers, plus Conductor, IAM, and native object storage modules.
+
+Storage backend options:
+
+- `STORAGE_BACKEND=raft` — Embedded Raft + go-memdb + BoltDB. Single-binary deployment, no external state store needed. Recommended for self-hosted and development.
+- `STORAGE_BACKEND=etcd` — External etcd cluster. Backward-compatible with existing deployments.
 
 Default services in docker-compose:
 
@@ -58,11 +63,11 @@ Default services in docker-compose:
 - axiomnizam-frontend: frontend UI, http://localhost:7000
 - keycloak: identity provider, http://localhost:8080
 - postgres: relational storage
-- etcd: distributed state for platform managers
 - clamav: SafeGate scanner
 
-Optional profile services (openclaw):
+Optional services:
 
+- etcd: distributed state (only needed when STORAGE_BACKEND=etcd)
 - openclaw-gateway: OpenClaw OpenAI-compatible gateway, http://localhost:18789
 - ollama: local model runtime, http://localhost:11434
 - ollama-init: one-shot TinyLlama bootstrap (model pull)
@@ -79,15 +84,15 @@ Runtime notes:
 ## Project Size Snapshot
 
 <!-- README_METRICS:START -->
-Code inventory snapshot (workspace scan on 2026-04-28):
+Code inventory snapshot (workspace scan on 2026-04-30):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 594
-- Total code lines: 216800
-- Go files (repository): 543
-- Go lines (repository): 178580
-- Internal modules: 91
-- Internal Go files: 501
-- Internal Go lines: 165350
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 712
+- Total code lines: 207783
+- Go files (repository): 661
+- Go lines (repository): 173451
+- Internal modules: 100
+- Internal Go files: 618
+- Internal Go lines: 160886
 
 Counting method used:
 
@@ -994,11 +999,11 @@ This split is intentional in the current codebase.
 
 ## Internal Module Coverage
 
-Internal scan snapshot (2026-04-28):
+Internal scan snapshot (2026-04-30):
 
-- Module folders under internal/: 91
-- Go files under internal/: 501
-- Go lines under internal/: 165350
+- Module folders under internal/: 100
+- Go files under internal/: 618
+- Go lines under internal/: 160886
 
 Largest modules by Go lines:
 

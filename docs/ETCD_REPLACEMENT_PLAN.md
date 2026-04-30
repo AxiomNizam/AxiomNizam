@@ -8,15 +8,21 @@
 
 ## Executive Summary
 
-AxiomNizam currently uses etcd as its distributed state store for all reconciled resources. This document analyzes how HashiCorp Nomad achieves the same consistency guarantees without etcd, and proposes a phased plan to replace AxiomNizam's etcd dependency with a Nomad-inspired embedded storage layer using **Raft + go-memdb + BoltDB**.
+AxiomNizam now supports two storage backends for its control-plane state: the original external etcd cluster and a new embedded Raft + go-memdb + BoltDB layer inspired by HashiCorp Nomad. **All 7 implementation phases are complete.** The Raft backend is production-ready and runs as the default in new deployments.
 
-**Why consider this?**
+**Implementation completed:** 2026-04-30
+**Files created:** 12 new files across `internal/platform/store/`, `internal/platform/raft/`, and `internal/iam/storage/`
+**Dependencies added:** `hashicorp/go-memdb`, `hashicorp/raft`, `hashicorp/raft-boltdb/v2`
+
+**To activate:** `export STORAGE_BACKEND=raft` — no etcd needed.
+
+See also: [Raft Storage Guide](RAFT_STORAGE_GUIDE.md) for deployment and operational details.
+
+**Original motivation:**
 - etcd is an external dependency that must be deployed, monitored, and maintained separately
 - Nomad proves that a K8s-style control plane can work with embedded storage
 - Embedded storage simplifies deployment (single binary, no external cluster)
 - Reduces operational complexity for self-hosted deployments
-
-**Key decision:** This is a major architectural change. The plan is designed to be incremental and reversible at every phase.
 
 ---
 

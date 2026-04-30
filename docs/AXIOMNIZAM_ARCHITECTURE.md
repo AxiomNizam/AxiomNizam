@@ -17,7 +17,7 @@ AxiomNizam is a **declarative control-plane for data platform services** with wo
 ## 2. Architecture Principles
 
 1. **Declarative over imperative** — Users declare desired state (Spec); controllers reconcile it into actual state (Status).
-2. **etcd is the source of truth** — All platform state lives in etcd. External systems (SQL databases, Kafka, etc.) are reached only by reconcilers.
+2. **Distributed state is the source of truth** — All platform state lives in the distributed state store (embedded Raft or external etcd, selected via `STORAGE_BACKEND`). External systems (SQL databases, Kafka, etc.) are reached only by reconcilers.
 3. **Reconcile loops drive everything** — Status transitions happen in reconcilers, never in HTTP handlers.
 4. **Feature-flagged migration** — Every architectural change is gated by env vars and can be rolled back instantly.
 5. **Observe before acting** — Every reconciler is instrumented with metrics, structured logging, and health reporting before it touches production.
@@ -40,10 +40,11 @@ AxiomNizam is a **declarative control-plane for data platform services** with wo
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│  LAYER 3: DECLARATIVE STATE (etcd)                              │
-│  EtcdStore[T] — typed, generic, watch-enabled persistence       │
+│  LAYER 3: DECLARATIVE STATE                                     │
+│  ResourceStore[T] — typed, generic, watch-enabled persistence   │
+│  Backends: RaftStore (embedded, default) or EtcdStore (external)│
 │  Resources: TypeMeta + ObjectMeta + Spec + Status               │
-│  30+ resource types across 22 modules                           │
+│  40+ resource types across 22 modules                           │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
@@ -69,7 +70,7 @@ AxiomNizam is a **declarative control-plane for data platform services** with wo
 ┌──────────────────────────────▼──────────────────────────────────┐
 │  LAYER 7: EXTERNAL RUNTIMES                                     │
 │  PostgreSQL, MySQL, MariaDB, Percona, Oracle, MongoDB           │
-│  Redis/Valkey, Elasticsearch, RabbitMQ, Kafka, etcd             │
+│  Redis/Valkey, Elasticsearch, RabbitMQ, Kafka                   │
 │  Keycloak, ClamAV, OpenClaw/Ollama                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -133,7 +134,7 @@ type GenericController[T store.Resource] struct {
 ```
 
 Features:
-- Watches `EtcdStore[T].Watch()` for create/update/delete events
+- Watches `ResourceStore[T].Watch()` for create/update/delete events
 - Enqueues resource keys into rate-limited work queue
 - Worker goroutines dequeue and call `Reconcile(ctx, resource)`
 - Handles `ReconcileResult.Requeue` / `RequeueAfter`
@@ -193,10 +194,10 @@ Stage 1: RECONCILER_SHADOW_MODE=true
   → Controllers run, reconcilers execute, but don't mutate
 
 Stage 2: DUAL_WRITE_<MODULE>=true
-  → Handlers write to etcd AND call managers
+  → Handlers write to store AND call managers
 
 Stage 3: RECONCILER_AUTHORITATIVE_<MODULE>=true
-  → Handlers write to etcd only, reconciler drives manager
+  → Handlers write to store only, reconciler drives manager
 ```
 
 Rollback at any stage: flip the flag to false (instant, no deploy).
@@ -218,10 +219,11 @@ Rollback at any stage: flip the flag to false (instant, no deploy).
 | `runtime` | ControllerManager — multi-controller lifecycle | K8s |
 | `apimachinery` | Conditions, finalizers, owners, labels, selectors, patches | K8s |
 | `resources` | Base resource types (TypeMeta, ObjectMeta, ObjectStatus) | K8s |
-| `platform/store` | EtcdStore[T] — generic typed persistence with Watch | AxiomNizam |
+| `platform/store` | ResourceStore[T] + EtcdStore, MemDBStore, RaftStore, KVStore, BackendManager | AxiomNizam |
+| `platform/raft` | Embedded Raft server, FSM, BoltDB persistence | AxiomNizam |
 | `platform/controller` | GenericController[T] — reusable watch+queue+worker | AxiomNizam |
-| `platform/featureflags` | Per-module migration flags | AxiomNizam |
-| `platform/dualwrite` | Async best-effort etcd write helper | AxiomNizam |
+| `platform/featureflags` | Per-module migration flags + storage backend selection | AxiomNizam |
+| `platform/dualwrite` | Async best-effort store write helper | AxiomNizam |
 
 ### 5.2 Orchestration Primitives
 
@@ -288,7 +290,7 @@ Rollback at any stage: flip the flag to false (instant, no deploy).
 
 | Module | Purpose |
 |---|---|
-| `metrics` | Prometheus metrics + ReconcilerMetrics + EtcdKeySpaceMonitor |
+| `metrics` | Prometheus metrics + ReconcilerMetrics + KeySpaceMonitor |
 | `tracing` | Distributed tracing with OpenTelemetry |
 | `logging` | Structured logging |
 | `health` | Liveness/readiness probes |
@@ -329,7 +331,7 @@ User → POST /api/v1/bulk/operations
          │   [async — GenericController picks up the resource]
          │     │
          │     ▼
-         │   EtcdStore.Watch() → WatchEvent{Type: Added}
+         │   ResourceStore.Watch() → WatchEvent{Type: Added}
          │     │
          │     ▼
          │   SimpleQueue.Add(key)
@@ -360,7 +362,7 @@ User → POST /api/v1/bulk/operations
              manager.SubmitOperation(op)
                │
                ▼
-             dualWriteOperation(created) — best-effort etcd write
+             dualWriteOperation(created) — best-effort store write
                │
                ▼
              return 200 OK
@@ -375,7 +377,7 @@ User → GET /api/v1/bulk/operations/:id
   BulkHandler.GetOperation()
          │
          ▼
-  manager.GetOperation(id) — reads from in-memory/etcd state
+  manager.GetOperation(id) — reads from in-memory/store state
          │
          ▼
   return 200 OK {operation}
@@ -396,8 +398,8 @@ User → GET /api/v1/bulk/operations/:id
 │  └──────┬──────┘  └─────────────┘  └─────────────┘       │
 │         │                                                   │
 │  ┌──────▼──────┐  ┌─────────────┐  ┌─────────────┐       │
-│  │   etcd      │  │  postgres   │  │   valkey    │       │
-│  │  :2379      │  │  :5432      │  │  :6379      │       │
+│  │   Raft/etcd │  │  postgres   │  │   valkey    │       │
+│  │  :9700/:2379│  │  :5432      │  │  :6379      │       │
 │  └─────────────┘  └─────────────┘  └─────────────┘       │
 │                                                             │
 │  ┌─────────────┐  (optional: openclaw profile)             │
@@ -421,7 +423,7 @@ User → GET /api/v1/bulk/operations/:id
 | File scanning | SafeGate pipeline (MIME, SVG, macro, archive, ClamAV) |
 | Encryption | AES-256-GCM field-level encryption with key rotation |
 | Audit | Tamper-evident hash chain with compliance reporting |
-| Secrets | Bootstrap secrets in etcd/PostgreSQL with env var override |
+| Secrets | Bootstrap secrets in Raft KV/PostgreSQL with env var override |
 
 ---
 
@@ -431,8 +433,8 @@ User → GET /api/v1/bulk/operations/:id
 |---|---|
 | `GET /health` | Basic liveness |
 | `GET /status` | All connection statuses |
-| `GET /distributed` | etcd cluster health |
-| `GET /health/reconcilers` | Per-module reconciler status + etcd keyspace |
+| `GET /distributed` | Storage backend health (Raft leader status or etcd cluster) |
+| `GET /health/reconcilers` | Per-module reconciler status + key-space metrics |
 
 Metrics tracked per reconciler:
 - TotalReconciles, TotalSuccesses, TotalErrors, TotalRequeues
@@ -450,10 +452,10 @@ Metrics tracked per reconciler:
 | Go lines | 174,000+ |
 | Reconciler controllers active | 33 |
 | GenericControllers | 29 |
-| Resource types | 30+ |
-| etcd prefixes monitored | 30 |
+| Resource types | 40+ |
+| Store prefixes monitored | 30 |
 | Feature flags | 27 |
-| External integrations | 13 (5 SQL + MongoDB + Redis + ES + RabbitMQ + Kafka + etcd + Keycloak + ClamAV) |
+| External integrations | 12 (5 SQL + MongoDB + Redis + ES + RabbitMQ + Kafka + Keycloak + ClamAV) |
 | API route groups | 40+ |
 | Frontend dashboards | 12 |
 
@@ -467,7 +469,7 @@ Metrics tracked per reconciler:
 
 3. **Feature-flagged migration** — Shadow → dual-write → authoritative, per module, with instant rollback. No other platform has this.
 
-4. **EtcdStore[T] with Watch** — Simplified generic store combining K8s watch semantics with Go generics. No CRD registration needed.
+4. **ResourceStore[T] with Watch** — Simplified generic store combining K8s watch semantics with Go generics. Pluggable backends (Raft, etcd). No CRD registration needed.
 
 5. **Multi-backend reconciliation** — Single reconciler pattern drives 5 SQL databases + MongoDB + Kafka + RabbitMQ. K8s reconcilers typically drive one API.
 

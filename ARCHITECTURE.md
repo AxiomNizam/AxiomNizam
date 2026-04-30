@@ -6,7 +6,7 @@ Current runtime layers (synced with README):
 
 - Presentation layer: frontend Gin server on port 7000 with role-based dashboard routes.
 - API layer: backend Gin server on port 8000 with auth, data, control-plane, and extension APIs.
-- Control-plane layer: etcd-backed resource APIs and reconcile runtime loop on a dedicated runtime port (default 8001).
+- Control-plane layer: resource APIs and reconcile runtime loop backed by embedded Raft (default) or external etcd, on a dedicated runtime port (default 8001).
 - Platform services layer: bulk/eventbus/export/webhook/stream/tenant/rbac/versioning/lineage/tracing managers, plus Conductor, IAM, and native object storage modules.
 - Internal orchestration layer: autopilot, planner, scheduler/binpack, deployment, drainer, eval broker, heartbeat, periodic dispatcher, service registry, and snapshot framing.
 
@@ -200,7 +200,11 @@ graph TB
             RabbitMQ["RabbitMQ"]
             Kafka["Kafka"]
             ObjectStore["Native Object\nStorage"]
-            Etcd["etcd\n(Distributed State)"]
+        end
+
+        subgraph StateBacked["State Backend (choose one)"]
+            RaftEmbed["Embedded Raft\n+ go-memdb + BoltDB\n(Default)"]
+            Etcd["etcd\n(Optional Legacy)"]
         end
     end
 
