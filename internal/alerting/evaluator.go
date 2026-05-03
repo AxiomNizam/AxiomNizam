@@ -6,6 +6,9 @@ package alerting
 // Evaluates alert rule conditions against metric data sources.
 // Supports threshold, anomaly, rate-of-change, and composite
 // condition types with configurable aggregation windows.
+//
+// NOTE: Types are prefixed with "Eval" to avoid collision
+// with the resource-level AlertCondition/ConditionType in resource.go.
 // =====================================================
 
 import (
@@ -38,27 +41,27 @@ type EvaluationResult struct {
 	Message      string  `json:"message"`
 }
 
-// ConditionType enumerates supported alert condition types.
-type ConditionType string
+// EvalConditionType enumerates supported evaluator condition types.
+type EvalConditionType string
 
 const (
-	ConditionThreshold    ConditionType = "threshold"     // value > / < / == threshold
-	ConditionAnomaly      ConditionType = "anomaly"       // value deviates from rolling avg by N stddevs
-	ConditionRateOfChange ConditionType = "rate_of_change" // value changes by > X% in window
-	ConditionAbsent       ConditionType = "absent"        // no data for > duration
+	EvalConditionThreshold    EvalConditionType = "threshold"      // value > / < / == threshold
+	EvalConditionAnomaly      EvalConditionType = "anomaly"        // value deviates from rolling avg by N stddevs
+	EvalConditionRateOfChange EvalConditionType = "rate_of_change" // value changes by > X% in window
+	EvalConditionAbsent       EvalConditionType = "absent"         // no data for > duration
 )
 
-// AlertCondition defines a single evaluable condition.
-type AlertCondition struct {
-	Type          ConditionType `json:"type"`
-	Metric        string        `json:"metric"`
-	Source        string        `json:"source"`
-	Operator      string        `json:"operator,omitempty"` // gt, lt, gte, lte, eq, ne
-	Value         float64       `json:"value,omitempty"`    // Threshold value
-	Window        string        `json:"window,omitempty"`   // Evaluation window ("5m", "1h")
-	Sensitivity   float64       `json:"sensitivity,omitempty"` // Stddev multiplier for anomaly
-	MaxChangePct  float64       `json:"maxChangePct,omitempty"`
-	AbsentTimeout string        `json:"absentTimeout,omitempty"`
+// EvalCondition defines a single evaluable metric condition.
+type EvalCondition struct {
+	Type          EvalConditionType `json:"type"`
+	Metric        string            `json:"metric"`
+	Source        string            `json:"source"`
+	Operator      string            `json:"operator,omitempty"` // gt, lt, gte, lte, eq, ne
+	Value         float64           `json:"value,omitempty"`    // Threshold value
+	Window        string            `json:"window,omitempty"`   // Evaluation window ("5m", "1h")
+	Sensitivity   float64           `json:"sensitivity,omitempty"` // Stddev multiplier for anomaly
+	MaxChangePct  float64           `json:"maxChangePct,omitempty"`
+	AbsentTimeout string            `json:"absentTimeout,omitempty"`
 }
 
 // Evaluator evaluates alert conditions against metric data.
@@ -72,19 +75,19 @@ func NewEvaluator(querier MetricQuerier) *Evaluator {
 }
 
 // Evaluate checks a condition and returns whether it is firing.
-func (e *Evaluator) Evaluate(ctx context.Context, cond AlertCondition) (*EvaluationResult, error) {
+func (e *Evaluator) Evaluate(ctx context.Context, cond EvalCondition) (*EvaluationResult, error) {
 	if e.querier == nil {
 		return &EvaluationResult{Firing: false, Message: "no metric querier configured"}, nil
 	}
 
 	switch cond.Type {
-	case ConditionThreshold:
+	case EvalConditionThreshold:
 		return e.evalThreshold(ctx, cond)
-	case ConditionAnomaly:
+	case EvalConditionAnomaly:
 		return e.evalAnomaly(ctx, cond)
-	case ConditionRateOfChange:
+	case EvalConditionRateOfChange:
 		return e.evalRateOfChange(ctx, cond)
-	case ConditionAbsent:
+	case EvalConditionAbsent:
 		return e.evalAbsent(ctx, cond)
 	default:
 		return nil, fmt.Errorf("evaluator: unsupported condition type %q", cond.Type)
@@ -92,7 +95,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, cond AlertCondition) (*Evaluat
 }
 
 // EvaluateAll checks multiple conditions with AND semantics (all must fire).
-func (e *Evaluator) EvaluateAll(ctx context.Context, conditions []AlertCondition) (*EvaluationResult, error) {
+func (e *Evaluator) EvaluateAll(ctx context.Context, conditions []EvalCondition) (*EvaluationResult, error) {
 	for _, cond := range conditions {
 		result, err := e.Evaluate(ctx, cond)
 		if err != nil {
@@ -107,7 +110,7 @@ func (e *Evaluator) EvaluateAll(ctx context.Context, conditions []AlertCondition
 
 // --- Condition implementations ---
 
-func (e *Evaluator) evalThreshold(ctx context.Context, cond AlertCondition) (*EvaluationResult, error) {
+func (e *Evaluator) evalThreshold(ctx context.Context, cond EvalCondition) (*EvaluationResult, error) {
 	value, err := e.querier.QueryMetric(ctx, cond.Source, cond.Metric)
 	if err != nil {
 		return nil, fmt.Errorf("threshold query failed: %w", err)
@@ -123,7 +126,7 @@ func (e *Evaluator) evalThreshold(ctx context.Context, cond AlertCondition) (*Ev
 	}, nil
 }
 
-func (e *Evaluator) evalAnomaly(ctx context.Context, cond AlertCondition) (*EvaluationResult, error) {
+func (e *Evaluator) evalAnomaly(ctx context.Context, cond EvalCondition) (*EvaluationResult, error) {
 	window := parseDurationDefault(cond.Window, 1*time.Hour)
 	now := time.Now()
 
@@ -157,7 +160,7 @@ func (e *Evaluator) evalAnomaly(ctx context.Context, cond AlertCondition) (*Eval
 	}, nil
 }
 
-func (e *Evaluator) evalRateOfChange(ctx context.Context, cond AlertCondition) (*EvaluationResult, error) {
+func (e *Evaluator) evalRateOfChange(ctx context.Context, cond EvalCondition) (*EvaluationResult, error) {
 	window := parseDurationDefault(cond.Window, 5*time.Minute)
 	now := time.Now()
 
@@ -192,7 +195,7 @@ func (e *Evaluator) evalRateOfChange(ctx context.Context, cond AlertCondition) (
 	}, nil
 }
 
-func (e *Evaluator) evalAbsent(ctx context.Context, cond AlertCondition) (*EvaluationResult, error) {
+func (e *Evaluator) evalAbsent(ctx context.Context, cond EvalCondition) (*EvaluationResult, error) {
 	timeout := parseDurationDefault(cond.AbsentTimeout, 5*time.Minute)
 	now := time.Now()
 

@@ -6,6 +6,10 @@ package rules
 // Additional check types beyond the core 9 in engine.go:
 // schema, regex, referential, distribution, timeliness,
 // accepted_values.
+//
+// All check functions follow the engine.go pattern:
+//   func (e *RuleEngine) checkX(ctx, rule) (*CheckOutput, error)
+// and reference spec types defined in resource.go.
 // =====================================================
 
 import (
@@ -22,14 +26,7 @@ func (e *RuleEngine) checkSchema(ctx context.Context, rule *QualityRuleResource)
 		return nil, fmt.Errorf("schema rule requires schema config")
 	}
 
-	// Query actual column list from information_schema.
-	query := fmt.Sprintf(
-		"SELECT column_name FROM information_schema.columns WHERE table_name = '%s' ORDER BY ordinal_position",
-		rule.Spec.AssetRef,
-	)
-	_ = query // Schema validation uses catalog metadata when available.
-
-	// For now, validate expected columns exist via scalar count queries.
+	// Validate expected columns exist via scalar count queries.
 	var missing []string
 	for _, expected := range rule.Spec.Schema.ExpectedColumns {
 		colQuery := fmt.Sprintf(
@@ -71,8 +68,7 @@ func (e *RuleEngine) checkRegex(ctx context.Context, rule *QualityRuleResource) 
 		return nil, fmt.Errorf("invalid regex pattern %q: %w", rule.Spec.Regex.Pattern, err)
 	}
 
-	// Use SQL REGEXP or NOT REGEXP depending on database dialect.
-	// This uses a portable approach: count rows that do NOT match.
+	// Count rows that do NOT match the pattern.
 	query := fmt.Sprintf(
 		"SELECT COUNT(*) FROM %s WHERE %s NOT REGEXP '%s'",
 		rule.Spec.AssetRef, rule.Spec.Regex.Column,
@@ -92,20 +88,23 @@ func (e *RuleEngine) checkRegex(ctx context.Context, rule *QualityRuleResource) 
 }
 
 // checkReferential validates referential integrity between two tables.
+// Uses ReferentialRule fields from resource.go: Column, ReferenceAsset, ReferenceColumn.
 func (e *RuleEngine) checkReferential(ctx context.Context, rule *QualityRuleResource) (*CheckOutput, error) {
 	if rule.Spec.Referential == nil {
 		return nil, fmt.Errorf("referential rule requires referential config")
 	}
 
+	ref := rule.Spec.Referential
+
 	// Count rows in the source where the FK column has no matching PK in the reference table.
 	query := fmt.Sprintf(
 		"SELECT COUNT(*) FROM %s AS src LEFT JOIN %s AS ref ON src.%s = ref.%s WHERE ref.%s IS NULL AND src.%s IS NOT NULL",
 		rule.Spec.AssetRef,
-		rule.Spec.Referential.ReferenceTable,
-		rule.Spec.Referential.SourceColumn,
-		rule.Spec.Referential.ReferenceColumn,
-		rule.Spec.Referential.ReferenceColumn,
-		rule.Spec.Referential.SourceColumn,
+		ref.ReferenceAsset,
+		ref.Column,
+		ref.ReferenceColumn,
+		ref.ReferenceColumn,
+		ref.Column,
 	)
 	orphanCount, err := e.querier.QueryRows(ctx, rule.Spec.DataSourceRef, query)
 	if err != nil {
@@ -115,26 +114,29 @@ func (e *RuleEngine) checkReferential(ctx context.Context, rule *QualityRuleReso
 	return &CheckOutput{
 		Passed:      orphanCount == 0,
 		FailCount:   orphanCount,
-		Message:     fmt.Sprintf("referential integrity: %d orphan rows in %s.%s (missing in %s.%s)", orphanCount, rule.Spec.AssetRef, rule.Spec.Referential.SourceColumn, rule.Spec.Referential.ReferenceTable, rule.Spec.Referential.ReferenceColumn),
+		Message:     fmt.Sprintf("referential integrity: %d orphan rows in %s.%s (missing in %s.%s)", orphanCount, rule.Spec.AssetRef, ref.Column, ref.ReferenceAsset, ref.ReferenceColumn),
 		ActualValue: fmt.Sprintf("%d", orphanCount),
 	}, nil
 }
 
 // checkDistribution validates that a column's value distribution meets expectations.
 // Uses coefficient of variation (stddev / mean) to detect anomalies.
+// Uses DistributionRule fields from resource.go: Column, MaxCoefficientOfVariation.
 func (e *RuleEngine) checkDistribution(ctx context.Context, rule *QualityRuleResource) (*CheckOutput, error) {
 	if rule.Spec.Distribution == nil {
 		return nil, fmt.Errorf("distribution rule requires distribution config")
 	}
 
+	dist := rule.Spec.Distribution
+
 	// Get mean and stddev for the column.
-	meanQuery := fmt.Sprintf("SELECT AVG(%s) FROM %s", rule.Spec.Distribution.Column, rule.Spec.AssetRef)
+	meanQuery := fmt.Sprintf("SELECT AVG(%s) FROM %s", dist.Column, rule.Spec.AssetRef)
 	mean, err := e.querier.QueryFloat(ctx, rule.Spec.DataSourceRef, meanQuery)
 	if err != nil {
 		return nil, fmt.Errorf("distribution mean query failed: %w", err)
 	}
 
-	stddevQuery := fmt.Sprintf("SELECT STDDEV(%s) FROM %s", rule.Spec.Distribution.Column, rule.Spec.AssetRef)
+	stddevQuery := fmt.Sprintf("SELECT STDDEV(%s) FROM %s", dist.Column, rule.Spec.AssetRef)
 	stddev, err := e.querier.QueryFloat(ctx, rule.Spec.DataSourceRef, stddevQuery)
 	if err != nil {
 		return nil, fmt.Errorf("distribution stddev query failed: %w", err)
@@ -146,7 +148,7 @@ func (e *RuleEngine) checkDistribution(ctx context.Context, rule *QualityRuleRes
 		cv = stddev / mean
 	}
 
-	maxCV := rule.Spec.Distribution.MaxCoefficientOfVariation
+	maxCV := dist.MaxCoefficientOfVariation
 	if maxCV == 0 {
 		maxCV = 2.0 // Default: flag distributions with CV > 200%
 	}
@@ -155,29 +157,31 @@ func (e *RuleEngine) checkDistribution(ctx context.Context, rule *QualityRuleRes
 
 	return &CheckOutput{
 		Passed:      passed,
-		Message:     fmt.Sprintf("distribution of %s: mean=%.2f, stddev=%.2f, CV=%.2f (max: %.2f)", rule.Spec.Distribution.Column, mean, stddev, cv, maxCV),
+		Message:     fmt.Sprintf("distribution of %s: mean=%.2f, stddev=%.2f, CV=%.2f (max: %.2f)", dist.Column, mean, stddev, cv, maxCV),
 		ActualValue: fmt.Sprintf("%.4f", cv),
 	}, nil
 }
 
 // checkTimeliness validates that data arrives within the expected SLA window.
+// Uses TimelinessRule fields from resource.go: TimestampColumn, MaxDelay.
 func (e *RuleEngine) checkTimeliness(ctx context.Context, rule *QualityRuleResource) (*CheckOutput, error) {
 	if rule.Spec.Timeliness == nil {
 		return nil, fmt.Errorf("timeliness rule requires timeliness config")
 	}
 
-	sla, err := time.ParseDuration(rule.Spec.Timeliness.ExpectedDelay)
+	tl := rule.Spec.Timeliness
+
+	sla, err := time.ParseDuration(tl.MaxDelay)
 	if err != nil {
-		return nil, fmt.Errorf("invalid expected delay %q: %w", rule.Spec.Timeliness.ExpectedDelay, err)
+		return nil, fmt.Errorf("invalid max delay %q: %w", tl.MaxDelay, err)
 	}
 
-	// Measure the lag between the ingest timestamp column and the event timestamp column.
+	// Measure the lag using the timestamp column vs NOW().
 	query := fmt.Sprintf(
-		"SELECT AVG(TIMESTAMPDIFF(SECOND, %s, %s)) FROM %s WHERE %s >= NOW() - INTERVAL 1 DAY",
-		rule.Spec.Timeliness.EventColumn,
-		rule.Spec.Timeliness.IngestColumn,
+		"SELECT AVG(TIMESTAMPDIFF(SECOND, %s, NOW())) FROM %s WHERE %s >= NOW() - INTERVAL 1 DAY",
+		tl.TimestampColumn,
 		rule.Spec.AssetRef,
-		rule.Spec.Timeliness.IngestColumn,
+		tl.TimestampColumn,
 	)
 	avgLagSec, err := e.querier.QueryFloat(ctx, rule.Spec.DataSourceRef, query)
 	if err != nil {
@@ -200,16 +204,18 @@ func (e *RuleEngine) checkAcceptedValues(ctx context.Context, rule *QualityRuleR
 		return nil, fmt.Errorf("accepted_values rule requires acceptedValues config")
 	}
 
+	av := rule.Spec.AcceptedValues
+
 	// Build the NOT IN clause.
 	var quoted []string
-	for _, v := range rule.Spec.AcceptedValues.Values {
+	for _, v := range av.Values {
 		quoted = append(quoted, fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''")))
 	}
 
 	query := fmt.Sprintf(
 		"SELECT COUNT(*) FROM %s WHERE %s NOT IN (%s)",
 		rule.Spec.AssetRef,
-		rule.Spec.AcceptedValues.Column,
+		av.Column,
 		joinStrings(quoted, ", "),
 	)
 	failCount, err := e.querier.QueryRows(ctx, rule.Spec.DataSourceRef, query)
@@ -220,54 +226,7 @@ func (e *RuleEngine) checkAcceptedValues(ctx context.Context, rule *QualityRuleR
 	return &CheckOutput{
 		Passed:      failCount == 0,
 		FailCount:   failCount,
-		Message:     fmt.Sprintf("accepted values in %s: %d rows have unexpected values", rule.Spec.AcceptedValues.Column, failCount),
+		Message:     fmt.Sprintf("accepted values in %s: %d rows have unexpected values", av.Column, failCount),
 		ActualValue: fmt.Sprintf("%d", failCount),
 	}, nil
-}
-
-// --- Spec types for extended checks ---
-
-// SchemaCheckConfig defines expected columns for schema validation.
-type SchemaCheckConfig struct {
-	ExpectedColumns []ExpectedColumn `json:"expectedColumns"`
-	StrictMode      bool             `json:"strictMode,omitempty"` // Fail if extra columns exist
-}
-
-// ExpectedColumn defines a single expected column.
-type ExpectedColumn struct {
-	Name     string `json:"name"`
-	Type     string `json:"type,omitempty"`     // Expected data type
-	Nullable bool   `json:"nullable,omitempty"` // Whether NULL is allowed
-}
-
-// RegexCheckConfig defines regex pattern validation for a column.
-type RegexCheckConfig struct {
-	Column  string `json:"column"`
-	Pattern string `json:"pattern"` // Go-compatible regex
-}
-
-// ReferentialCheckConfig defines referential integrity check parameters.
-type ReferentialCheckConfig struct {
-	SourceColumn    string `json:"sourceColumn"`
-	ReferenceTable  string `json:"referenceTable"`
-	ReferenceColumn string `json:"referenceColumn"`
-}
-
-// DistributionCheckConfig defines statistical distribution check parameters.
-type DistributionCheckConfig struct {
-	Column                      string  `json:"column"`
-	MaxCoefficientOfVariation   float64 `json:"maxCoefficientOfVariation,omitempty"`
-}
-
-// TimelinessCheckConfig defines data timeliness SLA check parameters.
-type TimelinessCheckConfig struct {
-	EventColumn   string `json:"eventColumn"`   // When the event happened
-	IngestColumn  string `json:"ingestColumn"`  // When it was ingested
-	ExpectedDelay string `json:"expectedDelay"` // Max acceptable lag ("5m", "1h")
-}
-
-// AcceptedValuesCheckConfig defines allowed values for a column.
-type AcceptedValuesCheckConfig struct {
-	Column string   `json:"column"`
-	Values []string `json:"values"`
 }

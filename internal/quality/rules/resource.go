@@ -142,6 +142,11 @@ type RowCountChangeRule struct {
 	PreviousCount int64   `json:"previousCount"` // Previous row count (updated by reconciler)
 }
 
+type DistributionRule struct {
+	Column                    string  `json:"column"`
+	MaxCoefficientOfVariation float64 `json:"maxCoefficientOfVariation,omitempty"` // Max CV (stddev/mean), default 2.0
+}
+
 type TimelinessRule struct {
 	MaxDelay        string `json:"maxDelay"`        // Max acceptable delay: "5m", "1h"
 	TimestampColumn string `json:"timestampColumn"`
@@ -193,6 +198,7 @@ type QualityRuleSpec struct {
 	Statistical    *StatisticalRule    `json:"statistical,omitempty"`
 	Completeness   *CompletenessRule   `json:"completeness,omitempty"`
 	RowCountChange *RowCountChangeRule `json:"rowCountChange,omitempty"`
+	Distribution   *DistributionRule   `json:"distribution,omitempty"`
 	Timeliness     *TimelinessRule     `json:"timeliness,omitempty"`
 
 	// Alerting

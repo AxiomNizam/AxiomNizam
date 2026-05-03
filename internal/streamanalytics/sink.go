@@ -17,6 +17,11 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/platform/resilience"
+
+	"go.uber.org/zap"
 )
 
 // Sink delivers window results to a downstream system.
@@ -81,7 +86,18 @@ func (s *WebhookSink) Write(ctx context.Context, results []WindowResult) error {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := s.client.Do(req)
+	// Execute with retry per coding practices §4.2.
+	var resp *http.Response
+	err = resilience.DoVoid(ctx, resilience.Config{
+		MaxAttempts:  3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     5 * time.Second,
+		Name:         "webhook-sink",
+	}, func(ctx context.Context) error {
+		var doErr error
+		resp, doErr = s.client.Do(req)
+		return doErr
+	})
 	if err != nil {
 		s.stats.TotalErrors++
 		s.stats.LastError = err.Error()
@@ -127,9 +143,10 @@ func (s *StdoutSink) Write(ctx context.Context, results []WindowResult) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	log := logging.Z()
 	for _, r := range results {
 		data, _ := json.Marshal(r)
-		fmt.Printf("[stream-sink] %s\n", string(data))
+		log.Debug("stream sink output", zap.String("result", string(data)))
 	}
 
 	now := time.Now()
