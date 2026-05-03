@@ -488,4 +488,5 @@ Metrics tracked per reconciler:
 - [SECURITY_AUDIT.md](./SECURITY_AUDIT.md) — Code-level security audit (38 findings)
 - [RAFT_STORAGE_GUIDE.md](./RAFT_STORAGE_GUIDE.md) — Embedded Raft storage operations
 - [CODING_PRACTICES.md](./CODING_PRACTICES.md) — Engineering standards
+- [PLATFORM_COMPLETION_PLAN.md](./PLATFORM_COMPLETION_PLAN.md) — Milestone completion status
 - [README.md](../README.md) — Project overview and quick start

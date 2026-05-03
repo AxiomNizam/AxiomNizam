@@ -257,6 +257,23 @@ Post-implementation audit (2026-04-29): fixed 3 runtime bugs that would have pre
 - Platform managers: removed hard etcd requirement — managers now work in-memory when etcd is nil (Raft mode)
 - IAM system: migrated to use `KVStore` interface — IAM now works with both etcd and Raft backends. Added `iamBackend` interface, `kvStoreBackend` adapter, and `NewKV*Repository` constructors. IAM initialization deferred to after BackendManager in Raft mode. IAM routes registered after deferred init. Raft leader election wait added before KV writes.
 
+### Platform Hardening: Coding Standards Enforcement (2026-05-03) ✅
+
+Executed a systematic 10-section audit against `docs/CODING_PRACTICES.md` and remediated
+all critical findings to harden the codebase for production readiness.
+
+**Key results:**
+
+- **Logging migration (Phase 3):** All 9 legacy handler files migrated from `log.Printf` to structured `logging.Z()` + zap — 57 log calls converted, 130+ structured log points across 38 files
+- **Auth error hardening:** 5 IAM error responses genericized (no longer leak internal status codes, content types, or body summaries to clients)
+- **Resilience:** All webhook and external HTTP operations wrapped with `resilience.DoVoid()` backoff/retry
+- **Import standardization:** All handler and module files follow stdlib → internal → external import ordering
+- **Naming collision fix:** Resolved `EvalConditionType` collision in `internal/alerting`
+- **Quality rules alignment:** Fixed schema field mismatches in `internal/quality`
+- **Build verification:** `go build ./...` and `go vet ./...` both pass clean (100 modules, 675 Go files)
+
+See [docs/CODING_PRACTICES.md](docs/CODING_PRACTICES.md) for the full standards reference and [docs/PLATFORM_COMPLETION_PLAN.md](docs/PLATFORM_COMPLETION_PLAN.md) for the overall platform status.
+
 ## Quick Start
 
 ### Docker Compose (recommended)

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -10,8 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/models"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -74,7 +76,7 @@ func NewAdminHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *Admin
 	// Auto-migrate persistence table and restore saved connections
 	if primaryDB != nil {
 		if err := primaryDB.AutoMigrate(&DatabaseServerRecord{}); err != nil {
-			log.Printf("⚠️ Failed to migrate database_servers table: %v", err)
+			logging.Z().Warn("failed to migrate database_servers table", zap.Error(err))
 		} else {
 			h.restoreSavedServers()
 		}
@@ -87,7 +89,7 @@ func NewAdminHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *Admin
 func (h *AdminHandler) restoreSavedServers() {
 	var records []DatabaseServerRecord
 	if err := h.primaryDB.Find(&records).Error; err != nil {
-		log.Printf("⚠️ Failed to load saved database servers: %v", err)
+		logging.Z().Warn("failed to load saved database servers", zap.Error(err))
 		return
 	}
 
@@ -109,16 +111,16 @@ func (h *AdminHandler) restoreSavedServers() {
 			dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", rec.Host, rec.Username, rec.Password, rec.DefaultDatabase, rec.Port, sslMode)
 			db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		default:
-			log.Printf("⚠️ Skipping saved server %s: unsupported db_type %s", rec.ServerKey, rec.DBType)
+			logging.Z().Warn("skipping saved server: unsupported db type", zap.String("key", rec.ServerKey), zap.String("dbType", rec.DBType))
 			continue
 		}
 
 		connected := true
 		if err != nil {
-			log.Printf("⚠️ Could not reconnect saved server %s (%s): %v", rec.ServerKey, rec.DBType, err)
+			logging.Z().Warn("could not reconnect saved server", zap.String("key", rec.ServerKey), zap.String("dbType", rec.DBType), zap.Error(err))
 			connected = false
 		} else if sqlDB, dbErr := db.DB(); dbErr != nil || sqlDB.Ping() != nil {
-			log.Printf("⚠️ Saved server %s (%s) not reachable, will show as disconnected", rec.ServerKey, rec.DBType)
+			logging.Z().Warn("saved server not reachable", zap.String("key", rec.ServerKey), zap.String("dbType", rec.DBType))
 			connected = false
 		}
 
@@ -139,12 +141,12 @@ func (h *AdminHandler) restoreSavedServers() {
 		h.mu.Unlock()
 
 		if connected {
-			log.Printf("✅ Restored saved DB server key=%s name=%s type=%s host=%s:%d", rec.ServerKey, rec.ServerName, rec.DBType, rec.Host, rec.Port)
+			logging.Z().Info("restored saved DB server", zap.String("key", rec.ServerKey), zap.String("name", rec.ServerName), zap.String("dbType", rec.DBType), zap.String("host", rec.Host), zap.Int("port", rec.Port))
 		}
 	}
 
 	if len(records) > 0 {
-		log.Printf("✅ Loaded %d saved database server(s)", len(records))
+		logging.Z().Info("loaded saved database servers", zap.Int("count", len(records)))
 	}
 }
 
@@ -268,7 +270,7 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 
 	// Execute create database query
 	if result := db.Exec(createSQL); result.Error != nil {
-		log.Printf("❌ Failed to create database '%s' on server=%s (%s): %v", req.DatabaseName, targetKey, resolvedDBType, result.Error)
+		logging.Z().Error("failed to create database", zap.String("database", req.DatabaseName), zap.String("server", targetKey), zap.String("dbType", resolvedDBType), zap.Error(result.Error))
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  fmt.Sprintf("Failed to create database: %v", result.Error),
@@ -281,7 +283,7 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 		serverName = serverInfo.Name
 	}
 
-	log.Printf("✅ Database '%s' created successfully on server=%s (%s)", req.DatabaseName, targetKey, resolvedDBType)
+	logging.Z().Info("database created", zap.String("database", req.DatabaseName), zap.String("server", targetKey), zap.String("dbType", resolvedDBType))
 	c.JSON(http.StatusCreated, gin.H{
 		"status":      "success",
 		"message":     fmt.Sprintf("Database '%s' created successfully", req.DatabaseName),
@@ -405,13 +407,13 @@ func (h *AdminHandler) ConnectDatabaseServer(c *gin.Context) {
 			SSLMode:         strings.TrimSpace(req.SSLMode),
 		}
 		if err := h.primaryDB.Where("server_key = ?", serverKey).Assign(rec).FirstOrCreate(&rec).Error; err != nil {
-			log.Printf("⚠️ Connected server %s but failed to persist: %v", serverKey, err)
+			logging.Z().Warn("connected server but failed to persist", zap.String("key", serverKey), zap.Error(err))
 		} else {
-			log.Printf("💾 Persisted custom DB server key=%s", serverKey)
+			logging.Z().Info("persisted custom DB server", zap.String("key", serverKey))
 		}
 	}
 
-	log.Printf("✅ Connected custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
+	logging.Z().Info("connected custom DB server", zap.String("key", serverKey), zap.String("name", serverName), zap.String("dbType", dbType), zap.String("host", host), zap.Int("port", port))
 	c.JSON(http.StatusCreated, gin.H{
 		"status":  "success",
 		"message": "Database server connected",
@@ -499,7 +501,7 @@ func (h *AdminHandler) CreateTable(c *gin.Context) {
 
 	// Execute create table query
 	if result := db.Exec(createSQL); result.Error != nil {
-		log.Printf("❌ Failed to create table '%s' on %s: %v", req.TableName, req.DBType, result.Error)
+		logging.Z().Error("failed to create table", zap.String("table", req.TableName), zap.String("dbType", req.DBType), zap.Error(result.Error))
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  fmt.Sprintf("Failed to create table: %v", result.Error),
@@ -507,7 +509,7 @@ func (h *AdminHandler) CreateTable(c *gin.Context) {
 		return
 	}
 
-	log.Printf("✅ Table '%s' created successfully on %s", req.TableName, req.DBType)
+	logging.Z().Info("table created", zap.String("table", req.TableName), zap.String("dbType", req.DBType))
 	c.JSON(http.StatusCreated, gin.H{
 		"status":  "success",
 		"message": fmt.Sprintf("Table '%s' created successfully", req.TableName),
@@ -894,11 +896,11 @@ func (h *AdminHandler) UpdateDatabaseServer(c *gin.Context) {
 			SSLMode:         strings.TrimSpace(req.SSLMode),
 		}
 		if err := h.primaryDB.Where("server_key = ?", serverKey).Assign(rec).FirstOrCreate(&rec).Error; err != nil {
-			log.Printf("⚠️ Updated server %s in memory but failed to persist: %v", serverKey, err)
+			logging.Z().Warn("updated server in memory but failed to persist", zap.String("key", serverKey), zap.Error(err))
 		}
 	}
 
-	log.Printf("✅ Updated custom DB server key=%s name=%s type=%s host=%s:%d", serverKey, serverName, dbType, host, port)
+	logging.Z().Info("updated custom DB server", zap.String("key", serverKey), zap.String("name", serverName), zap.String("dbType", dbType), zap.String("host", host), zap.Int("port", port))
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Database server updated",
@@ -950,11 +952,11 @@ func (h *AdminHandler) DeleteDatabaseServer(c *gin.Context) {
 	// Remove persisted record
 	if h.primaryDB != nil {
 		if err := h.primaryDB.Where("server_key = ?", serverKey).Delete(&DatabaseServerRecord{}).Error; err != nil {
-			log.Printf("⚠️ Removed server %s from memory but failed to delete from DB: %v", serverKey, err)
+			logging.Z().Warn("removed server from memory but failed to delete from DB", zap.String("key", serverKey), zap.Error(err))
 		}
 	}
 
-	log.Printf("🗑️ Deleted custom DB server key=%s", serverKey)
+	logging.Z().Info("deleted custom DB server", zap.String("key", serverKey))
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": fmt.Sprintf("Database server '%s' deleted", serverKey),

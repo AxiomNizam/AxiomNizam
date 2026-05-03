@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/logging"
+
+	"go.uber.org/zap"
 
 	"example.com/axiomnizam/internal/workqueue"
 
@@ -150,7 +153,7 @@ func (h *JobHandler) startScheduler() {
 			defer h.schedulerWG.Done()
 			w := workqueue.NewWorker(queue, process, 5)
 			if err := w.Run(ctx); err != nil {
-				log.Printf("jobs: exec worker exited: %v", err)
+				logging.Z().Warn("jobs: exec worker exited", zap.Error(err))
 			}
 		}()
 	}
@@ -336,7 +339,7 @@ func (h *JobHandler) loadState() {
 
 	resp, err := h.etcd.Get(ctx, h.stateKey)
 	if err != nil {
-		log.Printf("jobs: failed to load persisted state from etcd: %v", err)
+		logging.Z().Warn("jobs: failed to load persisted state", zap.Error(err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -345,7 +348,7 @@ func (h *JobHandler) loadState() {
 
 	var jobs map[string]*JobResource
 	if err := json.Unmarshal(resp.Kvs[0].Value, &jobs); err != nil {
-		log.Printf("jobs: failed to decode persisted state: %v", err)
+		logging.Z().Warn("jobs: failed to decode persisted state", zap.Error(err))
 		return
 	}
 	if jobs == nil {
@@ -361,7 +364,7 @@ func (h *JobHandler) persistStateLocked() {
 
 	payload, err := json.Marshal(h.jobs)
 	if err != nil {
-		log.Printf("jobs: failed to encode state: %v", err)
+		logging.Z().Warn("jobs: failed to encode state", zap.Error(err))
 		return
 	}
 
@@ -369,7 +372,7 @@ func (h *JobHandler) persistStateLocked() {
 	defer cancel()
 
 	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
-		log.Printf("jobs: failed to persist state to etcd: %v", err)
+		logging.Z().Warn("jobs: failed to persist state", zap.Error(err))
 	}
 }
 

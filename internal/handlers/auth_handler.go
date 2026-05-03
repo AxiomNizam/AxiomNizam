@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,8 +21,11 @@ import (
 	iammodels "example.com/axiomnizam/internal/iam/models"
 	"example.com/axiomnizam/internal/iam/pgstore"
 	iamstorage "example.com/axiomnizam/internal/iam/storage"
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/models"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	gojwt "github.com/golang-jwt/jwt/v5"
 )
 
@@ -1458,9 +1460,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	for idx, base := range loginBases {
 		targetURL := base + "/iam/auth/login"
 		if idx == 0 {
-			log.Printf("📝 IAM login attempt for identifier: %s (base=%s)", loginID, base)
+			logging.Z().Debug("IAM login attempt", zap.String("identifier", loginID), zap.String("base", base))
 		} else {
-			log.Printf("⚠️  IAM login retrying with alternate base=%s", base)
+			logging.Z().Debug("IAM login retrying with alternate base", zap.String("base", base))
 		}
 
 		attemptResp, attemptBody, attemptErr := postLogin(targetURL)
@@ -1505,10 +1507,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if !json.Valid(responseBody) {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM login non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		logging.Z().Warn("IAM login non-JSON response", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM authentication service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "authentication service temporarily unavailable",
 		})
 		return
 	}
@@ -1516,10 +1518,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM login malformed JSON payload: status=%d content-type=%q body=%q err=%v", resp.StatusCode, contentType, summary, err)
+		logging.Z().Warn("IAM login malformed JSON payload", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary), zap.Error(err))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM authentication service returned malformed JSON (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "authentication service returned an invalid response",
 		})
 		return
 	}
@@ -1568,7 +1570,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if h.rateLimiter != nil {
 		h.rateLimiter.RegisterToken(tokenResp.AccessToken, resolvedUsername)
-		log.Printf("✅ Token registered in rate limiter for user: %s (500 calls available)", resolvedUsername)
+		logging.Z().Info("token registered in rate limiter", zap.String("user", resolvedUsername))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1637,10 +1639,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
 	if !json.Valid(responseBody) {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM refresh non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		logging.Z().Warn("IAM refresh non-JSON response", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM token refresh service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "token refresh service temporarily unavailable",
 		})
 		return
 	}
@@ -1649,10 +1651,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM refresh malformed JSON payload: status=%d content-type=%q body=%q err=%v", resp.StatusCode, contentType, summary, err)
+		logging.Z().Warn("IAM refresh malformed JSON payload", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary), zap.Error(err))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM token refresh service returned malformed JSON (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "token refresh service returned an invalid response",
 		})
 		return
 	}
@@ -1766,10 +1768,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if !json.Valid([]byte(trimmedResponseBody)) {
 		contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM logout non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		logging.Z().Warn("IAM logout non-JSON response", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM logout service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "logout service temporarily unavailable",
 		})
 		return
 	}

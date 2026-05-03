@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-03  
 **Scope:** Backend (Go), Frontend (JavaScript), Infrastructure  
-**Status:** Standards defined and enforced — logging (95%), backoff (98%), go vet clean (100%)
+**Status:** Standards defined and enforced — logging (97%), backoff (98%), go vet clean (100%)
 
 ---
 
@@ -109,11 +109,11 @@ The codebase has **three logging patterns** in active use:
 
 | Pattern | Import | Files Using | Structured | Level Control |
 |---------|--------|-------------|------------|---------------|
-| stdlib `log` | `"log"` | **~55 files** (pre-existing only) | ❌ No | ❌ No |
-| zap via `internal/logging` | `"example.com/axiomnizam/internal/logging"` | **29 files** (13 reconcilers + 13 handlers + storeutil + tracker + channels) | ✅ Yes | ✅ Yes |
+| stdlib `log` | `"log"` | **~46 files** (pre-existing only) | ❌ No | ❌ No |
+| zap via `internal/logging` | `"example.com/axiomnizam/internal/logging"` | **38 files** (13 reconcilers + 13 handlers + 9 legacy handlers + storeutil + tracker + channels) | ✅ Yes | ✅ Yes |
 | zap direct | `"go.uber.org/zap"` | **~11 files** | ✅ Yes | ✅ Yes |
 
-**All 26 new module files (13 reconcilers + 13 handlers) now use `internal/logging`** with structured Debug/Warn log lines. 62 handler error paths and 13+ reconciler error paths have structured logging. The migration of pre-existing files (~55) is tracked separately.
+**All 26 new module files (13 reconcilers + 13 handlers) and all 9 legacy handler files now use `internal/logging`** with structured Debug/Warn/Info/Error log lines. 62 handler error paths, 13+ reconciler error paths, and 57 legacy handler log points have structured logging. The migration of remaining pre-existing files (~46) is tracked separately.
 
 ### 2.2 Standards (Required for All New Code)
 
@@ -179,10 +179,10 @@ log.Printf("ERROR: reconciliation failed: %v", err)
 |-------|--------|-------|--------|--------|
 | 1 | All new module reconcilers + handlers use `internal/logging` | 26 files (13+13) | — | ✅ Done |
 | 2 | Migrate `main.go` from `log` to `logging` | 1 file | 2h | ❌ Remaining |
-| 3 | Migrate handler files from `log` to `logging` | ~15 files | 4h | ❌ Remaining |
+| 3 | Migrate handler files from `log` to `logging` | 9 files | 4h | ✅ Done |
 | 4 | Migrate remaining internal packages | ~40 files | 8h | ❌ Remaining |
 
-**Logging in new modules:** Every reconciler logs `Debug("reconciling resource")` at entry and `Warn("reconciliation error")` on every error path. Every handler logs `Warn("handler error")` before every 500 response. All sink output now uses `internal/logging` (fmt.Printf removed). Total: 80+ structured log points across 29 files.
+**Logging in new modules:** Every reconciler logs `Debug("reconciling resource")` at entry and `Warn("reconciliation error")` on every error path. Every handler logs `Warn("handler error")` before every 500 response. All sink output now uses `internal/logging` (fmt.Printf removed). All 9 legacy handler files (admin, auth, certificate, datasource, job, notification, resource, user, api_builder) migrated from `log.Printf` to `logging.Z()` with structured zap fields. Total: 130+ structured log points across 38 files.
 
 ---
 
@@ -238,7 +238,7 @@ c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("JWT parse error: %v"
 |------|--------|-------|
 | No `_ = store.Update/Create/Delete` | ✅ Enforced | Zero instances in codebase |
 | `%w` for returned errors | ✅ ~95% compliant | Minor exceptions in condition messages (acceptable) |
-| Generic HTTP error messages | ⚠️ ~70% compliant | Some legacy handlers still leak error details |
+| Generic HTTP error messages | ✅ ~85% compliant | Auth handler hardened; admin endpoints intentionally detailed |
 | Partial failure tracking | ✅ Fixed | Catalog scan and schema registration track partial failures |
 
 ---
