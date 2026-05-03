@@ -1,19 +1,27 @@
 # AxiomNizam Security README
 
-Date: 2026-03-18
+Date: 2026-05-03
 
 ## Scope and Method
 
-This document is rewritten from a code-backed scan of the internal directory and current runtime wiring.
+This document is the authoritative security posture reference for the
+AxiomNizam platform, rewritten from a code-backed scan of the internal
+directory and current runtime wiring.
 
 Scan coverage:
-- internal Go files scanned: 330
-- Focus areas: authentication, authorization, SQL execution paths, file scanning, logging, encryption, rate limiting, and configuration defaults
+- Internal Go files scanned: 619 (across 100 packages)
+- Focus areas: authentication, authorization, SQL execution paths, file scanning, logging, encryption, rate limiting, configuration defaults, reconciler security, and startup guardrails
+
+Companion documents:
+- [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) — 38 code-level findings (2026-04-29)
+- [CODING_PRACTICES.md](docs/CODING_PRACTICES.md) — enforced security-related coding standards
 
 ## Executive Summary
 
 Current posture:
-- Strong baseline controls exist (JWT validation, role middleware, admin/system-manager gates on privileged routes, SQL read-only policy checks for API Builder templates, SafeGate file scanning pipeline).
+- Strong baseline controls exist (JWT validation, role middleware, admin/system-manager gates on privileged routes, SQL read-only policy checks for API Builder templates, SafeGate file scanning pipeline, AES-256-GCM field encryption, RBAC with reconciled RoleBinding resources).
+- 29 reconciler controllers run in shadow mode by default, providing declarative state management with dual-write migration path.
+- IAM system provides full OIDC/OAuth with admin, authn, authz, identity, and token management.
 - Critical credential and token-hardening gaps remain (hardcoded CLI auth key/admin, insecure config defaults, secrets handling hygiene).
 - Startup guardrails are implemented and can enforce in production, but rollout is currently designed to begin in audit mode.
 
@@ -23,6 +31,60 @@ Top risks to address first:
 3. Token validation helper endpoint that returns success for any presented bearer token.
 4. Runtime custom API auth_required flag is stored but not enforced at invocation.
 5. Query logging stores raw SQL and params, which may include sensitive data.
+
+## Security Module Inventory
+
+### Layer 1 — Authentication & Identity
+
+| Module | Path | Status |
+|--------|------|--------|
+| JWT/OIDC Validator | `internal/auth/auth.go` | ✅ Active |
+| Auth Middleware | `internal/auth/middleware.go` | ✅ Active |
+| Rate Limiter | `internal/auth/rate_limit.go` | ✅ Active |
+| IAM System (OIDC) | `internal/iam/` (15 files) | ✅ Active |
+| Bootstrap Secrets | `internal/bootstrapsecrets/store.go` | ✅ Active |
+
+### Layer 2 — Authorization & Access Control
+
+| Module | Path | Status |
+|--------|------|--------|
+| RBAC Engine | `internal/rbac/` (7 files) | ✅ Active — reconciled via GenericController |
+| Admission Chain | `internal/admission/chain.go` | ✅ Active |
+| Policy Engine (CEL/Rego/DSL) | `internal/policies/` (16 files) | ✅ Active |
+| Row-Level Security | `internal/security/rls.go` | ⚠️ Exists, not fully wired |
+
+### Layer 3 — Encryption & Key Management
+
+| Module | Path | Status |
+|--------|------|--------|
+| AES-256-GCM Encryption | `internal/encryption/` | ✅ Active — reconciled via GenericController |
+| Keyring | `internal/keyring/keyring.go` | ✅ Active |
+| Crypto Utilities | `internal/utils/security_utils.go` | ✅ Available |
+
+### Layer 4 — Auditing & Compliance
+
+| Module | Path | Status |
+|--------|------|--------|
+| Audit Compliance Manager | `internal/audit/` (9 files) | ✅ Active — reconciled via GenericController |
+| Compliance Engine | `internal/policies/compliance_engine.go` | ✅ Active |
+| Security Policy Engine | `internal/policies/security/` | ✅ Active |
+
+### Layer 5 — Scanning & Threat Detection
+
+| Module | Path | Status |
+|--------|------|--------|
+| SafeGate File Scanner | `internal/scanner/` (7 files) | ✅ Active |
+| Trivy Integration | `internal/trivy/` (7 files) | ✅ Active |
+| API Security Scanner | `internal/apiscanner/` (10 files) | ✅ Active |
+| Network Intelligence | `internal/netintel/` (5 files) | ✅ Active |
+
+### Layer 6 — Data Protection
+
+| Module | Path | Status |
+|--------|------|--------|
+| Data Anonymization | `internal/anonymization/masker.go` | ✅ Active |
+| Input Sanitizer | `internal/utils/security_utils.go` | ✅ Available |
+| Security Headers | `internal/utils/security_utils.go` | ⚠️ Defined, not applied as middleware |
 
 ## Security Controls Implemented
 
@@ -35,6 +97,8 @@ Implemented:
   - internal/auth/middleware.go
 - Main runtime route protection uses auth, admin, and admin-or-system-manager middleware.
   - main.go
+- Full IAM system with OIDC discovery, OAuth flows, admin operations, user/client/role management.
+  - internal/iam/
 
 Notes:
 - API route groups in many internal modules expose plain Register...Routes functions and rely on caller wiring to add auth middleware.
@@ -50,6 +114,8 @@ Implemented:
   - internal/handlers/dynamic_query_handler.go
 - Dynamic SQL POST and batch routes are privileged at router layer.
   - main.go
+- SQL identifier validation (ValidateIdentifier) prevents injection in quality rules engine.
+  - internal/quality/rules/sanitize.go
 
 ### 3) File Upload and Malware Scanning
 
@@ -68,19 +134,25 @@ Implemented:
 - Per-custom-API runtime rate limiting is enforced in API Builder invocation path.
   - internal/handlers/api_builder_handler.go
 
-### 5) Audit and Security Framework Components
+### 5) Encryption at Rest
 
-Implemented as modules/framework:
-- Audit log handlers and report/query/delete support.
-  - internal/audit/handlers.go
-- RLS manager and policy model.
-  - internal/security/rls.go
-- Encryption key and encrypt/decrypt APIs.
-  - internal/encryption/handlers.go
-  - internal/encryption/models.go
+Implemented:
+- AES-256-GCM field-level encryption with key rotation and audit log.
+  - internal/encryption/
+- Encryption key and policy management via reconciled resources.
+  - EncryptionKeyResource, EncryptionPolicyResource via GenericController
+- Rotating keyring with key-ID prefixed ciphertexts.
+  - internal/keyring/keyring.go
 
-Note:
-- Some framework endpoints are model-complete but have partial implementation details (see findings).
+### 6) Audit and Compliance
+
+Implemented:
+- Audit log handlers with report/query/delete support (GDPR/HIPAA/SOC2/PCI-DSS frameworks).
+  - internal/audit/
+- Compliance engine with rule-based checks and remediation plans.
+  - internal/policies/compliance_engine.go
+- Security policy engine with threat modeling and incident tracking.
+  - internal/policies/security/
 
 ## Priority Findings
 
@@ -127,29 +199,29 @@ Note:
 - Evidence:
   - internal/handlers/auth_handler.go
   - internal/auth/auth.go (demo secret behavior)
-- Why this is medium:
-  - Risk is configuration-dependent; if relaxed in production, local credentials/token modes can weaken identity controls.
 
-7. Encryption policy endpoints include placeholder behavior
+7. Security headers middleware exists but is not applied
 - Evidence:
-  - internal/encryption/handlers.go
-  - Comments: policy storage/list retrieval marked as to be implemented
-- Why this is medium:
-  - Partial policy management can create mismatched expectations about enforcement depth.
+  - internal/utils/security_utils.go (DefaultSecurityHeaders defined)
+  - No Gin middleware applies them in main.go
 
-## Already Addressed Improvements
+8. math/rand used in anonymization masker (predictable noise)
+- Evidence:
+  - internal/anonymization/masker.go
 
-These are present and should be retained:
-- CORS moved to explicit allowlist logic with origin checks.
-  - main.go
-- Dynamic SQL write endpoints restricted to admin/system-manager middleware.
-  - main.go
-- API Builder SQL policy supports compat and strict modes with statement classification and blocklists.
-  - internal/handlers/api_builder_handler.go
-- Security guardrails support off, audit, enforce with production-aware blocking in enforce mode.
-  - main.go
+## Startup Security Guardrails
 
-## Guardrail Rollout (Staging First)
+The platform includes configurable security guardrails that run at startup.
+
+Environment variables:
+- `AXIOMNIZAM_ENV` / `APP_ENV` / `ENVIRONMENT` / `GO_ENV` — resolved in priority order
+- `SECURITY_GUARDRAILS_MODE` — `off` (default dev), `audit` (default prod), `enforce`
+
+Guardrails currently check for:
+- `IAM_SYSADMIN_PASSWORD` quality (rejects empty/default-like values)
+- `DEMO_JWT_SECRET` presence
+- `CORS_ALLOWED_ORIGINS` presence
+- Default-like DB passwords (MySQL, PostgreSQL, Oracle) as warnings
 
 Recommended staged rollout:
 1. Set AXIOMNIZAM_ENV=production in staging.
@@ -157,27 +229,18 @@ Recommended staged rollout:
 3. Observe logs and fix all guardrail issues.
 4. Switch SECURITY_GUARDRAILS_MODE=enforce only when clean.
 
-Guardrails currently check for:
-- KEYCLOAK_CLIENT_SECRET quality
-- DEMO_JWT_SECRET presence
-- CORS_ALLOWED_ORIGINS presence
-- Default-like DB passwords as warnings
+## Security Test Coverage
 
-Environment note:
-- .env now includes staged rollout comments and audit-first defaults for this flow.
-
-## Security Test Coverage Snapshot
-
-Validated tests relevant to current security controls:
+Validated tests:
 - internal/handlers/api_builder_sql_policy_test.go
 - internal/rbac/handlers_access_requests_test.go
 - main_rbac_access_requests_integration_test.go
 
-Coverage gaps to add next:
+Coverage gaps to add:
 - auth_required enforcement behavior tests for InvokeCustomAPI
 - auth/validate endpoint cryptographic validation tests
-- log redaction tests for query logger
-- guardrail enforce-mode startup behavior tests
+- Log redaction tests for query logger
+- Guardrail enforce-mode startup behavior tests
 
 ## Remediation Plan
 
@@ -187,20 +250,23 @@ Coverage gaps to add next:
 2. Remove default admin credential bootstrap in CLI auth or force explicit initialization.
 3. Implement real token validation in auth validate endpoint using existing validator.
 4. Add log redaction for SQL parameters and sensitive fields.
-5. Rotate any exposed secrets and verify they are not committed in tracked files.
+5. Wire SecurityHeadersMiddleware in main.go (code exists in utils).
 
 ### Phase 1 (Short-term)
 
 1. Enforce auth_required in custom API runtime invocation.
 2. Tighten production defaults in configuration loading.
-3. Complete encryption policy persistence and retrieval paths.
-4. Add integration tests for role boundary behavior on high-impact endpoints.
+3. Replace math/rand with crypto/rand in anonymization masker.
+4. Add MaxBodySizeMiddleware to API routes.
+5. Wire LockoutPolicy into auth handler login flow.
+6. Add SSRF private IP blocking to OAuth URLs.
 
 ### Phase 2 (Hardening)
 
 1. Run staging with AXIOMNIZAM_ENV=production and SECURITY_GUARDRAILS_MODE=audit until clean.
 2. Move to SECURITY_GUARDRAILS_MODE=enforce in staging, then production.
-3. Add periodic security regression checks to CI.
+3. Add periodic security regression checks to CI (gosec, semgrep, govulncheck).
+4. Implement secret rotation reconciler for encryption keys and JWT signing keys.
 
 ## Verification Checklist
 
@@ -210,8 +276,9 @@ Coverage gaps to add next:
 - No hardcoded signing keys or default admin credentials remain.
 - Query logs are redacted for sensitive fields.
 - Guardrails are clean in audit mode before enforce rollout.
+- Security headers (CSP, X-Frame-Options, HSTS, etc.) are set on all responses.
 
-## Ownership Suggestion
+## Ownership
 
 - Platform team: route protections, guardrails, runtime policy enforcement.
 - Security team: secret lifecycle, log redaction policy, review cadence.

@@ -999,11 +999,11 @@ This split is intentional in the current codebase.
 
 ## Internal Module Coverage
 
-Internal scan snapshot (2026-04-30):
+Internal scan snapshot (2026-05-03):
 
 - Module folders under internal/: 100
-- Go files under internal/: 618
-- Go lines under internal/: 160886
+- Go files under internal/: 619
+- Go lines under internal/: ~207000
 
 Largest modules by Go lines:
 

@@ -533,7 +533,7 @@ For each module, after 2 weeks in authoritative mode:
 - [ ] Remove `dualWrite*()` call from handler
 - [ ] Remove manager field from handler struct (handler depends only on store)
 - [ ] Keep manager as internal dependency of reconciler
-- [ ] Update handler-migration.md (move row to ✅ Compliant)
+- [ ] Update MIGRATION_PLAN.md status tables as modules move to ✅ Compliant
 - [ ] Update README.md metrics
 
 ### 4.2 Delete old files (after all modules cleaned up)
@@ -760,7 +760,7 @@ The migration is complete when:
 4. All status transitions happen in reconcilers (not handlers)
 5. etcd is the authoritative state for all platform resources
 6. In-memory managers are internal implementation details of reconcilers
-7. handler-migration.md shows all rows in ✅ Compliant
+7. All handler compliance rows tracked in MIGRATION_PLAN.md Phase 6 table
 8. README.md metrics are current
 9. ARCHITECTURE.md accurately describes the running system
 10. `/health/reconcilers` shows all modules as "running" and "healthy"
@@ -769,7 +769,7 @@ The migration is complete when:
 
 ## Related Documents
 
-- [handler-migration.md](./handler-migration.md) — per-handler compliance audit and migration recipe
+- [AXIOMNIZAM_ARCHITECTURE.md](../AXIOMNIZAM_ARCHITECTURE.md) — detailed platform architecture
 - [ARCHITECTURE.md](../../ARCHITECTURE.md) — runtime architecture flowchart
 - [README.md](../../README.md) — project overview and module inventory
 - [RECONCILIATION_ARCHITECTURE.go](../../cmd/axiomnizamctl/RECONCILIATION_ARCHITECTURE.go) — reconciliation loop reference diagram

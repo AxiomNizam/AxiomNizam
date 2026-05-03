@@ -204,7 +204,7 @@ Rollback at any stage: flip the flag to false (instant, no deploy).
 
 ---
 
-## 5. Module Inventory (88 modules)
+## 5. Module Inventory (100 modules)
 
 ### 5.1 Control-Plane Infrastructure
 
@@ -447,14 +447,14 @@ Metrics tracked per reconciler:
 
 | Metric | Value |
 |---|---|
-| Internal modules | 88 |
-| Go files | 530+ |
-| Go lines | 174,000+ |
+| Internal modules | 100 |
+| Go files | 619 |
+| Go lines | ~207,000 |
 | Reconciler controllers active | 33 |
 | GenericControllers | 29 |
-| Resource types | 40+ |
-| Store prefixes monitored | 30 |
-| Feature flags | 27 |
+| Resource types | 53+ |
+| Store prefixes monitored | 30+ |
+| Feature flags | 27+ |
 | External integrations | 12 (5 SQL + MongoDB + Redis + ES + RabbitMQ + Kafka + Keycloak + ClamAV) |
 | API route groups | 40+ |
 | Frontend dashboards | 12 |
@@ -484,7 +484,7 @@ Metrics tracked per reconciler:
 ## 12. Related Documents
 
 - [MIGRATION_PLAN.md](./architecture/MIGRATION_PLAN.md) — Production migration plan (Phases 0-6)
-- [handler-migration.md](./architecture/handler-migration.md) — Per-handler compliance audit
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — Runtime architecture flowchart
 - [SECURITY_README.md](../SECURITY_README.md) — Security posture and findings
+- [SECURITY_AUDIT.md](./SECURITY_AUDIT.md) — Code-level security audit (38 findings)
 - [README.md](../README.md) — Project overview and quick start
