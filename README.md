@@ -185,41 +185,20 @@ Runtime status notes:
 
 ### Platform Completion: Enterprise Data Platform Modules (2026-04-28)
 
-Implemented the first wave of enterprise data platform capabilities as part of the
-Platform Completion Plan. Full plan: [docs/PLATFORM_COMPLETION_PLAN.md](docs/PLATFORM_COMPLETION_PLAN.md).
 
-**New modules implemented (WS-1 through WS-4):**
+Implemented the full enterprise data platform as 7 workstreams of declarative
+resources with reconcilers, completing the AxiomNizam K8s/Nomad-style control plane.
 
-- **Data Catalog** (`internal/catalog/`) — Unified metadata registry with auto-discovery, PII detection, column profiling, full-text search, and catalog collections. REST API at `/api/v1/catalog/*`.
-- **Data Quality Rules** (`internal/quality/rules/`) — 15 built-in check types (freshness, volume, schema, not_null, unique, range, regex, referential, custom_sql, statistical, completeness, timeliness, etc.) with SLA tracking and alert integration.
-- **Schema Registry** (`internal/schemaregistry/`) — Versioned schema storage with backward/forward/full compatibility enforcement for JSON Schema and Avro. Confluent-compatible wire format at `/api/v1/schemas/*`.
-- **Alerting Engine** (`internal/alerting/`) — Declarative alert rules with multi-channel notification (Slack, email, webhook, PagerDuty), escalation policies, incident lifecycle, and silence management.
+**All 7 workstreams — 100% complete:**
 
-Key numbers:
-- **4 new modules** with resource + reconciler + handlers
-- **12 new files** created
-- **4 new resource types**: CatalogAsset, QualityRule, Schema, AlertRule
-- **4 new reconcilers** ready for GenericController wiring
-- **20+ new API routes** across catalog, quality, schema, and alerting
-- **0 existing files modified** — purely additive
+- **WS-1: Data Catalog** (`internal/catalog/`) — Metadata registry, auto-discovery, PII detection, full-text search, collections
+- **WS-2: Data Quality** (`internal/quality/rules/`, `internal/contracts/`) — 15 check types, data contracts, SLA tracking
+- **WS-3: Schema Registry** (`internal/schemaregistry/`) — Versioned schemas, Protobuf/Avro/JSON support, evolution manager
+- **WS-4: Observability** (`internal/alerting/`, `internal/slo/`, `internal/costing/`) — Alert rules, SLO tracking, cost attribution
+- **WS-5: Federated Query** (`internal/federation/`) — Cross-source queries, optimizer, result cache, materialized views, profiler
+- **WS-6: Governance** (`internal/governance/`) — Compliance policies (GDPR/HIPAA/SOC2/PCI-DSS), enforcer, auto-classification, erasure
+- **WS-7: Analytics & ML** (`internal/featurestore/`, `internal/streamanalytics/`, `internal/anonymization/`, `internal/mlpipeline/`) — Feature store, streaming aggregation, anonymization, ML pipelines
 
-New etcd prefixes:
-```
-/axiomnizam/catalogassets/
-/axiomnizam/catalogcollections/
-/axiomnizam/qualityrules/
-/axiomnizam/qualitychecks/
-/axiomnizam/schemas/
-/axiomnizam/schemasubjects/
-/axiomnizam/alertrules/
-/axiomnizam/alertincidents/
-/axiomnizam/notificationchannels/
-```
-
-Remaining workstreams (planned):
-- **WS-5** — Federated Query and Data Virtualization
-- **WS-6** — Governance and Compliance (GDPR/HIPAA/SOC2/PCI-DSS)
-- **WS-7** — Feature Store, Streaming Analytics, Anonymization, ML Pipelines
 
 ### etcd Replacement: Nomad-Style Embedded Storage (2026-04-29) ✅
 
