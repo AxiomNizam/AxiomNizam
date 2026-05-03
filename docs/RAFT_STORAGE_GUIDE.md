@@ -221,4 +221,4 @@ These are not required for the Raft backend to function but would improve the ex
 
 ---
 
-*This document is maintained alongside the [ETCD Replacement Plan](ETCD_REPLACEMENT_PLAN.md).*
+*This document is the operational reference for the embedded Raft storage backend.*

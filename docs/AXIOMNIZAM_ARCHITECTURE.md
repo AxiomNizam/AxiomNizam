@@ -483,8 +483,10 @@ Metrics tracked per reconciler:
 
 ## 12. Related Documents
 
-- [MIGRATION_PLAN.md](./architecture/MIGRATION_PLAN.md) — Production migration plan (Phases 0-6)
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — Runtime architecture flowchart
 - [SECURITY_README.md](../SECURITY_README.md) — Security posture and findings
 - [SECURITY_AUDIT.md](./SECURITY_AUDIT.md) — Code-level security audit (38 findings)
+- [PLATFORM_COMPLETION_PLAN.md](./PLATFORM_COMPLETION_PLAN.md) — Enterprise data platform roadmap
+- [RAFT_STORAGE_GUIDE.md](./RAFT_STORAGE_GUIDE.md) — Embedded Raft storage operations
+- [CODING_PRACTICES.md](./CODING_PRACTICES.md) — Engineering standards
 - [README.md](../README.md) — Project overview and quick start

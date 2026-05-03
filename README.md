@@ -84,15 +84,15 @@ Runtime notes:
 ## Project Size Snapshot
 
 <!-- README_METRICS:START -->
-Code inventory snapshot (workspace scan on 2026-04-30):
+Code inventory snapshot (workspace scan on 2026-05-03):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 712
-- Total code lines: 207783
-- Go files (repository): 661
-- Go lines (repository): 173451
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 725
+- Total code lines: 213000+
+- Go files (repository): 675
+- Go lines (repository): 176463
 - Internal modules: 100
-- Internal Go files: 618
-- Internal Go lines: 160886
+- Internal Go files: 632
+- Internal Go lines: 166000+
 
 Counting method used:
 
@@ -122,8 +122,7 @@ Recent updates completed in this repository:
 ### Kubernetes-Style Reconcile Loop Migration (2026-04-27)
 
 Migrated the entire platform from imperative CRUD to the AxiomNizam K8s-style
-control-plane architecture. **All code phases complete.** Full plan:
-[docs/architecture/MIGRATION_PLAN.md](docs/architecture/MIGRATION_PLAN.md).
+control-plane architecture. **All code phases complete.**
 
 Key numbers:
 - **33 reconciler controllers** running (29 GenericController + 3 runtime + 1 storage)
@@ -164,7 +163,7 @@ export RECONCILER_AUTHORITATIVE_VERSIONING=true
 export RECONCILER_AUTHORITATIVE_VERSIONING=false
 ```
 
-Full plan: [docs/architecture/MIGRATION_PLAN.md](docs/architecture/MIGRATION_PLAN.md)
+Migration is complete — all code phases delivered.
 
 New infrastructure:
 
@@ -225,8 +224,8 @@ Remaining workstreams (planned):
 ### etcd Replacement: Nomad-Style Embedded Storage (2026-04-29) ✅
 
 Completed the phased migration from external etcd to an embedded Raft + go-memdb + BoltDB
-storage layer, inspired by HashiCorp Nomad's architecture. Full plan:
-[docs/ETCD_REPLACEMENT_PLAN.md](docs/ETCD_REPLACEMENT_PLAN.md).
+storage layer, inspired by HashiCorp Nomad's architecture.
+See [docs/RAFT_STORAGE_GUIDE.md](docs/RAFT_STORAGE_GUIDE.md) for operational details.
 
 **All 7 phases complete:**
 
@@ -1002,8 +1001,8 @@ This split is intentional in the current codebase.
 Internal scan snapshot (2026-05-03):
 
 - Module folders under internal/: 100
-- Go files under internal/: 619
-- Go lines under internal/: ~207000
+- Go files under internal/: 632
+- Go lines under internal/: ~166000
 
 Largest modules by Go lines:
 
@@ -1152,9 +1151,8 @@ Key vars used by current code paths:
 
 ### Reconciler Migration Flags
 
-These flags control the Kubernetes-style reconcile loop migration. See
-[docs/architecture/MIGRATION_PLAN.md](docs/architecture/MIGRATION_PLAN.md) for
-the full plan.
+These flags control the Kubernetes-style reconcile loop migration.
+All migration code phases are complete — these flags gate runtime activation.
 
 Shadow mode (default: true — reconcilers run but don't affect production):
 

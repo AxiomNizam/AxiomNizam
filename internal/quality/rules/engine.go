@@ -93,6 +93,18 @@ func (e *RuleEngine) Evaluate(ctx context.Context, rule *QualityRuleResource) (*
 		return e.checkRowCountChange(ctx, rule)
 	case CheckTypeStatistical:
 		return e.checkStatistical(ctx, rule)
+	case CheckTypeSchema:
+		return e.checkSchema(ctx, rule)
+	case CheckTypeRegex:
+		return e.checkRegex(ctx, rule)
+	case CheckTypeReferential:
+		return e.checkReferential(ctx, rule)
+	case CheckTypeDistribution:
+		return e.checkDistribution(ctx, rule)
+	case CheckTypeTimeliness:
+		return e.checkTimeliness(ctx, rule)
+	case CheckTypeAcceptedValues:
+		return e.checkAcceptedValues(ctx, rule)
 	default:
 		return nil, fmt.Errorf("quality engine: unsupported rule type %q", rule.Spec.RuleType)
 	}
