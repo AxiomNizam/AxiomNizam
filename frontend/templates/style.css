@@ -4870,9 +4870,9 @@ button .ax-icon,
 
 /* UI/UX Upgrades: Animations */
 .stat-card, .feature-card, .arch-card, .db-card, .metric {
-    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    opacity: 0;
-    transform: translateY(20px);
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+
+
 }
 .stat-card:nth-child(1), .feature-card:nth-child(1), .db-card:nth-child(1) { animation-delay: 0.05s; }
 .stat-card:nth-child(2), .feature-card:nth-child(2), .db-card:nth-child(2) { animation-delay: 0.1s; }
@@ -4882,8 +4882,47 @@ button .ax-icon,
 .stat-card:nth-child(6), .feature-card:nth-child(6), .db-card:nth-child(6) { animation-delay: 0.3s; }
 
 @keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
     to {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* UI/UX Upgrades: Click Responsiveness */
+.btn-primary:active, .btn-secondary:active, .nav-link:active, .card:active, button:active, .stat-card:active, .feature-card:active {
+    transform: scale(0.98);
+}
+
+/* Global Premium Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--darker-bg);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.3) var(--darker-bg);
+}
+
+/* Premium Text Selection */
+::selection {
+    background: rgba(var(--primary-rgb), 0.3);
+    color: var(--primary-light);
+}
+::-moz-selection {
+    background: rgba(var(--primary-rgb), 0.3);
+    color: var(--primary-light);
 }
