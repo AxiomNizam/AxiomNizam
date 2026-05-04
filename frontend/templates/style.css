@@ -6,7 +6,7 @@
 
 /* Default Dark Theme (Classic Modern Deep Slate & Emerald) */
 :root, [data-theme="dark"] {
-    --font-heading: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Cascadia Code', 'Consolas', var(--font-mono);
     --primary-color: #008C63;
@@ -4866,4 +4866,24 @@ button .ax-icon,
     width: 1.25em;
     height: 1.25em;
     margin-right: 0.5em;
+}
+
+/* UI/UX Upgrades: Animations */
+.stat-card, .feature-card, .arch-card, .db-card, .metric {
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+.stat-card:nth-child(1), .feature-card:nth-child(1), .db-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2), .feature-card:nth-child(2), .db-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-card:nth-child(3), .feature-card:nth-child(3), .db-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4), .feature-card:nth-child(4), .db-card:nth-child(4) { animation-delay: 0.2s; }
+.stat-card:nth-child(5), .feature-card:nth-child(5), .db-card:nth-child(5) { animation-delay: 0.25s; }
+.stat-card:nth-child(6), .feature-card:nth-child(6), .db-card:nth-child(6) { animation-delay: 0.3s; }
+
+@keyframes slideUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
