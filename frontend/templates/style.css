@@ -130,12 +130,24 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Navigation Bar */
 .navbar {
-    background: var(--card-bg);
+    background: rgba(15, 22, 18, 0.85); /* Semi-transparent background matching var(--card-bg) closely */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
     position: sticky;
     top: 0;
     z-index: 1000;
+}
+
+[data-theme="light"] .navbar {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+/* Global Focus Styles for Accessibility */
+:focus-visible {
+    outline: 2px solid var(--primary-light);
+    outline-offset: 2px;
 }
 
 .nav-container {
