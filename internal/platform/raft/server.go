@@ -248,7 +248,43 @@ func (s *Server) GetMetrics() *Metrics {
 	return s.metrics
 }
 
+// QuickStatus builds a stats map from non-blocking atomic reads ONLY.
+// Unlike Stats(), this NEVER touches the Raft main loop and will
+// always return instantly, even during elections or heavy replication.
+//
+// Missing vs Stats(): latest_configuration, num_peers (these require
+// GetConfiguration which blocks on the main loop).
+func (s *Server) QuickStatus() map[string]string {
+	toString := func(v uint64) string {
+		return fmt.Sprintf("%d", v)
+	}
+
+	m := map[string]string{
+		"state":          s.raft.State().String(),
+		"term":           toString(s.raft.CurrentTerm()),
+		"last_log_index": toString(s.raft.LastIndex()),
+		"commit_index":   toString(s.raft.CommitIndex()),
+		"applied_index":  toString(s.raft.AppliedIndex()),
+	}
+
+	// LastContact
+	if s.raft.State() == hraft.Leader {
+		m["last_contact"] = "0"
+	} else {
+		lc := s.raft.LastContact()
+		if lc.IsZero() {
+			m["last_contact"] = "never"
+		} else {
+			m["last_contact"] = fmt.Sprintf("%v", time.Since(lc))
+		}
+	}
+
+	return m
+}
+
 // Stats returns Raft internal stats (term, commit index, etc.).
+// WARNING: This calls GetConfiguration() internally which BLOCKS on the
+// Raft main loop.  Use QuickStatus() for non-blocking health checks.
 func (s *Server) Stats() map[string]string {
 	return s.raft.Stats()
 }

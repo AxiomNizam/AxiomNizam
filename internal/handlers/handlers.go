@@ -229,24 +229,6 @@ type raftBackendInfo interface {
 	IsEtcd() bool
 }
 
-// raftServerInfo extracts Raft server details.
-type raftServerInfo interface {
-	IsLeader() bool
-	LeaderAddr() string
-	LeaderWithID() (string, string)
-	State() interface{ String() string }
-	Stats() map[string]string
-	GetConfiguration() ([]raftPeerInfo, error)
-	AddPeer(id, addr string) error
-	RemovePeer(id string) error
-}
-
-type raftPeerInfo struct {
-	ID       string `json:"id"`
-	Address  string `json:"address"`
-	Suffrage string `json:"suffrage"`
-}
-
 // Distributed handles GET /distributed - Check cluster status (Raft or etcd)
 func (h *HealthHandler) Distributed(c *gin.Context) {
 	// Try Raft backend first.
@@ -262,6 +244,11 @@ func (h *HealthHandler) Distributed(c *gin.Context) {
 }
 
 // distributedRaft reports Raft cluster status (leader, state, peers).
+//
+// All core data (state, leader, term, indices) comes from non-blocking
+// atomic reads that return INSTANTLY.  The peer list requires
+// GetConfiguration() which blocks on the Raft main loop, so it's
+// fetched in a goroutine with a 2-second timeout.
 func (h *HealthHandler) distributedRaft(c *gin.Context) {
 	status := map[string]interface{}{
 		"backend":        "raft",
@@ -269,16 +256,20 @@ func (h *HealthHandler) distributedRaft(c *gin.Context) {
 		"healthy":        true,
 	}
 
-	// Duck-type the BackendManager to extract Raft details without
-	// importing platform/store (avoids circular dependencies).
-	type raftFields interface {
-		GetRaftStats() map[string]string
+	// Interface for non-blocking reads only.
+	type raftNonBlocking interface {
 		GetRaftLeader() (string, string)
 		GetRaftIsLeader() bool
+		GetRaftQuickStatus() map[string]string
+	}
+
+	// Interface for the blocking peer lookup (optional).
+	type raftPeerLookup interface {
 		GetRaftPeers() ([]map[string]string, error)
 	}
-	if rf, ok := h.backendMgr.(raftFields); ok {
-		// LeaderWithID and IsLeader are lock-free atomic reads — always fast.
+
+	if rf, ok := h.backendMgr.(raftNonBlocking); ok {
+		// ── All non-blocking: returns instantly ──
 		leaderAddr, leaderID := rf.GetRaftLeader()
 		isLeader := rf.GetRaftIsLeader()
 		if isLeader {
@@ -290,33 +281,33 @@ func (h *HealthHandler) distributedRaft(c *gin.Context) {
 		status["leader_id"] = leaderID
 		status["is_leader"] = isLeader
 
-		// Stats() and GetConfiguration() talk to the Raft main loop via
-		// unbuffered channels.  If the loop is busy (elections, replication)
-		// they block for minutes.  Use a goroutine + timeout so the API
-		// always responds within 3 seconds.
-		type raftExtra struct {
-			stats  map[string]string
-			peers  []map[string]string
-		}
-		ch := make(chan raftExtra, 1)
-		go func() {
-			var ex raftExtra
-			ex.stats = rf.GetRaftStats()
-			if p, err := rf.GetRaftPeers(); err == nil {
-				ex.peers = p
-			}
-			ch <- ex
-		}()
+		// QuickStatus uses ONLY atomic reads — no main loop, instant.
+		status["stats"] = rf.GetRaftQuickStatus()
 
-		select {
-		case ex := <-ch:
-			status["stats"] = ex.stats
-			if ex.peers != nil {
-				status["peers"] = ex.peers
-				status["member_count"] = len(ex.peers)
+		// ── Peer list (optional, may block) ──
+		// GetConfiguration() goes through the Raft main loop.
+		// Try it with a short timeout; if it blocks, return without peers.
+		if pl, ok2 := h.backendMgr.(raftPeerLookup); ok2 {
+			peerCh := make(chan []map[string]string, 1)
+			go func() {
+				if p, err := pl.GetRaftPeers(); err == nil {
+					peerCh <- p
+				} else {
+					peerCh <- nil
+				}
+			}()
+
+			timer := time.NewTimer(2 * time.Second)
+			select {
+			case p := <-peerCh:
+				timer.Stop()
+				if p != nil {
+					status["peers"] = p
+					status["member_count"] = len(p)
+				}
+			case <-timer.C:
+				status["peers_note"] = "peer list loading (raft syncing)"
 			}
-		case <-time.After(3 * time.Second):
-			status["stats_timeout"] = "raft main loop busy, stats unavailable"
 		}
 	}
 

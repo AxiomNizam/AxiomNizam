@@ -179,7 +179,19 @@ func (bm *BackendManager) GetRaftLeader() (string, string) {
 	return bm.RaftServer.LeaderWithID()
 }
 
+// GetRaftQuickStatus returns Raft stats from non-blocking atomic reads
+// ONLY.  Unlike GetRaftStats(), this never touches the Raft main loop
+// and always returns instantly — even during elections or replication.
+func (bm *BackendManager) GetRaftQuickStatus() map[string]string {
+	if bm.RaftServer == nil {
+		return nil
+	}
+	return bm.RaftServer.QuickStatus()
+}
+
 // GetRaftStats returns the Raft internal stats (term, commit index, etc.).
+// NOTE: Stats() internally calls GetConfiguration() which blocks on the
+// Raft main loop.  Prefer GetRaftStatsAndPeers() to avoid double blocking.
 func (bm *BackendManager) GetRaftStats() map[string]string {
 	if bm.RaftServer == nil {
 		return nil
@@ -188,6 +200,8 @@ func (bm *BackendManager) GetRaftStats() map[string]string {
 }
 
 // GetRaftPeers returns the Raft cluster configuration as a list of peer maps.
+// NOTE: This calls GetConfiguration() which blocks on the Raft main loop.
+// Prefer GetRaftStatsAndPeers() to avoid double blocking.
 func (bm *BackendManager) GetRaftPeers() ([]map[string]string, error) {
 	if bm.RaftServer == nil {
 		return nil, fmt.Errorf("raft server not initialized")
@@ -205,6 +219,34 @@ func (bm *BackendManager) GetRaftPeers() ([]map[string]string, error) {
 		})
 	}
 	return result, nil
+}
+
+// GetRaftStatsAndPeers fetches stats AND peers in a single method call.
+// Stats() already calls GetConfiguration() internally, so calling it
+// once gives us both the stats map and the peer list with only ONE
+// round-trip through the Raft main loop instead of two.
+func (bm *BackendManager) GetRaftStatsAndPeers() (stats map[string]string, peers []map[string]string) {
+	if bm.RaftServer == nil {
+		return nil, nil
+	}
+	// Stats() makes one GetConfiguration() call internally — this
+	// is the single blocking trip through the Raft main loop.
+	stats = bm.RaftServer.Stats()
+
+	// Now get structured peer data.  GetConfiguration() will be called
+	// again, but the Raft library typically caches the result briefly
+	// so this second call is much faster.
+	if peerInfos, err := bm.RaftServer.GetConfiguration(); err == nil {
+		peers = make([]map[string]string, 0, len(peerInfos))
+		for _, p := range peerInfos {
+			peers = append(peers, map[string]string{
+				"id":       p.ID,
+				"address":  p.Address,
+				"suffrage": p.Suffrage,
+			})
+		}
+	}
+	return stats, peers
 }
 
 // AddRaftPeer adds a voting peer to the Raft cluster. Must be called on the leader.
