@@ -245,10 +245,9 @@ func (h *HealthHandler) Distributed(c *gin.Context) {
 
 // distributedRaft reports Raft cluster status (leader, state, peers).
 //
-// All core data (state, leader, term, indices) comes from non-blocking
-// atomic reads that return INSTANTLY.  The peer list requires
-// GetConfiguration() which blocks on the Raft main loop, so it's
-// fetched in a goroutine with a 2-second timeout.
+// Leader/state are read from non-blocking atomics (instant).  Full stats
+// and peer list are fetched in a goroutine with a 3-second safety timeout.
+// If the Raft main loop is saturated, falls back to QuickStatus (atomic).
 func (h *HealthHandler) distributedRaft(c *gin.Context) {
 	status := map[string]interface{}{
 		"backend":        "raft",
@@ -256,20 +255,16 @@ func (h *HealthHandler) distributedRaft(c *gin.Context) {
 		"healthy":        true,
 	}
 
-	// Interface for non-blocking reads only.
-	type raftNonBlocking interface {
+	type raftInfo interface {
 		GetRaftLeader() (string, string)
 		GetRaftIsLeader() bool
 		GetRaftQuickStatus() map[string]string
-	}
-
-	// Interface for the blocking peer lookup (optional).
-	type raftPeerLookup interface {
+		GetRaftStats() map[string]string
 		GetRaftPeers() ([]map[string]string, error)
 	}
 
-	if rf, ok := h.backendMgr.(raftNonBlocking); ok {
-		// ── All non-blocking: returns instantly ──
+	if rf, ok := h.backendMgr.(raftInfo); ok {
+		// Leader info — non-blocking atomic reads, always instant.
 		leaderAddr, leaderID := rf.GetRaftLeader()
 		isLeader := rf.GetRaftIsLeader()
 		if isLeader {
@@ -281,33 +276,36 @@ func (h *HealthHandler) distributedRaft(c *gin.Context) {
 		status["leader_id"] = leaderID
 		status["is_leader"] = isLeader
 
-		// QuickStatus uses ONLY atomic reads — no main loop, instant.
-		status["stats"] = rf.GetRaftQuickStatus()
-
-		// ── Peer list (optional, may block) ──
-		// GetConfiguration() goes through the Raft main loop.
-		// Try it with a short timeout; if it blocks, return without peers.
-		if pl, ok2 := h.backendMgr.(raftPeerLookup); ok2 {
-			peerCh := make(chan []map[string]string, 1)
-			go func() {
-				if p, err := pl.GetRaftPeers(); err == nil {
-					peerCh <- p
-				} else {
-					peerCh <- nil
-				}
-			}()
-
-			timer := time.NewTimer(2 * time.Second)
-			select {
-			case p := <-peerCh:
-				timer.Stop()
-				if p != nil {
-					status["peers"] = p
-					status["member_count"] = len(p)
-				}
-			case <-timer.C:
-				status["peers_note"] = "peer list loading (raft syncing)"
+		// Full stats + peers in a goroutine with safety timeout.
+		// Now that the Redis middleware bug is fixed, this should
+		// complete in milliseconds.  The timeout is a safety net.
+		type raftResult struct {
+			stats map[string]string
+			peers []map[string]string
+		}
+		done := make(chan raftResult, 1)
+		go func() {
+			var r raftResult
+			r.stats = rf.GetRaftStats()
+			if p, err := rf.GetRaftPeers(); err == nil {
+				r.peers = p
 			}
+			done <- r
+		}()
+
+		timer := time.NewTimer(3 * time.Second)
+		select {
+		case r := <-done:
+			timer.Stop()
+			status["stats"] = r.stats
+			if r.peers != nil {
+				status["peers"] = r.peers
+				status["member_count"] = len(r.peers)
+			}
+		case <-timer.C:
+			// Fallback: non-blocking atomic stats only.
+			status["stats"] = rf.GetRaftQuickStatus()
+			status["stats_note"] = "full stats timed out, showing atomic snapshot"
 		}
 	}
 
