@@ -788,32 +788,36 @@
             document.querySelectorAll('[id$="CurrentIP"]').forEach(el => el.textContent = data.ip);
         }).catch(e => console.log('IP fetch failed', e));
 
-        // Setup live token countdown
-        let tokenSeconds = 0;
-        const updateTokenTime = () => {
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                try {
-                     const payload = JSON.parse(atob(token.split('.')[1]));
-                     if (payload.exp) {
-                         tokenSeconds = payload.exp - Math.floor(Date.now() / 1000);
-                     }
-                } catch(e) {}
-            }
-        };
-        updateTokenTime();
-
+        // Setup live token countdown — uses shared getTokenRemainingSeconds() from auth.js
+        // which automatically reflects refreshed tokens.
         setInterval(() => {
+            const tokenSeconds = (typeof getTokenRemainingSeconds === 'function')
+                ? getTokenRemainingSeconds()
+                : 0;
+
             if (tokenSeconds > 0) {
-                tokenSeconds--;
                 const wH = Math.floor(tokenSeconds / 3600);
                 const wM = Math.floor((tokenSeconds % 3600) / 60);
                 const wS = tokenSeconds % 60;
                 document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
                     el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+                    el.style.color = tokenSeconds < 120 ? '#f59e0b' : '';
                 });
+            } else if (localStorage.getItem('refreshToken')) {
+                // Token expired but we have a refresh token — show refreshing status.
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = 'Refreshing...';
+                    el.style.color = '#f59e0b';
+                });
+                // Trigger refresh if not already in-flight.
+                if (typeof refreshAccessToken === 'function') {
+                    refreshAccessToken();
+                }
             } else {
-                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => el.textContent = "Expired");
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = 'Expired';
+                    el.style.color = '#ef4444';
+                });
             }
         }, 1000);
 

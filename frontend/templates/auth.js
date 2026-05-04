@@ -484,3 +484,216 @@ function isAuthenticated() {
 function isAdmin() {
     return userRole === 'admin' || userRole === 'system-manager';
 }
+
+// ═══════════════════════════════════════════════
+// AUTOMATIC TOKEN REFRESH MECHANISM
+// ═══════════════════════════════════════════════
+
+// Extract the expiry timestamp (epoch seconds) from a JWT token.
+function getTokenExpiry(token) {
+    try {
+        if (!token) return 0;
+        const parts = token.split('.');
+        if (parts.length !== 3) return 0;
+        const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
+        const decoded = JSON.parse(atob(padded));
+        return decoded.exp || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+// Returns remaining seconds until the current access token expires.
+function getTokenRemainingSeconds() {
+    const token = localStorage.getItem('authToken') || authToken;
+    if (!token) return 0;
+    const exp = getTokenExpiry(token);
+    if (!exp) return 0;
+    return Math.max(0, exp - Math.floor(Date.now() / 1000));
+}
+
+// Guard to prevent concurrent refresh calls.
+let _refreshInFlight = null;
+
+// Refresh the access token using the stored refresh token.
+// Returns a promise that resolves to the new access token or null on failure.
+function refreshAccessToken() {
+    // If a refresh is already in-flight, piggyback on it.
+    if (_refreshInFlight) return _refreshInFlight;
+
+    const currentRefreshToken = localStorage.getItem('refreshToken') || refreshToken;
+    if (!currentRefreshToken) {
+        console.warn('🔄 No refresh token available — cannot refresh session');
+        return Promise.resolve(null);
+    }
+
+    const refreshURL = AUTH_CONFIG.apiURL + AUTH_CONFIG.refreshEndpoint;
+    console.log('🔄 Refreshing access token via:', refreshURL);
+
+    _refreshInFlight = fetch(refreshURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: currentRefreshToken })
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.text().then(function(body) {
+                var detail = '';
+                try { detail = JSON.parse(body).error || body; } catch(e) { detail = body; }
+                throw new Error('Refresh failed (' + response.status + '): ' + detail);
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        var newAccess = data.access_token || '';
+        var newRefresh = data.refresh_token || '';
+
+        if (!newAccess) {
+            throw new Error('Refresh response missing access_token');
+        }
+
+        // Update in-memory state.
+        authToken = newAccess;
+        refreshToken = newRefresh || currentRefreshToken;
+
+        // Persist to storage.
+        localStorage.setItem('authToken', authToken);
+        if (newRefresh) {
+            localStorage.setItem('refreshToken', newRefresh);
+        }
+
+        // Update cookies so server-side middleware sees the new token.
+        var resolvedRole = userRole || normalizeRole(localStorage.getItem('userRole') || extractUserRole(authToken));
+        var resolvedName = userName || localStorage.getItem('userName') || '';
+        setAuthCookies(authToken, resolvedRole, resolvedName);
+
+        console.log('✅ Token refreshed successfully, new expiry in', getTokenRemainingSeconds(), 'seconds');
+
+        // Re-schedule the next proactive refresh.
+        scheduleTokenRefresh();
+
+        return authToken;
+    })
+    .catch(function(err) {
+        console.error('❌ Token refresh failed:', err.message);
+        // If refresh fails, the session is truly expired — force re-login.
+        handleSessionExpired();
+        return null;
+    })
+    .finally(function() {
+        _refreshInFlight = null;
+    });
+
+    return _refreshInFlight;
+}
+
+// Handle a fully expired session (refresh token invalid/expired).
+function handleSessionExpired() {
+    console.warn('⏰ Session expired — redirecting to login');
+    authToken = null;
+    refreshToken = null;
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userRole');
+    clearAuthCookies();
+
+    // Only redirect if we are on a protected page.
+    var path = window.location.pathname;
+    if (isProtectedPath(path) || path === '/') {
+        window.location.href = '/login';
+    }
+}
+
+// ── Proactive refresh timer ──
+// Refreshes the token automatically ~2 minutes before it expires.
+var _refreshTimerId = null;
+var REFRESH_MARGIN_SECONDS = 120; // Refresh 2 minutes before expiry.
+
+function scheduleTokenRefresh() {
+    // Clear any existing timer.
+    if (_refreshTimerId) {
+        clearTimeout(_refreshTimerId);
+        _refreshTimerId = null;
+    }
+
+    var remaining = getTokenRemainingSeconds();
+    if (remaining <= 0) return; // Already expired, nothing to schedule.
+
+    // If remaining time is less than our margin, refresh immediately.
+    var delay = Math.max(0, remaining - REFRESH_MARGIN_SECONDS) * 1000;
+    if (delay <= 0) {
+        // Token is about to expire — refresh now.
+        refreshAccessToken();
+        return;
+    }
+
+    console.log('⏱️ Token refresh scheduled in', Math.round(delay / 1000), 'seconds (token expires in', remaining, 's)');
+
+    _refreshTimerId = setTimeout(function() {
+        _refreshTimerId = null;
+        var hasRefresh = localStorage.getItem('refreshToken') || refreshToken;
+        if (!hasRefresh) return;
+
+        refreshAccessToken();
+    }, delay);
+}
+
+// ── Fetch interceptor ──
+// Wraps window.fetch to automatically retry on 401 with a refreshed token.
+(function installFetchInterceptor() {
+    var _originalFetch = window.fetch;
+
+    window.fetch = function(input, init) {
+        return _originalFetch.call(this, input, init).then(function(response) {
+            // If the request returned 401 and we have a refresh token, try once.
+            if (response.status === 401) {
+                var hasRefresh = localStorage.getItem('refreshToken') || refreshToken;
+                if (!hasRefresh) return response;
+
+                // Check if this request had an Authorization header (skip public endpoints).
+                var hadAuth = false;
+                if (init && init.headers) {
+                    if (typeof init.headers === 'object' && init.headers['Authorization']) hadAuth = true;
+                    if (typeof init.headers.get === 'function' && init.headers.get('Authorization')) hadAuth = true;
+                }
+                if (!hadAuth) return response;
+
+                console.log('🔄 Got 401 — attempting token refresh before retry');
+                return refreshAccessToken().then(function(newToken) {
+                    if (!newToken) return response; // Refresh failed, return original 401.
+
+                    // Clone the request with the new token.
+                    var newInit = Object.assign({}, init || {});
+                    if (!newInit.headers || typeof newInit.headers !== 'object') {
+                        newInit.headers = {};
+                    }
+                    // Handle both plain objects and Headers instances.
+                    if (typeof newInit.headers.set === 'function') {
+                        newInit.headers.set('Authorization', 'Bearer ' + newToken);
+                    } else {
+                        newInit.headers = Object.assign({}, newInit.headers);
+                        newInit.headers['Authorization'] = 'Bearer ' + newToken;
+                    }
+
+                    console.log('🔄 Retrying request with refreshed token');
+                    return _originalFetch.call(window, input, newInit);
+                });
+            }
+            return response;
+        });
+    };
+})();
+
+// ── Bootstrap ──
+// Start the proactive refresh timer on page load.
+window.addEventListener('DOMContentLoaded', function() {
+    // Small delay to let the main DOMContentLoaded handler in auth.js run first.
+    setTimeout(function() {
+        if (localStorage.getItem('authToken') && localStorage.getItem('refreshToken')) {
+            scheduleTokenRefresh();
+        }
+    }, 500);
+});
