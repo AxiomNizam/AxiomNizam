@@ -96,9 +96,16 @@ func (s *Server) setupRaft() error {
 	raftCfg.Logger = s.logger
 
 	// TCP transport.
-	addr, err := net.ResolveTCPAddr("tcp", s.config.BindAddr)
+	// Determine the advertise address.  When running in Docker,
+	// BindAddr is typically "0.0.0.0:9700" (not advertisable), so
+	// we use AdvertiseAddr (e.g. "axiomnizam-1:9700") instead.
+	advertiseAddr := s.config.BindAddr
+	if s.config.AdvertiseAddr != "" {
+		advertiseAddr = s.config.AdvertiseAddr
+	}
+	addr, err := net.ResolveTCPAddr("tcp", advertiseAddr)
 	if err != nil {
-		return fmt.Errorf("resolve bind addr: %w", err)
+		return fmt.Errorf("resolve advertise addr: %w", err)
 	}
 	transport, err := hraft.NewTCPTransport(s.config.BindAddr, addr, 3, 10*time.Second, os.Stderr)
 	if err != nil {
@@ -138,11 +145,16 @@ func (s *Server) setupRaft() error {
 
 	// Bootstrap if configured (single-node or first node).
 	if s.config.Bootstrap {
+		// Use advertise address in cluster config so peers can reach us.
+		bootstrapAddr := s.config.BindAddr
+		if s.config.AdvertiseAddr != "" {
+			bootstrapAddr = s.config.AdvertiseAddr
+		}
 		cfg := hraft.Configuration{
 			Servers: []hraft.Server{
 				{
 					ID:      hraft.ServerID(s.config.NodeID),
-					Address: hraft.ServerAddress(s.config.BindAddr),
+					Address: hraft.ServerAddress(bootstrapAddr),
 				},
 			},
 		}

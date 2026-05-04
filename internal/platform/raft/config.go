@@ -24,6 +24,12 @@ type Config struct {
 	// Defaults to "127.0.0.1:9700".
 	BindAddr string
 
+	// AdvertiseAddr is the address advertised to other Raft nodes.
+	// If empty, defaults to BindAddr.  In Docker, set this to the
+	// container hostname (e.g. "axiomnizam-1:9700") while binding
+	// to "0.0.0.0:9700".
+	AdvertiseAddr string
+
 	// NodeID uniquely identifies this server in the Raft cluster.
 	// Defaults to "node-1".
 	NodeID string
@@ -67,6 +73,7 @@ func DefaultConfig() *Config {
 	cfg := &Config{
 		DataDir:             envOrDefault("AXIOMNIZAM_RAFT_DATA_DIR", filepath.Join(".", "data", "raft")),
 		BindAddr:            envOrDefault("AXIOMNIZAM_RAFT_BIND_ADDR", "127.0.0.1:9700"),
+		AdvertiseAddr:       envOrDefault("AXIOMNIZAM_RAFT_ADVERTISE_ADDR", ""),
 		NodeID:              envOrDefault("AXIOMNIZAM_RAFT_NODE_ID", "node-1"),
 		Bootstrap:           envOrDefaultBool("AXIOMNIZAM_RAFT_BOOTSTRAP", true),
 		SnapshotInterval:    2 * time.Minute,

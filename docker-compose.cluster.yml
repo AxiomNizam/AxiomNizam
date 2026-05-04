@@ -1,0 +1,76 @@
+# docker-compose.cluster.yml
+#
+# Multi-node Raft cluster test overlay.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.cluster.yml up -d --build
+#
+# This starts 2 AxiomNizam nodes:
+#   - axiomnizam-1 (leader bootstrap, API on :8000)
+#   - axiomnizam-2 (follower, API on :8002)
+#
+# After both are up, add node-2 to the cluster:
+#   curl -X POST http://localhost:8000/api/v1/raft/peers \
+#     -H "Content-Type: application/json" \
+#     -H "Authorization: Bearer raft-cluster-token" \
+#     -d '{"id":"node-2","addr":"axiomnizam-2:9700"}'
+#
+# Verify Raft status:
+#   curl http://localhost:8000/distributed   # node-1 (should be leader)
+#   curl http://localhost:8002/distributed   # node-2 (should be follower)
+#
+# To stop:
+#   docker compose -f docker-compose.yml -f docker-compose.cluster.yml down -v
+
+services:
+  # Override the original single-node service
+  axiomnizam:
+    container_name: axiomnizam-1
+    hostname: axiomnizam-1
+    ports:
+      - "8000:8000"
+      - "9700:9700"    # Raft transport (for debugging)
+    environment:
+      STORAGE_BACKEND: raft
+      AXIOMNIZAM_RAFT_NODE_ID: node-1
+      AXIOMNIZAM_RAFT_BIND_ADDR: "0.0.0.0:9700"
+      AXIOMNIZAM_RAFT_ADVERTISE_ADDR: "axiomnizam-1:9700"
+      AXIOMNIZAM_RAFT_BOOTSTRAP: "true"
+      AXIOMNIZAM_RAFT_DATA_DIR: /data/raft
+      ADMIN_TOKEN: raft-cluster-token
+    volumes:
+      - raft-data-1:/data/raft
+
+  # Second node — joins node-1's cluster
+  axiomnizam-2:
+    build: .
+    container_name: axiomnizam-2
+    hostname: axiomnizam-2
+    ports:
+      - "8002:8000"
+      - "9702:9700"    # Raft transport (for debugging)
+    env_file:
+      - .env
+    environment:
+      STORAGE_BACKEND: raft
+      AXIOMNIZAM_RAFT_NODE_ID: node-2
+      AXIOMNIZAM_RAFT_BIND_ADDR: "0.0.0.0:9700"
+      AXIOMNIZAM_RAFT_ADVERTISE_ADDR: "axiomnizam-2:9700"
+      AXIOMNIZAM_RAFT_BOOTSTRAP: "false"
+      AXIOMNIZAM_RAFT_DATA_DIR: /data/raft
+      IAM_INTERNAL_BASE_URL: http://axiomnizam-1:8000
+      ADMIN_TOKEN: raft-cluster-token
+    depends_on:
+      - postgres
+    volumes:
+      - query_logs_2:/data/query_logs
+      - storage-data-2:/data/storage
+      - raft-data-2:/data/raft
+    networks:
+      - app-network
+
+volumes:
+  raft-data-1:
+  raft-data-2:
+  query_logs_2:
+  storage-data-2:

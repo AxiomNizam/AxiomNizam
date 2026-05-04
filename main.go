@@ -1783,6 +1783,65 @@ func main() {
 			log.Println("  ℹ️  Module persistence: Raft KV available via backendMgr.KV()")
 		}
 
+		// Wire backend manager to health handler for /distributed Raft status.
+		healthHandler.SetBackendManager(backendMgr)
+
+		// Raft cluster management API.
+		// Supports two auth modes:
+		//   1. Normal JWT admin auth (authMiddleware + adminMiddleware)
+		//   2. ADMIN_TOKEN env-var bearer token (for cluster bootstrap when IAM isn't ready)
+		if backendMgr.IsRaft() {
+			adminToken := os.Getenv("ADMIN_TOKEN")
+			raftAuthMiddleware := func(c *gin.Context) {
+				// Check ADMIN_TOKEN first (bootstrap mode).
+				if adminToken != "" {
+					bearer := c.GetHeader("Authorization")
+					if bearer == "Bearer "+adminToken {
+						c.Next()
+						return
+					}
+				}
+				// Fall back to normal JWT admin auth.
+				if !authenticateRequest(c) {
+					return
+				}
+				enrichRequestContext(c)
+				claims := auth.GetUser(c)
+				if claims == nil || !claims.HasRole("admin") {
+					c.JSON(http.StatusForbidden, models.Response{Status: "error", Error: "admin role or ADMIN_TOKEN required"})
+					c.Abort()
+					return
+				}
+				c.Next()
+			}
+			raftAPI := router.Group("/api/v1/raft")
+			raftAPI.Use(raftAuthMiddleware)
+			raftAPI.POST("/peers", func(c *gin.Context) {
+				var req struct {
+					ID   string `json:"id" binding:"required"`
+					Addr string `json:"addr" binding:"required"`
+				}
+				if err := c.BindJSON(&req); err != nil {
+					c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "invalid request"})
+					return
+				}
+				if err := backendMgr.AddRaftPeer(req.ID, req.Addr); err != nil {
+					c.JSON(http.StatusInternalServerError, models.Response{Status: "error", Error: fmt.Sprintf("failed to add peer: %v", err)})
+					return
+				}
+				c.JSON(http.StatusOK, models.Response{Status: "ok", Message: fmt.Sprintf("peer %s added at %s", req.ID, req.Addr)})
+			})
+			raftAPI.DELETE("/peers/:id", func(c *gin.Context) {
+				id := c.Param("id")
+				if err := backendMgr.RemoveRaftPeer(id); err != nil {
+					c.JSON(http.StatusInternalServerError, models.Response{Status: "error", Error: fmt.Sprintf("failed to remove peer: %v", err)})
+					return
+				}
+				c.JSON(http.StatusOK, models.Response{Status: "ok", Message: fmt.Sprintf("peer %s removed", id)})
+			})
+			log.Println("  ✅ Raft cluster management API registered (/api/v1/raft/peers)")
+		}
+
 		log.Printf("🔄 Initializing reconciler controllers (backend=%s)...", storageBackend)
 		reconcilerMetrics := metrics.GlobalReconcilerMetrics
 

@@ -162,3 +162,63 @@ func NewStore[T Resource](bm *BackendManager, tableName string, factory func() T
 		return NewEtcdStore[T](bm.EtcdClient, prefix, factory)
 	}
 }
+
+// GetRaftIsLeader returns true if this node is the Raft leader.
+func (bm *BackendManager) GetRaftIsLeader() bool {
+	if bm.RaftServer == nil {
+		return false
+	}
+	return bm.RaftServer.IsLeader()
+}
+
+// GetRaftLeader returns the (address, id) of the current Raft leader.
+func (bm *BackendManager) GetRaftLeader() (string, string) {
+	if bm.RaftServer == nil {
+		return "", ""
+	}
+	return bm.RaftServer.LeaderWithID()
+}
+
+// GetRaftStats returns the Raft internal stats (term, commit index, etc.).
+func (bm *BackendManager) GetRaftStats() map[string]string {
+	if bm.RaftServer == nil {
+		return nil
+	}
+	return bm.RaftServer.Stats()
+}
+
+// GetRaftPeers returns the Raft cluster configuration as a list of peer maps.
+func (bm *BackendManager) GetRaftPeers() ([]map[string]string, error) {
+	if bm.RaftServer == nil {
+		return nil, fmt.Errorf("raft server not initialized")
+	}
+	peers, err := bm.RaftServer.GetConfiguration()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]map[string]string, 0, len(peers))
+	for _, p := range peers {
+		result = append(result, map[string]string{
+			"id":       p.ID,
+			"address":  p.Address,
+			"suffrage": p.Suffrage,
+		})
+	}
+	return result, nil
+}
+
+// AddRaftPeer adds a voting peer to the Raft cluster. Must be called on the leader.
+func (bm *BackendManager) AddRaftPeer(id, addr string) error {
+	if bm.RaftServer == nil {
+		return fmt.Errorf("raft server not initialized")
+	}
+	return bm.RaftServer.AddPeer(id, addr)
+}
+
+// RemoveRaftPeer removes a peer from the Raft cluster. Must be called on the leader.
+func (bm *BackendManager) RemoveRaftPeer(id string) error {
+	if bm.RaftServer == nil {
+		return fmt.Errorf("raft server not initialized")
+	}
+	return bm.RaftServer.RemovePeer(id)
+}
