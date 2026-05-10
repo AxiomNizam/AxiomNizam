@@ -1,29 +1,29 @@
-# AxiomNizam — Code-Level Security Audit
+# 🔒 AxiomNizam — Consolidated Security Audit
 
-**Date:** 2026-04-29  
-**Scope:** All Go backend code (`internal/`, `main.go`) + frontend (`frontend/templates/*.js`)  
-**Auditor:** Platform Architecture Team  
-**Codebase:** ~200K+ lines Go, ~30 JS files
+**Audit Period:** 2026-04-29 → 2026-05-07 (merged)  
+**Scope:** All Go backend (`internal/`, `main.go`), Frontend (`frontend/`), CLI (`cmd/`), Infrastructure (`Dockerfile`, `docker-compose.yml`, `.env`)  
+**Codebase:** ~200K+ lines Go, ~30 JS files, 100 internal packages  
+**Severity Scale:** 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low · ℹ️ Informational
 
 ---
 
 ## Executive Summary
 
-A code-level security audit of the AxiomNizam platform identified **38 findings** across 9 categories. The most critical issues are hardcoded credentials in the `.env` file, XSS vectors in the frontend via `innerHTML`, and command injection risk in the certificate handler. The platform has solid foundations (rate limiting, JWT auth, RBAC, encryption at rest) but needs hardening in credential management, frontend output encoding, and input validation.
+This document consolidates findings from three separate security reviews into a single authoritative reference. **38 unique findings** were identified across the platform's backend, frontend, CLI, and infrastructure layers.
 
-| Severity | Count | Category |
-|----------|-------|----------|
-| CRITICAL | 3 | Hardcoded credentials, RSA key in .env, demo accounts |
-| HIGH | 7 | XSS via innerHTML, MD5/SHA1 usage, weak token fallback, command injection risk |
-| MEDIUM | 12 | localStorage tokens, missing CSRF, SSRF risk, unbounded reads, error info leaks |
-| LOW | 8 | math/rand usage, missing security headers, path traversal risk |
-| INFO | 8 | Positive findings (rate limiting, RBAC, encryption, sanitization functions) |
+| Severity | Count | Status |
+|----------|-------|--------|
+| 🔴 Critical | 5 | Requires immediate action |
+| 🟠 High | 12 | Requires action before production |
+| 🟡 Medium | 13 | Should be addressed |
+| 🟢 Low / ℹ️ Info | 8 | Nice-to-have improvements |
+
+> [!CAUTION]
+> The most urgent action is fixing `.gitignore` to exclude `.env`, rotating all committed secrets, and purging them from Git history. Until this is done, the platform's entire authentication infrastructure should be considered compromised.
 
 ---
 
 ## Positive Security Controls (Already Present)
-
-Before listing vulnerabilities, these controls are already in place:
 
 | Control | Location | Status |
 |---------|----------|--------|
@@ -38,307 +38,388 @@ Before listing vulnerabilities, these controls are already in place:
 | SQL injection prevention | `internal/quality/rules/sanitize.go` | ✅ Identifier validation for quality engine |
 | TLS support | `internal/handlers/certificate_handler.go` | ✅ Certificate monitoring and renewal |
 | Multi-tenant isolation | `internal/tenant/` | ✅ Tenant-scoped resource access |
+| Row-level security | `internal/security/rls.go` | ✅ RLS policy engine with audit log |
+| Security guardrails | `main.go:applySecurityGuardrails()` | ✅ Startup checks for default credentials |
 
 ---
 
-## CRITICAL Findings
+## 🔴 CRITICAL Findings
 
-### SEC-01: Hardcoded Database Credentials in .env (CRITICAL)
+### SEC-01 · RSA Private Key Committed to `.env` (and Git)
 
-**Location:** `.env`
+**Location:** `.env:132` (`IAM_RSA_PRIVATE_KEY`)  
+**Layer:** Internal / Infrastructure
 
-All database passwords are default/weak values stored in plaintext:
+The full RSA private key used to sign all JWT tokens is hardcoded inline in `.env`. The `.gitignore` only excludes `env` (no dot prefix), meaning `.env` **is tracked by Git**.
 
-| Database | Password |
-|----------|----------|
+**Risk:** Every collaborator, fork, and potentially the public has access to the signing key. All tokens ever signed with this key must be considered compromised.
+
+**Remediation:**
+1. Rotate the RSA key immediately
+2. Fix `.gitignore` to exclude `.env` and `.env.*`
+3. Run `git filter-repo` to purge the key from history
+4. Use `IAM_RSA_PRIVATE_KEY_FILE` with a mounted secret (Docker/K8s secret, Vault)
+
+---
+
+### SEC-02 · Keycloak Admin Credentials & Client Secret in `.env`
+
+**Location:** `.env:124,136-137`  
+**Layer:** Infrastructure
+
+```
+KEYCLOAK_CLIENT_SECRET=6rFrY3rcyfEma3C5Vj7xCELT7uxFtk72
+KEYCLOAK_ADMIN_USERNAME=admin
+KEYCLOAK_ADMIN_PASSWORD=admin
+```
+
+Default master-realm admin credentials and the client secret are committed. Combined with SEC-01, the entire identity federation chain is compromised.
+
+**Remediation:** Use Docker/Kubernetes secrets; never store admin credentials in source control. Rotate immediately.
+
+---
+
+### SEC-03 · DEMO_JWT_SECRET in Source Control
+
+**Location:** `.env:128`  
+**Layer:** Internal
+
+```
+DEMO_JWT_SECRET=smw7flNLvrFeIQNKH7X8u7h_T5TXXtDrSnaz0GoSIP-7cyIITQAwdbZJFPDI3zsa
+```
+
+Static, committed, grants token-forging capabilities for the demo auth path.
+
+**Remediation:** Rotate secret, store via secret manager, add `.env` to `.gitignore`.
+
+---
+
+### SEC-04 · Hardcoded Demo Accounts with Admin Access
+
+**Location:** `internal/handlers/auth_handler.go` (~lines 1032-1035)  
+**Layer:** Internal
+
+Demo accounts with hardcoded passwords are embedded in source code:
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | admin | admin |
+| sysadmin | sysadmin | system-manager |
+| manager | manager | manager |
+| user | user | user |
+
+**Risk:** If demo mode is not explicitly disabled in production (`ENABLE_DEMO_ACCOUNTS=false`), anyone can authenticate as admin.
+
+**Remediation:**
+- Gate demo accounts behind `ENABLE_DEMO_ACCOUNTS=true` (default: false)
+- Log a startup warning when demo mode is enabled
+- Never enable in production
+
+---
+
+### SEC-05 · SQL Injection Protection Blocks Its Own Legitimate Queries
+
+**Location:** `internal/utils/sql_injection_protection.go:21-28`  
+**Layer:** Internal
+
+The `forbiddenKeywords` list includes `SELECT`, `INSERT`, `UPDATE`, `DELETE`, and `UNION` — which means `ValidateSQLInput()` rejects **all SQL queries**, including legitimate SELECT statements used by `DynamicQueryHandler`.
+
+```go
+forbiddenKeywords: []string{
+    "DROP", "DELETE", "TRUNCATE", "INSERT", "UPDATE", "ALTER",
+    "EXEC", "EXECUTE", "UNION", "SELECT", "REPLACE",
+    "--", "/*", "*/", ";", "xp_", "sp_", "|", "&",
+},
+```
+
+The protection is either broken (rejecting all queries) or bypassed (negating the protection). Either scenario is critical.
+
+**Remediation:** Validate user-supplied *parameters* only (not the full query text). Use parameterized queries exclusively.
+
+---
+
+## 🟠 HIGH Findings
+
+### SEC-06 · XSS via innerHTML in Frontend Dashboards
+
+**Location:** Multiple frontend JS files  
+**Layer:** Frontend
+
+The frontend extensively uses `.innerHTML = ...` to render dynamic content. Sanitization functions exist but are used inconsistently:
+
+| File | innerHTML count | Sanitizer |
+|------|----------------|-----------|
+| `admin.js` | ~50+ | `escapeHtml()` — inconsistent |
+| `object-storage.js` | ~25+ | `escHtml()` — consistent |
+| `conductor-dashboard.js` | ~15+ | `esc()` — consistent |
+| `iam-admin.js` | ~20+ | `escapeHtml()` — mostly |
+| `admin-dashboard.js` | ~10+ | Limited |
+
+**Remediation:** Adopt `textContent` for plain text; implement CSP header blocking inline scripts; audit every `innerHTML` assignment.
+
+---
+
+### SEC-07 · `safeHTML` Template Function Enables XSS
+
+**Location:** `frontend/main.go:133-135`  
+**Layer:** Frontend
+
+```go
+"safeHTML": func(html string) template.HTML {
+    return template.HTML(html)  // bypasses all HTML escaping
+},
+```
+
+If any user-controlled data passes through `{{safeHTML .someField}}` in templates, it enables stored/reflected XSS.
+
+**Remediation:** Audit all template usages; restrict to static HTML only. Consider `bluemonday` sanitizer.
+
+---
+
+### SEC-08 · Frontend Authentication is Client-Side Only
+
+**Location:** `frontend/main.go:77-107`  
+**Layer:** Frontend
+
+The `requireFrontendRoles` middleware reads `authToken` and `userRole` from client-side cookies with **no server-side token validation**. Any user can set `userRole=system-manager` cookie to access `/iam-admin`, `/governance`, etc.
+
+**Remediation:** Validate the JWT server-side by calling `/iam/auth/whoami` before granting access.
+
+---
+
+### SEC-09 · OAuth Access Token Passed in URL Fragment
+
+**Location:** `internal/handlers/auth_handler.go:540-551`  
+**Layer:** Internal
+
+The access token is placed in the URL fragment on OAuth callback redirect. It appears in browser history, is accessible to all JS on the page, and may be logged by extensions/proxies.
+
+**Remediation:** Use a short-lived authorization code exchange, or set the token as an `HttpOnly`, `Secure`, `SameSite=Lax` cookie.
+
+---
+
+### SEC-10 · Command Injection Risk in Certificate Handler
+
+**Location:** `internal/handlers/certificate_handler.go` (lines 252, 317)  
+**Layer:** Internal
+
+The certificate renewal handler executes shell commands via `exec.Command()`. The command template comes from `CERT_RENEW_COMMAND` env var, and the target comes from user input.
+
+**Remediation:** Validate target against a strict allowlist; never pass user input directly to shell commands; use a dedicated cert renewal library.
+
+---
+
+### SEC-11 · Custom SQL Execution in Quality Rules
+
+**Location:** `internal/quality/rules/engine.go` (~line 214)  
+**Layer:** Internal
+
+The `custom_sql` rule type allows users to define arbitrary SQL queries executed against datasources. Keyword filtering can be bypassed.
+
+**Remediation:** Execute with read-only database connection; add `QUALITY_CUSTOM_SQL_ENABLED=false` feature flag (default: disabled).
+
+---
+
+### SEC-12 · MD5 / SHA1 Hash Usage for Security Operations
+
+**Location:** Multiple files  
+**Layer:** Internal
+
+| File | Usage | Risk |
+|------|-------|------|
+| `internal/utils/hash/hash.go:40` | MD5 as hash algorithm | Collision attacks |
+| `internal/cache/middleware.go:39` | MD5 for cache keys | Cache poisoning |
+| `internal/storage/native/native.go:601` | MD5 for ETag | ETag collision |
+| `internal/utils/bot_protection.go:348` | MD5 for fingerprinting | Bypass |
+| `internal/utils/hash/hash.go:42,67,115` | SHA1 support | Collision attacks |
+
+**Remediation:** Replace MD5/SHA1 with SHA-256. Deprecate SHA1 option; log a warning if selected.
+
+---
+
+### SEC-13 · Default Database Passwords & Discord Webhook Committed
+
+**Location:** `.env:63-94,164`, `docker-compose.yml:233-234`  
+**Layer:** Infrastructure
+
+| Service | Password |
+|---------|----------|
 | MySQL | `root` |
 | MariaDB | `root` |
 | PostgreSQL | `postgres` |
 | MongoDB | `root` |
 | Oracle | `oracle123` |
+| RabbitMQ | `axiom` |
 | Percona | `root` |
+| Discord Webhook | Full URL with token |
 
-**Risk:** If `.env` is committed to version control, leaked via CI logs, or accessible on a compromised host, all databases are immediately compromised.
-
-**Remediation:**
-- Use a secrets manager (HashiCorp Vault, AWS Secrets Manager, or Kubernetes Secrets)
-- Generate strong random passwords (32+ chars)
-- Ensure `.env` is in `.gitignore` (it is) and never committed
-- Use `IAM_RSA_PRIVATE_KEY_FILE` instead of inline `IAM_RSA_PRIVATE_KEY`
+**Remediation:** Auto-generate passwords at first start; store in secret manager; rotate Discord webhook.
 
 ---
 
-### SEC-02: RSA Private Key Embedded in .env (CRITICAL)
+### SEC-14 · No CSRF Protection
 
-**Location:** `.env` — `IAM_RSA_PRIVATE_KEY` field
+**Location:** `main.go:305-327`  
+**Layer:** Internal
 
-The full RSA private key used for JWT signing is embedded directly in the environment file. If this key is compromised, an attacker can forge valid JWT tokens for any user/role.
+CORS middleware sets `Access-Control-Allow-Credentials: true` but no CSRF token mechanism exists. `X-CSRF-Token` is listed in `Allow-Headers` but never validated.
 
-**Remediation:**
-- Move to file-based key loading: `IAM_RSA_PRIVATE_KEY_FILE=/etc/axiomnizam/jwt.key`
-- Set file permissions to `0600` (owner read only)
-- Rotate the key and invalidate all existing tokens
+**Remediation:** Implement double-submit cookie or synchronizer token pattern.
 
 ---
 
-### SEC-03: Hardcoded Demo Accounts with Admin Access (CRITICAL)
+### SEC-15 · PostgreSQL SSL Disabled & Sysadmin Password in Frontend `.env`
 
-**Location:** `internal/handlers/auth_handler.go` (lines ~1032-1035)
+**Location:** `.env:87`, `frontend/.env:11`  
+**Layer:** Infrastructure
 
-Demo accounts with hardcoded passwords are embedded in source code:
+`POSTGRES_SSLMODE=disable` — all DB traffic unencrypted. `IAM_SYSADMIN_PASSWORD=changeme-on-first-login` exposed in frontend `.env` — the frontend has no business knowing the sysadmin password.
 
-```
-admin/admin       → admin role
-sysadmin/sysadmin → system-manager role
-manager/manager   → manager role
-user/user         → user role
-```
-
-**Risk:** These credentials are accessible to anyone with code access. If demo mode is not explicitly disabled in production, any user can authenticate as admin.
-
-**Remediation:**
-- Gate demo accounts behind `DEMO_MODE=true` environment variable (default: false)
-- Log a startup warning when demo mode is enabled
-- Never enable demo mode in production deployments
-- Add a health check that flags demo mode as a security risk
+**Remediation:** Set `POSTGRES_SSLMODE=require` in production. Remove `IAM_SYSADMIN_PASSWORD` from `frontend/.env`.
 
 ---
 
-## HIGH Findings
+### SEC-16 · Weak JWT Secret Fallback
 
-### SEC-04: XSS via innerHTML in Frontend Dashboards (HIGH)
+**Location:** `internal/auth/auth.go` (~lines 265-280)  
+**Layer:** Internal
 
-**Location:** Multiple frontend JS files
+If `DEMO_JWT_SECRET` is not set, the code falls back to a process-ephemeral secret derived from `time.Now().UnixNano()` — predictable and not cryptographically random.
 
-The frontend extensively uses `.innerHTML = ...` to render dynamic content. While sanitization functions (`esc()`, `escHtml()`, `escapeHtml()`) exist and are used in many places, the pattern is error-prone — any missed call creates an XSS vector.
-
-**Affected files (highest innerHTML count):**
-
-| File | innerHTML assignments | Has sanitizer |
-|------|---------------------|---------------|
-| `admin.js` | ~50+ | `escapeHtml()` — used inconsistently |
-| `object-storage.js` | ~25+ | `escHtml()` — used consistently |
-| `conductor-dashboard.js` | ~15+ | `esc()` — used consistently |
-| `iam-admin.js` | ~20+ | `escapeHtml()` — used in most places |
-| `admin-dashboard.js` | ~10+ | Limited sanitization |
-| `cdc-etl-dashboard.js` | ~10+ | Mixed |
-
-**Risk:** If any API response contains user-controlled data that isn't sanitized before innerHTML assignment, an attacker can inject JavaScript that executes in the context of an authenticated admin session.
-
-**Remediation:**
-- Adopt `textContent` for plain text, `innerHTML` only for trusted HTML
-- Implement a Content Security Policy (CSP) header that blocks inline scripts
-- Audit every `innerHTML` assignment to verify sanitization
-- Consider migrating to a framework with automatic escaping (React, Vue, Svelte)
+**Remediation:** Fail startup if secret is not set, or generate using `crypto/rand` and log a warning.
 
 ---
 
-### SEC-05: MD5 Hash Usage for Security-Adjacent Operations (HIGH)
+### SEC-17 · Auth Tokens in localStorage
 
-**Location:** Multiple files
+**Location:** `frontend/templates/auth.js` (lines 213-218, 244-246, 334-338)  
+**Layer:** Frontend
 
-| File | Usage | Risk |
-|------|-------|------|
-| `internal/utils/hash/hash.go:40` | MD5 as supported hash algorithm | Collision attacks |
-| `internal/cache/middleware.go:39` | MD5 for cache key generation | Cache poisoning |
-| `internal/storage/native/native.go:601` | MD5 for ETag generation | ETag collision |
-| `internal/utils/bot_protection.go:348` | MD5 for request fingerprinting | Fingerprint bypass |
-| `internal/utils/uuid/uuid.go:213` | MD5 for config ID generation | ID collision |
+JWT tokens stored in `localStorage` are accessible to any JS on the page. Combined with XSS (SEC-06/07), tokens can be exfiltrated.
 
-**Remediation:** Replace MD5 with SHA-256 for all new code. For cache keys and ETags where collision resistance is less critical, MD5 can remain but should be documented as non-security usage.
+**Remediation:** Store tokens in `HttpOnly`, `SameSite=Strict`, `Secure` cookies.
 
 ---
 
-### SEC-06: SHA1 Hash Usage (HIGH)
+## 🟡 MEDIUM Findings
 
-**Location:** `internal/utils/hash/hash.go:42,67,115`
+### SEC-18 · SSRF Risk in OAuth Configuration
 
-SHA1 is supported as a hash algorithm option. While HMAC-SHA1 is still considered safe, bare SHA1 is vulnerable to collision attacks.
+**Location:** `internal/handlers/auth_handler.go` (~lines 776, 853, 1728, 1798)
 
-**Remediation:** Deprecate SHA1 option. Default to SHA-256. Log a warning if SHA1 is selected.
+Admin-configurable OAuth URLs (token, userinfo, discovery) could point at internal services.
 
----
-
-### SEC-07: Weak JWT Secret Fallback (HIGH)
-
-**Location:** `internal/auth/auth.go` (lines ~265-280)
-
-If the `JWT_SECRET` environment variable is not set, the code falls back to a process-ephemeral secret derived from `time.Now().UnixNano()`. This is predictable and not cryptographically random.
-
-**Remediation:**
-- Fail startup if `JWT_SECRET` is not set (no fallback)
-- Or generate a cryptographically random fallback using `crypto/rand` and log a warning
+**Remediation:** Validate URLs against scheme whitelist (https only); block private IP ranges; set short timeouts.
 
 ---
 
-### SEC-08: Command Injection Risk in Certificate Handler (HIGH)
+### SEC-19 · Unbounded Request Body Reading
 
-**Location:** `internal/handlers/certificate_handler.go` (lines 252, 317)
+**Location:** Various handlers (e.g., `auth_handler.go:789` — no explicit limit)
 
-The certificate renewal handler executes shell commands via `exec.Command()`. The command template comes from `CERT_RENEW_COMMAND` env var, and the target comes from user input (request body). While `buildRenewCommand()` likely sanitizes the target, the pattern of executing commands with user-influenced arguments is inherently risky.
+Some endpoints use `io.ReadAll` without `MaxBytesReader`. `gin.Default()` used without `MaxMultipartMemory`.
 
-**Remediation:**
-- Validate the target against a strict allowlist of known certificate targets
-- Never pass user input directly to shell commands
-- Use a dedicated certificate renewal library instead of shell execution
-- Log all command executions to the audit trail
+**Remediation:** Add `http.MaxBytesReader` to all `io.ReadAll` calls; set `router.MaxMultipartMemory = 32 << 20`.
 
 ---
 
-### SEC-09: Custom SQL Execution in Quality Rules (HIGH)
+### SEC-20 · Error Messages Leak Internal Details
 
-**Location:** `internal/quality/rules/engine.go` (line ~214)
-
-The `custom_sql` rule type allows users to define arbitrary SQL queries that are executed against datasources. While `ValidateRuleInputs()` checks for dangerous DML keywords, a determined attacker could bypass keyword filtering.
-
-**Remediation:**
-- Execute custom SQL with a read-only database connection
-- Set a query timeout (already partially done via context)
-- Add a `QUALITY_CUSTOM_SQL_ENABLED=false` feature flag (default: disabled)
-- Log all custom SQL executions to the audit trail
-
----
-
-## MEDIUM Findings
-
-### SEC-10: Auth Tokens in localStorage (MEDIUM)
-
-**Location:** `frontend/templates/auth.js` (lines 213-218, 244-246, 334-338)
-
-JWT access tokens and refresh tokens are stored in `localStorage`, which is accessible to any JavaScript running on the page. If an XSS vulnerability exists (see SEC-04), tokens can be exfiltrated.
-
-**Remediation:**
-- Store tokens in HttpOnly cookies (not accessible to JavaScript)
-- Use `SameSite=Strict` and `Secure` cookie flags
-- Keep only a short-lived session identifier in localStorage if needed
-
----
-
-### SEC-11: Missing CSRF Protection (MEDIUM)
-
-**Location:** Frontend-wide
-
-No CSRF tokens are used in form submissions or state-changing API requests. The platform relies on JWT Bearer tokens in the `Authorization` header, which provides some CSRF protection (browsers don't auto-send custom headers). However, any endpoint that also accepts cookies for auth is vulnerable.
-
-**Remediation:**
-- If cookie-based auth is used, implement CSRF tokens
-- Ensure all state-changing requests require the `Authorization` header (not cookies)
-- Add `SameSite=Strict` to any auth cookies
-
----
-
-### SEC-12: SSRF Risk in OAuth Configuration (MEDIUM)
-
-**Location:** `internal/handlers/auth_handler.go` (lines ~776, 853, 1728, 1798)
-
-OAuth token URLs, userinfo URLs, and discovery endpoints are constructed from identity provider configuration. If an admin can configure arbitrary identity providers, they could point these URLs at internal services.
-
-**Remediation:**
-- Validate OAuth URLs against a scheme whitelist (https only)
-- Block requests to private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x, ::1)
-- Set a short timeout on OAuth HTTP requests (already partially done)
-
----
-
-### SEC-13: Unbounded Request Body Reading (MEDIUM)
-
-**Location:** Various handlers
-
-Most handlers use Gin's `ShouldBindJSON` which has a default 32MB limit. However, some endpoints use `io.ReadAll` directly:
-
-| File | Limit |
-|------|-------|
-| `internal/handlers/api_builder_handler.go:3074` | 2MB ✅ |
-| `internal/apiscanner/openapi.go:115` | 8MB ✅ |
-| `internal/handlers/auth_handler.go:789` | No explicit limit ⚠️ |
-
-**Remediation:** Add `http.MaxBytesReader` wrapper to all `io.ReadAll` calls.
-
----
-
-### SEC-14: Error Messages Leak Internal Details (MEDIUM)
-
-**Location:** `main.go` (lines ~406, 413), various handlers
-
-Error responses include full error messages that may reveal internal implementation details:
+**Location:** `main.go` (~lines 406, 413), various handlers
 
 ```go
 c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
 ```
 
-**Remediation:**
-- Return generic error messages to clients: `"authentication failed"`
-- Log detailed errors server-side only
-- Never include stack traces, file paths, or internal error types in API responses
+**Remediation:** Return generic error messages to clients; log detailed errors server-side only.
 
 ---
 
-### SEC-15: Sensitive Fields in API Responses (MEDIUM)
+### SEC-21 · Sensitive Fields in API Responses
 
 **Location:** `internal/iam/admin/admin.go`, `internal/storage/admin/admin.go`
 
-Client secrets and access keys are returned in API responses without masking.
+Client secrets and access keys returned unmasked in API responses.
 
-**Remediation:**
-- Mask client secrets in list/get responses (show only last 4 chars)
-- Only return full secrets on creation (one-time display)
-- Never log secrets
+**Remediation:** Mask secrets in list/get responses (last 4 chars only); return full secrets only on creation.
 
 ---
 
-### SEC-16: Missing Authentication on Health Endpoints (MEDIUM)
+### SEC-22 · Privilege Escalation via Email Pattern Matching
 
-**Location:** `main.go` (line ~526)
+**Location:** `internal/handlers/auth_handler.go` (~lines 1031-1037), `main.go:443-451`
 
-The `/health/reconcilers` endpoint exposes internal reconciler metrics without authentication. This reveals:
-- Which reconcilers are active
-- Error counts and states
-- Internal module names
+`deriveOAuthRole()` assigns roles based on email patterns. Additionally, if a JWT token has no roles but its email matches `IAM_SYSADMIN_EMAIL`, sysadmin is auto-granted.
 
-**Remediation:**
-- Require authentication for detailed health endpoints
-- Keep only a simple `/health` (returns 200 OK) as unauthenticated
+**Remediation:** Never derive roles from email patterns in production; require explicit role mappings from IdP; remove sysadmin email fallback or require issuer verification.
 
 ---
 
-### SEC-17: Privilege Escalation via Email Pattern Matching (MEDIUM)
+### SEC-23 · `ValidateQuerySafety` is Dead Code
 
-**Location:** `internal/handlers/auth_handler.go` (lines ~1031-1037)
+**Location:** `internal/handlers/dynamic_query_handler.go:581-594`
 
-The `deriveOAuthRole()` function assigns roles based on email patterns. A federated user could claim an admin role if their email matches the pattern.
+Exported but unused function that only checks `DROP DATABASE` and `DROP SCHEMA` — trivially bypassed. Provides false sense of security.
 
-**Remediation:**
-- Never derive roles from email patterns in production
-- Use explicit role mappings from the identity provider
-- Gate pattern-based role derivation behind `DEMO_MODE`
+**Remediation:** Remove dead code or replace with proper SQL safety validation.
 
 ---
 
-## LOW Findings
+### SEC-24 · Token Accepted from Query Parameter (Unscoped)
 
-### SEC-18: math/rand for Security-Adjacent Operations (LOW)
+**Location:** `main.go:419-421`
 
-**Location:** Multiple files
+Tokens in query parameters appear in server logs, proxy logs, browser history. Intended for WebSocket but not scoped to upgrade requests.
 
-| File | Usage |
-|------|-------|
-| `internal/utils/backoff/backoff.go:54` | Jitter calculation |
-| `internal/controllers/apiresource_controller.go:153` | Backoff jitter |
-| `internal/anonymization/masker.go` | Masking noise/synthetic data |
-
-`math/rand` is not cryptographically secure. For backoff jitter this is acceptable. For anonymization masking, it means the "random" noise is predictable.
-
-**Remediation:**
-- Use `crypto/rand` in `anonymization/masker.go` for security-sensitive masking
-- `math/rand` is acceptable for backoff jitter (not security-sensitive)
+**Remediation:** Only accept query-parameter tokens for `Upgrade: websocket` requests.
 
 ---
 
-### SEC-19: Missing Security Headers (LOW)
+### SEC-25 · etcd Has No Authentication
 
-**Location:** `main.go`
+**Location:** `docker-compose.yml:157-174`
 
-The server does not set security headers on responses:
+etcd exposed on port `2379` with no TLS, no auth. Anyone with network access can read/write all KV data.
+
+**Remediation:** Enable etcd TLS and client certificate authentication.
+
+---
+
+### SEC-26 · OAuth State Cookie Shares JWT Key
+
+**Location:** `internal/handlers/auth_handler.go:256-261`
+
+`OAUTH_STATE_SECRET` falls back to `DemoJWTSecret()` — key compromise in one domain affects the other.
+
+**Remediation:** Set a dedicated `OAUTH_STATE_SECRET`.
+
+---
+
+### SEC-27 · Demo Token Path Always Active
+
+**Location:** `internal/auth/auth.go:356-398`
+
+Despite `ENABLE_DEMO_ACCOUNTS=false`, `ValidateToken()` always falls back to `ValidateDemoToken()` when RSA validation fails.
+
+**Remediation:** Guard demo token fallback behind the `ENABLE_DEMO_ACCOUNTS` flag.
+
+---
+
+### SEC-28 · Kafka/RabbitMQ Communication Is Plaintext
+
+**Location:** `docker-compose.yml:398-423`
+
+All Kafka listeners use `PLAINTEXT`. RabbitMQ uses `amqp://` (no TLS).
+
+**Remediation:** Enable TLS for all message bus connections in production.
+
+---
+
+### SEC-29 · Missing Security Headers
+
+**Location:** `main.go`, `frontend/main.go`
+
+Neither backend nor frontend set security headers:
 
 | Header | Status |
 |--------|--------|
@@ -349,82 +430,148 @@ The server does not set security headers on responses:
 | `Referrer-Policy` | ❌ Missing |
 | `Permissions-Policy` | ❌ Missing |
 
-Note: The `internal/apiscanner/` module checks for these headers on scanned APIs, but the platform itself doesn't set them.
-
-**Remediation:** Add a middleware that sets all security headers:
-
-```go
-func SecurityHeaders() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        c.Header("X-Content-Type-Options", "nosniff")
-        c.Header("X-Frame-Options", "DENY")
-        c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-        c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        if c.Request.TLS != nil {
-            c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        }
-        c.Next()
-    }
-}
-```
+**Remediation:** Add a `SecurityHeaders()` middleware to both routers.
 
 ---
 
-### SEC-20: Path Traversal Risk in File Upload (LOW)
+### SEC-30 · Missing Auth on Detailed Health Endpoints
+
+**Location:** `main.go` (~line 526)
+
+`/health/reconcilers` exposes internal reconciler metrics, error counts, and module names without authentication.
+
+**Remediation:** Require auth for detailed health; keep only simple `/health` (200 OK) as unauthenticated.
+
+---
+
+## 🟢 LOW / ℹ️ INFORMATIONAL Findings
+
+### SEC-31 · math/rand for Security-Adjacent Operations
+
+**Location:** `internal/anonymization/masker.go`, `internal/utils/backoff/backoff.go:54`
+
+`math/rand` (not cryptographically secure) used for anonymization masking. Acceptable for backoff jitter.
+
+**Remediation:** Use `crypto/rand` in `anonymization/masker.go`.
+
+---
+
+### SEC-32 · Path Traversal Risk in File Upload
 
 **Location:** `internal/utils/examples.go:225`
 
-`filepath.Join(uploadPath, safeFilename)` relies on `safeFilename` being properly sanitized. If the sanitization is bypassed, `../` sequences could escape the upload directory.
+`filepath.Join(uploadPath, safeFilename)` relies on proper sanitization. If bypassed, `../` sequences could escape the upload directory.
 
-**Remediation:** Add `filepath.Clean()` and verify the result is still under `uploadPath`:
+**Remediation:** Add `filepath.Clean()` + prefix check to verify result is under `uploadPath`.
 
-```go
-fullPath := filepath.Join(uploadPath, filepath.Base(safeFilename))
-if !strings.HasPrefix(fullPath, filepath.Clean(uploadPath)) {
-    return fmt.Errorf("path traversal detected")
-}
-```
+---
+
+### SEC-33 · CLI `--password` Flag Visible in Process List
+
+**Location:** `cmd/axiomnizamctl/auth.go:316`
+
+`axiomnizamctl login --password secret` leaks password in `ps aux` and shell history.
+
+**Remediation:** Remove `--password` flag; always use interactive prompt or `stdin` pipe.
+
+---
+
+### SEC-34 · `--insecure-skip-tls-verify` Available by Default
+
+**Location:** `cmd/axiomnizamctl/auth.go:321`
+
+Allows MITM attacks on CLI-to-server connections without visible warning.
+
+**Remediation:** Emit a visible warning when `--insecure-skip-tls-verify` is used.
+
+---
+
+### SEC-35 · Health/Status Endpoints Expose Backend Topology
+
+**Location:** `main.go:545-548`
+
+`/health`, `/status`, `/distributed` are unauthenticated and reveal internal service topology and version information.
+
+---
+
+### SEC-36 · Docker Runtime Uses Root User
+
+**Location:** `Dockerfile:48`
+
+The runtime container runs as root. Container escape vulnerabilities are amplified.
+
+**Remediation:** Add a non-root user: `RUN useradd -r appuser && USER appuser`.
+
+---
+
+### SEC-37 · CORS `Access-Control-Max-Age: 86400` Is Aggressive
+
+**Location:** `main.go:311`
+
+24-hour preflight cache means CORS policy changes won't take effect for existing users for up to a day.
+
+---
+
+### SEC-38 · Firebase Credentials Placeholder in `.env`
+
+**Location:** `.env:155-162`
+
+Firebase config contains placeholder values (`fake-private-key`). Not a current vulnerability but could be overlooked when real values are substituted.
 
 ---
 
 ## Remediation Priority Matrix
 
-### Immediate (Before Next Deploy)
+### P0 — Immediate (Before Next Deploy)
 
 | ID | Finding | Fix |
 |----|---------|-----|
-| SEC-01 | Hardcoded DB passwords | Rotate all passwords, use secrets manager |
-| SEC-02 | RSA key in .env | Move to file-based key, rotate key |
-| SEC-03 | Demo accounts | Gate behind DEMO_MODE env var |
-| SEC-07 | Weak JWT fallback | Fail startup if JWT_SECRET not set |
+| SEC-01 | RSA key in `.env` / Git | Rotate key, fix `.gitignore`, purge Git history |
+| SEC-02 | Keycloak admin creds committed | Rotate, use K8s/Docker secrets |
+| SEC-03 | DEMO_JWT_SECRET committed | Rotate, secret manager |
+| SEC-04 | Hardcoded demo accounts | Gate behind `ENABLE_DEMO_ACCOUNTS` flag |
+| SEC-05 | SQL injection filter broken | Redesign validation to target params only |
+| SEC-16 | Weak JWT fallback | Fail startup if not set |
 
-### Short-Term (1-2 Weeks)
-
-| ID | Finding | Fix |
-|----|---------|-----|
-| SEC-04 | XSS via innerHTML | Audit all innerHTML, add CSP header |
-| SEC-05 | MD5 usage | Replace with SHA-256 |
-| SEC-08 | Command injection | Validate targets against allowlist |
-| SEC-09 | Custom SQL | Add feature flag, read-only connection |
-| SEC-10 | localStorage tokens | Migrate to HttpOnly cookies |
-| SEC-14 | Error info leaks | Generic client errors, detailed server logs |
-| SEC-16 | Unauthenticated health | Add auth to detailed health endpoints |
-| SEC-19 | Missing security headers | Add SecurityHeaders middleware |
-
-### Medium-Term (1 Month)
+### P1 — This Sprint (1–2 Weeks)
 
 | ID | Finding | Fix |
 |----|---------|-----|
-| SEC-06 | SHA1 usage | Deprecate, default to SHA-256 |
-| SEC-11 | Missing CSRF | Implement if cookie auth is used |
-| SEC-12 | SSRF in OAuth | URL validation, block private IPs |
-| SEC-13 | Unbounded reads | Add MaxBytesReader |
-| SEC-15 | Sensitive fields | Mask secrets in responses |
-| SEC-17 | Email role derivation | Gate behind DEMO_MODE |
-| SEC-18 | math/rand in masker | Use crypto/rand |
-| SEC-20 | Path traversal | Add filepath.Clean + prefix check |
+| SEC-06 | XSS via innerHTML | Audit all innerHTML, add CSP header |
+| SEC-07 | `safeHTML` XSS | Remove or restrict to static HTML |
+| SEC-08 | Frontend auth client-side only | Server-side JWT validation |
+| SEC-09 | OAuth token in URL fragment | Use auth code exchange |
+| SEC-10 | Command injection in cert handler | Allowlist targets |
+| SEC-11 | Custom SQL in quality rules | Feature flag + read-only connection |
+| SEC-12 | MD5/SHA1 usage | Replace with SHA-256 |
+| SEC-13 | Default DB passwords + Discord webhook | Rotate all, use secret manager |
+| SEC-14 | No CSRF protection | Implement double-submit cookie |
+| SEC-15 | PG SSL disabled + sysadmin pw in frontend | Fix both configs |
+| SEC-17 | localStorage tokens | Migrate to HttpOnly cookies |
+| SEC-29 | Missing security headers | Add SecurityHeaders middleware |
 
-### Long-Term (Ongoing)
+### P2 — Medium-Term (1 Month)
+
+| ID | Finding | Fix |
+|----|---------|-----|
+| SEC-18 | SSRF in OAuth | URL validation, block private IPs |
+| SEC-19 | Unbounded reads | Add MaxBytesReader |
+| SEC-20 | Error info leaks | Generic client errors |
+| SEC-21 | Sensitive fields unmasked | Mask secrets in responses |
+| SEC-22 | Email-based role escalation | Gate behind DEMO_MODE |
+| SEC-23 | Dead ValidateQuerySafety code | Remove |
+| SEC-24 | Token in query param unscoped | Scope to WebSocket only |
+| SEC-25 | etcd no auth | Enable TLS + client certs |
+| SEC-26 | OAuth state shares JWT key | Set dedicated OAUTH_STATE_SECRET |
+| SEC-27 | Demo token always active | Guard behind feature flag |
+| SEC-28 | Message bus plaintext | Enable TLS |
+| SEC-30 | Unauthenticated detailed health | Add auth |
+
+### P3 — Long-Term (Ongoing)
+
+| ID | Finding | Fix |
+|----|---------|-----|
+| SEC-31–38 | Low/informational items | See individual entries |
 
 | Action | Timeline |
 |--------|----------|
@@ -436,7 +583,7 @@ if !strings.HasPrefix(fullPath, filepath.Clean(uploadPath)) {
 
 ---
 
-## Appendix: Tools Recommended
+## Appendix: Recommended Tools
 
 | Tool | Purpose | Integration |
 |------|---------|-------------|
@@ -445,8 +592,9 @@ if !strings.HasPrefix(fullPath, filepath.Clean(uploadPath)) {
 | `govulncheck` | Go dependency vulnerability scanning | CI/CD pipeline |
 | `trivy` | Container image scanning | Already integrated |
 | `eslint-plugin-security` | JavaScript security linting | Frontend CI |
+| `bluemonday` | HTML sanitization for Go templates | Go middleware |
 | `helmet` (or equivalent) | Security headers middleware | Go middleware |
 
 ---
 
-*Document maintained by Platform Architecture Team. Review quarterly or after any security incident.*
+*Consolidated from audits dated 2026-04-29 and 2026-05-07. Review quarterly or after any security incident.*
