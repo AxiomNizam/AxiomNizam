@@ -19,7 +19,7 @@ This document consolidates findings from three separate security reviews into a 
 | 🟢 Low / ℹ️ Info | 8 | Nice-to-have improvements |
 
 > [!CAUTION]
-> The most urgent action is fixing `.gitignore` to exclude `.env`, rotating all committed secrets, and purging them from Git history. Until this is done, the platform's entire authentication infrastructure should be considered compromised.
+> **Update (2026-05-10):** `.gitignore` has been fixed to exclude `.env` and `.env.*`, and all `.env` files have been removed from Git tracking (`git rm --cached`). **Remaining actions:** rotate all previously committed secrets and purge them from Git history with `git filter-repo`. Until history is purged, the platform's authentication infrastructure should still be considered compromised.
 
 ---
 
@@ -50,13 +50,13 @@ This document consolidates findings from three separate security reviews into a 
 **Location:** `.env:132` (`IAM_RSA_PRIVATE_KEY`)  
 **Layer:** Internal / Infrastructure
 
-The full RSA private key used to sign all JWT tokens is hardcoded inline in `.env`. The `.gitignore` only excludes `env` (no dot prefix), meaning `.env` **is tracked by Git**.
+The full RSA private key used to sign all JWT tokens is hardcoded inline in `.env`. ~~The `.gitignore` only excludes `env` (no dot prefix), meaning `.env` **is tracked by Git**.~~ **Update (2026-05-10):** `.gitignore` has been corrected and `.env` removed from Git tracking.
 
 **Risk:** Every collaborator, fork, and potentially the public has access to the signing key. All tokens ever signed with this key must be considered compromised.
 
 **Remediation:**
 1. Rotate the RSA key immediately
-2. Fix `.gitignore` to exclude `.env` and `.env.*`
+2. ~~Fix `.gitignore` to exclude `.env` and `.env.*`~~ ✅ **Done (2026-05-10)**
 3. Run `git filter-repo` to purge the key from history
 4. Use `IAM_RSA_PRIVATE_KEY_FILE` with a mounted secret (Docker/K8s secret, Vault)
 
@@ -75,7 +75,7 @@ KEYCLOAK_ADMIN_PASSWORD=admin
 
 Default master-realm admin credentials and the client secret are committed. Combined with SEC-01, the entire identity federation chain is compromised.
 
-**Remediation:** Use Docker/Kubernetes secrets; never store admin credentials in source control. Rotate immediately.
+**Remediation:** Use Docker/Kubernetes secrets; never store admin credentials in source control. Rotate immediately. ✅ `.env` now excluded from Git (2026-05-10).
 
 ---
 
@@ -90,7 +90,7 @@ DEMO_JWT_SECRET=smw7flNLvrFeIQNKH7X8u7h_T5TXXtDrSnaz0GoSIP-7cyIITQAwdbZJFPDI3zsa
 
 Static, committed, grants token-forging capabilities for the demo auth path.
 
-**Remediation:** Rotate secret, store via secret manager, add `.env` to `.gitignore`.
+**Remediation:** Rotate secret, store via secret manager. ~~Add `.env` to `.gitignore`.~~ ✅ **Done (2026-05-10)**.
 
 ---
 
@@ -253,7 +253,7 @@ The `custom_sql` rule type allows users to define arbitrary SQL queries executed
 | Percona | `root` |
 | Discord Webhook | Full URL with token |
 
-**Remediation:** Auto-generate passwords at first start; store in secret manager; rotate Discord webhook.
+**Remediation:** Auto-generate passwords at first start; store in secret manager; rotate Discord webhook. ✅ `.env` now excluded from Git (2026-05-10).
 
 ---
 
@@ -526,7 +526,7 @@ Firebase config contains placeholder values (`fake-private-key`). Not a current 
 
 | ID | Finding | Fix |
 |----|---------|-----|
-| SEC-01 | RSA key in `.env` / Git | Rotate key, fix `.gitignore`, purge Git history |
+| SEC-01 | RSA key in `.env` / Git | Rotate key, ~~fix `.gitignore`~~ ✅, purge Git history |
 | SEC-02 | Keycloak admin creds committed | Rotate, use K8s/Docker secrets |
 | SEC-03 | DEMO_JWT_SECRET committed | Rotate, secret manager |
 | SEC-04 | Hardcoded demo accounts | Gate behind `ENABLE_DEMO_ACCOUNTS` flag |
