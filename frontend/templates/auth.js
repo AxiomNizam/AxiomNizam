@@ -564,9 +564,18 @@ function refreshAccessToken() {
             localStorage.setItem('refreshToken', newRefresh);
         }
 
-        // Update cookies so server-side middleware sees the new token.
-        var resolvedRole = userRole || normalizeRole(localStorage.getItem('userRole') || extractUserRole(authToken));
-        var resolvedName = userName || localStorage.getItem('userName') || '';
+        // Use role and username from refresh response if available,
+        // otherwise fall back to existing values or extract from token.
+        var resolvedRole = normalizeRole(data.role || '') || userRole || normalizeRole(localStorage.getItem('userRole') || extractUserRole(authToken));
+        var resolvedName = (data.username || '').trim() || userName || localStorage.getItem('userName') || '';
+
+        // Persist updated role/username.
+        userRole = resolvedRole;
+        userName = resolvedName;
+        localStorage.setItem('userRole', resolvedRole);
+        if (resolvedName) {
+            localStorage.setItem('userName', resolvedName);
+        }
         setAuthCookies(authToken, resolvedRole, resolvedName);
 
         console.log('✅ Token refreshed successfully, new expiry in', getTokenRemainingSeconds(), 'seconds');

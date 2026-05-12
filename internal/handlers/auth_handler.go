@@ -1584,15 +1584,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"user":          tokenResp.User,
 		"rate_limit": gin.H{
 			"max_calls":    500,
-			"validity_min": 10,
-			"expires_at":   time.Now().Add(10 * time.Minute).Format("2006-01-02 15:04:05"),
-			"message":      "You have 500 API calls available with this token. Token expires in 10 minutes.",
+			"validity_min": tokenResp.ExpiresIn / 60,
+			"expires_at":   time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second).Format("2006-01-02 15:04:05"),
+			"message":      fmt.Sprintf("You have 500 API calls available with this token. Token expires in %d minutes.", tokenResp.ExpiresIn/60),
 		},
 	})
 }
 
 // RefreshToken handles POST /auth/refresh
-// This endpoint refreshes an expired token
+// This endpoint refreshes an expired token by proxying to IAM and
+// registering the new access token in the rate limiter so subsequent
+// API calls are accepted without requiring a full re-login.
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`
@@ -1606,32 +1608,46 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	tokenURL := h.iamBaseURL + "/iam/auth/refresh"
+	// Try all IAM base candidates (same resilience as login).
+	loginBases := iamLoginBaseCandidates(h.iamBaseURL)
+	if len(loginBases) == 0 {
+		loginBases = []string{normalizeIAMBaseURL(defaultIAMInternalBaseURL())}
+	}
 
 	body, _ := json.Marshal(map[string]string{
 		"refresh_token": req.RefreshToken,
 	})
 
-	resp, err := h.httpClient.Post(
-		tokenURL,
-		"application/json",
-		strings.NewReader(string(body)),
+	var (
+		resp         *http.Response
+		responseBody []byte
+		err          error
 	)
+
+	for _, base := range loginBases {
+		tokenURL := base + "/iam/auth/refresh"
+		resp, err = h.httpClient.Post(
+			tokenURL,
+			"application/json",
+			strings.NewReader(string(body)),
+		)
+		if err != nil {
+			continue
+		}
+		responseBody, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if !shouldRetryIAMLogin(resp, responseBody, nil) {
+			break
+		}
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  "Failed to connect to IAM authentication service: " + err.Error(),
-		})
-		return
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Status: "error",
-			Error:  "Failed to read authentication response: " + err.Error(),
 		})
 		return
 	}
@@ -1681,13 +1697,34 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Success - return new token info
+	// Resolve user identity from the new access token so the frontend
+	// can keep its session state consistent.
+	resolvedRole := resolvePrimaryRole(tokenResp.User.Roles)
+	if resolvedRole == "user" {
+		resolvedRole = extractRoleFromToken(tokenResp.AccessToken)
+	}
+
+	resolvedUsername := strings.TrimSpace(tokenResp.User.DisplayName)
+	if resolvedUsername == "" {
+		resolvedUsername = strings.TrimSpace(tokenResp.User.Email)
+	}
+
+	// Register the freshly issued access token in the rate limiter so that
+	// subsequent API requests are accepted without the user having to re-login.
+	if h.rateLimiter != nil && strings.TrimSpace(tokenResp.AccessToken) != "" {
+		h.rateLimiter.RegisterToken(tokenResp.AccessToken, resolvedUsername)
+		logging.Z().Info("refreshed token registered in rate limiter", zap.String("user", resolvedUsername))
+	}
+
+	// Success - return new token info with role/username for frontend.
 	c.JSON(http.StatusOK, gin.H{
 		"status":        "ok",
 		"access_token":  tokenResp.AccessToken,
 		"expires_in":    tokenResp.ExpiresIn,
 		"refresh_token": tokenResp.RefreshToken,
 		"token_type":    tokenResp.TokenType,
+		"role":          resolvedRole,
+		"username":      resolvedUsername,
 	})
 }
 

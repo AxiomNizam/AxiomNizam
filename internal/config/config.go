@@ -180,7 +180,7 @@ func LoadConfig() *Config {
 		},
 		RateLimiting: RateLimitingConfig{
 			MaxCallsPerToken:     getEnvInt("RATE_LIMIT_MAX_CALLS", 500),
-			TokenValidityMinutes: int(getEnvInt("RATE_LIMIT_VALIDITY_MINUTES", 10)),
+			TokenValidityMinutes: int(getEnvInt("RATE_LIMIT_VALIDITY_MINUTES", 15)),
 		},
 	}
 }
