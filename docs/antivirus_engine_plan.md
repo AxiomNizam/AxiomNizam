@@ -408,7 +408,7 @@ Same wiring pattern as the previous file scanner plan:
 | **2** | Hash Database | 3 files | 2–3h | Phase 1 | ✅ Done |
 | **3** | Byte-Pattern Matcher (Aho-Corasick) | 4 files | 4–6h | Phase 1 | ✅ Done |
 | **4** | Behavioral Heuristics | 6 files | 4–6h | Phase 1 | ✅ Done |
-| **5** | Entropy Analysis | 2 files | 2–3h | Phase 1 | ⬜ Pending |
+| **5** | Entropy Analysis | 3 files | 2–3h | Phase 1 | ✅ Done |
 | **6** | YARA Rule Engine | 2 files | 4–6h | Phase 3 | ⬜ Pending |
 | **7** | Signature DB & Updater | 4 files | 3–4h | Phase 2, 3, 6 | ⬜ Pending |
 | **8** | Scan Cache | 1 file | 1–2h | Phase 1 | ⬜ Pending |
@@ -457,9 +457,9 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/heuristic/script.go` | CREATE | 4 | ✅ | Script obfuscation: JS, PowerShell, VBS, Bash (weighted scoring) |
 | `internal/antivirus/heuristic/shellcode.go` | CREATE | 4 | ✅ | NOP sleds, syscall patterns, XOR decode loops |
 | `internal/antivirus/heuristic/heuristic_test.go` | CREATE | 4 | ✅ | 25 tests — PE, ELF, script, shellcode, entropy, concurrency |
-| `internal/antivirus/entropy/entropy.go` | CREATE | 5 | ⬜ | Shannon entropy calculator |
-| `internal/antivirus/entropy/packer.go` | CREATE | 5 | ⬜ | Packer detection |
-| `internal/antivirus/entropy/entropy_test.go` | CREATE | 5 | ⬜ | Entropy tests |
+| `internal/antivirus/entropy/entropy.go` | CREATE | 5 | ✅ | Shannon entropy, windowed profiling, Layer orchestrator |
+| `internal/antivirus/entropy/packer.go` | CREATE | 5 | ✅ | 13 packer magic-byte signatures (UPX, Themida, VMProtect, etc.) |
+| `internal/antivirus/entropy/entropy_test.go` | CREATE | 5 | ✅ | 26 tests + 4 benchmarks — Shannon, profiling, layer, packers, MIME |
 | `internal/antivirus/yara/engine.go` | CREATE | 6 | ⬜ | YARA rule engine |
 | `internal/antivirus/yara/rules.go` | CREATE | 6 | ⬜ | Built-in YARA rules |
 | `internal/antivirus/yara/engine_test.go` | CREATE | 6 | ⬜ | YARA tests |
@@ -529,3 +529,14 @@ Same wiring pattern as the previous file scanner plan:
 - **Script obfuscation**: Weighted scoring system — each indicator carries weight + confidence; triggers require ≥3 score points AND ≥2 distinct indicators. Covers JavaScript (eval, fromCharCode, unescape, Function constructor), PowerShell (-EncodedCommand, IEX, WebClient, -w hidden), VBScript (Execute, Chr()), Bash (eval+base64, /dev/tcp)
 - **Shellcode detection**: Skips PE/ELF files (have dedicated analyzers). Detects variable-length NOP sleds (≥16 bytes), x86/x64 syscall instructions, shellcode prologues, XOR decode loops, Windows API hash rotation (Metasploit). Requires ≥2 pattern matches to avoid false positives
 - **Zero RAM overhead**: All analyzers are pure functions — no data structures, no state, fully concurrent-safe
+
+### ✅ Phase 5 — Entropy Analysis (Completed: 2026-05-13)
+
+**Files created:** `entropy/entropy.go` (305 lines), `entropy/packer.go` (212 lines), `entropy/entropy_test.go` (420 lines)  
+**Tests:** 26/26 passing + 4 benchmarks | `go vet`: clean  
+**Key design decisions:**
+- **Shannon entropy**: O(n) single-pass frequency counting, returns [0.0, 8.0] bits/byte
+- **Windowed profiling**: 256-byte windows with per-window threshold of 6.5 bits/byte (calibrated for small-window sample-size effect — truly random 256-byte windows produce ~6.5-7.2, normal code ~5.5)
+- **Three detection heuristics**: (1) Whole-file high entropy >7.5 for executables, (2) Uniformly packed: >80% windows above threshold AND low stddev <0.5, (3) Stub+payload pattern: ≤3 low-entropy stub windows + >70% high-entropy payload
+- **MIME-aware**: Skips entropy flagging for naturally high-entropy types (JPEG, PNG, ZIP, GZIP, etc.) — only packer magic bytes are checked on these
+- **13 packer signatures**: UPX, Themida/WinLicense, VMProtect, ASPack, PECompact, Petite, NsPack, Enigma Protector, MPRESS, ConfuserEx — searched in first 4KB only, deduplicated
