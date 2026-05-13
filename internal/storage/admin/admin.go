@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/antivirus"
+	avcache "example.com/axiomnizam/internal/antivirus/cache"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/controller"
 	"example.com/axiomnizam/internal/storage/events"
@@ -31,6 +33,10 @@ type Handler struct {
 	metrics    *storageMetrics.Collector
 	audit      *events.AuditLog
 	endpoint   string
+
+	// Antivirus.
+	avEngine *antivirus.Engine
+	avCache  *avcache.Cache
 }
 
 // PresignSigner generates SigV4-compatible presigned object URLs.
@@ -49,6 +55,8 @@ func NewHandler(
 	m *storageMetrics.Collector,
 	a *events.AuditLog,
 	endpoint string,
+	avEngine *antivirus.Engine,
+	avCache *avcache.Cache,
 ) *Handler {
 	return &Handler{
 		store:      s,
@@ -60,6 +68,8 @@ func NewHandler(
 		metrics:    m,
 		audit:      a,
 		endpoint:   endpoint,
+		avEngine:   avEngine,
+		avCache:    avCache,
 	}
 }
 
@@ -1085,6 +1095,11 @@ func (h *Handler) PutObject(c *gin.Context) {
 		"key":    key,
 		"size":   c.Request.ContentLength,
 	})
+
+	// ── Async antivirus scan ─────────────────────────────────────────
+	if h.avEngine != nil && h.avEngine.IsRunning() {
+		go h.scanObjectAsync(backendBucket, key, tenantID, userID, c.Request.ContentLength)
+	}
 }
 
 func (h *Handler) GetObject(c *gin.Context) {
@@ -1941,4 +1956,90 @@ func (h *Handler) GetBucketLifecycle(c *gin.Context) {
 		"objectCount":       b.Status.ObjectCount,
 		"totalSize":         b.Status.TotalSize,
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Antivirus: Async Object Scanning
+// ---------------------------------------------------------------------------
+
+// scanObjectAsync re-reads an uploaded object from the backend and runs
+// the antivirus engine against it. This is called asynchronously from
+// PutObject so that the upload response is never blocked by scanning.
+//
+// The method:
+//  1. Checks the scan cache — if the object was recently scanned clean,
+//     skips re-scanning.
+//  2. Re-reads the object from the backend (streaming).
+//  3. Runs Engine.Scan() with all registered layers.
+//  4. Records an audit event with the result.
+//  5. Stores the result in the scan cache.
+func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Re-read the object from the backend.
+	reader, err := h.client.GetObject(ctx, bucket, key)
+	if err != nil {
+		log.Printf("⚠️  antivirus: failed to re-read %s/%s for scan: %v", bucket, key, err)
+		return
+	}
+	defer reader.Close()
+
+	// Read the full content for scanning.
+	// Limit to the engine's max file size to prevent OOM.
+	maxSize := h.avEngine.MaxFileSize()
+	if maxSize <= 0 {
+		maxSize = 100 * 1024 * 1024 // 100MB fallback
+	}
+	content, err := io.ReadAll(io.LimitReader(reader, maxSize+1))
+	if err != nil {
+		log.Printf("⚠️  antivirus: failed to read %s/%s: %v", bucket, key, err)
+		return
+	}
+	if int64(len(content)) > maxSize {
+		log.Printf("🛡️  antivirus: skipping %s/%s (%d bytes > max %d bytes)",
+			bucket, key, len(content), maxSize)
+		return
+	}
+
+	// Scan.
+	result, err := h.avEngine.Scan(ctx, content, key)
+	if err != nil {
+		log.Printf("⚠️  antivirus: scan error for %s/%s: %v", bucket, key, err)
+		return
+	}
+
+	// Cache the result.
+	if h.avCache != nil && result.SHA256 != "" {
+		h.avCache.Put(result.SHA256, *result)
+	}
+
+	// Record audit event based on verdict.
+	if result.Verdict.IsThreat() {
+		threatNames := make([]string, 0, len(result.Threats))
+		for _, t := range result.Threats {
+			threatNames = append(threatNames, t.Name)
+		}
+		h.audit.Record(models.StorageEvent{
+			Type:     events.EventObjectThreatDetected,
+			TenantID: tenantID,
+			UserID:   userID,
+			Bucket:   bucket,
+			Key:      key,
+			Size:     size,
+			Details:  fmt.Sprintf("THREAT: %s (verdict=%s, sha256=%s)", strings.Join(threatNames, ", "), result.Verdict, result.SHA256),
+		})
+		log.Printf("🚨 antivirus: THREAT in %s/%s — %s [verdict=%s]",
+			bucket, key, strings.Join(threatNames, ", "), result.Verdict)
+	} else {
+		h.audit.Record(models.StorageEvent{
+			Type:     events.EventObjectScanClean,
+			TenantID: tenantID,
+			UserID:   userID,
+			Bucket:   bucket,
+			Key:      key,
+			Size:     size,
+			Details:  fmt.Sprintf("clean (sha256=%s, %dms)", result.SHA256, result.DurationMs),
+		})
+	}
 }

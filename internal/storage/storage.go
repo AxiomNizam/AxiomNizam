@@ -8,6 +8,14 @@ import (
 	"strconv"
 	"time"
 
+	"example.com/axiomnizam/internal/antivirus"
+	"example.com/axiomnizam/internal/antivirus/cache"
+	"example.com/axiomnizam/internal/antivirus/entropy"
+	"example.com/axiomnizam/internal/antivirus/hashdb"
+	"example.com/axiomnizam/internal/antivirus/heuristic"
+	"example.com/axiomnizam/internal/antivirus/matcher"
+	"example.com/axiomnizam/internal/antivirus/sigdb"
+	"example.com/axiomnizam/internal/antivirus/yara"
 	iamMiddleware "example.com/axiomnizam/internal/iam/middleware"
 	iamStorage "example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
@@ -38,6 +46,11 @@ type System struct {
 	Metrics    *storageMetrics.Collector
 	AuditLog   *events.AuditLog
 	Config     Config
+
+	// Antivirus engine for malware scanning on uploads.
+	AVEngine   *antivirus.Engine
+	AVSigDB    *sigdb.Database
+	AVCache    *cache.Cache
 
 	// IAM references (nil when IAM is not available).
 	// These may be set after construction via SetIAM() when IAM init
@@ -98,7 +111,47 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	accessCtrl := access.NewController(auditLog)
 	accessCtrl.SetBucketStore(bucketStore)
 	accessCtrl.ConfigurePersistence(etcdClient)
-	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint)
+	// ── Antivirus engine ────────────────────────────────────────────
+	avCfg := antivirus.LoadConfig()
+	avEngine := antivirus.NewEngine(avCfg)
+
+	// Create scan layers.
+	hashDB := hashdb.New(0, 0)
+	matcherBuilder := matcher.NewBuilder()
+	matcher.RegisterBuiltinPatterns(matcherBuilder)
+	matcherAutomaton := matcherBuilder.Build()
+	matcherLayer := matcher.NewLayer(matcherAutomaton)
+	heuristicLayer := heuristic.New()
+	entropyLayer := entropy.New()
+	yaraRuleSet := yara.NewRuleSet()
+	yara.RegisterBuiltinRules(yaraRuleSet)
+	yaraLayer := yara.NewLayer(yaraRuleSet)
+
+	// Register layers in execution order (fastest → slowest).
+	if avCfg.HashDBEnabled {
+		avEngine.RegisterLayer(hashDB)
+	}
+	if avCfg.PatternEnabled {
+		avEngine.RegisterLayer(matcherLayer)
+	}
+	if avCfg.HeuristicEnabled {
+		avEngine.RegisterLayer(heuristicLayer)
+	}
+	if avCfg.EntropyEnabled {
+		avEngine.RegisterLayer(entropyLayer)
+	}
+	if avCfg.YARAEnabled {
+		avEngine.RegisterLayer(yaraLayer)
+	}
+
+	// Signature database.
+	avSigDB := sigdb.New(avCfg.SigDir)
+	avSigDB.SetLayers(hashDB, matcherLayer, yaraLayer)
+
+	// Scan cache.
+	avCache := cache.New(avCfg.CacheSize, avCfg.CacheTTL)
+
+	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint, avEngine, avCache)
 
 	return &System{
 		Backend:         backend,
@@ -111,6 +164,9 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 		Metrics:         metricsCollector,
 		AuditLog:        auditLog,
 		Config:          cfg,
+		AVEngine:        avEngine,
+		AVSigDB:         avSigDB,
+		AVCache:         avCache,
 		iamIssuer:       issuer,
 		iamRevokedStore: revokedStore,
 	}, nil
@@ -170,12 +226,29 @@ func (sigV4PresignSigner) Generate(method, bucket, objectKey string, expiry time
 
 // Start begins the reconciliation controller.
 func (s *System) Start(ctx context.Context) {
+	// Initialize antivirus signature database.
+	if s.AVSigDB != nil {
+		if _, err := s.AVSigDB.Init(); err != nil {
+			log.Printf("⚠️  Storage: antivirus sigdb init error: %v", err)
+		}
+	}
+
+	// Start antivirus engine.
+	if s.AVEngine != nil {
+		s.AVEngine.Start()
+	}
+
 	s.Controller.Start(ctx)
-	log.Println("✅ Storage: module started (native backend, IAM-integrated)")
+	log.Println("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)")
 }
 
 // Stop gracefully shuts down the storage module.
 func (s *System) Stop() {
+	// Shutdown antivirus engine.
+	if s.AVEngine != nil {
+		s.AVEngine.Shutdown(context.Background())
+	}
+
 	s.Controller.Stop()
 	log.Println("✅ Storage: module stopped")
 }

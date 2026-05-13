@@ -105,14 +105,16 @@ func (a *AuditLog) ListByBucket(bucket string, limit int) []models.StorageEvent 
 
 // Event type constants
 const (
-	EventBucketCreated    = "bucket.created"
-	EventBucketDeleted    = "bucket.deleted"
-	EventObjectUploaded   = "object.uploaded"
-	EventObjectDownloaded = "object.downloaded"
-	EventObjectDeleted    = "object.deleted"
-	EventObjectCopied     = "object.copied"
-	EventPolicyCreated    = "policy.created"
-	EventPolicyDeleted    = "policy.deleted"
-	EventPresignGenerated = "presign.generated"
-	EventMultiDelete      = "object.multi-deleted"
+	EventBucketCreated         = "bucket.created"
+	EventBucketDeleted         = "bucket.deleted"
+	EventObjectUploaded        = "object.uploaded"
+	EventObjectDownloaded      = "object.downloaded"
+	EventObjectDeleted         = "object.deleted"
+	EventObjectCopied          = "object.copied"
+	EventPolicyCreated         = "policy.created"
+	EventPolicyDeleted         = "policy.deleted"
+	EventPresignGenerated      = "presign.generated"
+	EventMultiDelete           = "object.multi-deleted"
+	EventObjectScanClean       = "object.scan.clean"
+	EventObjectThreatDetected  = "object.scan.threat"
 )

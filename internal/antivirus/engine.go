@@ -417,6 +417,11 @@ func (e *Engine) Stats() EngineStats {
 	}
 }
 
+// MaxFileSize returns the configured maximum file size for scanning.
+func (e *Engine) MaxFileSize() int64 {
+	return e.cfg.MaxFileSize
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Signature DB Version
 // ─────────────────────────────────────────────────────────────────────────────

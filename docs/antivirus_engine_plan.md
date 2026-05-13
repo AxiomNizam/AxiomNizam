@@ -412,7 +412,7 @@ Same wiring pattern as the previous file scanner plan:
 | **6** | YARA Rule Engine | 3 files | 4–6h | Phase 3 | ✅ Done |
 | **7** | Signature DB & Updater | 3 files | 3–4h | Phase 2, 3, 6 | ✅ Done |
 | **8** | Scan Cache | 2 files | 1–2h | Phase 1 | ✅ Done |
-| **9** | Storage System Integration | 2 modified | 2–3h | Phase 1–8 | ⬜ Pending |
+| **9** | Storage System Integration | 3 modified | 2–3h | Phase 1–8 | ✅ Done |
 | **10** | API & Dashboard | 1+ files | 2–3h | Phase 9 | ⬜ Pending |
 
 > [!TIP]
@@ -469,9 +469,10 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/cache/cache.go` | CREATE | 8 | ✅ | O(1) LRU cache: doubly-linked list + map, TTL expiration, PurgeExpired |
 | `internal/antivirus/cache/cache_test.go` | CREATE | 8 | ✅ | 22 tests + 3 benchmarks — LRU, TTL, eviction, concurrency, stats |
 | `internal/antivirus/handler.go` | CREATE | 10 | ⬜ | HTTP API endpoints |
-| `internal/storage/storage.go` | MODIFY | 9 | ⬜ | Wire antivirus into storage |
-| `internal/storage/admin/admin.go` | MODIFY | 9 | ⬜ | PutObject scan hook + routes |
-| `internal/storage/events/events.go` | MODIFY | 9 | ⬜ | New scan event constants |
+| `internal/storage/storage.go` | MODIFY | 9 | ✅ | Engine init, layer registration, sigdb.Init, Start/Stop lifecycle |
+| `internal/storage/admin/admin.go` | MODIFY | 9 | ✅ | Handler receives Engine+Cache, async scan in PutObject, scanObjectAsync |
+| `internal/storage/events/events.go` | MODIFY | 9 | ✅ | Added object.scan.clean + object.scan.threat event types |
+| `internal/antivirus/engine.go` | MODIFY | 9 | ✅ | Added MaxFileSize() accessor |
 | `.env.example` | MODIFY | 1 | ✅ | Added 17 ANTIVIRUS_* env vars |
 
 ---
@@ -579,3 +580,16 @@ Same wiring pattern as the previous file scanner plan:
 - **Atomic stats**: `sync/atomic.Int64` for hits, misses, evictions, inserts — separate from the mutex to minimize contention
 - **Thread-safe**: `sync.Mutex` (not RWMutex, since Get mutates LRU order) with minimal critical sections
 - **CacheHit flag**: Returned results have `CacheHit=true` set automatically, matching the `ScanResult.CacheHit` field from Phase 1 types
+
+### ✅ Phase 9 — Storage System Integration (Completed: 2026-05-13)
+
+**Files modified:** `storage/storage.go` (+55 lines), `storage/admin/admin.go` (+92 lines), `storage/events/events.go` (+2 constants), `antivirus/engine.go` (+4 lines)  
+**Compilation:** `go vet ./internal/storage/...` clean | All 8 antivirus packages: tests pass  
+**Key design decisions:**
+- **Full engine init in NewSystem()**: Creates all 5 scan layers (hashdb, matcher, heuristic, entropy, yara), registers built-in patterns/rules, and passes engine+cache to the admin Handler
+- **Layer registration order**: hashdb → matcher → heuristic → entropy → yara (fastest to slowest), honoring per-layer enable/disable config flags
+- **Async scan in PutObject**: After successful upload + response, fires `go h.scanObjectAsync()` — upload latency is never affected by scanning
+- **scanObjectAsync flow**: Re-reads object from backend via `GetObject()` → respects MaxFileSize limit → `Engine.Scan()` → caches result → records audit event
+- **Audit events**: `object.scan.clean` and `object.scan.threat` event types with SHA-256, verdict, and threat names in details
+- **Lifecycle**: `System.Start()` calls `sigdb.Init()` then `engine.Start()`. `System.Stop()` calls `engine.Shutdown()` before controller stop
+- **Zero-impact on existing code**: All original handler logic untouched. Engine field is optional — nil-guarded throughout
