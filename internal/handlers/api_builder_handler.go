@@ -209,7 +209,7 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 	// Build scanner pipeline — uses subpackage scanners + native antivirus engine.
 	cfg := scanner.LoadConfigFromEnv()
 	orchestrator := scanner.NewOrchestratorWithConfig(cfg,
-		metadata.NewScanner(cfg.MaxFileSize),
+		metadata.NewScannerWithConfig(cfg.MaxFileSize, cfg.NullByteSampleSize, cfg.MaxFilenameLength),
 		mimetype.NewScanner(cfg.AllowedMIMETypes),
 		svg.NewScanner(),
 		macro.NewScanner(),
@@ -247,7 +247,7 @@ func (h *APIBuilderHandler) SetAVEngine(engine *antivirus.Engine) {
 
 	cfg := scanner.LoadConfigFromEnv()
 	h.scanOrch = scanner.NewOrchestratorWithConfig(cfg,
-		metadata.NewScanner(cfg.MaxFileSize),
+		metadata.NewScannerWithConfig(cfg.MaxFileSize, cfg.NullByteSampleSize, cfg.MaxFilenameLength),
 		mimetype.NewScanner(cfg.AllowedMIMETypes),
 		svg.NewScanner(),
 		macro.NewScanner(),

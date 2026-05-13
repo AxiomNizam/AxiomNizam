@@ -61,6 +61,7 @@ type Scanner interface {
 type Orchestrator struct {
 	scanners []Scanner
 	config   Config
+	metrics  *Metrics
 }
 
 // NewOrchestrator creates an orchestrator with the given scanners.
@@ -69,6 +70,7 @@ func NewOrchestrator(scanners ...Scanner) *Orchestrator {
 	return &Orchestrator{
 		scanners: scanners,
 		config:   DefaultConfig(),
+		metrics:  NewMetrics(),
 	}
 }
 
@@ -78,6 +80,7 @@ func NewOrchestratorWithConfig(cfg Config, scanners ...Scanner) *Orchestrator {
 	return &Orchestrator{
 		scanners: scanners,
 		config:   cfg,
+		metrics:  NewMetrics(),
 	}
 }
 
@@ -151,6 +154,10 @@ func (o *Orchestrator) ScanWithContext(ctx context.Context, file *FileInfo) *Sca
 	}
 
 	result.DurationMs = time.Since(start).Milliseconds()
+
+	// Record metrics for observability.
+	o.metrics.Record(result)
+
 	return result
 }
 
@@ -268,4 +275,57 @@ func (o *Orchestrator) ScannerNames() []string {
 // ScannerCount returns the number of registered scanners.
 func (o *Orchestrator) ScannerCount() int {
 	return len(o.scanners)
+}
+
+// Metrics returns the orchestrator's metrics collector.
+// Use Metrics().Snapshot() to obtain a serializable copy.
+func (o *Orchestrator) Metrics() *Metrics {
+	return o.metrics
+}
+
+// Health returns the current health status of the scanner pipeline.
+// Pass includeMetrics=true to embed the full MetricsSnapshot in the response.
+func (o *Orchestrator) Health(includeMetrics bool) HealthStatus {
+	snap := o.metrics.Snapshot()
+
+	// Determine status based on error rate.
+	status := "healthy"
+	errorRate := "0.0%"
+	if snap.TotalScans > 0 {
+		var totalErrors int64
+		for _, sm := range snap.Scanners {
+			totalErrors += sm.TotalErrors
+		}
+		totalRuns := snap.TotalScans * int64(len(o.scanners))
+		if totalRuns > 0 {
+			rate := float64(totalErrors) / float64(totalRuns) * 100
+			errorRate = fmt.Sprintf("%.1f%%", rate)
+			if rate > 50 {
+				status = "degraded"
+			}
+			if rate > 90 {
+				status = "unavailable"
+			}
+		}
+	}
+
+	if len(o.scanners) == 0 {
+		status = "unavailable"
+	}
+
+	h := HealthStatus{
+		Status:        status,
+		ScannerCount:  len(o.scanners),
+		Scanners:      o.ScannerNames(),
+		TotalScans:    snap.TotalScans,
+		UptimeSeconds: snap.UptimeSeconds,
+		LastScanAt:    snap.LastScanAt,
+		ErrorRate:     errorRate,
+	}
+
+	if includeMetrics {
+		h.Metrics = &snap
+	}
+
+	return h
 }

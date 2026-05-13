@@ -1,7 +1,8 @@
 // Package mimetype provides the MIMEScanner for the SafeGate pipeline.
 // It detects file type spoofing by comparing actual MIME type (from content
-// magic bytes) against the claimed extension, and checks for executable
-// signatures hidden in non-executable files.
+// magic bytes) against the claimed extension, checks for executable
+// signatures hidden in non-executable files, and detects dangerous
+// file formats (WebAssembly, Java class files, shell scripts).
 package mimetype
 
 import (
@@ -65,18 +66,115 @@ func (s *Scanner) Scan(_ context.Context, file *scanner.FileInfo) ([]scanner.Fin
 		}
 	}
 
-	// Check for executable content in non-executable files
-	if isExecutableSignature(file.Content) && !strings.Contains(detected, "executable") {
-		findings = append(findings, scanner.Finding{
-			Scanner:     s.Name(),
-			Severity:    scanner.SeverityCritical,
-			Description: "Executable content detected in non-executable file",
-			Details:     "File contains executable signatures (PE/ELF/Mach-O) but is not declared as executable",
-		})
-	}
+	// ── Dangerous file format detection (magic bytes) ────────────────────
+	findings = append(findings, checkDangerousFormats(file.Content, detected)...)
 
 	return findings, nil
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dangerous format detection via magic bytes
+// ─────────────────────────────────────────────────────────────────────────────
+
+// checkDangerousFormats inspects raw file content for magic byte signatures
+// of executable, compiled, or otherwise dangerous file formats that Go's
+// http.DetectContentType does not identify.
+func checkDangerousFormats(data []byte, detectedMIME string) []scanner.Finding {
+	var findings []scanner.Finding
+
+	for _, check := range dangerousFormatChecks {
+		if check.matchFn(data) && !strings.Contains(detectedMIME, "executable") {
+			findings = append(findings, scanner.Finding{
+				Scanner:     "mime_type_validator",
+				Severity:    check.severity,
+				Description: check.desc,
+				Details:     check.details,
+			})
+		}
+	}
+
+	return findings
+}
+
+type formatCheck struct {
+	matchFn  func([]byte) bool
+	severity scanner.Severity
+	desc     string
+	details  string
+}
+
+var dangerousFormatChecks = []formatCheck{
+	// ── Native executables ───────────────────────────────────────────────
+	{isPE, scanner.SeverityCritical,
+		"PE executable detected (Windows .exe/.dll)",
+		"File contains MZ header — Windows Portable Executable format"},
+	{isELF, scanner.SeverityCritical,
+		"ELF executable detected (Linux/Unix binary)",
+		"File contains ELF magic bytes — Linux/Unix executable or shared library"},
+	{isMachO, scanner.SeverityCritical,
+		"Mach-O executable detected (macOS binary)",
+		"File contains Mach-O magic bytes — macOS executable or library"},
+
+	// ── Compiled/intermediate formats ────────────────────────────────────
+	{isWebAssembly, scanner.SeverityCritical,
+		"WebAssembly binary detected",
+		"File contains WASM magic bytes (\\x00asm) — WebAssembly modules can execute native-speed code in browsers"},
+	{isJavaClass, scanner.SeverityHigh,
+		"Java class file detected",
+		"File contains Java class magic bytes (0xCAFEBABE) — compiled Java bytecode can execute arbitrary code via JVM"},
+
+	// ── Script-based threats ─────────────────────────────────────────────
+	{isShellScript, scanner.SeverityHigh,
+		"Shell script detected",
+		"File begins with a shebang (#!) indicating a script — can execute system commands if invoked"},
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Magic byte matchers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// isPE checks for Windows PE (MZ) header.
+func isPE(data []byte) bool {
+	return len(data) >= 2 && data[0] == 'M' && data[1] == 'Z'
+}
+
+// isELF checks for Linux/Unix ELF header (0x7F ELF).
+func isELF(data []byte) bool {
+	return len(data) >= 4 &&
+		data[0] == 0x7F && data[1] == 'E' && data[2] == 'L' && data[3] == 'F'
+}
+
+// isMachO checks for macOS Mach-O magic bytes (all four variants).
+func isMachO(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	return (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCE) || // 32-bit
+		(data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCF) || // 64-bit
+		(data[0] == 0xCE && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE) || // 32-bit reversed
+		(data[0] == 0xCF && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE) // 64-bit reversed
+}
+
+// isWebAssembly checks for WASM magic bytes: \x00asm (0x00 0x61 0x73 0x6D).
+func isWebAssembly(data []byte) bool {
+	return len(data) >= 4 &&
+		data[0] == 0x00 && data[1] == 0x61 && data[2] == 0x73 && data[3] == 0x6D
+}
+
+// isJavaClass checks for Java class file magic bytes: 0xCAFEBABE.
+func isJavaClass(data []byte) bool {
+	return len(data) >= 4 &&
+		data[0] == 0xCA && data[1] == 0xFE && data[2] == 0xBA && data[3] == 0xBE
+}
+
+// isShellScript checks for shebang (#!) at the start of the file.
+func isShellScript(data []byte) bool {
+	return len(data) >= 2 && data[0] == '#' && data[1] == '!'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MIME type compatibility
+// ─────────────────────────────────────────────────────────────────────────────
 
 // CompatMap defines which MIME types are compatible with each other.
 // This is exported so callers can inspect or extend the map.
@@ -92,6 +190,8 @@ var CompatMap = map[string][]string{
 	"application/json":             {"text/plain"},
 	"application/x-rar-compressed": {"application/octet-stream"},
 	"application/x-7z-compressed":  {"application/octet-stream"},
+	"application/wasm":             {"application/octet-stream"},
+	"application/java-archive":     {"application/zip", "application/octet-stream"},
 }
 
 func typesCompatible(claimed, detected string) bool {
@@ -114,25 +214,5 @@ func typesCompatible(claimed, detected string) bool {
 		return true
 	}
 
-	return false
-}
-
-// isExecutableSignature checks for PE, ELF, and Mach-O magic bytes.
-func isExecutableSignature(data []byte) bool {
-	if len(data) < 4 {
-		return false
-	}
-	if data[0] == 'M' && data[1] == 'Z' {
-		return true
-	}
-	if data[0] == 0x7F && data[1] == 'E' && data[2] == 'L' && data[3] == 'F' {
-		return true
-	}
-	if (data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCE) ||
-		(data[0] == 0xFE && data[1] == 0xED && data[2] == 0xFA && data[3] == 0xCF) ||
-		(data[0] == 0xCE && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE) ||
-		(data[0] == 0xCF && data[1] == 0xFA && data[2] == 0xED && data[3] == 0xFE) {
-		return true
-	}
 	return false
 }

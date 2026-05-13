@@ -8,7 +8,7 @@ established by `internal/antivirus/`.
 
 **Module**: `internal/scanner/` (SafeGate File Scanner Pipeline)  
 **Started**: 2026-05-13  
-**Status**: Phase 3 complete (3/6)
+**Status**: Phase 5 complete (5/6)
 
 ---
 
@@ -19,8 +19,8 @@ established by `internal/antivirus/`.
 | 1 | Foundation — Types, Config & Tests | ✅ Complete | 2026-05-13 |
 | 2 | Orchestrator Rewrite (context + parallel + metrics) | ✅ Complete | 2026-05-13 |
 | 3 | Subpackage Extraction | ✅ Complete | 2026-05-13 |
-| 4 | Individual Scanner Enhancements | ⏳ Pending | — |
-| 5 | Observability & Metrics | ⏳ Pending | — |
+| 4 | Individual Scanner Enhancements | ✅ Complete | 2026-05-13 |
+| 5 | Observability & Metrics | ✅ Complete | 2026-05-13 |
 | 6 | Full Test Suite & Docs | ⏳ Pending | — |
 
 ---
@@ -289,24 +289,168 @@ go test ./internal/scanner/... → ✅ 35/35 PASS (0.53s)
 
 ---
 
-## Phase 4: Individual Scanner Enhancements ⏳
+## Phase 4: Individual Scanner Enhancements ✅
 
-| Scanner | Enhancements |
-|---------|-------------|
-| Metadata | Sample-based null byte detection, Unicode/control char detection, path traversal in filenames |
-| MIME | Configurable compat map, WebAssembly/Java class magic bytes |
-| SVG | CSS `@import`/`url()` detection, `<use>` external reference detection |
-| Macro | OLE2 stream-based analysis, DDE link detection, ActiveX detection |
-| Archive | TAR/GZIP/BZ2 analysis, symlink bomb detection |
+**Goal**: Deep-dive security improvements for each scanner, adding detection
+capabilities that address real-world attack vectors.
+
+### Metadata Scanner Enhancements
+
+| Enhancement | Detail |
+|-------------|--------|
+| **Sample-based null byte detection** | Configurable `NullByteSampleSize` (default 8192) — avoids O(n) scan on large files |
+| **Path traversal detection** | Detects `../`, absolute paths, Windows drive letters (`C:\`), bare `..` |
+| **Unicode/control char detection** | Bidi override chars (U+202A-E), zero-width spaces (U+200B-D), control chars |
+| **Null bytes in filename** | Detects null byte truncation attacks in filenames |
+| **Expanded text file recognition** | Added `.css`, `.js`, `.ts`, `.md`, `.yaml`, `.py`, `.go`, `.rs`, etc. |
+| **Configurable filename length** | Uses `Config.MaxFilenameLength` instead of hardcoded 255 |
+| **`NewScannerWithConfig()`** | New constructor accepting all 3 config parameters |
+
+### MIME Scanner Enhancements
+
+| Enhancement | Detail |
+|-------------|--------|
+| **WebAssembly detection** | `\x00asm` magic bytes — WASM can execute native-speed code in browsers |
+| **Java class detection** | `0xCAFEBABE` magic bytes — compiled bytecode for JVM exploitation |
+| **Shell script detection** | `#!` shebang — script files can execute system commands |
+| **Table-driven format checks** | Refactored from monolithic `isExecutableSignature()` to `dangerousFormatChecks[]` |
+| **Individual matchers** | `isPE()`, `isELF()`, `isMachO()`, `isWebAssembly()`, `isJavaClass()`, `isShellScript()` |
+| **Extended CompatMap** | Added `application/wasm` and `application/java-archive` entries |
+
+### SVG Scanner Enhancements
+
+| Enhancement | Detail |
+|-------------|--------|
+| **CSS `@import` detection** | External stylesheet loading via `@import url()` |
+| **CSS `url()` detection** | External resource loading via `url(https://...)` |
+| **`<style>` element detection** | Inline CSS blocks that can contain injection vectors |
+| **`<use>` external refs** | `<use href="https://...">` can load arbitrary SVG fragments |
+| **`<use>` data: URIs** | `<use href="data:...">` can embed arbitrary SVG content |
+| **`<iframe>` detection** | Iframes embedded in SVG via foreignObject |
+| **`<embed>`/`<object>` detection** | Plugin/Flash/arbitrary content loading |
+
+### Macro Scanner Enhancements
+
+| Enhancement | Detail |
+|-------------|--------|
+| **DDE field code detection** | `DDE`/`DDEAUTO` field codes that execute commands without VBA macros |
+| **DDE command execution** | `DDEAUTO cmd.exe` / `powershell` / `mshta` patterns |
+| **ActiveX control detection** | `activeX*.xml`, `ActiveXData` patterns |
+| **COM/CLSID detection** | `CLSID` and `classid=` references to COM objects |
+| **Shell automation objects** | `Shell.Application`, `WScript.Shell`, `Scripting.FileSystemObject` |
+| **OLE embedded objects** | OLE stream names (`\x01Ole`, `ObjectPool`, `\x01CompObj`) |
+| **`isAnyOffice()` helper** | DDE/ActiveX checks apply to both legacy and modern Office |
+
+### Archive Scanner Enhancements
+
+| Enhancement | Detail |
+|-------------|--------|
+| **TAR analysis** | Full `archive/tar` parsing — path traversal, executables, size limits |
+| **GZIP bomb detection** | Limited decompression read via `io.LimitReader` |
+| **BZ2 bomb detection** | Limited decompression read via `io.LimitReader` |
+| **TAR-in-GZIP** | `.tar.gz` recursive analysis (decompress GZIP, then analyze TAR) |
+| **TAR-in-BZ2** | `.tar.bz2` recursive analysis |
+| **Symlink detection (ZIP)** | File mode bit check for symlinks in ZIP entries |
+| **Symlink detection (TAR)** | `tar.TypeSymlink` / `tar.TypeLink` detection |
+| **Symlink bomb** | >50 symlinks triggers high-severity finding |
+| **Symlink target traversal** | Validates symlink targets for path traversal |
+| **Extended executable list** | Added `.dll`, `.sys`, `.cpl`, `.hta`, `.inf`, `.reg` |
+| **`.tgz` support** | Recognized as GZIP archive |
+| **BZ2 magic bytes** | `0x42 0x5A 0x68` ("BZh") detection |
+| **TAR magic bytes** | `ustar` at offset 257 |
+
+### Build & Test Verification
+
+```
+go build -o NUL .              → ✅ Clean
+go test ./internal/scanner/... → ✅ 35/35 PASS (0.53s)
+```
 
 ---
 
-## Phase 5: Observability & Metrics ⏳
+## Phase 5: Observability & Metrics ✅
 
-- Per-scanner execution time tracking
-- Scan throughput counters
-- Finding severity distribution
-- Health endpoint enhancements
+**Goal**: Add pipeline-wide metrics collection, scan throughput tracking,
+finding severity distribution, and a structured health endpoint.
+
+### New Files
+
+| File | Purpose |
+|------|--------|
+| `metrics.go` | Thread-safe `Metrics` collector, `MetricsSnapshot`, `HealthStatus`, `ScannerMetrics`, `AtomicCounter` |
+| `metrics_test.go` | 22 tests covering all metrics/health functionality |
+
+### Metrics Collector (`Metrics`)
+
+| Capability | Detail |
+|------------|--------|
+| **Scan throughput** | `totalScans`, `totalSafe`, `totalUnsafe` counters |
+| **Finding distribution** | `bySeverity` map tracking counts per `Severity` level |
+| **Per-scanner stats** | `scannerScans`, `scannerFindings`, `scannerErrors`, `scannerTimeouts`, `scannerTotalMs` |
+| **Timing aggregation** | `totalDurationMs`, `maxDurationMs`, `minDurationMs` across all scans |
+| **Thread safety** | `sync.RWMutex` — concurrent reads via `RLock`, exclusive writes via `Lock` |
+| **Auto-recording** | `Record(result)` called automatically by orchestrator after every scan |
+
+### MetricsSnapshot (JSON-serializable)
+
+```json
+{
+  "total_scans": 1542,
+  "total_safe": 1500,
+  "total_unsafe": 42,
+  "safety_rate": "97.3%",
+  "total_findings": 87,
+  "findings_by_severity": { "critical": 3, "high": 12, "medium": 30, "low": 42 },
+  "avg_duration_ms": 45,
+  "max_duration_ms": 1200,
+  "min_duration_ms": 5,
+  "uptime_seconds": 86400,
+  "scanners": [
+    { "name": "metadata_scanner", "total_runs": 1542, "avg_ms": 2 },
+    { "name": "native_antivirus", "total_runs": 1542, "avg_ms": 35 }
+  ]
+}
+```
+
+### Health Endpoint (`HealthStatus`)
+
+| Field | Detail |
+|-------|--------|
+| `status` | `"healthy"` / `"degraded"` (>50% errors) / `"unavailable"` (>90% errors or no scanners) |
+| `scanner_count` | Number of registered scanners |
+| `scanners` | Names of all registered scanners |
+| `total_scans` | Scans since startup |
+| `error_rate` | Formatted percentage (e.g. `"0.5%"`) |
+| `metrics` | Full `MetricsSnapshot` when `includeMetrics=true` |
+
+### Orchestrator Integration
+
+| Change | Detail |
+|--------|--------|
+| `metrics` field added to `Orchestrator` struct | Auto-initialized in both constructors |
+| `ScanWithContext()` calls `metrics.Record(result)` | Every scan automatically collected |
+| `Metrics()` method | Returns the metrics collector for snapshot access |
+| `Health(includeMetrics)` method | Returns structured health status with optional full metrics |
+
+### Test Coverage (22 new tests)
+
+| Test Category | Tests |
+|---------------|-------|
+| **Metrics.Record** | SafeScan, UnsafeScan, DurationTracking, PerScanner, Timeouts |
+| **Metrics.Snapshot** | Full snapshot, NoScans edge case |
+| **Metrics.Reset** | All fields cleared |
+| **Metrics.TotalScans** | Thread-safe accessor |
+| **Orchestrator integration** | AutoRecord, FindingsTracked, PerScannerTimings, WithContext |
+| **Health endpoint** | Healthy, WithMetrics, NoScanners, ErrorRate, ScannerList |
+| **AtomicCounter** | Inc, Add, Reset |
+
+### Build & Test Verification
+
+```
+go build -o NUL .              → ✅ Clean
+go test ./internal/scanner/... → ✅ 57/57 PASS (0.54s)
+└─ 35 existing + 22 new metrics/health tests
+```
 
 ---
 
