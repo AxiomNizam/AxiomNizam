@@ -410,7 +410,7 @@ Same wiring pattern as the previous file scanner plan:
 | **4** | Behavioral Heuristics | 6 files | 4–6h | Phase 1 | ✅ Done |
 | **5** | Entropy Analysis | 3 files | 2–3h | Phase 1 | ✅ Done |
 | **6** | YARA Rule Engine | 3 files | 4–6h | Phase 3 | ✅ Done |
-| **7** | Signature DB & Updater | 4 files | 3–4h | Phase 2, 3, 6 | ⬜ Pending |
+| **7** | Signature DB & Updater | 3 files | 3–4h | Phase 2, 3, 6 | ✅ Done |
 | **8** | Scan Cache | 1 file | 1–2h | Phase 1 | ⬜ Pending |
 | **9** | Storage System Integration | 2 modified | 2–3h | Phase 1–8 | ⬜ Pending |
 | **10** | API & Dashboard | 1+ files | 2–3h | Phase 9 | ⬜ Pending |
@@ -463,10 +463,9 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/yara/engine.go` | CREATE | 6 | ✅ | Pure-Go YARA parser, condition evaluator, RuleSet matcher, Layer |
 | `internal/antivirus/yara/rules.go` | CREATE | 6 | ✅ | 12 built-in rules (ransomware, miner, webshell, exploit, dropper) |
 | `internal/antivirus/yara/engine_test.go` | CREATE | 6 | ✅ | 28 tests — parser, conditions, builtins, layer, file loading |
-| `internal/antivirus/sigdb/database.go` | CREATE | 7 | ⬜ | Unified signature DB |
-| `internal/antivirus/sigdb/updater.go` | CREATE | 7 | ⬜ | Auto-updater |
-| `internal/antivirus/sigdb/format.go` | CREATE | 7 | ⬜ | Signature file parsers |
-| `internal/antivirus/sigdb/builtin.go` | CREATE | 7 | ⬜ | Compiled-in essential sigs |
+| `internal/antivirus/sigdb/database.go` | CREATE | 7 | ✅ | Unified DB coordinator: builtin + disk loading, hot-reload, versioning |
+| `internal/antivirus/sigdb/updater.go` | CREATE | 7 | ✅ | Auto-updater: HTTP polling, atomic file downloads, background loop |
+| `internal/antivirus/sigdb/sigdb_test.go` | CREATE | 7 | ✅ | 14 tests — init, reload, versioning, layer integration, HTTP updater |
 | `internal/antivirus/cache/cache.go` | CREATE | 8 | ⬜ | LRU scan cache |
 | `internal/antivirus/cache/cache_test.go` | CREATE | 8 | ⬜ | Cache tests |
 | `internal/antivirus/handler.go` | CREATE | 10 | ⬜ | HTTP API endpoints |
@@ -552,3 +551,17 @@ Same wiring pattern as the previous file scanner plan:
 - **12 built-in rules** compiled into binary: 3 ransomware (WannaCry, generic notes, LockBit), 2 cryptominer (XMRig, pool URLs), 3 webshell (PHP generic, PHP obfuscated, JSP Runtime), 3 exploit (Log4Shell, reverse shells, Cobalt Strike), 1 dropper (PowerShell download+execute)
 - **Layer**: Extracts category/severity/confidence from rule `meta:` blocks. Hot-reloadable via `Reload()` with RWMutex
 - **File loader**: Supports `.yar` and `.yara` extensions from directory scanning
+
+### ✅ Phase 7 — Signature DB & Auto-Updater (Completed: 2026-05-13)
+
+**Files created:** `sigdb/database.go` (315 lines), `sigdb/updater.go` (265 lines), `sigdb/sigdb_test.go` (280 lines)  
+**Tests:** 14/14 passing | `go vet`: clean  
+**Key design decisions:**
+- **Unified coordinator**: `Database` manages loading for all three signature-consuming layers (hashdb.DB, matcher.Layer, yara.Layer) through a single `Init()` and `Reload()` interface
+- **On-disk layout**: `{sigDir}/hashes/`, `{sigDir}/patterns/`, `{sigDir}/yara/`, `{sigDir}/custom/`, `{sigDir}/version.json`
+- **Built-in fallback**: Built-in patterns (25) and YARA rules (12) are always loaded first, then augmented by disk files. Engine works even with zero external files
+- **Auto-updater**: Background goroutine polls remote HTTP endpoint. Protocol: `GET /version.json` → compare versions → download file list → atomic temp-file rename → `Reload()`. 30s timeout, 50MB download limit, graceful context cancellation
+- **Hot-reload**: `Reload()` rebuilds all layers atomically — builtins re-registered + disk files re-parsed + layers swapped via RWMutex. Zero downtime
+- **Custom rules**: `{sigDir}/custom/` directory for user-uploaded `.hdb`, `.ndb`, `.yar` files
+- **ForceCheck()**: Manual trigger for immediate update check via admin API
+- **Eliminated `format.go` and `builtin.go`**: Format parsing is already handled by each layer’s loader (hashdb/loader.go, matcher/signature.go, yara/engine.go). Built-in patterns are registered by each layer’s own `RegisterBuiltin*()` functions. Avoided unnecessary indirection
