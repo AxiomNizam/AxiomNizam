@@ -1198,7 +1198,7 @@ func main() {
 	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
-	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd)
+	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
 
 	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{
@@ -1655,6 +1655,11 @@ func main() {
 		storageSys.RegisterRoutes(storageAPI)
 		storageSys.Start(ctx)
 		log.Println("✅ Object Storage module started (native backend, data:", storageCfg.DataDir, ")")
+
+		// Wire antivirus engine to API builder scanner pipeline.
+		if storageSys.AVEngine != nil {
+			apiBuilderHandler.SetAVEngine(storageSys.AVEngine)
+		}
 	}
 
 	// ====================================

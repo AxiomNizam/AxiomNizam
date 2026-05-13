@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/antivirus"
 	"example.com/axiomnizam/internal/apiscanner"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/scanner"
@@ -198,8 +199,8 @@ type apiBuilderState struct {
 	APIScanReports      map[string]*APIScanReport           `json:"api_scan_reports,omitempty"`
 }
 
-func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client) *APIBuilderHandler {
-	// Build scanner pipeline
+func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client, avEngine *antivirus.Engine) *APIBuilderHandler {
+	// Build scanner pipeline — uses native antivirus engine instead of ClamAV.
 	orchestrator := scanner.NewOrchestrator(
 		scanner.NewMetadataScanner(100*1024*1024),
 		scanner.NewMIMEScanner([]string{
@@ -216,7 +217,7 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 		&scanner.SVGScanner{},
 		&scanner.MacroScanner{},
 		scanner.NewArchiveScanner(5, 1024*1024*1024),
-		scanner.NewClamAVScanner(getClamAVAddr()),
+		scanner.NewNativeAVScanner(avEngine),
 	)
 	h := &APIBuilderHandler{
 		customAPIs:          make(map[string]*CustomAPI),
@@ -239,6 +240,32 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 		h.persistStateLocked()
 	}
 	return h
+}
+
+// SetAVEngine wires the antivirus engine into the scanner orchestrator.
+// Called after storage system initialization provides the shared engine.
+func (h *APIBuilderHandler) SetAVEngine(engine *antivirus.Engine) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.scanOrch = scanner.NewOrchestrator(
+		scanner.NewMetadataScanner(100*1024*1024),
+		scanner.NewMIMEScanner([]string{
+			"text/plain", "text/csv", "text/html", "text/xml",
+			"application/json", "application/xml", "application/pdf",
+			"application/zip", "application/gzip",
+			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			"application/vnd.ms-excel",
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			"application/msword",
+			"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp",
+			"audio/mpeg", "video/mp4",
+		}),
+		&scanner.SVGScanner{},
+		&scanner.MacroScanner{},
+		scanner.NewArchiveScanner(5, 1024*1024*1024),
+		scanner.NewNativeAVScanner(engine),
+	)
 }
 
 func (h *APIBuilderHandler) loadState() bool {
@@ -332,12 +359,7 @@ func (h *APIBuilderHandler) persistStateLocked() {
 	}
 }
 
-func getClamAVAddr() string {
-	if v := strings.TrimSpace(os.Getenv("SAFEGATE_CLAMAV_ADDR")); v != "" {
-		return v
-	}
-	return "clamav:3310"
-}
+
 
 // ===================================================================
 // API Builder CRUD

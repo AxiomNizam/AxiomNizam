@@ -30,7 +30,6 @@ services:
       # - mysql
       # - mariadb
       - postgres
-      # - clamav
       # - mongodb
       # - percona
       # - firebase
@@ -356,23 +355,6 @@ services:
   #     timeout: 5s
   #     retries: 3
 
-  # ClamAV Antivirus (SafeGate Scanner)
-  clamav:
-    image: clamav/clamav:latest
-    container_name: clamav
-    ports:
-      - "3310:3310"
-    networks:
-      - app-network
-    volumes:
-      - clamav-data:/var/lib/clamav
-    healthcheck:
-      test: ["CMD", "clamdcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-
   # RabbitMQ with Management UI
   rabbitmq:
     image: rabbitmq:3-management
@@ -437,7 +419,6 @@ volumes:
   oracle-data:
   valkey-data:
   etcd-data:
-  clamav-data:
   rabbitmq-data:
   query_logs:
   storage-data:

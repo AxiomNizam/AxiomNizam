@@ -623,3 +623,29 @@ Same wiring pattern as the previous file scanner plan:
 - **Route mounting**: AV routes mounted under `/storage/antivirus/` in the authenticated group — accessible to any authenticated storage user
 - **nil safety**: `APIHandler.RegisterRoutes()` is nil-safe — skips registration if engine is nil
 - **Manual scan**: Respects `MaxFileSize` limit, returns `413 Request Entity Too Large` when exceeded, `503 Service Unavailable` when engine not running
+
+### ✅ ClamAV Migration — Complete (2026-05-13)
+
+**ClamAV has been fully removed from the platform.** All scanning is now handled by the native Go antivirus engine.
+
+**Files deleted:**
+- `internal/scanner/clamav.go` — ClamAV TCP daemon client (96 lines)
+- `docs/file_scanner_plan.md` — Obsolete ClamAV-based scanner plan (216 lines)
+
+**Files created:**
+- `internal/scanner/native_av.go` — Bridge scanner: wraps `antivirus.Engine` as `scanner.Scanner` interface
+
+**Files modified:**
+- `internal/handlers/api_builder_handler.go` — Replaced `NewClamAVScanner(getClamAVAddr())` with `NewNativeAVScanner(avEngine)`; added `SetAVEngine()` method; removed `getClamAVAddr()` function
+- `main.go` — Passes `nil` for initial builder creation; wires `storageSys.AVEngine` after storage init via `SetAVEngine()`
+- `docker-compose.yml` — Removed ClamAV service definition (17 lines), commented dependency, and `clamav-data` volume
+- `.env` — Removed `SAFEGATE_CLAMAV_ADDR`
+- `.env.example` — Removed `SAFEGATE_CLAMAV_ADDR`, updated section header
+- `README.md` — Removed ClamAV from default services list and env var table
+- `SECURITY_README.md` — Updated §3 to reference native antivirus engine instead of ClamAV
+
+**Infrastructure savings:**
+- Eliminated ~600MB ClamAV container image
+- Eliminated ~200MB ClamAV signature database download on startup (120s cold start)
+- Eliminated external TCP dependency (port 3310)
+- Zero additional Go binary size increase (engine already compiled in from Phase 9)

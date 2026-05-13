@@ -124,9 +124,12 @@ Implemented:
 ### 3) File Upload and Malware Scanning
 
 Implemented:
-- SafeGate pipeline for uploads includes metadata, MIME, SVG, macro, archive, and ClamAV scanners.
+- SafeGate pipeline for uploads includes metadata, MIME, SVG, macro, archive, and native antivirus scanners.
   - internal/handlers/api_builder_handler.go
   - internal/scanner/scanner.go
+  - internal/scanner/native_av.go (bridge to internal/antivirus engine)
+- Native antivirus engine provides 5-layer detection: hash DB, byte-pattern (Aho-Corasick), behavioral heuristics, entropy analysis, and YARA rules.
+  - internal/antivirus/ (10-phase implementation, fully replaces ClamAV)
 
 ### 4) Rate Limiting
 

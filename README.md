@@ -63,7 +63,6 @@ Default services in docker-compose:
 - axiomnizam-frontend: frontend UI, http://localhost:7000
 - keycloak: identity provider, http://localhost:8080
 - postgres: relational storage
-- clamav: SafeGate scanner
 
 Optional services:
 
@@ -1142,7 +1141,6 @@ Key vars used by current code paths:
 - ETCD_PORT
 - VALKEY_HOST
 - VALKEY_PORT
-- SAFEGATE_CLAMAV_ADDR
 - SAFEGATE_MAX_FILE_SIZE
 
 ### Reconciler Migration Flags
