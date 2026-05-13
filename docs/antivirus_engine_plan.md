@@ -406,7 +406,7 @@ Same wiring pattern as the previous file scanner plan:
 |-------|-----------|-------|--------|------------|--------|
 | **1** | Foundation (types, config, engine shell) | 4 files | 1–2h | None | ✅ Done |
 | **2** | Hash Database | 3 files | 2–3h | Phase 1 | ✅ Done |
-| **3** | Byte-Pattern Matcher (Aho-Corasick) | 3 files | 4–6h | Phase 1 | ⬜ Pending |
+| **3** | Byte-Pattern Matcher (Aho-Corasick) | 4 files | 4–6h | Phase 1 | ✅ Done |
 | **4** | Behavioral Heuristics | 4 files | 4–6h | Phase 1 | ⬜ Pending |
 | **5** | Entropy Analysis | 2 files | 2–3h | Phase 1 | ⬜ Pending |
 | **6** | YARA Rule Engine | 2 files | 4–6h | Phase 3 | ⬜ Pending |
@@ -447,10 +447,10 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/hashdb/hashdb.go` | CREATE | 2 | ✅ | Bloom filter (Kirsch-Mitzenmacker) + SHA-256 map, ~1.1MB for 500K hashes |
 | `internal/antivirus/hashdb/loader.go` | CREATE | 2 | ✅ | ClamAV .hdb/.hsb, JSON, plain text format loaders |
 | `internal/antivirus/hashdb/hashdb_test.go` | CREATE | 2 | ✅ | 27 tests — bloom FP rate, concurrency, all 3 formats, category inference |
-| `internal/antivirus/matcher/ahocorasick.go` | CREATE | 3 | ⬜ | Aho-Corasick automaton |
-| `internal/antivirus/matcher/signature.go` | CREATE | 3 | ⬜ | Signature format parser |
-| `internal/antivirus/matcher/patterns.go` | CREATE | 3 | ⬜ | Built-in malware patterns |
-| `internal/antivirus/matcher/ahocorasick_test.go` | CREATE | 3 | ⬜ | AC matcher tests |
+| `internal/antivirus/matcher/ahocorasick.go` | CREATE | 3 | ✅ | Aho-Corasick automaton + Layer + Builder |
+| `internal/antivirus/matcher/signature.go` | CREATE | 3 | ✅ | ClamAV .ndb + JSON format loaders |
+| `internal/antivirus/matcher/patterns.go` | CREATE | 3 | ✅ | 25 built-in signatures (EICAR, ransomware, cryptominer, webshell, exploits) |
+| `internal/antivirus/matcher/ahocorasick_test.go` | CREATE | 3 | ✅ | 30 tests — AC correctness, layer, builtins, loaders, concurrency |
 | `internal/antivirus/heuristic/pe.go` | CREATE | 4 | ⬜ | PE/EXE analysis |
 | `internal/antivirus/heuristic/elf.go` | CREATE | 4 | ⬜ | ELF analysis |
 | `internal/antivirus/heuristic/script.go` | CREATE | 4 | ⬜ | Script obfuscation detection |
@@ -502,3 +502,18 @@ Same wiring pattern as the previous file scanner plan:
 - `Reload()` builds new bloom filter outside lock, swaps atomically — zero-downtime updates
 - Category inference from ClamAV naming conventions (e.g. `Trojan.Win32.Emotet.A` → trojan)
 - Thread-safe: RWMutex for all operations, concurrent read test passes with 50 goroutines
+
+### ✅ Phase 3 — Byte-Pattern Matcher / Aho-Corasick (Completed: 2026-05-13)
+
+**Files created:** `matcher/ahocorasick.go` (347 lines), `matcher/signature.go` (289 lines), `matcher/patterns.go` (305 lines), `matcher/ahocorasick_test.go` (390 lines)  
+**Tests:** 30/30 passing | `go vet`: clean  
+**Key design decisions:**
+- Pure Go Aho-Corasick — zero dependencies, zero cgo, fully portable
+- Classical trie with BFS failure links + output chains (not DFA — saves memory for sparse binary patterns)
+- Nodes use `map[byte]int` children — trades speed for lower memory when alphabet utilisation is sparse
+- Automaton is immutable after `Build()` — no locking needed during concurrent scans
+- Layer deduplicates: same signature matching multiple offsets produces only 1 ThreatInfo
+- `Reload()` swaps atomically via RWMutex for hot signature updates
+- 25 built-in patterns compiled into binary: EICAR, WannaCry, Log4Shell, ShellShock, Stratum/XMRig/CoinHive miners, PHP/JSP webshells, bash/Python reverse shells, PE/ELF embedded executable detection, Meterpreter/Cobalt Strike markers
+- ClamAV `.ndb` loader skips wildcard patterns (`??`, `{n}`, `(a|b)`) — exact hex only for now
+- Minimum 4-byte pattern length enforced to prevent false positives
