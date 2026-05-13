@@ -1,4 +1,7 @@
-package scanner
+// Package native provides the NativeAVScanner bridge for the SafeGate pipeline.
+// It wraps the internal antivirus.Engine as a scanner.Scanner implementation,
+// translating antivirus threats into scanner.Finding results.
+package native
 
 import (
 	"context"
@@ -6,24 +9,25 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/antivirus"
+	"example.com/axiomnizam/internal/scanner"
 )
 
-// NativeAVScanner wraps the internal antivirus.Engine as a scanner.Scanner
+// Scanner wraps the internal antivirus.Engine as a scanner.Scanner
 // implementation. This is the drop-in replacement for ClamAVScanner in
 // the SafeGate scanner orchestrator pipeline.
-type NativeAVScanner struct {
+type Scanner struct {
 	engine *antivirus.Engine
 }
 
-// NewNativeAVScanner creates a scanner.Scanner backed by the internal
+// NewScanner creates a scanner.Scanner backed by the internal
 // antivirus engine. If engine is nil, all scans return clean (no-op).
-func NewNativeAVScanner(engine *antivirus.Engine) *NativeAVScanner {
-	return &NativeAVScanner{engine: engine}
+func NewScanner(engine *antivirus.Engine) *Scanner {
+	return &Scanner{engine: engine}
 }
 
-func (s *NativeAVScanner) Name() string { return "native_antivirus" }
+func (s *Scanner) Name() string { return "native_antivirus" }
 
-func (s *NativeAVScanner) Scan(ctx context.Context, file *FileInfo) ([]Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, file *scanner.FileInfo) ([]scanner.Finding, error) {
 	if s.engine == nil || !s.engine.IsRunning() {
 		return nil, nil // engine not available — skip
 	}
@@ -40,22 +44,22 @@ func (s *NativeAVScanner) Scan(ctx context.Context, file *FileInfo) ([]Finding, 
 		return nil, fmt.Errorf("native antivirus scan failed: %w", err)
 	}
 
-	var findings []Finding
+	var findings []scanner.Finding
 	if result.Verdict.IsThreat() {
 		for _, t := range result.Threats {
-			sev := SeverityMedium
+			sev := scanner.SeverityMedium
 			switch t.Severity {
 			case antivirus.SeverityCritical:
-				sev = SeverityCritical
+				sev = scanner.SeverityCritical
 			case antivirus.SeverityHigh:
-				sev = SeverityHigh
+				sev = scanner.SeverityHigh
 			case antivirus.SeverityMedium:
-				sev = SeverityMedium
+				sev = scanner.SeverityMedium
 			case antivirus.SeverityLow:
-				sev = SeverityLow
+				sev = scanner.SeverityLow
 			}
 
-			findings = append(findings, Finding{
+			findings = append(findings, scanner.Finding{
 				Scanner:     s.Name(),
 				Severity:    sev,
 				Description: fmt.Sprintf("Malware detected: %s", t.Name),

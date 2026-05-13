@@ -1,4 +1,7 @@
-package scanner
+// Package archivescan provides the ArchiveScanner for the SafeGate pipeline.
+// It detects zip bombs (via compression ratio and decompressed size analysis),
+// path traversal attacks, and executable files hidden inside archives.
+package archivescan
 
 import (
 	"archive/zip"
@@ -6,32 +9,35 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"example.com/axiomnizam/internal/scanner"
 )
 
-// ArchiveScanner detects zip bombs, path traversal, and malicious archives.
-type ArchiveScanner struct {
+// Scanner detects zip bombs, path traversal, and malicious archives.
+type Scanner struct {
 	maxDepth        int
 	maxDecompressed int64
 }
 
-func NewArchiveScanner(maxDepth int, maxDecompressed int64) *ArchiveScanner {
-	return &ArchiveScanner{maxDepth: maxDepth, maxDecompressed: maxDecompressed}
+// NewScanner creates an ArchiveScanner with the given depth and size limits.
+func NewScanner(maxDepth int, maxDecompressed int64) *Scanner {
+	return &Scanner{maxDepth: maxDepth, maxDecompressed: maxDecompressed}
 }
 
-func (s *ArchiveScanner) Name() string { return "archive_bomb_scanner" }
+func (s *Scanner) Name() string { return "archive_bomb_scanner" }
 
-func (s *ArchiveScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
+func (s *Scanner) Scan(_ context.Context, file *scanner.FileInfo) ([]scanner.Finding, error) {
 	if !isArchive(file) {
 		return nil, nil
 	}
 
-	var findings []Finding
+	var findings []scanner.Finding
 
 	if isZipArchive(file) {
 		f, err := s.analyzeZip(file.Content, 0)
 		if err != nil {
-			findings = append(findings, Finding{
-				Scanner: s.Name(), Severity: SeverityMedium,
+			findings = append(findings, scanner.Finding{
+				Scanner: s.Name(), Severity: scanner.SeverityMedium,
 				Description: "Failed to analyze archive", Details: err.Error(),
 			})
 		}
@@ -41,12 +47,12 @@ func (s *ArchiveScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, err
 	return findings, nil
 }
 
-func (s *ArchiveScanner) analyzeZip(data []byte, depth int) ([]Finding, error) {
-	var findings []Finding
+func (s *Scanner) analyzeZip(data []byte, depth int) ([]scanner.Finding, error) {
+	var findings []scanner.Finding
 
 	if depth > s.maxDepth {
-		findings = append(findings, Finding{
-			Scanner: s.Name(), Severity: SeverityHigh,
+		findings = append(findings, scanner.Finding{
+			Scanner: s.Name(), Severity: scanner.SeverityHigh,
 			Description: "Archive exceeds maximum nesting depth",
 			Details:     fmt.Sprintf("Depth %d exceeds limit %d — possible zip bomb", depth, s.maxDepth),
 		})
@@ -68,8 +74,8 @@ func (s *ArchiveScanner) analyzeZip(data []byte, depth int) ([]Finding, error) {
 		if f.CompressedSize64 > 0 {
 			ratio := float64(f.UncompressedSize64) / float64(f.CompressedSize64)
 			if ratio > 100 {
-				findings = append(findings, Finding{
-					Scanner: s.Name(), Severity: SeverityCritical,
+				findings = append(findings, scanner.Finding{
+					Scanner: s.Name(), Severity: scanner.SeverityCritical,
 					Description: "Possible zip bomb detected",
 					Details:     fmt.Sprintf("File %q has %.0f:1 compression ratio", f.Name, ratio),
 				})
@@ -77,8 +83,8 @@ func (s *ArchiveScanner) analyzeZip(data []byte, depth int) ([]Finding, error) {
 		}
 
 		if int64(totalUncompressed) > s.maxDecompressed {
-			findings = append(findings, Finding{
-				Scanner: s.Name(), Severity: SeverityCritical,
+			findings = append(findings, scanner.Finding{
+				Scanner: s.Name(), Severity: scanner.SeverityCritical,
 				Description: "Archive decompressed size exceeds limit",
 				Details:     fmt.Sprintf("Total %d bytes exceeds %d byte limit", totalUncompressed, s.maxDecompressed),
 			})
@@ -86,16 +92,16 @@ func (s *ArchiveScanner) analyzeZip(data []byte, depth int) ([]Finding, error) {
 		}
 
 		if strings.Contains(f.Name, "..") {
-			findings = append(findings, Finding{
-				Scanner: s.Name(), Severity: SeverityCritical,
+			findings = append(findings, scanner.Finding{
+				Scanner: s.Name(), Severity: scanner.SeverityCritical,
 				Description: "Archive contains path traversal",
 				Details:     fmt.Sprintf("Entry %q contains '..' — directory traversal attack", f.Name),
 			})
 		}
 
 		if isExecutableExtension(strings.ToLower(f.Name)) {
-			findings = append(findings, Finding{
-				Scanner: s.Name(), Severity: SeverityHigh,
+			findings = append(findings, scanner.Finding{
+				Scanner: s.Name(), Severity: scanner.SeverityHigh,
 				Description: "Archive contains executable file",
 				Details:     fmt.Sprintf("Found executable: %q", f.Name),
 			})
@@ -103,8 +109,8 @@ func (s *ArchiveScanner) analyzeZip(data []byte, depth int) ([]Finding, error) {
 	}
 
 	if fileCount > 10000 {
-		findings = append(findings, Finding{
-			Scanner: s.Name(), Severity: SeverityHigh,
+		findings = append(findings, scanner.Finding{
+			Scanner: s.Name(), Severity: scanner.SeverityHigh,
 			Description: "Archive contains excessive files",
 			Details:     fmt.Sprintf("%d files — possible resource exhaustion", fileCount),
 		})
@@ -113,7 +119,7 @@ func (s *ArchiveScanner) analyzeZip(data []byte, depth int) ([]Finding, error) {
 	return findings, nil
 }
 
-func isArchive(file *FileInfo) bool {
+func isArchive(file *scanner.FileInfo) bool {
 	ext := strings.ToLower(file.Extension)
 	switch ext {
 	case ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz",
@@ -125,7 +131,7 @@ func isArchive(file *FileInfo) bool {
 		strings.Contains(mime, "7z") || strings.Contains(mime, "compressed")
 }
 
-func isZipArchive(file *FileInfo) bool {
+func isZipArchive(file *scanner.FileInfo) bool {
 	if len(file.Content) >= 4 &&
 		file.Content[0] == 0x50 && file.Content[1] == 0x4B &&
 		file.Content[2] == 0x03 && file.Content[3] == 0x04 {

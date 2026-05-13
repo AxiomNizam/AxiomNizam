@@ -1,30 +1,37 @@
-package scanner
+// Package mimetype provides the MIMEScanner for the SafeGate pipeline.
+// It detects file type spoofing by comparing actual MIME type (from content
+// magic bytes) against the claimed extension, and checks for executable
+// signatures hidden in non-executable files.
+package mimetype
 
 import (
 	"context"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"example.com/axiomnizam/internal/scanner"
 )
 
-// MIMEScanner detects file type spoofing by comparing the actual MIME type
+// Scanner detects file type spoofing by comparing the actual MIME type
 // (detected from file content magic bytes) against the claimed extension.
-type MIMEScanner struct {
+type Scanner struct {
 	allowedTypes map[string]bool
 }
 
-func NewMIMEScanner(allowedTypes []string) *MIMEScanner {
+// NewScanner creates a MIMEScanner with the given list of allowed MIME types.
+func NewScanner(allowedTypes []string) *Scanner {
 	m := make(map[string]bool, len(allowedTypes))
 	for _, t := range allowedTypes {
 		m[t] = true
 	}
-	return &MIMEScanner{allowedTypes: m}
+	return &Scanner{allowedTypes: m}
 }
 
-func (s *MIMEScanner) Name() string { return "mime_type_validator" }
+func (s *Scanner) Name() string { return "mime_type_validator" }
 
-func (s *MIMEScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
-	var findings []Finding
+func (s *Scanner) Scan(_ context.Context, file *scanner.FileInfo) ([]scanner.Finding, error) {
+	var findings []scanner.Finding
 
 	// Detect actual MIME type from content bytes
 	detected := http.DetectContentType(file.Content)
@@ -33,9 +40,9 @@ func (s *MIMEScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error)
 
 	// Check if the detected type is in the allowed list
 	if !s.allowedTypes[detected] && detected != "application/octet-stream" {
-		findings = append(findings, Finding{
+		findings = append(findings, scanner.Finding{
 			Scanner:     s.Name(),
-			Severity:    SeverityHigh,
+			Severity:    scanner.SeverityHigh,
 			Description: "Disallowed file type detected",
 			Details:     fmt.Sprintf("Detected MIME type %q is not in the allowed list", detected),
 		})
@@ -45,10 +52,10 @@ func (s *MIMEScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error)
 	if file.MIMEType != "" && detected != "application/octet-stream" {
 		claimedBase := strings.Split(file.MIMEType, ";")[0]
 		claimedBase = strings.TrimSpace(claimedBase)
-		if !mimeTypesCompatible(claimedBase, detected) {
-			findings = append(findings, Finding{
+		if !typesCompatible(claimedBase, detected) {
+			findings = append(findings, scanner.Finding{
 				Scanner:     s.Name(),
-				Severity:    SeverityCritical,
+				Severity:    scanner.SeverityCritical,
 				Description: "File type spoofing detected",
 				Details: fmt.Sprintf(
 					"File claims to be %q but content detected as %q — possible disguised payload",
@@ -60,9 +67,9 @@ func (s *MIMEScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error)
 
 	// Check for executable content in non-executable files
 	if isExecutableSignature(file.Content) && !strings.Contains(detected, "executable") {
-		findings = append(findings, Finding{
+		findings = append(findings, scanner.Finding{
 			Scanner:     s.Name(),
-			Severity:    SeverityCritical,
+			Severity:    scanner.SeverityCritical,
 			Description: "Executable content detected in non-executable file",
 			Details:     "File contains executable signatures (PE/ELF/Mach-O) but is not declared as executable",
 		})
@@ -71,7 +78,23 @@ func (s *MIMEScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error)
 	return findings, nil
 }
 
-func mimeTypesCompatible(claimed, detected string) bool {
+// CompatMap defines which MIME types are compatible with each other.
+// This is exported so callers can inspect or extend the map.
+var CompatMap = map[string][]string{
+	"application/msword": {"application/zip", "application/x-cfbf", "application/octet-stream"},
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"application/zip", "application/octet-stream"},
+	"application/vnd.ms-excel": {"application/zip", "application/x-cfbf", "application/octet-stream"},
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {"application/zip", "application/octet-stream"},
+	"application/vnd.ms-powerpoint":                                             {"application/zip", "application/x-cfbf", "application/octet-stream"},
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": {"application/zip", "application/octet-stream"},
+	"image/svg+xml":                {"text/xml", "application/xml", "text/plain", "text/html"},
+	"text/csv":                     {"text/plain", "application/octet-stream"},
+	"application/json":             {"text/plain"},
+	"application/x-rar-compressed": {"application/octet-stream"},
+	"application/x-7z-compressed":  {"application/octet-stream"},
+}
+
+func typesCompatible(claimed, detected string) bool {
 	claimed = strings.ToLower(claimed)
 	detected = strings.ToLower(detected)
 
@@ -79,21 +102,7 @@ func mimeTypesCompatible(claimed, detected string) bool {
 		return true
 	}
 
-	compatMap := map[string][]string{
-		"application/msword": {"application/zip", "application/x-cfbf", "application/octet-stream"},
-		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"application/zip", "application/octet-stream"},
-		"application/vnd.ms-excel": {"application/zip", "application/x-cfbf", "application/octet-stream"},
-		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {"application/zip", "application/octet-stream"},
-		"application/vnd.ms-powerpoint":                                             {"application/zip", "application/x-cfbf", "application/octet-stream"},
-		"application/vnd.openxmlformats-officedocument.presentationml.presentation": {"application/zip", "application/octet-stream"},
-		"image/svg+xml":                {"text/xml", "application/xml", "text/plain", "text/html"},
-		"text/csv":                     {"text/plain", "application/octet-stream"},
-		"application/json":             {"text/plain"},
-		"application/x-rar-compressed": {"application/octet-stream"},
-		"application/x-7z-compressed":  {"application/octet-stream"},
-	}
-
-	if compatible, ok := compatMap[claimed]; ok {
+	if compatible, ok := CompatMap[claimed]; ok {
 		for _, c := range compatible {
 			if detected == c {
 				return true

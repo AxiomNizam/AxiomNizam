@@ -8,7 +8,7 @@ established by `internal/antivirus/`.
 
 **Module**: `internal/scanner/` (SafeGate File Scanner Pipeline)  
 **Started**: 2026-05-13  
-**Status**: Phase 2 complete (2/6)
+**Status**: Phase 3 complete (3/6)
 
 ---
 
@@ -18,7 +18,7 @@ established by `internal/antivirus/`.
 |-------|-------|--------|------|
 | 1 | Foundation — Types, Config & Tests | ✅ Complete | 2026-05-13 |
 | 2 | Orchestrator Rewrite (context + parallel + metrics) | ✅ Complete | 2026-05-13 |
-| 3 | Subpackage Extraction | ⏳ Pending | — |
+| 3 | Subpackage Extraction | ✅ Complete | 2026-05-13 |
 | 4 | Individual Scanner Enhancements | ⏳ Pending | — |
 | 5 | Observability & Metrics | ⏳ Pending | — |
 | 6 | Full Test Suite & Docs | ⏳ Pending | — |
@@ -196,24 +196,95 @@ go test ./internal/scanner/... → ✅ 35/35 PASS (0.73s)
 
 ---
 
-## Phase 3: Subpackage Extraction ⏳
+## Phase 3: Subpackage Extraction ✅
 
 **Goal**: Move each scanner into its own subpackage for independent
 testability and cleaner dependency graph.
 
-**Target structure:**
+### Final Directory Structure
+
 ```
 internal/scanner/
-├── scanner.go          (interface + orchestrator)
-├── types.go            (shared types)
-├── config.go           (configuration)
-├── metadata/metadata.go
-├── mime/mime.go + compat.go
-├── svg/svg.go
-├── macro/macro.go
-├── archive/archive.go
-├── native/native_av.go
-└── scanner_test.go
+├── scanner.go            (Scanner interface + Orchestrator)
+├── types.go              (FileInfo, Finding, ScanResult, ScannerTiming, Severity)
+├── config.go             (Config, DefaultConfig, LoadConfigFromEnv)
+├── scanner_test.go       (35 tests: types, config, orchestrator, parallel)
+├── metadata/metadata.go  (MetadataScanner → metadata.Scanner)
+├── mimetype/mimetype.go  (MIMEScanner → mimetype.Scanner)
+├── svg/svg.go            (SVGScanner → svg.Scanner)
+├── macro/macro.go        (MacroScanner → macro.Scanner)
+├── archivescan/archivescan.go  (ArchiveScanner → archivescan.Scanner)
+└── native/native.go      (NativeAVScanner → native.Scanner)
+```
+
+### Deleted Files (replaced by subpackages)
+
+| Old File | New Location |
+|----------|-------------|
+| `scanner/metadata.go` | `scanner/metadata/metadata.go` |
+| `scanner/mime.go` | `scanner/mimetype/mimetype.go` |
+| `scanner/svg.go` | `scanner/svg/svg.go` |
+| `scanner/macro.go` | `scanner/macro/macro.go` |
+| `scanner/archive.go` | `scanner/archivescan/archivescan.go` |
+| `scanner/native_av.go` | `scanner/native/native.go` |
+
+### Naming Decisions
+
+| Subpackage | Rationale |
+|------------|----------|
+| `metadata` | Clear, no conflicts |
+| `mimetype` | Avoids shadowing Go stdlib `mime` package |
+| `svg` | Clear, no conflicts |
+| `macro` | Clear, no conflicts |
+| `archivescan` | Avoids shadowing Go stdlib `archive` package |
+| `native` | Clear, no conflicts |
+
+### Constructor Migration
+
+```diff
+- scanner.NewMetadataScanner(100*1024*1024)
++ metadata.NewScanner(cfg.MaxFileSize)
+
+- scanner.NewMIMEScanner([]string{...})
++ mimetype.NewScanner(cfg.AllowedMIMETypes)
+
+- &scanner.SVGScanner{}
++ svg.NewScanner()
+
+- &scanner.MacroScanner{}
++ macro.NewScanner()
+
+- scanner.NewArchiveScanner(5, 1024*1024*1024)
++ archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize)
+
+- scanner.NewNativeAVScanner(engine)
++ native.NewScanner(engine)
+```
+
+### Handler Integration Updated
+
+`api_builder_handler.go` now:
+- Imports 6 scanner subpackages alongside root `scanner` package
+- Uses `scanner.LoadConfigFromEnv()` for centralized configuration
+- Passes config values to subpackage constructors (no more hardcoded thresholds)
+- Both `NewAPIBuilderHandler()` and `SetAVEngine()` updated
+
+### Architecture Benefits
+
+| Benefit | Detail |
+|---------|--------|
+| **Independent testability** | Each subpackage can have focused unit tests |
+| **Cleaner dependency graph** | Subpackages only import root scanner for types — no circular deps |
+| **Decoupled namespace** | Each scanner owns its helpers and regex patterns |
+| **Config-driven** | Thresholds from centralized Config, no inline magic numbers |
+| **Extensibility** | New scanners = new subpackage, no root package changes |
+
+### Build & Test Verification
+
+```
+go build -o NUL .              → ✅ Clean
+go test ./internal/scanner/... → ✅ 35/35 PASS (0.53s)
+└─ 6 subpackages detected (no test files yet — Phase 6)
 ```
 
 ---

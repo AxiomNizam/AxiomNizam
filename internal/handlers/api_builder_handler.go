@@ -23,6 +23,12 @@ import (
 	"example.com/axiomnizam/internal/apiscanner"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/scanner"
+	"example.com/axiomnizam/internal/scanner/archivescan"
+	"example.com/axiomnizam/internal/scanner/macro"
+	"example.com/axiomnizam/internal/scanner/metadata"
+	"example.com/axiomnizam/internal/scanner/mimetype"
+	"example.com/axiomnizam/internal/scanner/native"
+	"example.com/axiomnizam/internal/scanner/svg"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -200,24 +206,15 @@ type apiBuilderState struct {
 }
 
 func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client, avEngine *antivirus.Engine) *APIBuilderHandler {
-	// Build scanner pipeline — uses native antivirus engine instead of ClamAV.
-	orchestrator := scanner.NewOrchestrator(
-		scanner.NewMetadataScanner(100*1024*1024),
-		scanner.NewMIMEScanner([]string{
-			"text/plain", "text/csv", "text/html", "text/xml",
-			"application/json", "application/xml", "application/pdf",
-			"application/zip", "application/gzip",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"application/vnd.ms-excel",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/msword",
-			"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp",
-			"audio/mpeg", "video/mp4",
-		}),
-		&scanner.SVGScanner{},
-		&scanner.MacroScanner{},
-		scanner.NewArchiveScanner(5, 1024*1024*1024),
-		scanner.NewNativeAVScanner(avEngine),
+	// Build scanner pipeline — uses subpackage scanners + native antivirus engine.
+	cfg := scanner.LoadConfigFromEnv()
+	orchestrator := scanner.NewOrchestratorWithConfig(cfg,
+		metadata.NewScanner(cfg.MaxFileSize),
+		mimetype.NewScanner(cfg.AllowedMIMETypes),
+		svg.NewScanner(),
+		macro.NewScanner(),
+		archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize),
+		native.NewScanner(avEngine),
 	)
 	h := &APIBuilderHandler{
 		customAPIs:          make(map[string]*CustomAPI),
@@ -248,23 +245,14 @@ func (h *APIBuilderHandler) SetAVEngine(engine *antivirus.Engine) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.scanOrch = scanner.NewOrchestrator(
-		scanner.NewMetadataScanner(100*1024*1024),
-		scanner.NewMIMEScanner([]string{
-			"text/plain", "text/csv", "text/html", "text/xml",
-			"application/json", "application/xml", "application/pdf",
-			"application/zip", "application/gzip",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"application/vnd.ms-excel",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/msword",
-			"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp",
-			"audio/mpeg", "video/mp4",
-		}),
-		&scanner.SVGScanner{},
-		&scanner.MacroScanner{},
-		scanner.NewArchiveScanner(5, 1024*1024*1024),
-		scanner.NewNativeAVScanner(engine),
+	cfg := scanner.LoadConfigFromEnv()
+	h.scanOrch = scanner.NewOrchestratorWithConfig(cfg,
+		metadata.NewScanner(cfg.MaxFileSize),
+		mimetype.NewScanner(cfg.AllowedMIMETypes),
+		svg.NewScanner(),
+		macro.NewScanner(),
+		archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize),
+		native.NewScanner(engine),
 	)
 }
 

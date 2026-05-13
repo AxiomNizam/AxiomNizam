@@ -1,23 +1,30 @@
-package scanner
+// Package macro provides the MacroScanner for the SafeGate pipeline.
+// It detects embedded macros and scripts in Office documents (legacy .doc/.xls/.ppt
+// and modern .docx/.xlsx/.pptx) and PDF files, including VBA macros,
+// auto-execute entries, shell commands, and external template references.
+package macro
 
 import (
 	"context"
 	"regexp"
 	"strings"
+
+	"example.com/axiomnizam/internal/scanner"
 )
 
-// MacroScanner detects embedded macros and scripts in Office documents and PDFs.
-type MacroScanner struct{}
+// Scanner detects embedded macros and scripts in Office documents and PDFs.
+type Scanner struct{}
 
-func NewMacroScanner() *MacroScanner { return &MacroScanner{} }
+// NewScanner creates a new MacroScanner.
+func NewScanner() *Scanner { return &Scanner{} }
 
-func (s *MacroScanner) Name() string { return "macro_script_scanner" }
+func (s *Scanner) Name() string { return "macro_script_scanner" }
 
-func (s *MacroScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
+func (s *Scanner) Scan(_ context.Context, file *scanner.FileInfo) ([]scanner.Finding, error) {
 	ext := strings.ToLower(file.Extension)
 	mime := strings.ToLower(file.MIMEType)
 
-	var findings []Finding
+	var findings []scanner.Finding
 
 	if ext == ".pdf" || strings.Contains(mime, "pdf") {
 		findings = append(findings, s.scanPDF(file.Content)...)
@@ -34,33 +41,33 @@ func (s *MacroScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error
 	return findings, nil
 }
 
-func (s *MacroScanner) scanPDF(data []byte) []Finding {
-	var findings []Finding
+func (s *Scanner) scanPDF(data []byte) []scanner.Finding {
+	var findings []scanner.Finding
 	content := string(data)
 
 	checks := []struct {
 		pattern *regexp.Regexp
-		sev     Severity
+		sev     scanner.Severity
 		desc    string
 		details string
 	}{
-		{pdfJSPattern, SeverityCritical, "PDF contains JavaScript",
+		{pdfJSPattern, scanner.SeverityCritical, "PDF contains JavaScript",
 			"Embedded JavaScript in PDF can execute malicious code when opened"},
-		{pdfAutoActionPattern, SeverityHigh, "PDF contains auto-execute actions",
+		{pdfAutoActionPattern, scanner.SeverityHigh, "PDF contains auto-execute actions",
 			"OpenAction/AA entries can trigger actions automatically when the PDF is opened"},
-		{pdfLaunchPattern, SeverityCritical, "PDF contains launch actions",
+		{pdfLaunchPattern, scanner.SeverityCritical, "PDF contains launch actions",
 			"Launch actions can execute arbitrary system commands"},
-		{pdfEmbeddedFilePattern, SeverityMedium, "PDF contains embedded files",
+		{pdfEmbeddedFilePattern, scanner.SeverityMedium, "PDF contains embedded files",
 			"Embedded file streams can carry hidden payloads"},
-		{pdfURIPattern, SeverityLow, "PDF contains URI actions",
+		{pdfURIPattern, scanner.SeverityLow, "PDF contains URI actions",
 			"URI actions can redirect users to malicious websites"},
-		{pdfEncryptPattern, SeverityMedium, "PDF contains encrypted or encoded streams",
+		{pdfEncryptPattern, scanner.SeverityMedium, "PDF contains encrypted or encoded streams",
 			"Encrypted streams may hide malicious content from analysis"},
 	}
 
 	for _, c := range checks {
 		if c.pattern.MatchString(content) {
-			findings = append(findings, Finding{
+			findings = append(findings, scanner.Finding{
 				Scanner: s.Name(), Severity: c.sev, Description: c.desc, Details: c.details,
 			})
 		}
@@ -68,8 +75,8 @@ func (s *MacroScanner) scanPDF(data []byte) []Finding {
 	return findings
 }
 
-func (s *MacroScanner) scanLegacyOffice(data []byte) []Finding {
-	var findings []Finding
+func (s *Scanner) scanLegacyOffice(data []byte) []scanner.Finding {
+	var findings []scanner.Finding
 
 	if len(data) < 8 || data[0] != 0xD0 || data[1] != 0xCF || data[2] != 0x11 || data[3] != 0xE0 {
 		return nil
@@ -78,8 +85,8 @@ func (s *MacroScanner) scanLegacyOffice(data []byte) []Finding {
 	content := string(data)
 
 	if strings.Contains(content, "VBA") || strings.Contains(content, "_VBA_PROJECT") {
-		findings = append(findings, Finding{
-			Scanner: s.Name(), Severity: SeverityCritical,
+		findings = append(findings, scanner.Finding{
+			Scanner: s.Name(), Severity: scanner.SeverityCritical,
 			Description: "Office document contains VBA macros",
 			Details:     "VBA macros can execute arbitrary code and are a common malware vector",
 		})
@@ -92,8 +99,8 @@ func (s *MacroScanner) scanLegacyOffice(data []byte) []Finding {
 	}
 	for _, name := range autoExecNames {
 		if strings.Contains(content, name) {
-			findings = append(findings, Finding{
-				Scanner: s.Name(), Severity: SeverityCritical,
+			findings = append(findings, scanner.Finding{
+				Scanner: s.Name(), Severity: scanner.SeverityCritical,
 				Description: "Office document contains auto-execute macros",
 				Details:     "Found auto-execute macro: " + name,
 			})
@@ -102,8 +109,8 @@ func (s *MacroScanner) scanLegacyOffice(data []byte) []Finding {
 	}
 
 	if shellPattern.MatchString(content) {
-		findings = append(findings, Finding{
-			Scanner: s.Name(), Severity: SeverityCritical,
+		findings = append(findings, scanner.Finding{
+			Scanner: s.Name(), Severity: scanner.SeverityCritical,
 			Description: "Office document contains shell execution commands",
 			Details:     "Document references shell/command execution APIs",
 		})
@@ -112,21 +119,21 @@ func (s *MacroScanner) scanLegacyOffice(data []byte) []Finding {
 	return findings
 }
 
-func (s *MacroScanner) scanModernOffice(data []byte) []Finding {
-	var findings []Finding
+func (s *Scanner) scanModernOffice(data []byte) []scanner.Finding {
+	var findings []scanner.Finding
 	content := string(data)
 
 	if strings.Contains(content, "vbaProject.bin") {
-		findings = append(findings, Finding{
-			Scanner: s.Name(), Severity: SeverityCritical,
+		findings = append(findings, scanner.Finding{
+			Scanner: s.Name(), Severity: scanner.SeverityCritical,
 			Description: "Office document contains VBA macro project",
 			Details:     "vbaProject.bin found — macros are present",
 		})
 	}
 
 	if externalRelPattern.MatchString(content) {
-		findings = append(findings, Finding{
-			Scanner: s.Name(), Severity: SeverityHigh,
+		findings = append(findings, scanner.Finding{
+			Scanner: s.Name(), Severity: scanner.SeverityHigh,
 			Description: "Office document references external content",
 			Details:     "External relationships can load remote templates (template injection attack)",
 		})
