@@ -407,7 +407,7 @@ Same wiring pattern as the previous file scanner plan:
 | **1** | Foundation (types, config, engine shell) | 4 files | 1–2h | None | ✅ Done |
 | **2** | Hash Database | 3 files | 2–3h | Phase 1 | ✅ Done |
 | **3** | Byte-Pattern Matcher (Aho-Corasick) | 4 files | 4–6h | Phase 1 | ✅ Done |
-| **4** | Behavioral Heuristics | 4 files | 4–6h | Phase 1 | ⬜ Pending |
+| **4** | Behavioral Heuristics | 6 files | 4–6h | Phase 1 | ✅ Done |
 | **5** | Entropy Analysis | 2 files | 2–3h | Phase 1 | ⬜ Pending |
 | **6** | YARA Rule Engine | 2 files | 4–6h | Phase 3 | ⬜ Pending |
 | **7** | Signature DB & Updater | 4 files | 3–4h | Phase 2, 3, 6 | ⬜ Pending |
@@ -451,11 +451,12 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/matcher/signature.go` | CREATE | 3 | ✅ | ClamAV .ndb + JSON format loaders |
 | `internal/antivirus/matcher/patterns.go` | CREATE | 3 | ✅ | 25 built-in signatures (EICAR, ransomware, cryptominer, webshell, exploits) |
 | `internal/antivirus/matcher/ahocorasick_test.go` | CREATE | 3 | ✅ | 30 tests — AC correctness, layer, builtins, loaders, concurrency |
-| `internal/antivirus/heuristic/pe.go` | CREATE | 4 | ⬜ | PE/EXE analysis |
-| `internal/antivirus/heuristic/elf.go` | CREATE | 4 | ⬜ | ELF analysis |
-| `internal/antivirus/heuristic/script.go` | CREATE | 4 | ⬜ | Script obfuscation detection |
-| `internal/antivirus/heuristic/shellcode.go` | CREATE | 4 | ⬜ | Shellcode detection |
-| `internal/antivirus/heuristic/heuristic_test.go` | CREATE | 4 | ⬜ | Heuristic tests |
+| `internal/antivirus/heuristic/heuristic.go` | CREATE | 4 | ✅ | Layer orchestrator dispatching to 4 sub-analyzers |
+| `internal/antivirus/heuristic/pe.go` | CREATE | 4 | ✅ | PE header analysis: packers, W+X sections, entry point, entropy |
+| `internal/antivirus/heuristic/elf.go` | CREATE | 4 | ✅ | ELF analysis: executable stack, stripped binaries, UPX, entropy |
+| `internal/antivirus/heuristic/script.go` | CREATE | 4 | ✅ | Script obfuscation: JS, PowerShell, VBS, Bash (weighted scoring) |
+| `internal/antivirus/heuristic/shellcode.go` | CREATE | 4 | ✅ | NOP sleds, syscall patterns, XOR decode loops |
+| `internal/antivirus/heuristic/heuristic_test.go` | CREATE | 4 | ✅ | 25 tests — PE, ELF, script, shellcode, entropy, concurrency |
 | `internal/antivirus/entropy/entropy.go` | CREATE | 5 | ⬜ | Shannon entropy calculator |
 | `internal/antivirus/entropy/packer.go` | CREATE | 5 | ⬜ | Packer detection |
 | `internal/antivirus/entropy/entropy_test.go` | CREATE | 5 | ⬜ | Entropy tests |
@@ -517,3 +518,14 @@ Same wiring pattern as the previous file scanner plan:
 - 25 built-in patterns compiled into binary: EICAR, WannaCry, Log4Shell, ShellShock, Stratum/XMRig/CoinHive miners, PHP/JSP webshells, bash/Python reverse shells, PE/ELF embedded executable detection, Meterpreter/Cobalt Strike markers
 - ClamAV `.ndb` loader skips wildcard patterns (`??`, `{n}`, `(a|b)`) — exact hex only for now
 - Minimum 4-byte pattern length enforced to prevent false positives
+
+### ✅ Phase 4 — Behavioral Heuristics (Completed: 2026-05-13)
+
+**Files created:** `heuristic/heuristic.go` (120 lines), `heuristic/pe.go` (225 lines), `heuristic/elf.go` (228 lines), `heuristic/script.go` (256 lines), `heuristic/shellcode.go` (148 lines), `heuristic/heuristic_test.go` (350 lines)  
+**Tests:** 25/25 passing | `go vet`: clean  
+**Key design decisions:**
+- **PE analysis**: Raw binary parsing of MZ/PE/COFF/Optional/Section headers (no external deps). Detects 16 packer section names (UPX, Themida, VMProtect, ASPack, etc.), writable+executable sections, entry point anomalies, per-section Shannon entropy >7.2, and virtual-vs-raw size mismatches >10x
+- **ELF analysis**: Full ELF32/ELF64 little-endian header parsing. Detects executable GNU_STACK (exploit indicator), stripped+exec-stack combo (evasion), UPX on Linux, high-entropy LOAD segments
+- **Script obfuscation**: Weighted scoring system — each indicator carries weight + confidence; triggers require ≥3 score points AND ≥2 distinct indicators. Covers JavaScript (eval, fromCharCode, unescape, Function constructor), PowerShell (-EncodedCommand, IEX, WebClient, -w hidden), VBScript (Execute, Chr()), Bash (eval+base64, /dev/tcp)
+- **Shellcode detection**: Skips PE/ELF files (have dedicated analyzers). Detects variable-length NOP sleds (≥16 bytes), x86/x64 syscall instructions, shellcode prologues, XOR decode loops, Windows API hash rotation (Metasploit). Requires ≥2 pattern matches to avoid false positives
+- **Zero RAM overhead**: All analyzers are pure functions — no data structures, no state, fully concurrent-safe
