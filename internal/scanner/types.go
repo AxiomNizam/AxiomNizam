@@ -59,12 +59,12 @@ func (s Severity) IsThreat() bool {
 // Finding represents a single security issue discovered by a scanner.
 // Each scanner may produce zero or more findings per file.
 type Finding struct {
-	Scanner     string   `json:"scanner"`               // Name of the scanner that produced this finding.
-	Severity    Severity `json:"severity"`               // Impact level (critical → info).
-	Description string   `json:"description"`            // Human-readable title of the finding.
-	Details     string   `json:"details,omitempty"`       // Extended technical detail (optional).
-	Offset      int64    `json:"offset,omitempty"`        // Byte offset in file where issue was found (0 = N/A).
-	Category    string   `json:"category,omitempty"`      // Classification category (e.g. "xss", "macro", "bomb").
+	Scanner     string   `json:"scanner"`            // Name of the scanner that produced this finding.
+	Severity    Severity `json:"severity"`           // Impact level (critical → info).
+	Description string   `json:"description"`        // Human-readable title of the finding.
+	Details     string   `json:"details,omitempty"`  // Extended technical detail (optional).
+	Offset      int64    `json:"offset,omitempty"`   // Byte offset in file where issue was found (0 = N/A).
+	Category    string   `json:"category,omitempty"` // Classification category (e.g. "xss", "macro", "bomb").
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +100,16 @@ type ScanResult struct {
 	DurationMs int64     `json:"duration_ms"`  // Total scan time in milliseconds.
 	Findings   []Finding `json:"findings"`     // All findings from all scanners.
 	Scanners   []string  `json:"scanners_run"` // Names of scanners that were executed.
+	Timings    []ScannerTiming `json:"timings,omitempty"` // Per-scanner execution timing.
+}
+
+// ScannerTiming records the execution time and outcome of a single scanner.
+type ScannerTiming struct {
+	Scanner      string `json:"scanner"`               // Scanner name.
+	DurationMs   int64  `json:"duration_ms"`           // Execution time in milliseconds.
+	FindingCount int    `json:"finding_count"`         // Number of findings produced.
+	Error        bool   `json:"error,omitempty"`       // True if the scanner returned an error.
+	TimedOut     bool   `json:"timed_out,omitempty"`   // True if cancelled due to timeout.
 }
 
 // Summary returns a one-line human-readable summary of the scan result.

@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"regexp"
 	"strings"
 )
@@ -12,7 +13,7 @@ func NewSVGScanner() *SVGScanner { return &SVGScanner{} }
 
 func (s *SVGScanner) Name() string { return "svg_xss_scanner" }
 
-func (s *SVGScanner) Scan(file *FileInfo) ([]Finding, error) {
+func (s *SVGScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
 	if !isSVG(file) {
 		return nil, nil
 	}

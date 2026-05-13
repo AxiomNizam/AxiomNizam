@@ -23,13 +23,17 @@ func NewNativeAVScanner(engine *antivirus.Engine) *NativeAVScanner {
 
 func (s *NativeAVScanner) Name() string { return "native_antivirus" }
 
-func (s *NativeAVScanner) Scan(file *FileInfo) ([]Finding, error) {
+func (s *NativeAVScanner) Scan(ctx context.Context, file *FileInfo) ([]Finding, error) {
 	if s.engine == nil || !s.engine.IsRunning() {
 		return nil, nil // engine not available — skip
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	// Safety-net timeout when caller provides no deadline.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+	}
 
 	result, err := s.engine.Scan(ctx, file.Content, file.Filename)
 	if err != nil {

@@ -1,6 +1,9 @@
 package scanner
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // MetadataScanner checks file size, empty files, null bytes, and suspicious filenames.
 type MetadataScanner struct {
@@ -13,7 +16,7 @@ func NewMetadataScanner(maxFileSize int64) *MetadataScanner {
 
 func (s *MetadataScanner) Name() string { return "metadata_scanner" }
 
-func (s *MetadataScanner) Scan(file *FileInfo) ([]Finding, error) {
+func (s *MetadataScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
 	var findings []Finding
 
 	if file.Size > s.maxFileSize {

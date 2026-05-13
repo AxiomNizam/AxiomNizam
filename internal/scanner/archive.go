@@ -3,6 +3,7 @@ package scanner
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 )
@@ -19,7 +20,7 @@ func NewArchiveScanner(maxDepth int, maxDecompressed int64) *ArchiveScanner {
 
 func (s *ArchiveScanner) Name() string { return "archive_bomb_scanner" }
 
-func (s *ArchiveScanner) Scan(file *FileInfo) ([]Finding, error) {
+func (s *ArchiveScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
 	if !isArchive(file) {
 		return nil, nil
 	}

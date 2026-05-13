@@ -8,7 +8,7 @@ established by `internal/antivirus/`.
 
 **Module**: `internal/scanner/` (SafeGate File Scanner Pipeline)  
 **Started**: 2026-05-13  
-**Status**: Phase 1 complete (1/6)
+**Status**: Phase 2 complete (2/6)
 
 ---
 
@@ -17,7 +17,7 @@ established by `internal/antivirus/`.
 | Phase | Title | Status | Date |
 |-------|-------|--------|------|
 | 1 | Foundation — Types, Config & Tests | ✅ Complete | 2026-05-13 |
-| 2 | Orchestrator Rewrite (context + parallel + metrics) | ⏳ Pending | — |
+| 2 | Orchestrator Rewrite (context + parallel + metrics) | ✅ Complete | 2026-05-13 |
 | 3 | Subpackage Extraction | ⏳ Pending | — |
 | 4 | Individual Scanner Enhancements | ⏳ Pending | — |
 | 5 | Observability & Metrics | ⏳ Pending | — |
@@ -111,25 +111,88 @@ go test ./internal/scanner/... → ✅ 27/27 PASS (0.48s)
 
 ---
 
-## Phase 2: Orchestrator Rewrite ⏳
+## Phase 2: Orchestrator Rewrite (context + parallel + metrics) ✅
 
 **Goal**: Add `context.Context` to Scanner interface, implement parallel
 execution, add per-scanner timeout and timing metrics.
 
-**Interface change:**
+### Interface Change
+
+Scanner interface updated from:
 ```go
-type Scanner interface {
-    Name() string
-    Scan(ctx context.Context, file *FileInfo) ([]Finding, error)
+Scan(file *FileInfo) ([]Finding, error)
+```
+to:
+```go
+Scan(ctx context.Context, file *FileInfo) ([]Finding, error)
+```
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `scanner.go` | Full rewrite — parallel + sequential execution paths, `ScanWithContext()`, context deadline enforcement, per-scanner timing |
+| `types.go` | Added `ScannerTiming` struct and `Timings` field on `ScanResult` |
+| `metadata.go` | `Scan()` now accepts `context.Context` |
+| `mime.go` | `Scan()` now accepts `context.Context` |
+| `svg.go` | `Scan()` now accepts `context.Context` |
+| `macro.go` | `Scan()` now accepts `context.Context` |
+| `archive.go` | `Scan()` now accepts `context.Context` |
+| `native_av.go` | Propagates caller ctx to AV engine; adds safety-net timeout only when caller has no deadline |
+| `scanner_test.go` | Updated mock, added `slowMockScanner`, +8 new tests |
+
+### New Orchestrator Capabilities
+
+| Feature | Detail |
+|---------|--------|
+| **Parallel execution** | `Config.Parallel=true` (default): scanners run concurrently via `sync.WaitGroup`. Output merged in registration order for determinism. |
+| **Sequential fallback** | `Config.Parallel=false`: scanners run in order (useful for debugging). |
+| **Single scanner optimization** | When only 1 scanner is registered, parallel mode is skipped (no goroutine overhead). |
+| **Context propagation** | `ScanWithContext(ctx, file)` passes ctx to all scanners. `Scan(file)` wraps with `Config.Timeout` deadline. |
+| **Timeout enforcement** | `Config.Timeout` creates deadline context. Shorter of caller deadline vs config timeout wins. |
+| **Per-scanner timing** | `ScanResult.Timings[]` records execution time, finding count, error/timeout status per scanner. |
+| **Error isolation** | Scanner errors produce info-level findings. In sequential mode, context cancellation stops remaining scanners. |
+
+### New Type: ScannerTiming
+
+```go
+type ScannerTiming struct {
+    Scanner      string  // Scanner name.
+    DurationMs   int64   // Execution time in milliseconds.
+    FindingCount int     // Number of findings produced.
+    Error        bool    // True if the scanner returned an error.
+    TimedOut     bool    // True if cancelled due to timeout.
 }
 ```
 
-**Key changes planned:**
-- All 6 scanners + NativeAVScanner gain `ctx` parameter
-- Orchestrator uses `errgroup` for parallel fan-out
-- Per-scanner timing recorded in result metadata
-- Config.Timeout enforced via context deadline
-- Config.Parallel controls concurrent vs sequential mode
+### Test Coverage (8 new tests)
+
+| Test | Validates |
+|------|----------|
+| `TestOrchestrator_Parallel_AllScannersRun` | All scanners execute and findings merge in parallel mode |
+| `TestOrchestrator_Parallel_Timings` | Per-scanner timing recorded correctly in parallel mode |
+| `TestOrchestrator_Sequential_Timings` | Error timings tracked in sequential mode |
+| `TestOrchestrator_ScanWithContext` | ScanWithContext API works correctly |
+| `TestOrchestrator_ScanWithContext_Cancellation` | Pre-cancelled context stops slow scanners immediately |
+| `TestOrchestrator_Timeout_Sequential` | Config.Timeout aborts slow scanners within deadline |
+| `TestOrchestrator_Parallel_FasterThanSequential` | Parallel mode runs 3 slow scanners faster than sequential |
+| `TestOrchestrator_SingleScanner_NoParallel` | Single scanner skips parallel overhead |
+
+### Backward Compatibility
+
+✅ **Zero breaking changes for callers:**
+- `Scan(file)` still works identically (internal context created)
+- `NewOrchestrator(scanners...)` signature unchanged
+- `ScanResult` gains `Timings` field (omitempty — invisible in JSON when empty)
+- All handler code in `api_builder_handler.go` compiles without changes
+
+### Build & Test Verification
+
+```
+go build -o NUL .              → ✅ Clean
+go vet ./internal/scanner/...  → ✅ Clean
+go test ./internal/scanner/... → ✅ 35/35 PASS (0.73s)
+```
 
 ---
 

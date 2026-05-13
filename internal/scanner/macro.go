@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"regexp"
 	"strings"
 )
@@ -12,7 +13,7 @@ func NewMacroScanner() *MacroScanner { return &MacroScanner{} }
 
 func (s *MacroScanner) Name() string { return "macro_script_scanner" }
 
-func (s *MacroScanner) Scan(file *FileInfo) ([]Finding, error) {
+func (s *MacroScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
 	ext := strings.ToLower(file.Extension)
 	mime := strings.ToLower(file.MIMEType)
 

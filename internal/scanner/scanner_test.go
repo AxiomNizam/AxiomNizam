@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -345,8 +346,25 @@ type mockScanner struct {
 	err      error
 }
 
-func (m *mockScanner) Name() string                        { return m.name }
-func (m *mockScanner) Scan(_ *FileInfo) ([]Finding, error) { return m.findings, m.err }
+func (m *mockScanner) Name() string                                            { return m.name }
+func (m *mockScanner) Scan(_ context.Context, _ *FileInfo) ([]Finding, error) { return m.findings, m.err }
+
+// slowMockScanner sleeps for the given duration, respecting context cancellation.
+type slowMockScanner struct {
+	name     string
+	delay    time.Duration
+	findings []Finding
+}
+
+func (m *slowMockScanner) Name() string { return m.name }
+func (m *slowMockScanner) Scan(ctx context.Context, _ *FileInfo) ([]Finding, error) {
+	select {
+	case <-time.After(m.delay):
+		return m.findings, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 func TestOrchestrator_Scan_Clean(t *testing.T) {
 	orch := NewOrchestrator(
@@ -582,5 +600,143 @@ func TestOrchestrator_Scan_FileMetadata(t *testing.T) {
 	}
 	if result.ScannedAt.IsZero() {
 		t.Error("ScannedAt should not be zero")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 2: Parallel Execution & Context Tests
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestOrchestrator_Parallel_AllScannersRun(t *testing.T) {
+	orch := NewOrchestratorWithConfig(Config{Parallel: true, Timeout: 5 * time.Second},
+		&mockScanner{name: "a", findings: []Finding{{Scanner: "a", Severity: SeverityInfo}}},
+		&mockScanner{name: "b", findings: []Finding{{Scanner: "b", Severity: SeverityLow}}},
+		&mockScanner{name: "c"},
+	)
+	result := orch.Scan(&FileInfo{Filename: "test.txt"})
+	if len(result.Scanners) != 3 {
+		t.Errorf("Expected 3 scanners, got %d", len(result.Scanners))
+	}
+	if len(result.Findings) != 2 {
+		t.Errorf("Expected 2 findings, got %d", len(result.Findings))
+	}
+	if !result.Safe {
+		t.Error("Expected safe=true (info+low only)")
+	}
+}
+
+func TestOrchestrator_Parallel_Timings(t *testing.T) {
+	orch := NewOrchestratorWithConfig(Config{Parallel: true, Timeout: 5 * time.Second},
+		&mockScanner{name: "fast"},
+		&mockScanner{name: "also-fast", findings: []Finding{{Scanner: "also-fast", Severity: SeverityHigh}}},
+	)
+	result := orch.Scan(&FileInfo{Filename: "test.txt"})
+	if len(result.Timings) != 2 {
+		t.Fatalf("Expected 2 timings, got %d", len(result.Timings))
+	}
+	if result.Timings[0].Scanner != "fast" {
+		t.Errorf("Timing[0].Scanner = %q, want fast", result.Timings[0].Scanner)
+	}
+	if result.Timings[1].FindingCount != 1 {
+		t.Errorf("Timing[1].FindingCount = %d, want 1", result.Timings[1].FindingCount)
+	}
+}
+
+func TestOrchestrator_Sequential_Timings(t *testing.T) {
+	orch := NewOrchestratorWithConfig(Config{Parallel: false, Timeout: 5 * time.Second},
+		&mockScanner{name: "s1"},
+		&mockScanner{name: "s2", err: fmt.Errorf("fail")},
+	)
+	result := orch.Scan(&FileInfo{Filename: "test.txt"})
+	if len(result.Timings) != 2 {
+		t.Fatalf("Expected 2 timings, got %d", len(result.Timings))
+	}
+	if !result.Timings[1].Error {
+		t.Error("Timing[1].Error should be true for failing scanner")
+	}
+}
+
+func TestOrchestrator_ScanWithContext(t *testing.T) {
+	ctx := context.Background()
+	orch := NewOrchestrator(&mockScanner{name: "a"})
+	result := orch.ScanWithContext(ctx, &FileInfo{Filename: "test.txt"})
+	if !result.Safe {
+		t.Error("Expected safe=true")
+	}
+	if len(result.Scanners) != 1 {
+		t.Errorf("Expected 1 scanner, got %d", len(result.Scanners))
+	}
+}
+
+func TestOrchestrator_ScanWithContext_Cancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately.
+	orch := NewOrchestratorWithConfig(Config{Parallel: false},
+		&slowMockScanner{name: "slow", delay: 5 * time.Second},
+	)
+	result := orch.ScanWithContext(ctx, &FileInfo{Filename: "test.txt"})
+	if len(result.Findings) == 0 {
+		t.Fatal("Expected at least 1 error finding from cancelled scanner")
+	}
+	if result.Findings[0].Severity != SeverityInfo {
+		t.Errorf("Expected info severity for cancelled scanner, got %q", result.Findings[0].Severity)
+	}
+}
+
+func TestOrchestrator_Timeout_Sequential(t *testing.T) {
+	cfg := Config{Parallel: false, Timeout: 50 * time.Millisecond}
+	orch := NewOrchestratorWithConfig(cfg,
+		&mockScanner{name: "fast"},
+		&slowMockScanner{name: "slow", delay: 5 * time.Second},
+	)
+	start := time.Now()
+	result := orch.Scan(&FileInfo{Filename: "test.txt"})
+	elapsed := time.Since(start)
+	if elapsed > 1*time.Second {
+		t.Errorf("Scan took %v, expected quick timeout", elapsed)
+	}
+	if len(result.Timings) != 2 {
+		t.Fatalf("Expected 2 timings, got %d", len(result.Timings))
+	}
+	if !result.Timings[1].Error {
+		t.Error("Expected slow scanner timing to have Error=true")
+	}
+}
+
+func TestOrchestrator_Parallel_FasterThanSequential(t *testing.T) {
+	delay := 50 * time.Millisecond
+	scanners := []Scanner{
+		&slowMockScanner{name: "a", delay: delay},
+		&slowMockScanner{name: "b", delay: delay},
+		&slowMockScanner{name: "c", delay: delay},
+	}
+	pOrch := NewOrchestratorWithConfig(Config{Parallel: true, Timeout: 5 * time.Second}, scanners...)
+	pStart := time.Now()
+	pResult := pOrch.Scan(&FileInfo{Filename: "test.txt"})
+	pElapsed := time.Since(pStart)
+
+	sOrch := NewOrchestratorWithConfig(Config{Parallel: false, Timeout: 5 * time.Second}, scanners...)
+	sStart := time.Now()
+	sResult := sOrch.Scan(&FileInfo{Filename: "test.txt"})
+	sElapsed := time.Since(sStart)
+
+	if len(pResult.Scanners) != 3 || len(sResult.Scanners) != 3 {
+		t.Fatalf("Both should run 3: p=%d, s=%d", len(pResult.Scanners), len(sResult.Scanners))
+	}
+	if pElapsed > sElapsed {
+		t.Errorf("Parallel (%v) should be faster than sequential (%v)", pElapsed, sElapsed)
+	}
+}
+
+func TestOrchestrator_SingleScanner_NoParallel(t *testing.T) {
+	orch := NewOrchestratorWithConfig(Config{Parallel: true, Timeout: 5 * time.Second},
+		&mockScanner{name: "solo", findings: []Finding{{Scanner: "solo", Severity: SeverityCritical}}},
+	)
+	result := orch.Scan(&FileInfo{Filename: "test.txt"})
+	if result.Safe {
+		t.Error("Expected unsafe with critical finding")
+	}
+	if len(result.Timings) != 1 {
+		t.Errorf("Expected 1 timing, got %d", len(result.Timings))
 	}
 }

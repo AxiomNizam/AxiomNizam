@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -22,7 +23,7 @@ func NewMIMEScanner(allowedTypes []string) *MIMEScanner {
 
 func (s *MIMEScanner) Name() string { return "mime_type_validator" }
 
-func (s *MIMEScanner) Scan(file *FileInfo) ([]Finding, error) {
+func (s *MIMEScanner) Scan(_ context.Context, file *FileInfo) ([]Finding, error) {
 	var findings []Finding
 
 	// Detect actual MIME type from content bytes
