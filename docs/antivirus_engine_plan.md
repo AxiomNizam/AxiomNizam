@@ -411,7 +411,7 @@ Same wiring pattern as the previous file scanner plan:
 | **5** | Entropy Analysis | 3 files | 2–3h | Phase 1 | ✅ Done |
 | **6** | YARA Rule Engine | 3 files | 4–6h | Phase 3 | ✅ Done |
 | **7** | Signature DB & Updater | 3 files | 3–4h | Phase 2, 3, 6 | ✅ Done |
-| **8** | Scan Cache | 1 file | 1–2h | Phase 1 | ⬜ Pending |
+| **8** | Scan Cache | 2 files | 1–2h | Phase 1 | ✅ Done |
 | **9** | Storage System Integration | 2 modified | 2–3h | Phase 1–8 | ⬜ Pending |
 | **10** | API & Dashboard | 1+ files | 2–3h | Phase 9 | ⬜ Pending |
 
@@ -466,8 +466,8 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/sigdb/database.go` | CREATE | 7 | ✅ | Unified DB coordinator: builtin + disk loading, hot-reload, versioning |
 | `internal/antivirus/sigdb/updater.go` | CREATE | 7 | ✅ | Auto-updater: HTTP polling, atomic file downloads, background loop |
 | `internal/antivirus/sigdb/sigdb_test.go` | CREATE | 7 | ✅ | 14 tests — init, reload, versioning, layer integration, HTTP updater |
-| `internal/antivirus/cache/cache.go` | CREATE | 8 | ⬜ | LRU scan cache |
-| `internal/antivirus/cache/cache_test.go` | CREATE | 8 | ⬜ | Cache tests |
+| `internal/antivirus/cache/cache.go` | CREATE | 8 | ✅ | O(1) LRU cache: doubly-linked list + map, TTL expiration, PurgeExpired |
+| `internal/antivirus/cache/cache_test.go` | CREATE | 8 | ✅ | 22 tests + 3 benchmarks — LRU, TTL, eviction, concurrency, stats |
 | `internal/antivirus/handler.go` | CREATE | 10 | ⬜ | HTTP API endpoints |
 | `internal/storage/storage.go` | MODIFY | 9 | ⬜ | Wire antivirus into storage |
 | `internal/storage/admin/admin.go` | MODIFY | 9 | ⬜ | PutObject scan hook + routes |
@@ -565,3 +565,17 @@ Same wiring pattern as the previous file scanner plan:
 - **Custom rules**: `{sigDir}/custom/` directory for user-uploaded `.hdb`, `.ndb`, `.yar` files
 - **ForceCheck()**: Manual trigger for immediate update check via admin API
 - **Eliminated `format.go` and `builtin.go`**: Format parsing is already handled by each layer’s loader (hashdb/loader.go, matcher/signature.go, yara/engine.go). Built-in patterns are registered by each layer’s own `RegisterBuiltin*()` functions. Avoided unnecessary indirection
+
+### ✅ Phase 8 — Scan Cache (Completed: 2026-05-13)
+
+**Files created:** `cache/cache.go` (275 lines), `cache/cache_test.go` (335 lines)  
+**Tests:** 22/22 passing + 3 benchmarks | `go vet`: clean  
+**Key design decisions:**
+- **O(1) LRU**: `container/list` doubly-linked list + `map[string]*list.Element` for constant-time get/put/invalidate. No third-party dependencies
+- **TTL expiration**: Per-entry creation timestamps checked on `Get()` — expired entries are lazily removed and count as misses. Avoids background timers for individual entries
+- **PurgeExpired()**: Batch cleanup walking from oldest (back of list) — stops at first non-expired entry. Designed for periodic background calls (e.g. every 5min)
+- **InvalidateAll()**: O(1) full cache reset for signature DB update events — reinitializes map + list
+- **Capacity=0 disables**: Zero allocation, all `Get()` calls return miss immediately — operators can disable caching without code changes
+- **Atomic stats**: `sync/atomic.Int64` for hits, misses, evictions, inserts — separate from the mutex to minimize contention
+- **Thread-safe**: `sync.Mutex` (not RWMutex, since Get mutates LRU order) with minimal critical sections
+- **CacheHit flag**: Returned results have `CacheHit=true` set automatically, matching the `ScanResult.CacheHit` field from Phase 1 types
