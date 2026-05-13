@@ -2596,14 +2596,13 @@ func (h *APIBuilderHandler) GetScan(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "scan": record})
 }
 
-// GetScannerHealth returns the scanner pipeline status
+// GetScannerHealth returns the scanner pipeline health status and metrics.
 func (h *APIBuilderHandler) GetScannerHealth(c *gin.Context) {
-	scanners := h.scanOrch.ScannerNames()
+	includeMetrics := c.Query("metrics") == "true"
+	health := h.scanOrch.Health(includeMetrics)
 	c.JSON(http.StatusOK, gin.H{
-		"status":        "success",
-		"scanner_count": len(scanners),
-		"scanners":      scanners,
-		"total_scans":   len(h.scanRecords),
+		"status":  "success",
+		"health":  health,
 	})
 }
 

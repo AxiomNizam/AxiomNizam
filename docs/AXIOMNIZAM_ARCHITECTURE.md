@@ -71,7 +71,7 @@ AxiomNizam is a **declarative control-plane for data platform services** with wo
 │  LAYER 7: EXTERNAL RUNTIMES                                     │
 │  PostgreSQL, MySQL, MariaDB, Percona, Oracle, MongoDB           │
 │  Redis/Valkey, Elasticsearch, RabbitMQ, Kafka                   │
-│  Keycloak, ClamAV, OpenClaw/Ollama                              │
+│  Keycloak, OpenClaw/Ollama                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -276,7 +276,7 @@ Rollback at any stage: flip the flag to false (instant, no deploy).
 | `graphql` | Dynamic GraphQL schema generation and execution |
 | `database` | Multi-database connection management (5 SQL + MongoDB) |
 | `sqlfilter` | SQL query validation, injection detection, complexity analysis |
-| `scanner` | SafeGate file scanning pipeline (MIME, SVG, macro, ClamAV) |
+| `scanner` | SafeGate file scanning pipeline (MIME, SVG, macro, archive, native antivirus) |
 
 ### 5.5 Identity & Access
 
@@ -401,11 +401,10 @@ User → GET /api/v1/bulk/operations/:id
 │  │   Raft/etcd │  │  postgres   │  │   valkey    │       │
 │  │  :9700/:2379│  │  :5432      │  │  :6379      │       │
 │  └─────────────┘  └─────────────┘  └─────────────┘       │
-│                                                             │
-│  ┌─────────────┐  (optional: openclaw profile)             │
-│  │   clamav    │  ┌─────────────┐  ┌─────────────┐       │
-│  │  :3310      │  │  openclaw   │  │   ollama    │       │
-│  └─────────────┘  │  :18789     │  │  :11434     │       │
+│                    (optional: openclaw profile)             │
+│                    ┌─────────────┐  ┌─────────────┐       │
+│                    │  openclaw   │  │   ollama    │       │
+│                    │  :18789     │  │  :11434     │       │
 │                    └─────────────┘  └─────────────┘       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -420,7 +419,7 @@ User → GET /api/v1/bulk/operations/:id
 | Authorization | Role-based middleware (admin, system-manager, user) |
 | Rate limiting | Per-token call limits with configurable windows |
 | SQL safety | `sqlfilter` module — injection detection, read-only enforcement, dialect validation |
-| File scanning | SafeGate pipeline (MIME, SVG, macro, archive, ClamAV) |
+| File scanning | SafeGate pipeline (MIME, SVG, macro, archive, native antivirus) |
 | Encryption | AES-256-GCM field-level encryption with key rotation |
 | Audit | Tamper-evident hash chain with compliance reporting |
 | Secrets | Bootstrap secrets in Raft KV/PostgreSQL with env var override |
@@ -455,7 +454,7 @@ Metrics tracked per reconciler:
 | Resource types | 53+ |
 | Store prefixes monitored | 30+ |
 | Feature flags | 27+ |
-| External integrations | 12 (5 SQL + MongoDB + Redis + ES + RabbitMQ + Kafka + Keycloak + ClamAV) |
+| External integrations | 11 (5 SQL + MongoDB + Redis + ES + RabbitMQ + Kafka + Keycloak) |
 | API route groups | 40+ |
 | Frontend dashboards | 12 |
 

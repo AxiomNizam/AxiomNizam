@@ -104,7 +104,7 @@ All 22 platform service modules have resource types, reconcilers, and GenericCon
 | Role-based middleware (admin, system-manager, user) | ✅ | `internal/auth/middleware.go` |
 | Per-token rate limiting | ✅ | `internal/ratelimit/` |
 | SQL filter engine (injection detection, dialect validation) | ✅ | `internal/sqlfilter/` |
-| SafeGate file scanning (MIME, SVG, macro, ClamAV) | ✅ | `internal/scanner/` |
+| SafeGate file scanning (MIME, SVG, macro, archive, native antivirus) | ✅ | `internal/scanner/` |
 | AES-256-GCM field-level encryption with key rotation | ✅ | `internal/encryption/` |
 | Tamper-evident audit hash chain | ✅ | `internal/audit/` |
 | Security audit (38 findings documented) | ✅ | `docs/SECURITY_AUDIT.md` |
