@@ -187,6 +187,9 @@ type ScanResult struct {
 	// the verdict is VerdictClean.
 	Threats []ThreatInfo `json:"threats"`
 
+	// Filename is the original filename of the scanned file.
+	Filename string `json:"filename"`
+
 	// SHA256 is the hex-encoded SHA-256 digest of the scanned file.
 	SHA256 string `json:"sha256"`
 

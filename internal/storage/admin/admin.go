@@ -35,8 +35,9 @@ type Handler struct {
 	endpoint   string
 
 	// Antivirus.
-	avEngine *antivirus.Engine
-	avCache  *avcache.Cache
+	avEngine  *antivirus.Engine
+	avCache   *avcache.Cache
+	avHandler *antivirus.APIHandler
 }
 
 // PresignSigner generates SigV4-compatible presigned object URLs.
@@ -70,6 +71,7 @@ func NewHandler(
 		endpoint:   endpoint,
 		avEngine:   avEngine,
 		avCache:    avCache,
+		avHandler:  antivirus.NewAPIHandler(avEngine),
 	}
 }
 
@@ -187,6 +189,11 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			{
 				admin.GET("/system/metrics", h.SystemMetrics)
 				admin.GET("/system/metrics/:bucket", h.BucketMetricsHandler)
+			}
+
+			// Antivirus API (admin-level read, admin-level write).
+			if h.avHandler != nil {
+				h.avHandler.RegisterRoutes(auth)
 			}
 		}
 	}

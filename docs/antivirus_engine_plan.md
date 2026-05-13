@@ -413,7 +413,10 @@ Same wiring pattern as the previous file scanner plan:
 | **7** | Signature DB & Updater | 3 files | 3–4h | Phase 2, 3, 6 | ✅ Done |
 | **8** | Scan Cache | 2 files | 1–2h | Phase 1 | ✅ Done |
 | **9** | Storage System Integration | 3 modified | 2–3h | Phase 1–8 | ✅ Done |
-| **10** | API & Dashboard | 1+ files | 2–3h | Phase 9 | ⬜ Pending |
+| **10** | API & Dashboard | 3 files | 2–3h | Phase 9 | ✅ Done |
+
+> [!IMPORTANT]
+> **All 10 phases are complete.** The AxiomNizam native antivirus engine is fully operational with multi-layer detection, hot-reloadable signatures, LRU scan caching, async storage integration, and admin API endpoints.
 
 > [!TIP]
 > **Phases 1–5 are independently testable** and provide value on their own. Phase 3 (Aho-Corasick) is the highest-impact single phase. Phase 4 (heuristics) provides zero-day coverage that ClamAV itself struggles with.
@@ -468,7 +471,8 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/sigdb/sigdb_test.go` | CREATE | 7 | ✅ | 14 tests — init, reload, versioning, layer integration, HTTP updater |
 | `internal/antivirus/cache/cache.go` | CREATE | 8 | ✅ | O(1) LRU cache: doubly-linked list + map, TTL expiration, PurgeExpired |
 | `internal/antivirus/cache/cache_test.go` | CREATE | 8 | ✅ | 22 tests + 3 benchmarks — LRU, TTL, eviction, concurrency, stats |
-| `internal/antivirus/handler.go` | CREATE | 10 | ⬜ | HTTP API endpoints |
+| `internal/antivirus/handler.go` | CREATE | 10 | ✅ | 5 API endpoints: status, stats, manual scan, threats, config |
+| `internal/antivirus/handler_test.go` | CREATE | 10 | ✅ | 12 tests — all endpoints + threat log + redactURL + nil safety |
 | `internal/storage/storage.go` | MODIFY | 9 | ✅ | Engine init, layer registration, sigdb.Init, Start/Stop lifecycle |
 | `internal/storage/admin/admin.go` | MODIFY | 9 | ✅ | Handler receives Engine+Cache, async scan in PutObject, scanObjectAsync |
 | `internal/storage/events/events.go` | MODIFY | 9 | ✅ | Added object.scan.clean + object.scan.threat event types |
@@ -593,3 +597,29 @@ Same wiring pattern as the previous file scanner plan:
 - **Audit events**: `object.scan.clean` and `object.scan.threat` event types with SHA-256, verdict, and threat names in details
 - **Lifecycle**: `System.Start()` calls `sigdb.Init()` then `engine.Start()`. `System.Stop()` calls `engine.Shutdown()` before controller stop
 - **Zero-impact on existing code**: All original handler logic untouched. Engine field is optional — nil-guarded throughout
+
+### ✅ Phase 10 — API & Admin Dashboard (Completed: 2026-05-13)
+
+**Files created:** `antivirus/handler.go` (270 lines), `antivirus/handler_test.go` (330 lines)  
+**Files modified:** `antivirus/engine.go` (+40 lines: threat log + RecentThreats), `antivirus/types.go` (+3 lines: Filename field), `storage/admin/admin.go` (+5 lines: avHandler creation + route registration)  
+**Tests:** 12/12 passing | `go vet`: clean across all packages  
+**Total test count across all 9 packages:** ~210 tests + 3 benchmarks
+
+**Endpoints implemented:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/storage/antivirus/status` | GET | Engine status, version, enabled layers, capacity |
+| `/storage/antivirus/stats` | GET | Scan totals, cache hits/misses/rate, avg scan time |
+| `/storage/antivirus/scan` | POST | Manual file scan via multipart upload |
+| `/storage/antivirus/threats` | GET | Recent threat detections (newest first, capped 1000) |
+| `/storage/antivirus/config` | GET | Read-only engine config (URLs redacted) |
+
+**Key design decisions:**
+- **APIHandler in antivirus package**: Self-contained handler that references `*Engine` directly — avoids circular dependencies with storage
+- **Threat log**: Ring buffer (capped at 1000) on the engine with `sync.Mutex`. `RecentThreats()` returns reverse-chronological copy
+- **Filename on ScanResult**: Added to track which file triggered detections for the `/threats` endpoint and audit logs
+- **URL redaction**: `redactURL()` masks hostnames in config output to prevent leaking internal infrastructure
+- **Route mounting**: AV routes mounted under `/storage/antivirus/` in the authenticated group — accessible to any authenticated storage user
+- **nil safety**: `APIHandler.RegisterRoutes()` is nil-safe — skips registration if engine is nil
+- **Manual scan**: Respects `MaxFileSize` limit, returns `413 Request Entity Too Large` when exceeded, `503 Service Unavailable` when engine not running

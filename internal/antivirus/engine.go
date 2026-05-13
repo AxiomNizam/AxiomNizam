@@ -63,6 +63,11 @@ type Engine struct {
 	sigDBVersion string
 	sigDBMu      sync.RWMutex
 
+	// threatLog stores recent threat detections for the /threats API.
+	// Capped at 1000 entries, oldest evicted first.
+	threatLog   []ScanResult
+	threatLogMu sync.Mutex
+
 	// cancel is the context cancellation function for background workers.
 	cancel context.CancelFunc
 
@@ -280,6 +285,7 @@ func (e *Engine) Scan(ctx context.Context, content []byte, filename string) (*Sc
 	result := &ScanResult{
 		Verdict:       VerdictClean,
 		Threats:       make([]ThreatInfo, 0),
+		Filename:      filename,
 		SHA256:        sha256Hex,
 		FileSize:      fileSize,
 		FileType:      mimeType,
@@ -341,6 +347,7 @@ func (e *Engine) Scan(ctx context.Context, content []byte, filename string) (*Sc
 	if result.Verdict.IsThreat() {
 		log.Printf("🚨 antivirus: THREAT in %q — %s [sha256=%s]",
 			filename, result.Summary(), sha256Hex)
+		e.recordThreat(*result)
 	}
 
 	return result, nil
@@ -420,6 +427,42 @@ func (e *Engine) Stats() EngineStats {
 // MaxFileSize returns the configured maximum file size for scanning.
 func (e *Engine) MaxFileSize() int64 {
 	return e.cfg.MaxFileSize
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Threat Log
+// ─────────────────────────────────────────────────────────────────────────────
+
+const maxThreatLogSize = 1000
+
+// recordThreat appends a threat result to the in-memory log. If the log
+// exceeds maxThreatLogSize, the oldest entries are evicted.
+func (e *Engine) recordThreat(result ScanResult) {
+	e.threatLogMu.Lock()
+	defer e.threatLogMu.Unlock()
+
+	e.threatLog = append(e.threatLog, result)
+
+	// Evict oldest if over cap.
+	if len(e.threatLog) > maxThreatLogSize {
+		evict := len(e.threatLog) - maxThreatLogSize
+		e.threatLog = e.threatLog[evict:]
+	}
+}
+
+// RecentThreats returns a copy of recent threat detections in reverse
+// chronological order (newest first). The returned slice is safe to
+// modify without affecting the engine's internal log.
+func (e *Engine) RecentThreats() []ScanResult {
+	e.threatLogMu.Lock()
+	defer e.threatLogMu.Unlock()
+
+	n := len(e.threatLog)
+	result := make([]ScanResult, n)
+	for i, t := range e.threatLog {
+		result[n-1-i] = t // reverse order
+	}
+	return result
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
