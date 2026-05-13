@@ -402,18 +402,18 @@ Same wiring pattern as the previous file scanner plan:
 
 ## Execution Order
 
-| Phase | Component | Files | Effort | Dependency |
-|-------|-----------|-------|--------|------------|
-| **1** | Foundation (types, config, engine shell) | 3 files | 1–2h | None |
-| **2** | Hash Database | 2 files | 2–3h | Phase 1 |
-| **3** | Byte-Pattern Matcher (Aho-Corasick) | 3 files | 4–6h | Phase 1 |
-| **4** | Behavioral Heuristics | 4 files | 4–6h | Phase 1 |
-| **5** | Entropy Analysis | 2 files | 2–3h | Phase 1 |
-| **6** | YARA Rule Engine | 2 files | 4–6h | Phase 3 |
-| **7** | Signature DB & Updater | 4 files | 3–4h | Phase 2, 3, 6 |
-| **8** | Scan Cache | 1 file | 1–2h | Phase 1 |
-| **9** | Storage System Integration | 2 modified | 2–3h | Phase 1–8 |
-| **10** | API & Dashboard | 1+ files | 2–3h | Phase 9 |
+| Phase | Component | Files | Effort | Dependency | Status |
+|-------|-----------|-------|--------|------------|--------|
+| **1** | Foundation (types, config, engine shell) | 4 files | 1–2h | None | ✅ Done |
+| **2** | Hash Database | 3 files | 2–3h | Phase 1 | ✅ Done |
+| **3** | Byte-Pattern Matcher (Aho-Corasick) | 3 files | 4–6h | Phase 1 | ⬜ Pending |
+| **4** | Behavioral Heuristics | 4 files | 4–6h | Phase 1 | ⬜ Pending |
+| **5** | Entropy Analysis | 2 files | 2–3h | Phase 1 | ⬜ Pending |
+| **6** | YARA Rule Engine | 2 files | 4–6h | Phase 3 | ⬜ Pending |
+| **7** | Signature DB & Updater | 4 files | 3–4h | Phase 2, 3, 6 | ⬜ Pending |
+| **8** | Scan Cache | 1 file | 1–2h | Phase 1 | ⬜ Pending |
+| **9** | Storage System Integration | 2 modified | 2–3h | Phase 1–8 | ⬜ Pending |
+| **10** | API & Dashboard | 1+ files | 2–3h | Phase 9 | ⬜ Pending |
 
 > [!TIP]
 > **Phases 1–5 are independently testable** and provide value on their own. Phase 3 (Aho-Corasick) is the highest-impact single phase. Phase 4 (heuristics) provides zero-day coverage that ClamAV itself struggles with.
@@ -438,38 +438,67 @@ Same wiring pattern as the previous file scanner plan:
 
 ## File Manifest (Complete)
 
-| File | Action | Phase | Description |
-|------|--------|-------|-------------|
-| `internal/antivirus/types.go` | CREATE | 1 | Core types: ScanVerdict, ThreatInfo, ScanResult |
-| `internal/antivirus/config.go` | CREATE | 1 | Configuration from env vars |
-| `internal/antivirus/engine.go` | CREATE | 1 | Engine orchestrator, Scan() method |
-| `internal/antivirus/engine_test.go` | CREATE | 1 | Engine tests |
-| `internal/antivirus/hashdb/hashdb.go` | CREATE | 2 | Bloom filter + hash map |
-| `internal/antivirus/hashdb/loader.go` | CREATE | 2 | Load hash databases |
-| `internal/antivirus/hashdb/hashdb_test.go` | CREATE | 2 | Hash DB tests |
-| `internal/antivirus/matcher/ahocorasick.go` | CREATE | 3 | Aho-Corasick automaton |
-| `internal/antivirus/matcher/signature.go` | CREATE | 3 | Signature format parser |
-| `internal/antivirus/matcher/patterns.go` | CREATE | 3 | Built-in malware patterns |
-| `internal/antivirus/matcher/ahocorasick_test.go` | CREATE | 3 | AC matcher tests |
-| `internal/antivirus/heuristic/pe.go` | CREATE | 4 | PE/EXE analysis |
-| `internal/antivirus/heuristic/elf.go` | CREATE | 4 | ELF analysis |
-| `internal/antivirus/heuristic/script.go` | CREATE | 4 | Script obfuscation detection |
-| `internal/antivirus/heuristic/shellcode.go` | CREATE | 4 | Shellcode detection |
-| `internal/antivirus/heuristic/heuristic_test.go` | CREATE | 4 | Heuristic tests |
-| `internal/antivirus/entropy/entropy.go` | CREATE | 5 | Shannon entropy calculator |
-| `internal/antivirus/entropy/packer.go` | CREATE | 5 | Packer detection |
-| `internal/antivirus/entropy/entropy_test.go` | CREATE | 5 | Entropy tests |
-| `internal/antivirus/yara/engine.go` | CREATE | 6 | YARA rule engine |
-| `internal/antivirus/yara/rules.go` | CREATE | 6 | Built-in YARA rules |
-| `internal/antivirus/yara/engine_test.go` | CREATE | 6 | YARA tests |
-| `internal/antivirus/sigdb/database.go` | CREATE | 7 | Unified signature DB |
-| `internal/antivirus/sigdb/updater.go` | CREATE | 7 | Auto-updater |
-| `internal/antivirus/sigdb/format.go` | CREATE | 7 | Signature file parsers |
-| `internal/antivirus/sigdb/builtin.go` | CREATE | 7 | Compiled-in essential sigs |
-| `internal/antivirus/cache/cache.go` | CREATE | 8 | LRU scan cache |
-| `internal/antivirus/cache/cache_test.go` | CREATE | 8 | Cache tests |
-| `internal/antivirus/handler.go` | CREATE | 10 | HTTP API endpoints |
-| `internal/storage/storage.go` | MODIFY | 9 | Wire antivirus into storage |
-| `internal/storage/admin/admin.go` | MODIFY | 9 | PutObject scan hook + routes |
-| `internal/storage/events/events.go` | MODIFY | 9 | New scan event constants |
-| `.env.example` | MODIFY | 1 | Add antivirus env vars |
+| File | Action | Phase | Status | Description |
+|------|--------|-------|--------|-------------|
+| `internal/antivirus/types.go` | CREATE | 1 | ✅ | Core types: ScanVerdict, ThreatInfo, ScanResult, ScanLayer interface |
+| `internal/antivirus/config.go` | CREATE | 1 | ✅ | Configuration from 17 env vars with validation |
+| `internal/antivirus/engine.go` | CREATE | 1 | ✅ | Engine orchestrator, Scan(), lifecycle, atomic stats |
+| `internal/antivirus/engine_test.go` | CREATE | 1 | ✅ | 25 tests — engine lifecycle, scan flows, types, config |
+| `internal/antivirus/hashdb/hashdb.go` | CREATE | 2 | ✅ | Bloom filter (Kirsch-Mitzenmacker) + SHA-256 map, ~1.1MB for 500K hashes |
+| `internal/antivirus/hashdb/loader.go` | CREATE | 2 | ✅ | ClamAV .hdb/.hsb, JSON, plain text format loaders |
+| `internal/antivirus/hashdb/hashdb_test.go` | CREATE | 2 | ✅ | 27 tests — bloom FP rate, concurrency, all 3 formats, category inference |
+| `internal/antivirus/matcher/ahocorasick.go` | CREATE | 3 | ⬜ | Aho-Corasick automaton |
+| `internal/antivirus/matcher/signature.go` | CREATE | 3 | ⬜ | Signature format parser |
+| `internal/antivirus/matcher/patterns.go` | CREATE | 3 | ⬜ | Built-in malware patterns |
+| `internal/antivirus/matcher/ahocorasick_test.go` | CREATE | 3 | ⬜ | AC matcher tests |
+| `internal/antivirus/heuristic/pe.go` | CREATE | 4 | ⬜ | PE/EXE analysis |
+| `internal/antivirus/heuristic/elf.go` | CREATE | 4 | ⬜ | ELF analysis |
+| `internal/antivirus/heuristic/script.go` | CREATE | 4 | ⬜ | Script obfuscation detection |
+| `internal/antivirus/heuristic/shellcode.go` | CREATE | 4 | ⬜ | Shellcode detection |
+| `internal/antivirus/heuristic/heuristic_test.go` | CREATE | 4 | ⬜ | Heuristic tests |
+| `internal/antivirus/entropy/entropy.go` | CREATE | 5 | ⬜ | Shannon entropy calculator |
+| `internal/antivirus/entropy/packer.go` | CREATE | 5 | ⬜ | Packer detection |
+| `internal/antivirus/entropy/entropy_test.go` | CREATE | 5 | ⬜ | Entropy tests |
+| `internal/antivirus/yara/engine.go` | CREATE | 6 | ⬜ | YARA rule engine |
+| `internal/antivirus/yara/rules.go` | CREATE | 6 | ⬜ | Built-in YARA rules |
+| `internal/antivirus/yara/engine_test.go` | CREATE | 6 | ⬜ | YARA tests |
+| `internal/antivirus/sigdb/database.go` | CREATE | 7 | ⬜ | Unified signature DB |
+| `internal/antivirus/sigdb/updater.go` | CREATE | 7 | ⬜ | Auto-updater |
+| `internal/antivirus/sigdb/format.go` | CREATE | 7 | ⬜ | Signature file parsers |
+| `internal/antivirus/sigdb/builtin.go` | CREATE | 7 | ⬜ | Compiled-in essential sigs |
+| `internal/antivirus/cache/cache.go` | CREATE | 8 | ⬜ | LRU scan cache |
+| `internal/antivirus/cache/cache_test.go` | CREATE | 8 | ⬜ | Cache tests |
+| `internal/antivirus/handler.go` | CREATE | 10 | ⬜ | HTTP API endpoints |
+| `internal/storage/storage.go` | MODIFY | 9 | ⬜ | Wire antivirus into storage |
+| `internal/storage/admin/admin.go` | MODIFY | 9 | ⬜ | PutObject scan hook + routes |
+| `internal/storage/events/events.go` | MODIFY | 9 | ⬜ | New scan event constants |
+| `.env.example` | MODIFY | 1 | ✅ | Added 17 ANTIVIRUS_* env vars |
+
+---
+
+## Implementation Progress Log
+
+### ✅ Phase 1 — Foundation (Completed: 2026-05-13)
+
+**Files created:** `types.go` (362 lines), `config.go` (233 lines), `engine.go` (492 lines), `engine_test.go` (350 lines)  
+**Tests:** 25/25 passing | `go vet`: clean  
+**Key decisions:**
+- `ScanLayer` interface mirrors `scanner.Scanner` but purpose-built for AV detection
+- Layer list frozen after `Start()` — prevents data races, panics on late registration
+- Atomic stats counters — lock-free concurrent updates, zero overhead
+- Layer errors are non-fatal — a broken YARA rule won't block uploads
+- Confidence-based verdicts: ≥0.8 → malware, <0.8 → suspicious
+- Config auto-corrects invalid values and returns warnings instead of crashing
+
+### ✅ Phase 2 — Hash Database (Completed: 2026-05-13)
+
+**Files created:** `hashdb/hashdb.go` (306 lines), `hashdb/loader.go` (296 lines), `hashdb/hashdb_test.go` (410 lines)  
+**Tests:** 27/27 passing | `go vet`: clean  
+**Key metrics:**
+- Bloom filter: **1.14 MB** for 500K hashes at 0.01% false positive rate (k=14 hash functions)
+- Actual measured FP rate: **1.007%** (at 1% target, 10K items, 100K test lookups)
+- Kirsch-Mitzenmacker optimisation: g_i(x) = h1(x) + i·h2(x) — only 1 SHA-256 hash needed
+- Three format loaders: ClamAV `.hdb`/`.hsb`, AxiomNizam JSON, plain text
+- `Reload()` builds new bloom filter outside lock, swaps atomically — zero-downtime updates
+- Category inference from ClamAV naming conventions (e.g. `Trojan.Win32.Emotet.A` → trojan)
+- Thread-safe: RWMutex for all operations, concurrent read test passes with 50 goroutines
