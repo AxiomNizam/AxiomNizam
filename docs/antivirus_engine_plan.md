@@ -409,7 +409,7 @@ Same wiring pattern as the previous file scanner plan:
 | **3** | Byte-Pattern Matcher (Aho-Corasick) | 4 files | 4–6h | Phase 1 | ✅ Done |
 | **4** | Behavioral Heuristics | 6 files | 4–6h | Phase 1 | ✅ Done |
 | **5** | Entropy Analysis | 3 files | 2–3h | Phase 1 | ✅ Done |
-| **6** | YARA Rule Engine | 2 files | 4–6h | Phase 3 | ⬜ Pending |
+| **6** | YARA Rule Engine | 3 files | 4–6h | Phase 3 | ✅ Done |
 | **7** | Signature DB & Updater | 4 files | 3–4h | Phase 2, 3, 6 | ⬜ Pending |
 | **8** | Scan Cache | 1 file | 1–2h | Phase 1 | ⬜ Pending |
 | **9** | Storage System Integration | 2 modified | 2–3h | Phase 1–8 | ⬜ Pending |
@@ -460,9 +460,9 @@ Same wiring pattern as the previous file scanner plan:
 | `internal/antivirus/entropy/entropy.go` | CREATE | 5 | ✅ | Shannon entropy, windowed profiling, Layer orchestrator |
 | `internal/antivirus/entropy/packer.go` | CREATE | 5 | ✅ | 13 packer magic-byte signatures (UPX, Themida, VMProtect, etc.) |
 | `internal/antivirus/entropy/entropy_test.go` | CREATE | 5 | ✅ | 26 tests + 4 benchmarks — Shannon, profiling, layer, packers, MIME |
-| `internal/antivirus/yara/engine.go` | CREATE | 6 | ⬜ | YARA rule engine |
-| `internal/antivirus/yara/rules.go` | CREATE | 6 | ⬜ | Built-in YARA rules |
-| `internal/antivirus/yara/engine_test.go` | CREATE | 6 | ⬜ | YARA tests |
+| `internal/antivirus/yara/engine.go` | CREATE | 6 | ✅ | Pure-Go YARA parser, condition evaluator, RuleSet matcher, Layer |
+| `internal/antivirus/yara/rules.go` | CREATE | 6 | ✅ | 12 built-in rules (ransomware, miner, webshell, exploit, dropper) |
+| `internal/antivirus/yara/engine_test.go` | CREATE | 6 | ✅ | 28 tests — parser, conditions, builtins, layer, file loading |
 | `internal/antivirus/sigdb/database.go` | CREATE | 7 | ⬜ | Unified signature DB |
 | `internal/antivirus/sigdb/updater.go` | CREATE | 7 | ⬜ | Auto-updater |
 | `internal/antivirus/sigdb/format.go` | CREATE | 7 | ⬜ | Signature file parsers |
@@ -540,3 +540,15 @@ Same wiring pattern as the previous file scanner plan:
 - **Three detection heuristics**: (1) Whole-file high entropy >7.5 for executables, (2) Uniformly packed: >80% windows above threshold AND low stddev <0.5, (3) Stub+payload pattern: ≤3 low-entropy stub windows + >70% high-entropy payload
 - **MIME-aware**: Skips entropy flagging for naturally high-entropy types (JPEG, PNG, ZIP, GZIP, etc.) — only packer magic bytes are checked on these
 - **13 packer signatures**: UPX, Themida/WinLicense, VMProtect, ASPack, PECompact, Petite, NsPack, Enigma Protector, MPRESS, ConfuserEx — searched in first 4KB only, deduplicated
+
+### ✅ Phase 6 — YARA Rule Engine (Completed: 2026-05-13)
+
+**Files created:** `yara/engine.go` (465 lines), `yara/rules.go` (230 lines), `yara/engine_test.go` (335 lines)  
+**Tests:** 28/28 passing | `go vet`: clean  
+**Key design decisions:**
+- **Pure Go, no cgo**: Simplified YARA-compatible subset covering ~90% of community rules
+- **Supported syntax**: `meta:` block (key=value), `strings:` (text with `"quotes"`, hex with `{ AA BB }`, `nocase` modifier), `condition:` (`any of them`, `all of them`, `N of them`, `$s1 and $s2`, `$s1 or $s2`, `N of ($prefix*)`, single `$var`)
+- **Multi-rule parser**: Handles files with multiple rules, brace-depth tracking for rule boundary detection
+- **12 built-in rules** compiled into binary: 3 ransomware (WannaCry, generic notes, LockBit), 2 cryptominer (XMRig, pool URLs), 3 webshell (PHP generic, PHP obfuscated, JSP Runtime), 3 exploit (Log4Shell, reverse shells, Cobalt Strike), 1 dropper (PowerShell download+execute)
+- **Layer**: Extracts category/severity/confidence from rule `meta:` blocks. Hot-reloadable via `Reload()` with RWMutex
+- **File loader**: Supports `.yar` and `.yara` extensions from directory scanning
