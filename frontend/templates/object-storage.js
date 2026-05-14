@@ -1700,9 +1700,8 @@
         const badge = document.getElementById('osScanHealthBadge');
         const tbody = document.getElementById('osScannerPerfBody');
         try {
-            // Derive backend base from OS_API (strip /api/v1/storage suffix)
-            const backendBase = OS_API.replace(/\/api\/v1\/storage\/?$/, '');
-            const resp = await fetch(backendBase + '/api/v1/builder/scanner/health?metrics=true', {
+            // Use the storage scanner health endpoint (same API base as storage)
+            const resp = await fetch(OS_API + '/scanner/health?metrics=true', {
                 headers: osHeaders()
             });
             if (!resp.ok) {

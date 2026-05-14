@@ -19,6 +19,13 @@ import (
 	iamMiddleware "example.com/axiomnizam/internal/iam/middleware"
 	iamStorage "example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
+	"example.com/axiomnizam/internal/scanner"
+	"example.com/axiomnizam/internal/scanner/archivescan"
+	"example.com/axiomnizam/internal/scanner/macro"
+	"example.com/axiomnizam/internal/scanner/metadata"
+	"example.com/axiomnizam/internal/scanner/mimetype"
+	nativeav "example.com/axiomnizam/internal/scanner/native"
+	"example.com/axiomnizam/internal/scanner/svg"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/admin"
 	"example.com/axiomnizam/internal/storage/controller"
@@ -51,6 +58,9 @@ type System struct {
 	AVEngine   *antivirus.Engine
 	AVSigDB    *sigdb.Database
 	AVCache    *cache.Cache
+
+	// SafeGate scanner orchestrator — full pipeline scanning on uploads.
+	ScanOrch   *scanner.Orchestrator
 
 	// IAM references (nil when IAM is not available).
 	// These may be set after construction via SetIAM() when IAM init
@@ -151,7 +161,20 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	// Scan cache.
 	avCache := cache.New(avCfg.CacheSize, avCfg.CacheTTL)
 
-	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint, avEngine, avCache)
+	// ── SafeGate scanner orchestrator ────────────────────────────────
+	// Full pipeline: metadata → MIME → SVG → macro → archive → native AV.
+	// Metrics from this orchestrator power the Object Storage SafeGate dashboard.
+	scannerCfg := scanner.LoadConfigFromEnv()
+	scanOrch := scanner.NewOrchestratorWithConfig(scannerCfg,
+		metadata.NewScannerWithConfig(scannerCfg.MaxFileSize, scannerCfg.NullByteSampleSize, scannerCfg.MaxFilenameLength),
+		mimetype.NewScanner(scannerCfg.AllowedMIMETypes),
+		svg.NewScanner(),
+		macro.NewScanner(),
+		archivescan.NewScanner(scannerCfg.ArchiveMaxDepth, scannerCfg.ArchiveMaxDecompressedSize),
+		nativeav.NewScanner(avEngine),
+	)
+
+	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint, avEngine, avCache, scanOrch)
 
 	return &System{
 		Backend:         backend,
@@ -167,6 +190,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 		AVEngine:        avEngine,
 		AVSigDB:         avSigDB,
 		AVCache:         avCache,
+		ScanOrch:        scanOrch,
 		iamIssuer:       issuer,
 		iamRevokedStore: revokedStore,
 	}, nil
