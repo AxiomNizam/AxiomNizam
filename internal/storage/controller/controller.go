@@ -206,73 +206,78 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 	}
 
 	specChanged := bucket.Status.ObservedGeneration != bucket.Generation
-	if bucket.Status.Phase == models.BucketPhaseReady && !specChanged {
-		bc.debugf("skip reconcile for %s/%s (ready and unchanged generation=%d)", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Generation)
-		return nil
-	}
+	
+	// Step 1: Ensure the bucket exists in the storage backend.
+	// Only run provisioning steps if the bucket is not ready or the spec has changed.
+	if bucket.Status.Phase != models.BucketPhaseReady || specChanged {
+		if bucket.Status.ObservedGeneration == 0 {
+			log.Printf("Storage: reconciling new resource %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name)
+		} else if specChanged {
+			log.Printf("Storage: reconciling spec change for %s/%s (observedGeneration=%d generation=%d)", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObservedGeneration, bucket.Generation)
+		}
 
-	if bucket.Status.ObservedGeneration == 0 {
-		log.Printf("Storage: reconciling new resource %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name)
-	} else if specChanged {
-		log.Printf("Storage: reconciling spec change for %s/%s (observedGeneration=%d generation=%d)", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObservedGeneration, bucket.Generation)
+		tenantBucket := bucket.Spec.Name
+		exists, err := bc.client.BucketExists(ctx, tenantBucket)
+		if err != nil {
+			bc.setCondition(bucket, "BackendReachable", "False", "PingFailed", err.Error())
+			bc.setPhase(bucket, models.BucketPhaseError)
+			return fmt.Errorf("bucket exists check: %w", err)
+		}
+
+		if !exists {
+			if err := bc.client.CreateBucket(ctx, tenantBucket); err != nil {
+				bc.setCondition(bucket, "BucketCreated", "False", "CreateFailed", err.Error())
+				bc.setPhase(bucket, models.BucketPhaseError)
+				return fmt.Errorf("create bucket: %w", err)
+			}
+			log.Printf("Storage: created backend bucket for %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name)
+			bc.setCondition(bucket, "BucketCreated", "True", "Created", "Bucket created in storage backend")
+		} else {
+			bc.setCondition(bucket, "BucketCreated", "True", "AlreadyExists", "Bucket already exists")
+		}
+
+		// Step 2: Reconcile versioning.
+		if bucket.Spec.Versioning == models.VersioningEnabled {
+			if err := bc.client.SetBucketVersioning(ctx, tenantBucket, true); err != nil {
+				bc.setCondition(bucket, "VersioningConfigured", "False", "VersioningFailed", err.Error())
+				bc.setPhase(bucket, models.BucketPhaseError)
+				return fmt.Errorf("set versioning: %w", err)
+			}
+			bc.setCondition(bucket, "VersioningConfigured", "True", "Enabled", "Versioning enabled")
+		} else if bucket.Spec.Versioning == models.VersioningDisabled {
+			if err := bc.client.SetBucketVersioning(ctx, tenantBucket, false); err != nil {
+				log.Printf("⚠️  Storage: could not suspend versioning on %s: %v", tenantBucket, err)
+			}
+			bc.setCondition(bucket, "VersioningConfigured", "True", "Disabled", "Versioning suspended")
+		}
+
+		// Step 3: Apply lifecycle policy if defined.
+		if len(bucket.Spec.LifecyclePolicy) > 0 {
+			if err := bc.client.SetBucketLifecycle(ctx, tenantBucket, bucket.Spec.LifecyclePolicy); err != nil {
+				bc.setCondition(bucket, "LifecycleApplied", "False", "LifecycleFailed", err.Error())
+				log.Printf("⚠️  Storage: lifecycle policy apply failed on %s: %v", tenantBucket, err)
+			} else {
+				bc.setCondition(bucket, "LifecycleApplied", "True", "Applied", fmt.Sprintf("%d rules applied", len(bucket.Spec.LifecyclePolicy)))
+			}
+		}
+		
+		bucket.Status.ObservedGeneration = bucket.Generation
 	}
 
 	tenantBucket := bucket.Spec.Name
-
-	// Step 1: Ensure the bucket exists in the storage backend.
-	exists, err := bc.client.BucketExists(ctx, tenantBucket)
-	if err != nil {
-		bc.setCondition(bucket, "BackendReachable", "False", "PingFailed", err.Error())
-		bc.setPhase(bucket, models.BucketPhaseError)
-		return fmt.Errorf("bucket exists check: %w", err)
-	}
-
-	if !exists {
-		if err := bc.client.CreateBucket(ctx, tenantBucket); err != nil {
-			bc.setCondition(bucket, "BucketCreated", "False", "CreateFailed", err.Error())
-			bc.setPhase(bucket, models.BucketPhaseError)
-			return fmt.Errorf("create bucket: %w", err)
-		}
-		log.Printf("Storage: created backend bucket for %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name)
-		bc.setCondition(bucket, "BucketCreated", "True", "Created", "Bucket created in storage backend")
-	} else {
-		bc.setCondition(bucket, "BucketCreated", "True", "AlreadyExists", "Bucket already exists")
-	}
-
-	// Step 2: Reconcile versioning.
-	if bucket.Spec.Versioning == models.VersioningEnabled {
-		if err := bc.client.SetBucketVersioning(ctx, tenantBucket, true); err != nil {
-			bc.setCondition(bucket, "VersioningConfigured", "False", "VersioningFailed", err.Error())
-			bc.setPhase(bucket, models.BucketPhaseError)
-			return fmt.Errorf("set versioning: %w", err)
-		}
-		bc.setCondition(bucket, "VersioningConfigured", "True", "Enabled", "Versioning enabled")
-	} else if bucket.Spec.Versioning == models.VersioningDisabled {
-		if err := bc.client.SetBucketVersioning(ctx, tenantBucket, false); err != nil {
-			log.Printf("⚠️  Storage: could not suspend versioning on %s: %v", tenantBucket, err)
-		}
-		bc.setCondition(bucket, "VersioningConfigured", "True", "Disabled", "Versioning suspended")
-	}
-
-	// Step 3: Apply lifecycle policy if defined.
-	if len(bucket.Spec.LifecyclePolicy) > 0 {
-		if err := bc.client.SetBucketLifecycle(ctx, tenantBucket, bucket.Spec.LifecyclePolicy); err != nil {
-			bc.setCondition(bucket, "LifecycleApplied", "False", "LifecycleFailed", err.Error())
-			log.Printf("⚠️  Storage: lifecycle policy apply failed on %s: %v", tenantBucket, err)
-		} else {
-			bc.setCondition(bucket, "LifecycleApplied", "True", "Applied", fmt.Sprintf("%d rules applied", len(bucket.Spec.LifecyclePolicy)))
-		}
-	}
-
-	// Step 4: Gather stats.
+	// Step 4: Gather stats (always run, even if ready, to keep dashboard accurate).
+	log.Printf("Storage: gathering stats for %s/%s (backend bucket=%s)", bucket.Metadata.TenantID, bucket.Metadata.Name, tenantBucket)
 	objects, err := bc.client.ListObjects(ctx, tenantBucket, "")
-	if err == nil {
+	if err != nil {
+		log.Printf("⚠️  Storage: failed to list objects for %s/%s stats: %v", bucket.Metadata.TenantID, bucket.Metadata.Name, err)
+	} else {
 		var totalSize int64
 		for _, o := range objects {
 			totalSize += o.Size
 		}
 		bucket.Status.ObjectCount = int64(len(objects))
 		bucket.Status.TotalSize = totalSize
+		log.Printf("✅ Storage: synced stats for %s/%s: %d objects, %d bytes", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObjectCount, bucket.Status.TotalSize)
 	}
 
 	// Step 5: Update status to Ready.

@@ -5,7 +5,7 @@
   <!-- Header Bar -->
   <div class="analytics-header">
     <div class="analytics-header-left">
-      <h1 class="analytics-title">📈 Analytics Dashboard</h1>
+      <h1 class="analytics-title"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> Analytics Dashboard</h1>
       <select id="dashboardSelector" class="analytics-select" onchange="loadDashboard(this.value)">
         <option value="">Select Dashboard...</option>
       </select>
@@ -13,15 +13,15 @@
     </div>
     <div class="analytics-header-right">
       <button class="analytics-btn analytics-btn-icon" id="editModeToggle" onclick="toggleEditMode()" title="Toggle Edit Mode">
-        <span id="editModeIcon">✏️</span>
+        <span id="editModeIcon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
         <span id="editModeLabel">Edit</span>
       </button>
-      <button class="analytics-btn analytics-btn-icon" onclick="refreshDashboard()" title="Refresh">🔄</button>
+      <button class="analytics-btn analytics-btn-icon" onclick="refreshDashboard()" title="Refresh"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
       <div class="analytics-dropdown" id="exportDropdown">
-        <button class="analytics-btn analytics-btn-primary" onclick="toggleExportMenu()">📥 Export</button>
+        <button class="analytics-btn analytics-btn-primary" onclick="toggleExportMenu()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export</button>
         <div class="analytics-dropdown-menu" id="exportMenu">
           <div class="analytics-dropdown-item" onclick="exportAllCSV()">📄 Export All as CSV</div>
-          <div class="analytics-dropdown-item" onclick="exportAllXLSX()">📊 Export All as XLSX</div>
+          <div class="analytics-dropdown-item" onclick="exportAllXLSX()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg> Export All as XLSX</div>
           <div class="analytics-dropdown-divider"></div>
           <div id="exportWidgetList"></div>
         </div>
@@ -39,7 +39,7 @@
   <!-- Widget Grid -->
   <div class="analytics-grid" id="widgetGrid">
     <div class="analytics-empty" id="emptyState">
-      <div class="analytics-empty-icon">📊</div>
+      <div class="analytics-empty-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></div>
       <h3>Select a Dashboard</h3>
       <p>Choose a dashboard from the dropdown above to view analytics</p>
     </div>
@@ -49,7 +49,7 @@
   <div class="analytics-modal-overlay" id="widgetEditorOverlay" style="display:none;" onclick="closeWidgetEditor(event)">
     <div class="analytics-modal" onclick="event.stopPropagation()">
       <div class="analytics-modal-header">
-        <h3>⚙️ Edit Widget</h3>
+        <h3><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Edit Widget</h3>
         <button class="analytics-modal-close" onclick="closeWidgetEditor()">&times;</button>
       </div>
       <div class="analytics-modal-body">
@@ -94,7 +94,7 @@
       </div>
       <div class="analytics-modal-footer">
         <button class="analytics-btn analytics-btn-ghost" onclick="closeWidgetEditor()">Cancel</button>
-        <button class="analytics-btn analytics-btn-primary" onclick="saveWidgetEdits()">💾 Save Changes</button>
+        <button class="analytics-btn analytics-btn-primary" onclick="saveWidgetEdits()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Changes</button>
       </div>
     </div>
   </div>

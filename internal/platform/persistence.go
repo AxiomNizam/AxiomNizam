@@ -62,7 +62,7 @@ func (s *platformStateStore) key(k string) string {
 func (s *platformStateStore) getRaw(ctx context.Context, key string) ([]byte, error) {
 	nk := s.key(key)
 	if s.etcd == nil {
-		return nil, fmt.Errorf("etcd connection is unavailable")
+		return nil, nil // no persistence backend — in-memory only
 	}
 
 	resp, err := s.etcd.Get(ctx, nk)
@@ -78,7 +78,7 @@ func (s *platformStateStore) getRaw(ctx context.Context, key string) ([]byte, er
 func (s *platformStateStore) putRaw(ctx context.Context, key string, payload []byte) error {
 	nk := s.key(key)
 	if s.etcd == nil {
-		return fmt.Errorf("etcd connection is unavailable")
+		return nil // no persistence backend — in-memory only
 	}
 
 	_, err := s.etcd.Put(ctx, nk, string(payload))

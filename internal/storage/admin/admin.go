@@ -2,14 +2,20 @@ package admin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/antivirus"
+	avcache "example.com/axiomnizam/internal/antivirus/cache"
+	"example.com/axiomnizam/internal/scanner"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/controller"
 	"example.com/axiomnizam/internal/storage/events"
@@ -31,6 +37,14 @@ type Handler struct {
 	metrics    *storageMetrics.Collector
 	audit      *events.AuditLog
 	endpoint   string
+
+	// Antivirus.
+	avEngine  *antivirus.Engine
+	avCache   *avcache.Cache
+	avHandler *antivirus.APIHandler
+
+	// SafeGate scanner orchestrator for full pipeline scanning.
+	scanOrch  *scanner.Orchestrator
 }
 
 // PresignSigner generates SigV4-compatible presigned object URLs.
@@ -49,6 +63,9 @@ func NewHandler(
 	m *storageMetrics.Collector,
 	a *events.AuditLog,
 	endpoint string,
+	avEngine *antivirus.Engine,
+	avCache *avcache.Cache,
+	scanOrch *scanner.Orchestrator,
 ) *Handler {
 	return &Handler{
 		store:      s,
@@ -60,6 +77,10 @@ func NewHandler(
 		metrics:    m,
 		audit:      a,
 		endpoint:   endpoint,
+		avEngine:   avEngine,
+		avCache:    avCache,
+		avHandler:  antivirus.NewAPIHandler(avEngine),
+		scanOrch:   scanOrch,
 	}
 }
 
@@ -73,6 +94,9 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	{
 		// Public (no auth)
 		sg.GET("/health", h.Health)
+
+		// Scanner health & metrics (public — used by dashboard)
+		sg.GET("/scanner/health", h.ScannerHealth)
 
 		// Authenticated
 		// IAM auth is applied at the system level (storage.go injects middleware).
@@ -177,6 +201,11 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 			{
 				admin.GET("/system/metrics", h.SystemMetrics)
 				admin.GET("/system/metrics/:bucket", h.BucketMetricsHandler)
+			}
+
+			// Antivirus API (admin-level read, admin-level write).
+			if h.avHandler != nil {
+				h.avHandler.RegisterRoutes(auth)
 			}
 		}
 	}
@@ -1070,21 +1099,32 @@ func (h *Handler) PutObject(c *gin.Context) {
 
 	h.metrics.RecordRequest(tenantID, bucket, "PUT", c.Request.ContentLength, latency, false)
 
+	// Record audit event for upload and trigger immediate stats update.
 	h.audit.Record(models.StorageEvent{
-		Type:     "object.uploaded",
+		Type:     events.EventObjectUploaded,
 		TenantID: tenantID,
 		UserID:   userID,
 		Bucket:   bucket,
 		Key:      key,
 		Size:     c.Request.ContentLength,
 		SourceIP: c.ClientIP(),
+		Details:  fmt.Sprintf("uploaded %d bytes", c.Request.ContentLength),
 	})
+
+	go func() {
+		_ = h.controller.ReconcileOne(context.Background(), tenantID, bucket)
+	}()
 
 	c.JSON(http.StatusOK, gin.H{
 		"bucket": bucket,
 		"key":    key,
 		"size":   c.Request.ContentLength,
 	})
+
+	// ── Async antivirus scan ─────────────────────────────────────────
+	if h.avEngine != nil && h.avEngine.IsRunning() {
+		go h.scanObjectAsync(backendBucket, key, tenantID, userID, c.Request.ContentLength)
+	}
 }
 
 func (h *Handler) GetObject(c *gin.Context) {
@@ -1940,5 +1980,202 @@ func (h *Handler) GetBucketLifecycle(c *gin.Context) {
 		"phase":             b.Status.Phase,
 		"objectCount":       b.Status.ObjectCount,
 		"totalSize":         b.Status.TotalSize,
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Antivirus: Async Object Scanning
+// ---------------------------------------------------------------------------
+
+// scanObjectAsync re-reads an uploaded object from the backend and runs
+// the SafeGate scanner pipeline against it. This is called asynchronously
+// from PutObject so that the upload response is never blocked by scanning.
+//
+// The method:
+//  1. Re-reads the object from the backend (streaming).
+//  2. Runs the full SafeGate scanner.Orchestrator pipeline (metadata,
+//     MIME, SVG, macro, archive, native AV). Metrics are accumulated
+//     automatically and exposed via /api/v1/storage/scanner/health.
+//  3. Records an audit event with the result.
+func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Re-read the object from the backend.
+	reader, err := h.client.GetObject(ctx, bucket, key)
+	if err != nil {
+		log.Printf("⚠️  safegate: failed to re-read %s/%s for scan: %v", bucket, key, err)
+		return
+	}
+	defer reader.Close()
+
+	// Read the full content for scanning.
+	// Limit to the engine's max file size to prevent OOM.
+	maxSize := h.avEngine.MaxFileSize()
+	if maxSize <= 0 {
+		maxSize = 100 * 1024 * 1024 // 100MB fallback
+	}
+	content, err := io.ReadAll(io.LimitReader(reader, maxSize+1))
+	if err != nil {
+		log.Printf("⚠️  safegate: failed to read %s/%s: %v", bucket, key, err)
+		return
+	}
+	if int64(len(content)) > maxSize {
+		log.Printf("🛡️  safegate: skipping %s/%s (%d bytes > max %d bytes)",
+			bucket, key, len(content), maxSize)
+		return
+	}
+
+	// Use SafeGate scanner orchestrator if available.
+	if h.scanOrch != nil {
+		// Compute SHA-256 for the file.
+		fileHash := sha256.Sum256(content)
+		hashHex := hex.EncodeToString(fileHash[:])
+
+		// Determine MIME type and extension from the key.
+		ext := strings.ToLower(filepath.Ext(key))
+		mimeType := "application/octet-stream"
+		switch ext {
+		case ".pdf":
+			mimeType = "application/pdf"
+		case ".svg":
+			mimeType = "image/svg+xml"
+		case ".zip":
+			mimeType = "application/zip"
+		case ".gz", ".tar.gz":
+			mimeType = "application/gzip"
+		case ".jpg", ".jpeg":
+			mimeType = "image/jpeg"
+		case ".png":
+			mimeType = "image/png"
+		case ".gif":
+			mimeType = "image/gif"
+		case ".html", ".htm":
+			mimeType = "text/html"
+		case ".js":
+			mimeType = "application/javascript"
+		case ".json":
+			mimeType = "application/json"
+		case ".xml":
+			mimeType = "application/xml"
+		case ".csv":
+			mimeType = "text/csv"
+		case ".txt":
+			mimeType = "text/plain"
+		case ".doc", ".docx":
+			mimeType = "application/msword"
+		case ".xls", ".xlsx":
+			mimeType = "application/vnd.ms-excel"
+		case ".ppt", ".pptx":
+			mimeType = "application/vnd.ms-powerpoint"
+		case ".exe":
+			mimeType = "application/x-msdownload"
+		}
+
+		// Derive filename from the key (last segment).
+		filename := key
+		if idx := strings.LastIndex(key, "/"); idx >= 0 {
+			filename = key[idx+1:]
+		}
+
+		fileInfo := &scanner.FileInfo{
+			Filename:  filename,
+			Extension: ext,
+			MIMEType:  mimeType,
+			Size:      int64(len(content)),
+			SHA256:    hashHex,
+			Content:   content,
+		}
+
+		scanResult := h.scanOrch.ScanWithContext(ctx, fileInfo)
+
+		// Record audit event based on SafeGate result.
+		if !scanResult.Safe {
+			var threatDescs []string
+			for _, f := range scanResult.ThreatFindings() {
+				threatDescs = append(threatDescs, fmt.Sprintf("%s:%s", f.Scanner, f.Description))
+			}
+			h.audit.Record(models.StorageEvent{
+				Type:     events.EventObjectThreatDetected,
+				TenantID: tenantID,
+				UserID:   userID,
+				Bucket:   bucket,
+				Key:      key,
+				Size:     size,
+				Details:  fmt.Sprintf("THREAT: %s (sha256=%s, %dms)", strings.Join(threatDescs, "; "), scanResult.SHA256, scanResult.DurationMs),
+			})
+			log.Printf("🚨 safegate: THREAT in %s/%s — %s [%dms]",
+				bucket, key, strings.Join(threatDescs, "; "), scanResult.DurationMs)
+		} else {
+			h.audit.Record(models.StorageEvent{
+				Type:     events.EventObjectScanClean,
+				TenantID: tenantID,
+				UserID:   userID,
+				Bucket:   bucket,
+				Key:      key,
+				Size:     size,
+				Details:  fmt.Sprintf("clean (sha256=%s, %dms, scanners=%d)", scanResult.SHA256, scanResult.DurationMs, len(scanResult.Scanners)),
+			})
+		}
+		return
+	}
+
+	// Fallback: direct antivirus engine scan when no orchestrator is configured.
+	avResult, avErr := h.avEngine.Scan(ctx, content, key)
+	if avErr != nil {
+		log.Printf("⚠️  antivirus: scan error for %s/%s: %v", bucket, key, avErr)
+		return
+	}
+
+	// Cache the result.
+	if h.avCache != nil && avResult.SHA256 != "" {
+		h.avCache.Put(avResult.SHA256, *avResult)
+	}
+
+	// Record audit event based on verdict.
+	if avResult.Verdict.IsThreat() {
+		threatNames := make([]string, 0, len(avResult.Threats))
+		for _, t := range avResult.Threats {
+			threatNames = append(threatNames, t.Name)
+		}
+		h.audit.Record(models.StorageEvent{
+			Type:     events.EventObjectThreatDetected,
+			TenantID: tenantID,
+			UserID:   userID,
+			Bucket:   bucket,
+			Key:      key,
+			Size:     size,
+			Details:  fmt.Sprintf("THREAT: %s (verdict=%s, sha256=%s)", strings.Join(threatNames, ", "), avResult.Verdict, avResult.SHA256),
+		})
+		log.Printf("🚨 antivirus: THREAT in %s/%s — %s [verdict=%s]",
+			bucket, key, strings.Join(threatNames, ", "), avResult.Verdict)
+	} else {
+		h.audit.Record(models.StorageEvent{
+			Type:     events.EventObjectScanClean,
+			TenantID: tenantID,
+			UserID:   userID,
+			Bucket:   bucket,
+			Key:      key,
+			Size:     size,
+			Details:  fmt.Sprintf("clean (sha256=%s, %dms)", avResult.SHA256, avResult.DurationMs),
+		})
+	}
+}
+
+// ScannerHealth returns the SafeGate scanner pipeline health status and metrics.
+// Endpoint: GET /api/v1/storage/scanner/health?metrics=true
+func (h *Handler) ScannerHealth(c *gin.Context) {
+	if h.scanOrch == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status": "error",
+			"health": gin.H{"status": "unavailable", "scanner_count": 0},
+		})
+		return
+	}
+	includeMetrics := c.Query("metrics") == "true"
+	health := h.scanOrch.Health(includeMetrics)
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"health": health,
 	})
 }

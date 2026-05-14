@@ -221,8 +221,8 @@
                 <div class="analysis-columns" id="csvColumnAnalysis"></div>
                 <div class="analysis-sample" id="csvSampleTable"></div>
                 <div class="analysis-actions">
-                    <button class="btn-primary" id="btnGenerateDashboard" onclick="generateCSVDashboard()">📊 Generate Analytics Dashboard</button>
-                    <button class="btn-secondary" id="btnGenerateGIS" onclick="generateCSVGIS()" style="display:none">🌍 Generate GIS Dashboard</button>
+                    <button class="btn-primary" id="btnGenerateDashboard" onclick="generateCSVDashboard()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg> Generate Analytics Dashboard</button>
+                    <button class="btn-secondary" id="btnGenerateGIS" onclick="generateCSVGIS()" style="display:none"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Generate GIS Dashboard</button>
                 </div>
             </div>
 
@@ -238,14 +238,14 @@
     <div id="converter" class="tab-content">
         <div class="converter-section">
             <div class="converter-header">
-                <h3>🔄 Dashboard ↔ GIS Converter</h3>
+                <h3><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Dashboard ↔ GIS Converter</h3>
                 <p>Convert Analytics dashboards to GIS map views, or GIS datasets to Analytics dashboards.</p>
             </div>
 
             <div class="converter-panels">
                 <!-- Dashboard → GIS -->
                 <div class="converter-panel">
-                    <div class="panel-icon">📊 → 🌍</div>
+                    <div class="panel-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg> → <svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
                     <h4>Dashboard → GIS</h4>
                     <p>Convert an analytics dashboard with geographic data into a GIS map dataset with markers.</p>
                     <select id="dashboardSelect" onchange="analyzeDashToGIS()">
@@ -257,7 +257,7 @@
 
                 <!-- GIS → Dashboard -->
                 <div class="converter-panel">
-                    <div class="panel-icon">🌍 → 📊</div>
+                    <div class="panel-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> → <svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></div>
                     <h4>GIS → Dashboard</h4>
                     <p>Convert a GIS dataset into an analytics dashboard with auto-generated charts and tables.</p>
                     <select id="gisDatasetSelect" onchange="analyzeGISToDash()">
@@ -280,7 +280,7 @@
     <div id="file-scanner" class="tab-content">
         <div class="csv-section">
             <div class="csv-upload-area" id="scanDropZone">
-                <div class="upload-icon">🛡️</div>
+                <div class="upload-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
                 <h3>SafeGate File Scanner</h3>
                 <p>Drop any file here to scan for security threats</p>
                 <p class="upload-hint">6-stage pipeline: Metadata · MIME Type · SVG XSS · Macro/Script · Archive Bomb · ClamAV Antivirus</p>
@@ -480,7 +480,7 @@
             <!-- API Search & Filter -->
             <div class="api-controls">
                 <div class="search-box">
-                    <input type="text" id="apiSearch" placeholder="🔍 Search custom runtime endpoints..." onkeyup="filterAPIs()">
+                    <input type="text" id="apiSearch" placeholder="Search custom runtime endpoints..." onkeyup="filterAPIs()">
                 </div>
                 <div class="filter-buttons">
                     <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
@@ -888,7 +888,7 @@ search:string:false"></textarea>
 <div id="editAPIModal" class="modal">
     <div class="modal-content" style="max-width:700px;">
         <div class="modal-header">
-            <h2>✏️ Edit Custom API</h2>
+            <h2><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit Custom API</h2>
             <button class="modal-close" onclick="closeEditAPIModal()">&times;</button>
         </div>
         <div class="modal-body">

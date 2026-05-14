@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
+
+	"example.com/axiomnizam/internal/logging"
+
+	"go.uber.org/zap"
 
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
@@ -136,7 +139,7 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 
 	// Send to Discord
 	if err := h.sendToDiscord(msg); err != nil {
-		log.Printf("❌ Failed to send Discord notification: %v", err)
+		logging.Z().Warn("failed to send Discord notification", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  fmt.Sprintf("Failed to send notification: %v", err),
@@ -144,7 +147,7 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 		return
 	}
 
-	log.Printf("✅ Notification sent to Discord: %s", req.Title)
+	logging.Z().Info("notification sent to Discord", zap.String("title", req.Title))
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Notification sent to Discord",
@@ -193,7 +196,7 @@ func (h *NotificationHandler) SendHealthNotification(c *gin.Context) {
 	}
 
 	if err := h.sendToDiscord(msg); err != nil {
-		log.Printf("❌ Failed to send health notification: %v", err)
+		logging.Z().Warn("failed to send health notification", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  fmt.Sprintf("Failed to send health notification: %v", err),
@@ -201,7 +204,7 @@ func (h *NotificationHandler) SendHealthNotification(c *gin.Context) {
 		return
 	}
 
-	log.Printf("✅ Health notification sent to Discord")
+	logging.Z().Info("health notification sent to Discord")
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "success",
 		"message":     "Health notification sent",
@@ -250,7 +253,7 @@ func (h *NotificationHandler) SendStatusNotification(c *gin.Context) {
 	}
 
 	if err := h.sendToDiscord(msg); err != nil {
-		log.Printf("❌ Failed to send status notification: %v", err)
+		logging.Z().Warn("failed to send status notification", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  fmt.Sprintf("Failed to send status notification: %v", err),
@@ -258,7 +261,7 @@ func (h *NotificationHandler) SendStatusNotification(c *gin.Context) {
 		return
 	}
 
-	log.Printf("✅ Status notification sent to Discord")
+	logging.Z().Info("status notification sent to Discord")
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "success",
 		"message":     "Status notification sent",

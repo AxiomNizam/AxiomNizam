@@ -191,7 +191,7 @@ func (dqa *DataQualityAnalyzer) validateField(value interface{}, rule *Validatio
 	// Custom check
 	if rule.CustomCheck != nil {
 		if ok, msg := rule.CustomCheck(value); !ok {
-			return fmt.Errorf(msg)
+			return fmt.Errorf("%s", msg)
 		}
 	}
 

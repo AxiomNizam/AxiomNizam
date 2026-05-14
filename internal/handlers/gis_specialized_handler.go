@@ -8,6 +8,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Deprecated: GISSpecializedHandler is an in-memory map guarded by
+// sync.RWMutex and does NOT follow the platform's control-plane architecture.
+// All specialized dashboards are seeded at startup and lost on restart.
+//
+// MIGRATION TARGET: Each dashboard type (agriculture, industries, medical,
+// satellite, airplane, ship, train) should be modelled as a GISDashboard
+// resource persisted via ResourceStore -> etcd and projected by a
+// reconciler. Do NOT add new dashboard types here — author them through the
+// API Builder instead. See docs/architecture/handler-migration.md.
+//
 // GISSpecializedHandler serves category-specific GIS dashboard data
 // Categories: agriculture, industries, medical (domestic Bangladesh)
 //

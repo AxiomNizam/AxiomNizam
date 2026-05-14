@@ -1,11 +1,20 @@
 package metrics
 
 import (
+	"context"
+	"encoding/json"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/storage/models"
+)
+
+const (
+	metricsKVKey   = "storage:metrics:collector"
+	metricsTimeout = 3 * time.Second
 )
 
 // Collector aggregates storage operation metrics.
@@ -20,6 +29,18 @@ type Collector struct {
 	totalLatencyNs atomic.Int64
 
 	startTime time.Time
+	kvStore   platformstore.KVStore
+}
+
+// collectorState is a serializable snapshot of the Collector's state.
+type collectorState struct {
+	Buckets        map[string]*bucketMetric `json:"buckets"`
+	TotalRequests  int64                    `json:"totalRequests"`
+	TotalBytesIn   int64                    `json:"totalBytesIn"`
+	TotalBytesOut  int64                    `json:"totalBytesOut"`
+	TotalErrors    int64                    `json:"totalErrors"`
+	TotalLatencyNs int64                    `json:"totalLatencyNs"`
+	StartTime      time.Time                `json:"startTime"`
 }
 
 type bucketMetric struct {
@@ -43,6 +64,81 @@ func NewCollector() *Collector {
 	}
 }
 
+// ConfigureKVPersistence enables KVStore-backed persistence for metrics.
+func (c *Collector) ConfigureKVPersistence(kv platformstore.KVStore) {
+	c.mu.Lock()
+	c.kvStore = kv
+	c.mu.Unlock()
+	c.load()
+}
+
+func (c *Collector) load() {
+	c.mu.Lock()
+	kv := c.kvStore
+	c.mu.Unlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), metricsTimeout)
+	defer cancel()
+
+	val, err := kv.Get(ctx, metricsKVKey)
+	if err != nil {
+		return // likely not found
+	}
+
+	var state collectorState
+	if err := json.Unmarshal([]byte(val), &state); err != nil {
+		log.Printf("⚠️  storage metrics: failed to unmarshal state: %v", err)
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.buckets = state.Buckets
+	if c.buckets == nil {
+		c.buckets = make(map[string]*bucketMetric)
+	}
+	c.totalRequests.Store(state.TotalRequests)
+	c.totalBytesIn.Store(state.TotalBytesIn)
+	c.totalBytesOut.Store(state.TotalBytesOut)
+	c.totalErrors.Store(state.TotalErrors)
+	c.totalLatencyNs.Store(state.TotalLatencyNs)
+	c.startTime = state.StartTime
+	log.Printf("✅ storage metrics: loaded persistent state (requests=%d)", state.TotalRequests)
+}
+
+func (c *Collector) save() {
+	c.mu.RLock()
+	kv := c.kvStore
+	if kv == nil {
+		c.mu.RUnlock()
+		return
+	}
+
+	state := collectorState{
+		Buckets:        c.buckets,
+		TotalRequests:  c.totalRequests.Load(),
+		TotalBytesIn:   c.totalBytesIn.Load(),
+		TotalBytesOut:  c.totalBytesOut.Load(),
+		TotalErrors:    c.totalErrors.Load(),
+		TotalLatencyNs: c.totalLatencyNs.Load(),
+		StartTime:      c.startTime,
+	}
+	c.mu.RUnlock()
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), metricsTimeout)
+	defer cancel()
+	_ = kv.Put(ctx, metricsKVKey, string(data))
+}
+
 func bKey(tenantID, bucket string) string {
 	return tenantID + "/" + bucket
 }
@@ -57,8 +153,6 @@ func (c *Collector) RecordRequest(tenantID, bucket, op string, bytes int64, late
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	k := bKey(tenantID, bucket)
 	m, ok := c.buckets[k]
 	if !ok {
@@ -87,6 +181,10 @@ func (c *Collector) RecordRequest(tenantID, bucket, op string, bytes int64, late
 	case "DELETE":
 		m.deletes++
 	}
+	c.mu.Unlock()
+
+	// Async save to avoid blocking the request path.
+	go c.save()
 }
 
 // GetBucketMetrics returns metrics for a specific bucket.

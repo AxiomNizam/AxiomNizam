@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
 // DataSourceResource represents a datasource on the server
@@ -72,7 +74,7 @@ func (h *DataSourceHandler) loadState() {
 
 	resp, err := h.etcd.Get(ctx, h.stateKey)
 	if err != nil {
-		log.Printf("datasources: failed to load persisted state from etcd: %v", err)
+		logging.Z().Warn("datasources: failed to load persisted state", zap.Error(err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -81,7 +83,7 @@ func (h *DataSourceHandler) loadState() {
 
 	var datasources map[string]*DataSourceResource
 	if err := json.Unmarshal(resp.Kvs[0].Value, &datasources); err != nil {
-		log.Printf("datasources: failed to decode persisted state: %v", err)
+		logging.Z().Warn("datasources: failed to decode persisted state", zap.Error(err))
 		return
 	}
 	if datasources == nil {
@@ -97,7 +99,7 @@ func (h *DataSourceHandler) persistStateLocked() {
 
 	payload, err := json.Marshal(h.datasources)
 	if err != nil {
-		log.Printf("datasources: failed to encode state: %v", err)
+		logging.Z().Warn("datasources: failed to encode state", zap.Error(err))
 		return
 	}
 
@@ -105,7 +107,7 @@ func (h *DataSourceHandler) persistStateLocked() {
 	defer cancel()
 
 	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
-		log.Printf("datasources: failed to persist state to etcd: %v", err)
+		logging.Z().Warn("datasources: failed to persist state", zap.Error(err))
 	}
 }
 

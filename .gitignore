@@ -25,9 +25,18 @@ go.work
 go.work.sum
 
 # env file
-env
+.env
+.env.*
+*.env
 
 
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Runtime data (Raft storage, object storage, antivirus signatures)
+# In Docker/k8s this maps to a persistent volume mount.
+/data/
+
+# AI context tracking
+claude.md

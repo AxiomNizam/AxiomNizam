@@ -9,10 +9,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// StreamHandler handles streaming endpoints
 type StreamHandler struct {
-	manager  StreamManager
-	upgrader websocket.Upgrader
+	manager        StreamManager
+	upgrader       websocket.Upgrader
+	dualWriteStore StreamingDualWriteStore
 }
 
 // NewStreamHandler creates handler

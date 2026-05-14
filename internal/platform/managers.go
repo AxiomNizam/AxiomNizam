@@ -1,8 +1,6 @@
 package platform
 
 import (
-	"fmt"
-
 	"example.com/axiomnizam/internal/bulk"
 	"example.com/axiomnizam/internal/database"
 	"example.com/axiomnizam/internal/eventbus"
@@ -30,12 +28,12 @@ type Managers struct {
 	Tracing  tracing.TracingManager
 }
 
-// NewManagers creates persistent platform managers backed by etcd.
+// NewManagers creates persistent platform managers.
+// When etcd is available, uses etcd-backed persistence.
+// When etcd is nil (e.g. STORAGE_BACKEND=raft), uses in-memory-only
+// persistence (state is not persisted across restarts but managers
+// still function).
 func NewManagers(conns *database.Connections) (*Managers, error) {
-	if conns == nil || conns.Etcd == nil {
-		return nil, fmt.Errorf("etcd is required for platform managers")
-	}
-
 	store := newPlatformStateStore(conns, "axiomnizam")
 
 	return &Managers{

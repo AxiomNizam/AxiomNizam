@@ -10,7 +10,8 @@ import (
 
 // VersionHandler handles versioning endpoints
 type VersionHandler struct {
-	manager VersionManager
+	manager        VersionManager
+	dualWriteStore DualWriteStore // Phase 2: nil until SetDualWriteStore is called
 }
 
 // NewVersionHandler creates handler
@@ -97,6 +98,29 @@ func (h *VersionHandler) CreateSnapshot(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: reconciler-authoritative path — write resource, let reconciler drive manager
+	if h.isAuthoritative() {
+		resource := h.buildSnapshotResource(resourceType, resourceID, req.Name, req.Description, req.Tags)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				// Fallback: try update if already exists
+				if updateErr := h.dualWriteStore.Update(c.Request.Context(), resource); updateErr != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": updateErr.Error()})
+					return
+				}
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"name":         resource.Name,
+			"status":       "Pending",
+			"message":      "snapshot resource created — reconciler will process",
+			"resourceType": resourceType,
+			"resourceId":   resourceID,
+		})
+		return
+	}
+
+	// Old path: direct manager call
 	snapshot := &Snapshot{
 		Name:         req.Name,
 		Description:  req.Description,
@@ -111,6 +135,9 @@ func (h *VersionHandler) CreateSnapshot(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Phase 2: dual-write to etcd (best-effort, non-blocking)
+	h.dualWriteSnapshot(created)
 
 	c.JSON(http.StatusCreated, created)
 }

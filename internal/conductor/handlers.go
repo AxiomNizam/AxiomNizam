@@ -17,10 +17,10 @@ func isConfigError(err error) bool {
 	return strings.Contains(msg, "not configured") || strings.Contains(msg, "unsupported backend")
 }
 
-// Handler serves the conductor REST + WebSocket API.
 type Handler struct {
-	mgr      *Manager
-	upgrader websocket.Upgrader
+	mgr                    *Manager
+	upgrader               websocket.Upgrader
+	producerDualWriteStore ProducerDualWriteStore
 }
 
 // NewHandler creates a new conductor handler.

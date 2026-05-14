@@ -8,7 +8,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GISHandler manages GIS dashboard data (layers, regions, markers, datasets)
+// Deprecated: GISHandler is an in-memory store protected by sync.RWMutex and
+// does NOT follow the platform's control-plane architecture
+// (ResourceStore -> Informer -> WorkQueue -> Controller -> Reconciler with
+// etcd as authoritative state). It is retained only because
+// APIBuilderHandler currently depends on it for layer/region/marker/dataset
+// persistence during the Dashboard<->GIS conversion flow.
+//
+// MIGRATION TARGET:
+//
+//	GISHandler (gin)
+//	    -> GISService
+//	    -> ResourceStore[GISLayer | GISRegion | GISMarker | GISDataset]
+//	    -> etcd
+//	    -> Reconciler (projects to Postgres / Elasticsearch read-model)
+//
+// New GIS APIs must be authored via the API Builder, which already writes to
+// etcd. Do NOT add new endpoints to this handler. See
+// docs/architecture/handler-migration.md for the full migration plan.
+//
+// GISHandler manages GIS dashboard data (layers, regions, markers, datasets).
 type GISHandler struct {
 	mu       sync.RWMutex
 	layers   []GISLayer

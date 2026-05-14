@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TracingHandler handles tracing endpoints
 type TracingHandler struct {
-	manager TracingManager
+	manager        TracingManager
+	dualWriteStore TracingDualWriteStore
 }
 
 // NewTracingHandler creates handler
@@ -84,6 +84,18 @@ func (h *TracingHandler) IngestTrace(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		resource := h.buildConfigResource(req.TenantID)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"status": "Pending", "traceId": req.ID, "message": "trace config resource created"})
+		return
+	}
+
 	trace, err := h.manager.IngestTrace(&req)
 	if err != nil {
 		h.writeIngestionAudit(c, &TraceIngestionAuditLog{
@@ -110,6 +122,9 @@ func (h *TracingHandler) IngestTrace(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusCreated, trace)
+
+	// Phase 2: dual-write tracing config to etcd
+	h.dualWriteConfig(trace.TenantID)
 }
 
 // IngestSpan handles POST /api/v1/tracing/spans.

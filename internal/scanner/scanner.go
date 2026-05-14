@@ -1,72 +1,125 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
-// Severity levels for scan findings.
-type Severity string
+// ─────────────────────────────────────────────────────────────────────────────
+// Scanner Interface
+// ─────────────────────────────────────────────────────────────────────────────
 
-const (
-	SeverityCritical Severity = "critical"
-	SeverityHigh     Severity = "high"
-	SeverityMedium   Severity = "medium"
-	SeverityLow      Severity = "low"
-	SeverityInfo     Severity = "info"
-)
-
-// Finding represents a single security issue found during scanning.
-type Finding struct {
-	Scanner     string   `json:"scanner"`
-	Severity    Severity `json:"severity"`
-	Description string   `json:"description"`
-	Details     string   `json:"details,omitempty"`
-}
-
-// ScanResult is the aggregated result of all scanners.
-type ScanResult struct {
-	Safe       bool      `json:"safe"`
-	Filename   string    `json:"filename"`
-	FileSize   int64     `json:"file_size"`
-	MIMEType   string    `json:"mime_type"`
-	SHA256     string    `json:"sha256"`
-	ScannedAt  time.Time `json:"scanned_at"`
-	DurationMs int64     `json:"duration_ms"`
-	Findings   []Finding `json:"findings"`
-	Scanners   []string  `json:"scanners_run"`
-}
-
-// FileInfo holds metadata about the uploaded file.
-type FileInfo struct {
-	Filename  string
-	Extension string
-	MIMEType  string
-	Size      int64
-	SHA256    string
-	Content   []byte
-	TempPath  string
-}
-
-// Scanner is the interface all individual scanners must implement.
+// Scanner is the interface that all individual scanners in the SafeGate
+// pipeline must implement. Each scanner inspects a file and returns zero
+// or more findings.
+//
+// The ctx parameter enables:
+//   - Deadline propagation from the orchestrator's global timeout.
+//   - Caller-initiated cancellation (e.g. HTTP request cancelled).
+//   - Per-scanner timeout enforcement.
+//
+// Implementations:
+//   - MetadataScanner  — file size, empty files, null bytes, suspicious filenames
+//   - MIMEScanner      — content-type validation, type spoofing, executable detection
+//   - SVGScanner       — XSS vectors in SVG files (script, event handlers, JS URIs)
+//   - MacroScanner     — VBA macros, auto-exec, shell commands in Office/PDF files
+//   - ArchiveScanner   — zip bombs, path traversal, executable entries in archives
+//   - NativeAVScanner  — malware detection via internal antivirus engine
 type Scanner interface {
+	// Name returns a unique, stable identifier for this scanner.
 	Name() string
-	Scan(file *FileInfo) ([]Finding, error)
+
+	// Scan inspects the file and returns any findings.
+	// Implementations must be safe to call concurrently.
+	// Return (nil, nil) to indicate "no findings, no error".
+	// Respect ctx.Done() for cancellation and deadline propagation.
+	Scan(ctx context.Context, file *FileInfo) ([]Finding, error)
 }
 
-// Orchestrator runs all registered scanners against a file.
+// ─────────────────────────────────────────────────────────────────────────────
+// Orchestrator
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Orchestrator runs all registered scanners against a file and aggregates
+// their findings into a single ScanResult.
+//
+// Behavior:
+//   - When Config.Parallel is true (default), scanners run concurrently.
+//     Findings are collected thread-safely and merged in registration order.
+//   - When Config.Parallel is false, scanners run sequentially in
+//     registration order (useful for debugging and deterministic output).
+//   - Config.Timeout is enforced as a context deadline on the entire scan.
+//   - If a scanner returns an error, an info-level finding is recorded and
+//     other scanners continue — the pipeline never aborts.
+//   - If a scanner's context is cancelled (timeout), a timed-out finding
+//     is recorded for that scanner.
+//   - After all scanners complete, the result is marked as unsafe if any
+//     finding has severity ≥ medium (critical, high, or medium).
+//   - Per-scanner timing is recorded in ScanResult.Timings.
 type Orchestrator struct {
 	scanners []Scanner
+	config   Config
+	metrics  *Metrics
 }
 
 // NewOrchestrator creates an orchestrator with the given scanners.
+// Uses DefaultConfig(). For custom configuration, use NewOrchestratorWithConfig.
 func NewOrchestrator(scanners ...Scanner) *Orchestrator {
-	return &Orchestrator{scanners: scanners}
+	return &Orchestrator{
+		scanners: scanners,
+		config:   DefaultConfig(),
+		metrics:  NewMetrics(),
+	}
 }
 
+// NewOrchestratorWithConfig creates an orchestrator with the given scanners
+// and explicit configuration.
+func NewOrchestratorWithConfig(cfg Config, scanners ...Scanner) *Orchestrator {
+	return &Orchestrator{
+		scanners: scanners,
+		config:   cfg,
+		metrics:  NewMetrics(),
+	}
+}
+
+// Config returns the orchestrator's active configuration.
+func (o *Orchestrator) Config() Config {
+	return o.config
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scan Methods
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Scan runs all registered scanners and returns aggregated results.
+// Uses an internal context with Config.Timeout as the deadline.
+// This is the backward-compatible entry point.
 func (o *Orchestrator) Scan(file *FileInfo) *ScanResult {
+	ctx := context.Background()
+	if o.config.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.config.Timeout)
+		defer cancel()
+	}
+	return o.ScanWithContext(ctx, file)
+}
+
+// ScanWithContext runs all registered scanners with the provided context.
+// If Config.Timeout is shorter than the context's existing deadline,
+// Config.Timeout takes precedence.
+func (o *Orchestrator) ScanWithContext(ctx context.Context, file *FileInfo) *ScanResult {
 	start := time.Now()
+
+	// Apply config timeout if shorter than existing deadline.
+	if o.config.Timeout > 0 {
+		if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > o.config.Timeout {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, o.config.Timeout)
+			defer cancel()
+		}
+	}
 
 	result := &ScanResult{
 		Safe:      true,
@@ -77,35 +130,138 @@ func (o *Orchestrator) Scan(file *FileInfo) *ScanResult {
 		ScannedAt: start.UTC(),
 		Findings:  make([]Finding, 0),
 		Scanners:  make([]string, 0, len(o.scanners)),
+		Timings:   make([]ScannerTiming, len(o.scanners)),
 	}
 
-	for _, s := range o.scanners {
+	// Record scanner names upfront (preserves registration order).
+	for i, s := range o.scanners {
 		result.Scanners = append(result.Scanners, s.Name())
-
-		findings, err := s.Scan(file)
-		if err != nil {
-			result.Findings = append(result.Findings, Finding{
-				Scanner:     s.Name(),
-				Severity:    SeverityInfo,
-				Description: "Scanner unavailable",
-				Details:     fmt.Sprintf("Scanner %q could not complete: %v", s.Name(), err),
-			})
-			continue
-		}
-
-		result.Findings = append(result.Findings, findings...)
+		result.Timings[i].Scanner = s.Name()
 	}
 
+	if o.config.Parallel && len(o.scanners) > 1 {
+		o.scanParallel(ctx, file, result)
+	} else {
+		o.scanSequential(ctx, file, result)
+	}
+
+	// Determine safety: any medium+ finding makes the result unsafe.
 	for _, f := range result.Findings {
-		if f.Severity == SeverityCritical || f.Severity == SeverityHigh || f.Severity == SeverityMedium {
+		if f.Severity.IsThreat() {
 			result.Safe = false
 			break
 		}
 	}
 
 	result.DurationMs = time.Since(start).Milliseconds()
+
+	// Record metrics for observability.
+	o.metrics.Record(result)
+
 	return result
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sequential Execution
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (o *Orchestrator) scanSequential(ctx context.Context, file *FileInfo, result *ScanResult) {
+	for i, s := range o.scanners {
+		scanStart := time.Now()
+		findings, err := s.Scan(ctx, file)
+		elapsed := time.Since(scanStart).Milliseconds()
+
+		result.Timings[i].DurationMs = elapsed
+
+		if err != nil {
+			timedOut := ctx.Err() == context.DeadlineExceeded
+			result.Timings[i].Error = true
+			result.Timings[i].TimedOut = timedOut
+			detail := fmt.Sprintf("Scanner %q could not complete: %v", s.Name(), err)
+			if timedOut {
+				detail = fmt.Sprintf("Scanner %q timed out after %dms", s.Name(), elapsed)
+			}
+			result.Findings = append(result.Findings, Finding{
+				Scanner:     s.Name(),
+				Severity:    SeverityInfo,
+				Description: "Scanner unavailable",
+				Details:     detail,
+			})
+			result.Timings[i].FindingCount = 1
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+
+		result.Timings[i].FindingCount = len(findings)
+		result.Findings = append(result.Findings, findings...)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parallel Execution
+// ─────────────────────────────────────────────────────────────────────────────
+
+// scannerOutput holds the output of a single scanner execution.
+type scannerOutput struct {
+	index    int
+	findings []Finding
+	err      error
+	elapsed  int64
+}
+
+func (o *Orchestrator) scanParallel(ctx context.Context, file *FileInfo, result *ScanResult) {
+	outputs := make([]scannerOutput, len(o.scanners))
+	var wg sync.WaitGroup
+
+	for i, s := range o.scanners {
+		wg.Add(1)
+		go func(idx int, sc Scanner) {
+			defer wg.Done()
+			scanStart := time.Now()
+			findings, err := sc.Scan(ctx, file)
+			outputs[idx] = scannerOutput{
+				index:    idx,
+				findings: findings,
+				err:      err,
+				elapsed:  time.Since(scanStart).Milliseconds(),
+			}
+		}(i, s)
+	}
+
+	wg.Wait()
+
+	// Merge in registration order for deterministic output.
+	for i, out := range outputs {
+		result.Timings[i].DurationMs = out.elapsed
+
+		if out.err != nil {
+			timedOut := ctx.Err() == context.DeadlineExceeded
+			result.Timings[i].Error = true
+			result.Timings[i].TimedOut = timedOut
+			detail := fmt.Sprintf("Scanner %q could not complete: %v", o.scanners[i].Name(), out.err)
+			if timedOut {
+				detail = fmt.Sprintf("Scanner %q timed out after %dms", o.scanners[i].Name(), out.elapsed)
+			}
+			result.Findings = append(result.Findings, Finding{
+				Scanner:     o.scanners[i].Name(),
+				Severity:    SeverityInfo,
+				Description: "Scanner unavailable",
+				Details:     detail,
+			})
+			result.Timings[i].FindingCount = 1
+			continue
+		}
+
+		result.Timings[i].FindingCount = len(out.findings)
+		result.Findings = append(result.Findings, out.findings...)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Accessors
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ScannerNames returns the names of all registered scanners.
 func (o *Orchestrator) ScannerNames() []string {
@@ -114,4 +270,62 @@ func (o *Orchestrator) ScannerNames() []string {
 		names[i] = s.Name()
 	}
 	return names
+}
+
+// ScannerCount returns the number of registered scanners.
+func (o *Orchestrator) ScannerCount() int {
+	return len(o.scanners)
+}
+
+// Metrics returns the orchestrator's metrics collector.
+// Use Metrics().Snapshot() to obtain a serializable copy.
+func (o *Orchestrator) Metrics() *Metrics {
+	return o.metrics
+}
+
+// Health returns the current health status of the scanner pipeline.
+// Pass includeMetrics=true to embed the full MetricsSnapshot in the response.
+func (o *Orchestrator) Health(includeMetrics bool) HealthStatus {
+	snap := o.metrics.Snapshot()
+
+	// Determine status based on error rate.
+	status := "healthy"
+	errorRate := "0.0%"
+	if snap.TotalScans > 0 {
+		var totalErrors int64
+		for _, sm := range snap.Scanners {
+			totalErrors += sm.TotalErrors
+		}
+		totalRuns := snap.TotalScans * int64(len(o.scanners))
+		if totalRuns > 0 {
+			rate := float64(totalErrors) / float64(totalRuns) * 100
+			errorRate = fmt.Sprintf("%.1f%%", rate)
+			if rate > 50 {
+				status = "degraded"
+			}
+			if rate > 90 {
+				status = "unavailable"
+			}
+		}
+	}
+
+	if len(o.scanners) == 0 {
+		status = "unavailable"
+	}
+
+	h := HealthStatus{
+		Status:        status,
+		ScannerCount:  len(o.scanners),
+		Scanners:      o.ScannerNames(),
+		TotalScans:    snap.TotalScans,
+		UptimeSeconds: snap.UptimeSeconds,
+		LastScanAt:    snap.LastScanAt,
+		ErrorRate:     errorRate,
+	}
+
+	if includeMetrics {
+		h.Metrics = &snap
+	}
+
+	return h
 }

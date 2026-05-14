@@ -684,7 +684,21 @@
     box-shadow: 0 0 0 2px rgba(var(--analytics-primary-rgb), 0.25);
 }
 
-.type-icon { font-size: 1.2rem; }
+.type-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #10b981;
+}
+.type-icon svg {
+    width: 22px;
+    height: 22px;
+}
+.analytics-type-btn.active .type-icon {
+    color: #34d399;
+}
 .type-label { font-size: 0.65rem; color: var(--analytics-text-muted); }
 
 /* Responsive */

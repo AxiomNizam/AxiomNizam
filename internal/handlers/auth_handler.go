@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,8 +21,11 @@ import (
 	iammodels "example.com/axiomnizam/internal/iam/models"
 	"example.com/axiomnizam/internal/iam/pgstore"
 	iamstorage "example.com/axiomnizam/internal/iam/storage"
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/models"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	gojwt "github.com/golang-jwt/jwt/v5"
 )
 
@@ -1458,9 +1460,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	for idx, base := range loginBases {
 		targetURL := base + "/iam/auth/login"
 		if idx == 0 {
-			log.Printf("📝 IAM login attempt for identifier: %s (base=%s)", loginID, base)
+			logging.Z().Debug("IAM login attempt", zap.String("identifier", loginID), zap.String("base", base))
 		} else {
-			log.Printf("⚠️  IAM login retrying with alternate base=%s", base)
+			logging.Z().Debug("IAM login retrying with alternate base", zap.String("base", base))
 		}
 
 		attemptResp, attemptBody, attemptErr := postLogin(targetURL)
@@ -1505,10 +1507,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if !json.Valid(responseBody) {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM login non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		logging.Z().Warn("IAM login non-JSON response", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM authentication service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "authentication service temporarily unavailable",
 		})
 		return
 	}
@@ -1516,10 +1518,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM login malformed JSON payload: status=%d content-type=%q body=%q err=%v", resp.StatusCode, contentType, summary, err)
+		logging.Z().Warn("IAM login malformed JSON payload", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary), zap.Error(err))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM authentication service returned malformed JSON (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "authentication service returned an invalid response",
 		})
 		return
 	}
@@ -1568,7 +1570,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if h.rateLimiter != nil {
 		h.rateLimiter.RegisterToken(tokenResp.AccessToken, resolvedUsername)
-		log.Printf("✅ Token registered in rate limiter for user: %s (500 calls available)", resolvedUsername)
+		logging.Z().Info("token registered in rate limiter", zap.String("user", resolvedUsername))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1582,15 +1584,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"user":          tokenResp.User,
 		"rate_limit": gin.H{
 			"max_calls":    500,
-			"validity_min": 10,
-			"expires_at":   time.Now().Add(10 * time.Minute).Format("2006-01-02 15:04:05"),
-			"message":      "You have 500 API calls available with this token. Token expires in 10 minutes.",
+			"validity_min": tokenResp.ExpiresIn / 60,
+			"expires_at":   time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second).Format("2006-01-02 15:04:05"),
+			"message":      fmt.Sprintf("You have 500 API calls available with this token. Token expires in %d minutes.", tokenResp.ExpiresIn/60),
 		},
 	})
 }
 
 // RefreshToken handles POST /auth/refresh
-// This endpoint refreshes an expired token
+// This endpoint refreshes an expired token by proxying to IAM and
+// registering the new access token in the rate limiter so subsequent
+// API calls are accepted without requiring a full re-login.
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`
@@ -1604,17 +1608,42 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	tokenURL := h.iamBaseURL + "/iam/auth/refresh"
+	// Try all IAM base candidates (same resilience as login).
+	loginBases := iamLoginBaseCandidates(h.iamBaseURL)
+	if len(loginBases) == 0 {
+		loginBases = []string{normalizeIAMBaseURL(defaultIAMInternalBaseURL())}
+	}
 
 	body, _ := json.Marshal(map[string]string{
 		"refresh_token": req.RefreshToken,
 	})
 
-	resp, err := h.httpClient.Post(
-		tokenURL,
-		"application/json",
-		strings.NewReader(string(body)),
+	var (
+		resp         *http.Response
+		responseBody []byte
+		err          error
 	)
+
+	for _, base := range loginBases {
+		tokenURL := base + "/iam/auth/refresh"
+		resp, err = h.httpClient.Post(
+			tokenURL,
+			"application/json",
+			strings.NewReader(string(body)),
+		)
+		if err != nil {
+			continue
+		}
+		responseBody, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if !shouldRetryIAMLogin(resp, responseBody, nil) {
+			break
+		}
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
@@ -1622,25 +1651,14 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		})
 		return
 	}
-	defer resp.Body.Close()
-
-	// Read response body
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Status: "error",
-			Error:  "Failed to read authentication response: " + err.Error(),
-		})
-		return
-	}
 
 	contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
 	if !json.Valid(responseBody) {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM refresh non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		logging.Z().Warn("IAM refresh non-JSON response", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM token refresh service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "token refresh service temporarily unavailable",
 		})
 		return
 	}
@@ -1649,10 +1667,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(responseBody, &tokenResp); err != nil {
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM refresh malformed JSON payload: status=%d content-type=%q body=%q err=%v", resp.StatusCode, contentType, summary, err)
+		logging.Z().Warn("IAM refresh malformed JSON payload", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary), zap.Error(err))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM token refresh service returned malformed JSON (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "token refresh service returned an invalid response",
 		})
 		return
 	}
@@ -1679,13 +1697,34 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Success - return new token info
+	// Resolve user identity from the new access token so the frontend
+	// can keep its session state consistent.
+	resolvedRole := resolvePrimaryRole(tokenResp.User.Roles)
+	if resolvedRole == "user" {
+		resolvedRole = extractRoleFromToken(tokenResp.AccessToken)
+	}
+
+	resolvedUsername := strings.TrimSpace(tokenResp.User.DisplayName)
+	if resolvedUsername == "" {
+		resolvedUsername = strings.TrimSpace(tokenResp.User.Email)
+	}
+
+	// Register the freshly issued access token in the rate limiter so that
+	// subsequent API requests are accepted without the user having to re-login.
+	if h.rateLimiter != nil && strings.TrimSpace(tokenResp.AccessToken) != "" {
+		h.rateLimiter.RegisterToken(tokenResp.AccessToken, resolvedUsername)
+		logging.Z().Info("refreshed token registered in rate limiter", zap.String("user", resolvedUsername))
+	}
+
+	// Success - return new token info with role/username for frontend.
 	c.JSON(http.StatusOK, gin.H{
 		"status":        "ok",
 		"access_token":  tokenResp.AccessToken,
 		"expires_in":    tokenResp.ExpiresIn,
 		"refresh_token": tokenResp.RefreshToken,
 		"token_type":    tokenResp.TokenType,
+		"role":          resolvedRole,
+		"username":      resolvedUsername,
 	})
 }
 
@@ -1766,10 +1805,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if !json.Valid([]byte(trimmedResponseBody)) {
 		contentType := strings.TrimSpace(resp.Header.Get(headerContentType))
 		summary := summarizeIAMBody(responseBody)
-		log.Printf("⚠️  IAM logout non-JSON response: status=%d content-type=%q body=%q", resp.StatusCode, contentType, summary)
+		logging.Z().Warn("IAM logout non-JSON response", zap.Int("status", resp.StatusCode), zap.String("contentType", contentType), zap.String("body", summary))
 		c.JSON(http.StatusBadGateway, models.Response{
 			Status: "error",
-			Error:  fmt.Sprintf("IAM logout service returned non-JSON response (status=%d, content-type=%s): %s", resp.StatusCode, contentType, summary),
+			Error:  "logout service temporarily unavailable",
 		})
 		return
 	}

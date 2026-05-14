@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// EventBusHandler handles event bus endpoints
 type EventBusHandler struct {
-	manager EventBusManager
+	manager            EventBusManager
+	topicDualWriteStore TopicDualWriteStore
 }
 
 // NewEventBusHandler creates handler
@@ -74,6 +74,19 @@ func (h *EventBusHandler) CreateTopic(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		topic := &EventTopic{Name: req.Name, Partitions: req.Partitions, IsActive: true}
+		resource := h.buildTopicResource(topic)
+		if h.topicDualWriteStore != nil {
+			if err := h.topicDualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.topicDualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "topic resource created"})
+		return
+	}
+
 	topic := &EventTopic{
 		Name:       req.Name,
 		Partitions: req.Partitions,
@@ -87,6 +100,7 @@ func (h *EventBusHandler) CreateTopic(c *gin.Context) {
 		return
 	}
 
+	h.dualWriteTopic(created)
 	c.JSON(http.StatusCreated, created)
 }
 

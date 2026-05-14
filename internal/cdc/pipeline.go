@@ -220,22 +220,22 @@ func (pe *PipelineEngine) persistStateLocked() {
 
 func (pe *PipelineEngine) registerTypes() {
 	pe.sourceTypes = []CDCSourceType{
-		{ID: "mysql_binlog", Name: "MySQL Binary Log", Method: "binlog", Database: "mysql", ConfigKeys: []string{"host", "port", "database", "server_id", "binlog_position"}, Icon: "🐬"},
-		{ID: "pg_wal", Name: "PostgreSQL WAL", Method: "wal", Database: "postgres", ConfigKeys: []string{"host", "port", "database", "slot_name", "publication"}, Icon: "🐘"},
-		{ID: "mongo_oplog", Name: "MongoDB Oplog", Method: "oplog", Database: "mongodb", ConfigKeys: []string{"uri", "database", "replica_set"}, Icon: "🍃"},
-		{ID: "polling", Name: "Table Polling", Method: "polling", ConfigKeys: []string{"host", "database", "table", "poll_interval", "cursor_column"}, Icon: "🔄"},
-		{ID: "api_webhook", Name: "API Webhook", Method: "webhook", ConfigKeys: []string{"endpoint", "secret", "events"}, Icon: "🌐"},
-		{ID: "mariadb_binlog", Name: "MariaDB Binary Log", Method: "binlog", Database: "mariadb", ConfigKeys: []string{"host", "port", "database", "server_id"}, Icon: "🦭"},
+		{ID: "mysql_binlog", Name: "MySQL Binary Log", Method: "binlog", Database: "mysql", ConfigKeys: []string{"host", "port", "database", "server_id", "binlog_position"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><path d="M4 7l8-4 8 4M4 7v10l8 4 8-4V7M4 7l8 4 8-4M12 11v10"/></svg>`},
+		{ID: "pg_wal", Name: "PostgreSQL WAL", Method: "wal", Database: "postgres", ConfigKeys: []string{"host", "port", "database", "slot_name", "publication"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg>`},
+		{ID: "mongo_oplog", Name: "MongoDB Oplog", Method: "oplog", Database: "mongodb", ConfigKeys: []string{"uri", "database", "replica_set"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><path d="M12 2C9 5 8 8 8 12c0 4 2 7 4 10"/><path d="M12 2c3 3 4 6 4 10 0 4-2 7-4 10"/><path d="M12 6v16"/></svg>`},
+		{ID: "polling", Name: "Table Polling", Method: "polling", ConfigKeys: []string{"host", "database", "table", "poll_interval", "cursor_column"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/><circle cx="15" cy="15" r="2"/><path d="M15 13v-1"/></svg>`},
+		{ID: "api_webhook", Name: "API Webhook", Method: "webhook", ConfigKeys: []string{"endpoint", "secret", "events"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/><path d="M12 3c-2.8 2.4-4 5.6-4 9s1.2 6.6 4 9c2.8-2.4 4-5.6 4-9s-1.2-6.6-4-9"/></svg>`},
+		{ID: "mariadb_binlog", Name: "MariaDB Binary Log", Method: "binlog", Database: "mariadb", ConfigKeys: []string{"host", "port", "database", "server_id"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/><path d="M9 6v12" opacity="0.4"/></svg>`},
 	}
 
 	pe.sinkTypes = []CDCSinkType{
-		{ID: "kafka", Name: "Apache Kafka", Category: "stream", ConfigKeys: []string{"brokers", "topic", "key_field"}, Icon: "📨"},
-		{ID: "webhook", Name: "Webhook (HTTP)", Category: "api", ConfigKeys: []string{"url", "method", "headers", "retry_count"}, Icon: "🔔"},
-		{ID: "postgres", Name: "PostgreSQL", Category: "database", ConfigKeys: []string{"host", "port", "database", "table"}, Icon: "🐘"},
-		{ID: "elasticsearch", Name: "Elasticsearch", Category: "search", ConfigKeys: []string{"url", "index", "pipeline"}, Icon: "🔍"},
-		{ID: "s3", Name: "S3/MinIO", Category: "storage", ConfigKeys: []string{"endpoint", "bucket", "prefix", "format"}, Icon: "☁️"},
-		{ID: "redis", Name: "Redis Stream", Category: "stream", ConfigKeys: []string{"host", "port", "stream_key"}, Icon: "🔴"},
-		{ID: "api", Name: "REST API", Category: "api", ConfigKeys: []string{"url", "method", "auth"}, Icon: "🌐"},
+		{ID: "kafka", Name: "Apache Kafka", Category: "stream", ConfigKeys: []string{"brokers", "topic", "key_field"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><circle cx="8" cy="6" r="2"/><circle cx="8" cy="18" r="2"/><circle cx="16" cy="12" r="2"/><path d="M10 6h4l2 6-2 6h-4"/><path d="M8 8v8"/></svg>`},
+		{ID: "webhook", Name: "Webhook (HTTP)", Category: "api", ConfigKeys: []string{"url", "method", "headers", "retry_count"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`},
+		{ID: "postgres", Name: "PostgreSQL", Category: "database", ConfigKeys: []string{"host", "port", "database", "table"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg>`},
+		{ID: "elasticsearch", Name: "Elasticsearch", Category: "search", ConfigKeys: []string{"url", "index", "pipeline"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6"/></svg>`},
+		{ID: "s3", Name: "S3/MinIO", Category: "storage", ConfigKeys: []string{"endpoint", "bucket", "prefix", "format"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>`},
+		{ID: "redis", Name: "Redis Stream", Category: "stream", ConfigKeys: []string{"host", "port", "stream_key"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><path d="M4 12l8-4 8 4-8 4-8-4z"/><path d="M4 12v4l8 4 8-4v-4"/><path d="M4 8v4l8 4 8-4V8"/><path d="M4 8l8-4 8 4-8 4-8-4z"/></svg>`},
+		{ID: "api", Name: "REST API", Category: "api", ConfigKeys: []string{"url", "method", "auth"}, Icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="ax-icon"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/><path d="M12 3c-2.8 2.4-4 5.6-4 9s1.2 6.6 4 9c2.8-2.4 4-5.6 4-9s-1.2-6.6-4-9"/></svg>`},
 	}
 }
 

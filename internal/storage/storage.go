@@ -8,9 +8,25 @@ import (
 	"strconv"
 	"time"
 
+	"example.com/axiomnizam/internal/antivirus"
+	"example.com/axiomnizam/internal/antivirus/cache"
+	"example.com/axiomnizam/internal/antivirus/entropy"
+	"example.com/axiomnizam/internal/antivirus/hashdb"
+	"example.com/axiomnizam/internal/antivirus/heuristic"
+	"example.com/axiomnizam/internal/antivirus/matcher"
+	"example.com/axiomnizam/internal/antivirus/sigdb"
+	"example.com/axiomnizam/internal/antivirus/yara"
 	iamMiddleware "example.com/axiomnizam/internal/iam/middleware"
 	iamStorage "example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
+	platformstore "example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/scanner"
+	"example.com/axiomnizam/internal/scanner/archivescan"
+	"example.com/axiomnizam/internal/scanner/macro"
+	"example.com/axiomnizam/internal/scanner/metadata"
+	"example.com/axiomnizam/internal/scanner/mimetype"
+	nativeav "example.com/axiomnizam/internal/scanner/native"
+	"example.com/axiomnizam/internal/scanner/svg"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/admin"
 	"example.com/axiomnizam/internal/storage/controller"
@@ -39,9 +55,44 @@ type System struct {
 	AuditLog   *events.AuditLog
 	Config     Config
 
+	// Antivirus engine for malware scanning on uploads.
+	AVEngine   *antivirus.Engine
+	AVSigDB    *sigdb.Database
+	AVCache    *cache.Cache
+
+	// SafeGate scanner orchestrator — full pipeline scanning on uploads.
+	ScanOrch   *scanner.Orchestrator
+
 	// IAM references (nil when IAM is not available).
+	// These may be set after construction via SetIAM() when IAM init
+	// is deferred (Raft mode).
 	iamIssuer       *token.Issuer
 	iamRevokedStore *iamStorage.EtcdRevokedTokenStore
+}
+
+// SetIAM sets the IAM issuer and revoked token store after construction.
+// Used when IAM initialization is deferred (e.g., STORAGE_BACKEND=raft).
+func (s *System) SetIAM(issuer *token.Issuer, revokedStore *iamStorage.EtcdRevokedTokenStore) {
+	s.iamIssuer = issuer
+	s.iamRevokedStore = revokedStore
+}
+
+// SetKVStore wires the KVStore-backed persistence into the BucketStore and
+// Access Controller. Called in Raft mode after the Raft KV becomes available.
+// This loads previously persisted buckets from the KVStore.
+func (s *System) SetKVStore(kv platformstore.KVStore) {
+	s.Store.ConfigureKVPersistence(kv)
+	s.Access.ConfigureKVPersistence(kv)
+	if s.Metrics != nil {
+		s.Metrics.ConfigureKVPersistence(kv)
+	}
+	if s.ScanOrch != nil && s.ScanOrch.Metrics() != nil {
+		s.ScanOrch.Metrics().ConfigureKVPersistence(kv)
+	}
+	if s.AuditLog != nil {
+		s.AuditLog.ConfigureKVPersistence(kv)
+	}
+	log.Println("✅ Storage: KVStore persistence configured (Raft mode)")
 }
 
 // Config holds configuration for the native object storage backend.
@@ -89,7 +140,60 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	accessCtrl := access.NewController(auditLog)
 	accessCtrl.SetBucketStore(bucketStore)
 	accessCtrl.ConfigurePersistence(etcdClient)
-	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint)
+	// ── Antivirus engine ────────────────────────────────────────────
+	avCfg := antivirus.LoadConfig()
+	avEngine := antivirus.NewEngine(avCfg)
+
+	// Create scan layers.
+	hashDB := hashdb.New(0, 0)
+	matcherBuilder := matcher.NewBuilder()
+	matcher.RegisterBuiltinPatterns(matcherBuilder)
+	matcherAutomaton := matcherBuilder.Build()
+	matcherLayer := matcher.NewLayer(matcherAutomaton)
+	heuristicLayer := heuristic.New()
+	entropyLayer := entropy.New()
+	yaraRuleSet := yara.NewRuleSet()
+	yara.RegisterBuiltinRules(yaraRuleSet)
+	yaraLayer := yara.NewLayer(yaraRuleSet)
+
+	// Register layers in execution order (fastest → slowest).
+	if avCfg.HashDBEnabled {
+		avEngine.RegisterLayer(hashDB)
+	}
+	if avCfg.PatternEnabled {
+		avEngine.RegisterLayer(matcherLayer)
+	}
+	if avCfg.HeuristicEnabled {
+		avEngine.RegisterLayer(heuristicLayer)
+	}
+	if avCfg.EntropyEnabled {
+		avEngine.RegisterLayer(entropyLayer)
+	}
+	if avCfg.YARAEnabled {
+		avEngine.RegisterLayer(yaraLayer)
+	}
+
+	// Signature database.
+	avSigDB := sigdb.New(avCfg.SigDir)
+	avSigDB.SetLayers(hashDB, matcherLayer, yaraLayer)
+
+	// Scan cache.
+	avCache := cache.New(avCfg.CacheSize, avCfg.CacheTTL)
+
+	// ── SafeGate scanner orchestrator ────────────────────────────────
+	// Full pipeline: metadata → MIME → SVG → macro → archive → native AV.
+	// Metrics from this orchestrator power the Object Storage SafeGate dashboard.
+	scannerCfg := scanner.LoadConfigFromEnv()
+	scanOrch := scanner.NewOrchestratorWithConfig(scannerCfg,
+		metadata.NewScannerWithConfig(scannerCfg.MaxFileSize, scannerCfg.NullByteSampleSize, scannerCfg.MaxFilenameLength),
+		mimetype.NewScanner(scannerCfg.AllowedMIMETypes),
+		svg.NewScanner(),
+		macro.NewScanner(),
+		archivescan.NewScanner(scannerCfg.ArchiveMaxDepth, scannerCfg.ArchiveMaxDecompressedSize),
+		nativeav.NewScanner(avEngine),
+	)
+
+	handler := admin.NewHandler(bucketStore, backend, tenantMgr, bucketCtrl, accessCtrl, sigV4PresignSigner{}, metricsCollector, auditLog, endpoint, avEngine, avCache, scanOrch)
 
 	return &System{
 		Backend:         backend,
@@ -102,6 +206,10 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 		Metrics:         metricsCollector,
 		AuditLog:        auditLog,
 		Config:          cfg,
+		AVEngine:        avEngine,
+		AVSigDB:         avSigDB,
+		AVCache:         avCache,
+		ScanOrch:        scanOrch,
 		iamIssuer:       issuer,
 		iamRevokedStore: revokedStore,
 	}, nil
@@ -119,11 +227,9 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 	}
 	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, presignedLimit)
 
-	var jwtAuth gin.HandlerFunc
-	if s.iamIssuer != nil {
-		jwtAuth = iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
-	}
-
+	// JWT auth is resolved at request time (not route-registration time)
+	// so that the IAM issuer can be set after routes are registered
+	// (deferred IAM init in Raft mode).
 	rg.Use(func(c *gin.Context) {
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c.Request = r
@@ -137,7 +243,8 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 				c.Set("storage_presigned_user", info.UserID)
 			}
 
-			if !c.GetBool("storage_presigned_request") && jwtAuth != nil {
+			if !c.GetBool("storage_presigned_request") && s.iamIssuer != nil {
+				jwtAuth := iamMiddleware.JWTAuth(s.iamIssuer, s.iamRevokedStore)
 				jwtAuth(c)
 				return
 			}
@@ -162,12 +269,29 @@ func (sigV4PresignSigner) Generate(method, bucket, objectKey string, expiry time
 
 // Start begins the reconciliation controller.
 func (s *System) Start(ctx context.Context) {
+	// Initialize antivirus signature database.
+	if s.AVSigDB != nil {
+		if _, err := s.AVSigDB.Init(); err != nil {
+			log.Printf("⚠️  Storage: antivirus sigdb init error: %v", err)
+		}
+	}
+
+	// Start antivirus engine.
+	if s.AVEngine != nil {
+		s.AVEngine.Start()
+	}
+
 	s.Controller.Start(ctx)
-	log.Println("✅ Storage: module started (native backend, IAM-integrated)")
+	log.Println("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)")
 }
 
 // Stop gracefully shuts down the storage module.
 func (s *System) Stop() {
+	// Shutdown antivirus engine.
+	if s.AVEngine != nil {
+		s.AVEngine.Shutdown(context.Background())
+	}
+
 	s.Controller.Stop()
 	log.Println("✅ Storage: module stopped")
 }

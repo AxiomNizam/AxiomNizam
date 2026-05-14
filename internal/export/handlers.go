@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ExportHandler handles export endpoints
 type ExportHandler struct {
-	manager ExportManager
+	manager        ExportManager
+	dualWriteStore ExportDualWriteStore
 }
 
 // NewExportHandler creates handler
@@ -22,6 +22,19 @@ func (h *ExportHandler) SubmitExport(c *gin.Context) {
 	var req ExportCreateRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		job := &ExportJob{Name: req.Name, Description: req.Description, Format: req.Format, Source: req.Source, Query: req.Query, Filters: req.Filters, Columns: req.Columns, Compression: req.Compression, Encryption: req.Encryption, Destination: req.Destination}
+		resource := h.buildExportResource(job)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "export job resource created"})
 		return
 	}
 
@@ -46,6 +59,7 @@ func (h *ExportHandler) SubmitExport(c *gin.Context) {
 		return
 	}
 
+	h.dualWriteExport(created)
 	c.JSON(http.StatusAccepted, created)
 }
 

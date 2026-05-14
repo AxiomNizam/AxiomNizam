@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RBACHandler handles RBAC endpoints
 type RBACHandler struct {
-	manager RBACManager
+	manager            RBACManager
+	roleDualWriteStore RBACRoleDualWriteStore
 }
 
 // NewRBACHandler creates handler
@@ -31,6 +31,20 @@ func (h *RBACHandler) CreateRole(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		role := &Role{TenantID: req.TenantID, Name: req.Name, Description: req.Description, Type: "CUSTOM", Permissions: req.Permissions, IsActive: true}
+		resource := h.buildRoleResource(role)
+		resource.Status.Phase = "Pending"
+		if h.roleDualWriteStore != nil {
+			if err := h.roleDualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.roleDualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "role resource created"})
+		return
+	}
+
 	role := &Role{
 		TenantID:    req.TenantID,
 		Name:        req.Name,
@@ -47,6 +61,7 @@ func (h *RBACHandler) CreateRole(c *gin.Context) {
 		return
 	}
 
+	h.dualWriteRole(created)
 	c.JSON(http.StatusCreated, created)
 }
 

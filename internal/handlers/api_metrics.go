@@ -51,44 +51,48 @@ func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode in
 	durationMs := duration.Milliseconds()
 
 	if t.redisClient != nil {
+		// Use a short timeout so unreachable Redis doesn't block for minutes.
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+
 		// Increment total calls
-		t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:calls", key))
+		t.redisClient.Incr(ctx, fmt.Sprintf("%s:calls", key))
 
 		// Track status code
-		t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:status:%d", key, statusCode))
+		t.redisClient.Incr(ctx, fmt.Sprintf("%s:status:%d", key, statusCode))
 
 		// Track duration
-		t.redisClient.Incr(context.Background(), fmt.Sprintf("%s:total_duration", key))
-		t.redisClient.Set(context.Background(), fmt.Sprintf("%s:duration", key), durationMs, 0)
+		t.redisClient.Incr(ctx, fmt.Sprintf("%s:total_duration", key))
+		t.redisClient.Set(ctx, fmt.Sprintf("%s:duration", key), durationMs, 0)
 
 		// Update max duration
 		maxKey := fmt.Sprintf("%s:max_duration", key)
-		currentMax := t.redisClient.Get(context.Background(), maxKey).Val()
+		currentMax := t.redisClient.Get(ctx, maxKey).Val()
 		if currentMax == "" {
-			t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
+			t.redisClient.Set(ctx, maxKey, durationMs, 0)
 		} else {
 			var currentMaxMs int64
 			fmt.Sscanf(currentMax, "%d", &currentMaxMs)
 			if durationMs > currentMaxMs {
-				t.redisClient.Set(context.Background(), maxKey, durationMs, 0)
+				t.redisClient.Set(ctx, maxKey, durationMs, 0)
 			}
 		}
 
 		// Update min duration
 		minKey := fmt.Sprintf("%s:min_duration", key)
-		currentMin := t.redisClient.Get(context.Background(), minKey).Val()
+		currentMin := t.redisClient.Get(ctx, minKey).Val()
 		if currentMin == "" {
-			t.redisClient.Set(context.Background(), minKey, durationMs, 0)
+			t.redisClient.Set(ctx, minKey, durationMs, 0)
 		} else {
 			var currentMinMs int64
 			fmt.Sscanf(currentMin, "%d", &currentMinMs)
 			if durationMs < currentMinMs {
-				t.redisClient.Set(context.Background(), minKey, durationMs, 0)
+				t.redisClient.Set(ctx, minKey, durationMs, 0)
 			}
 		}
 
 		// Update last called timestamp
-		t.redisClient.Set(context.Background(), fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
+		t.redisClient.Set(ctx, fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
 	}
 
 	// Track in local cache for quick access
@@ -436,8 +440,10 @@ func MetricsMiddleware(tracker *APIMetricsTracker) gin.HandlerFunc {
 		duration := time.Since(startTime)
 		method := c.Request.Method
 		endpoint := c.Request.URL.Path
+		statusCode := c.Writer.Status()
 
-		// Record the metric
-		tracker.RecordAPICall(method, endpoint, c.Writer.Status(), duration)
+		// Record the metric asynchronously so that slow/unreachable
+		// Redis connections do not block the HTTP response.
+		go tracker.RecordAPICall(method, endpoint, statusCode, duration)
 	}
 }

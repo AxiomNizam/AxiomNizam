@@ -6,7 +6,7 @@
 
 /* Default Dark Theme (Classic Modern Deep Slate & Emerald) */
 :root, [data-theme="dark"] {
-    --font-heading: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Cascadia Code', 'Consolas', var(--font-mono);
     --primary-color: #008C63;
@@ -130,12 +130,24 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Navigation Bar */
 .navbar {
-    background: var(--card-bg);
+    background: rgba(15, 22, 18, 0.85); /* Semi-transparent background matching var(--card-bg) closely */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
     position: sticky;
     top: 0;
     z-index: 1000;
+}
+
+[data-theme="light"] .navbar {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+/* Global Focus Styles for Accessibility */
+:focus-visible {
+    outline: 2px solid var(--primary-light);
+    outline-offset: 2px;
 }
 
 .nav-container {
@@ -4794,3 +4806,123 @@ body {
 }
 
 /* End Techno Matte Override */
+
+
+/* ====================================
+   AxiomNizam Custom SVG Icons
+   Replaces emoji icons with inline SVGs
+   ==================================== */
+
+.ax-icon {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: -0.125em;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+
+/* Larger icons in cards and feature sections */
+.card-icon .ax-icon,
+.feature-card-icon .ax-icon,
+.category-icon .ax-icon {
+    width: 2em;
+    height: 2em;
+}
+
+/* Button icons */
+button .ax-icon,
+.btn .ax-icon,
+.btn-secondary .ax-icon,
+.btn-primary .ax-icon {
+    width: 1em;
+    height: 1em;
+    margin-right: 0.25em;
+}
+
+/* Nav icons */
+.nav-icon .ax-icon {
+    width: 1.25em;
+    height: 1.25em;
+}
+
+/* Tab icons */
+.tab-icon .ax-icon {
+    width: 1.125em;
+    height: 1.125em;
+}
+
+/* KPI card icons */
+.ni-kpi-icon .ax-icon,
+.kpi-icon .ax-icon {
+    width: 1.5em;
+    height: 1.5em;
+    color: var(--primary-color);
+}
+
+/* Modal header icons */
+.modal-box h3 .ax-icon {
+    width: 1.25em;
+    height: 1.25em;
+    margin-right: 0.5em;
+}
+
+/* UI/UX Upgrades: Animations */
+.stat-card, .feature-card, .arch-card, .db-card, .metric {
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+
+
+}
+.stat-card:nth-child(1), .feature-card:nth-child(1), .db-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2), .feature-card:nth-child(2), .db-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-card:nth-child(3), .feature-card:nth-child(3), .db-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4), .feature-card:nth-child(4), .db-card:nth-child(4) { animation-delay: 0.2s; }
+.stat-card:nth-child(5), .feature-card:nth-child(5), .db-card:nth-child(5) { animation-delay: 0.25s; }
+.stat-card:nth-child(6), .feature-card:nth-child(6), .db-card:nth-child(6) { animation-delay: 0.3s; }
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* UI/UX Upgrades: Click Responsiveness */
+.btn-primary:active, .btn-secondary:active, .nav-link:active, .card:active, button:active, .stat-card:active, .feature-card:active {
+    transform: scale(0.98);
+}
+
+/* Global Premium Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--darker-bg);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.3) var(--darker-bg);
+}
+
+/* Premium Text Selection */
+::selection {
+    background: rgba(var(--primary-rgb), 0.3);
+    color: var(--primary-light);
+}
+::-moz-selection {
+    background: rgba(var(--primary-rgb), 0.3);
+    color: var(--primary-light);
+}

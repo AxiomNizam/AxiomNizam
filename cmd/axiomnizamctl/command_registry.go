@@ -30,6 +30,8 @@ func registerRootCommands(root *cobra.Command) {
 	for _, cmd := range utilityCommands() {
 		root.AddCommand(cmd)
 	}
+	// Phase 6: Extended platform commands for all internal modules
+	registerExtendedCommands(root)
 }
 
 func authCommands() []*cobra.Command {

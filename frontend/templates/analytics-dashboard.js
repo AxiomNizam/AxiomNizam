@@ -211,8 +211,22 @@ function renderWidgets(widgets) {
 }
 
 function getWidgetIcon(type) {
-    const icons = { bar: '📊', line: '📈', area: '📉', pie: '🥧', doughnut: '🍩', radar: '🕸️', scatter: '⚬', heatmap: '🔥', funnel: '🔽', gauge: '🎯', kpi: '💡', table: '📋', log: '📜' };
-    return icons[type] || '📊';
+    const icons = {
+        bar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>',
+        line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="17 7 21 7 21 11"/></svg>',
+        area: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 20l6-8 4 4 8-10v14H3z" fill="currentColor" opacity="0.15"/><polyline points="3 12 9 4 13 8 21 2"/></svg>',
+        pie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M12 2a10 10 0 1 0 10 10h-10V2z"/><path d="M20 12A8 8 0 0 0 12 4v8h8z"/></svg>',
+        doughnut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v4"/><path d="M21 12h-4"/></svg>',
+        radar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polygon points="12 2 20 8 18 18 6 18 4 8"/><polygon points="12 6 16 9 15 15 9 15 8 9" opacity="0.4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
+        scatter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 3v18h18"/><circle cx="8" cy="14" r="1.5" fill="currentColor"/><circle cx="12" cy="9" r="1.5" fill="currentColor"/><circle cx="16" cy="12" r="1.5" fill="currentColor"/><circle cx="14" cy="6" r="1.5" fill="currentColor"/><circle cx="18" cy="8" r="1.5" fill="currentColor"/></svg>',
+        heatmap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="3" width="5" height="5" rx="1" fill="currentColor" opacity="0.8"/><rect x="10" y="3" width="5" height="5" rx="1" fill="currentColor" opacity="0.4"/><rect x="17" y="3" width="5" height="5" rx="1" fill="currentColor" opacity="0.6"/><rect x="3" y="10" width="5" height="5" rx="1" fill="currentColor" opacity="0.3"/><rect x="10" y="10" width="5" height="5" rx="1" fill="currentColor" opacity="0.9"/><rect x="17" y="10" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/><rect x="3" y="17" width="5" height="5" rx="1" fill="currentColor" opacity="0.6"/><rect x="10" y="17" width="5" height="5" rx="1" fill="currentColor" opacity="0.2"/><rect x="17" y="17" width="5" height="5" rx="1" fill="currentColor" opacity="0.7"/></svg>',
+        funnel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M3 4h18l-6 7v6l-4 3V11L3 4z"/></svg>',
+        gauge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M5 17h14" opacity="0.3"/></svg>',
+        kpi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12h8"/><path d="M12 8v8"/><circle cx="12" cy="12" r="3" opacity="0.3"/></svg>',
+        table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>',
+        log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10"/><path d="M7 12h7"/><path d="M7 16h10"/></svg>'
+    };
+    return icons[type] || icons.bar;
 }
 
 // =====================================================

@@ -24,13 +24,14 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://axiom:axiom@rabbitmq:5672/axiom}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      AXIOMNIZAM_RAFT_DATA_DIR: /data/raft
+      STORAGE_DATA_DIR: /data/storage
     depends_on:
       # - valkey
-      - etcd
+      # - etcd  # Not required when STORAGE_BACKEND=raft
       # - mysql
       # - mariadb
       - postgres
-      # - clamav
       # - mongodb
       # - percona
       # - firebase
@@ -39,6 +40,7 @@ services:
     volumes:
       - query_logs:/data/query_logs
       - storage-data:/data/storage
+      - raft-data:/data/raft
     networks:
       - app-network
 
@@ -151,10 +153,15 @@ services:
   #     - valkey-data:/data
   #   command: valkey-server --appendonly yes --dir /data
 
-  # etcd
+  # etcd — required for STORAGE_BACKEND=etcd (default).
+  # When using STORAGE_BACKEND=raft, etcd is not needed.
+  # To run without etcd: docker compose up -d --no-deps etcd
   etcd:
     image: quay.io/coreos/etcd:v3.5.9
     container_name: etcd
+    profiles:
+      - etcd
+      - default
     ports:
       - "2379:2379"
       - "2380:2380"
@@ -351,23 +358,6 @@ services:
   #     timeout: 5s
   #     retries: 3
 
-  # ClamAV Antivirus (SafeGate Scanner)
-  clamav:
-    image: clamav/clamav:latest
-    container_name: clamav
-    ports:
-      - "3310:3310"
-    networks:
-      - app-network
-    volumes:
-      - clamav-data:/var/lib/clamav
-    healthcheck:
-      test: ["CMD", "clamdcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-
   # RabbitMQ with Management UI
   rabbitmq:
     image: rabbitmq:3-management
@@ -432,9 +422,9 @@ volumes:
   oracle-data:
   valkey-data:
   etcd-data:
-  clamav-data:
   rabbitmq-data:
   query_logs:
   storage-data:
+  raft-data:
   openclaw-config:
   ollama-data:

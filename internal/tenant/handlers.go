@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TenantHandler handles tenant endpoints
 type TenantHandler struct {
-	manager TenantManager
+	manager        TenantManager
+	dualWriteStore TenantDualWriteStore
 }
 
 // NewTenantHandler creates handler
@@ -32,6 +32,19 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		t := &Tenant{Name: req.Name, DisplayName: req.DisplayName, Owner: req.Owner, Tier: req.Tier}
+		resource := h.buildTenantResource(t)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "tenant resource created"})
+		return
+	}
+
 	tenant := &Tenant{
 		Name:           req.Name,
 		DisplayName:    req.DisplayName,
@@ -46,6 +59,7 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 		return
 	}
 
+	h.dualWriteTenant(created)
 	c.JSON(http.StatusCreated, created)
 }
 

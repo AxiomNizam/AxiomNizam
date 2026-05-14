@@ -329,7 +329,7 @@
                 return (c.supported_as || []).indexOf('extract') >= 0 || (c.supported_as || []).indexOf('both') >= 0;
             });
             extractEl.innerHTML = extractOpts.map(function(c) {
-                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml((c.icon || '🔌') + ' ' + c.name) + '</option>';
+                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
             }).join('');
         }
         if (loadEl) {
@@ -337,7 +337,7 @@
                 return (c.supported_as || []).indexOf('load') >= 0 || (c.supported_as || []).indexOf('both') >= 0;
             });
             loadEl.innerHTML = loadOpts.map(function(c) {
-                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml((c.icon || '🔌') + ' ' + c.name) + '</option>';
+                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
             }).join('');
         }
     }
@@ -805,7 +805,7 @@
             if (c.supports_cdc) flags.push('cdc');
 
             return '<div class="connector-card">' +
-                '<div class="connector-icon">' + escapeHtml(c.icon || '🔌') + '</div>' +
+                '<div class="connector-icon">' + (c.icon || '') + '</div>' +
                 '<div class="connector-name">' + escapeHtml(c.name || c.id) + '</div>' +
                 '<div class="connector-type">' + escapeHtml(c.category || c.method || c.id) + '</div>' +
                 (c.version ? '<div class="connector-meta">v' + escapeHtml(c.version) + '</div>' : '') +
@@ -849,7 +849,7 @@
                 return (c.supported_as || []).indexOf('extract') >= 0 || (c.supported_as || []).indexOf('both') >= 0;
             });
             extractEl.innerHTML = extractOpts.map(function(c) {
-                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml((c.icon || '🔌') + ' ' + c.name) + '</option>';
+                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
             }).join('');
         }
         if (loadEl) {
@@ -857,7 +857,7 @@
                 return (c.supported_as || []).indexOf('load') >= 0 || (c.supported_as || []).indexOf('both') >= 0;
             });
             loadEl.innerHTML = loadOpts.map(function(c) {
-                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml((c.icon || '🔌') + ' ' + c.name) + '</option>';
+                return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
             }).join('');
         }
     }
@@ -867,12 +867,12 @@
         const sinkEl = document.getElementById('modal-sink-type');
         if (srcEl) {
             srcEl.innerHTML = state.cdcSources.map(function(s) {
-                return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml((s.icon || '📡') + ' ' + s.name) + '</option>';
+                return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.name) + '</option>';
             }).join('');
         }
         if (sinkEl) {
             sinkEl.innerHTML = state.cdcSinks.map(function(s) {
-                return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml((s.icon || '📤') + ' ' + s.name) + '</option>';
+                return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.name) + '</option>';
             }).join('');
         }
     }

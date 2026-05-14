@@ -1055,13 +1055,13 @@ function loadStatusData() {
     fetch(BACKEND_URL + '/health')
         .then(function(response) { return response.json(); })
         .then(function(data) {
-            const status = data.status === 'ok' ? '✓ Healthy' : '✗ Unhealthy';
+            const status = data.status === 'ok' ? '\u2713 Healthy' : '\u2717 Unhealthy';
             document.getElementById('liveStatus').textContent = status;
             document.getElementById('statusDot').style.background = data.status === 'ok' ? '#10b981' : '#ef4444';
             document.getElementById('statusTime').textContent = new Date().toLocaleTimeString();
         })
         .catch(function() {
-            document.getElementById('liveStatus').textContent = '✗ Error';
+            document.getElementById('liveStatus').textContent = '\u2717 Error';
             document.getElementById('statusDot').style.background = '#ef4444';
         });
 

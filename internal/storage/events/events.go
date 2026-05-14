@@ -1,12 +1,20 @@
 package events
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"sync"
 	"time"
 
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/storage/models"
 	"github.com/google/uuid"
+)
+
+const (
+	auditKVKey   = "storage:audit:log"
+	auditTimeout = 5 * time.Second
 )
 
 // AuditLog records and stores storage operation events.
@@ -14,6 +22,8 @@ type AuditLog struct {
 	mu     sync.RWMutex
 	events []models.StorageEvent
 	max    int
+
+	kvStore platformstore.KVStore
 }
 
 // NewAuditLog creates a new audit log with max event capacity.
@@ -50,6 +60,71 @@ func (a *AuditLog) Record(ev models.StorageEvent) {
 	a.mu.Unlock()
 
 	log.Printf("📝 Storage audit: %s tenant=%s bucket=%s key=%s", ev.Type, ev.TenantID, ev.Bucket, ev.Key)
+
+	// Async save to persistent store.
+	go a.save()
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for the audit log.
+func (a *AuditLog) ConfigureKVPersistence(kv platformstore.KVStore) {
+	a.mu.Lock()
+	a.kvStore = kv
+	a.mu.Unlock()
+	a.load()
+}
+
+func (a *AuditLog) load() {
+	a.mu.Lock()
+	kv := a.kvStore
+	a.mu.Unlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), auditTimeout)
+	defer cancel()
+
+	val, err := kv.Get(ctx, auditKVKey)
+	if err != nil {
+		return // not found
+	}
+
+	var events []models.StorageEvent
+	if err := json.Unmarshal([]byte(val), &events); err != nil {
+		log.Printf("⚠️  storage audit: failed to unmarshal events: %v", err)
+		return
+	}
+
+	a.mu.Lock()
+	a.events = events
+	a.mu.Unlock()
+	log.Printf("✅ storage audit: loaded %d persistent events", len(events))
+}
+
+func (a *AuditLog) save() {
+	a.mu.RLock()
+	kv := a.kvStore
+	if kv == nil {
+		a.mu.RUnlock()
+		return
+	}
+	// Take a small snapshot of recent events to avoid giant KV values.
+	// We only persist up to 1000 most recent events to Raft.
+	const maxPersistentEvents = 1000
+	persistEvents := a.events
+	if len(persistEvents) > maxPersistentEvents {
+		persistEvents = persistEvents[len(persistEvents)-maxPersistentEvents:]
+	}
+	a.mu.RUnlock()
+
+	data, err := json.Marshal(persistEvents)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), auditTimeout)
+	defer cancel()
+	_ = kv.Put(ctx, auditKVKey, string(data))
 }
 
 // List returns events filtered by optional tenant and event type.
@@ -105,14 +180,16 @@ func (a *AuditLog) ListByBucket(bucket string, limit int) []models.StorageEvent 
 
 // Event type constants
 const (
-	EventBucketCreated    = "bucket.created"
-	EventBucketDeleted    = "bucket.deleted"
-	EventObjectUploaded   = "object.uploaded"
-	EventObjectDownloaded = "object.downloaded"
-	EventObjectDeleted    = "object.deleted"
-	EventObjectCopied     = "object.copied"
-	EventPolicyCreated    = "policy.created"
-	EventPolicyDeleted    = "policy.deleted"
-	EventPresignGenerated = "presign.generated"
-	EventMultiDelete      = "object.multi-deleted"
+	EventBucketCreated         = "bucket.created"
+	EventBucketDeleted         = "bucket.deleted"
+	EventObjectUploaded        = "object.uploaded"
+	EventObjectDownloaded      = "object.downloaded"
+	EventObjectDeleted         = "object.deleted"
+	EventObjectCopied          = "object.copied"
+	EventPolicyCreated         = "policy.created"
+	EventPolicyDeleted         = "policy.deleted"
+	EventPresignGenerated      = "presign.generated"
+	EventMultiDelete           = "object.multi-deleted"
+	EventObjectScanClean       = "object.scan.clean"
+	EventObjectThreatDetected  = "object.scan.threat"
 )

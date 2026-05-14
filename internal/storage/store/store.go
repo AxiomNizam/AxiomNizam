@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/storage/models"
 	"github.com/google/uuid"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -20,6 +21,7 @@ type BucketStore struct {
 	mu      sync.RWMutex
 	buckets map[string]*models.BucketResource // key = tenantID/bucketName
 	etcd    *clientv3.Client
+	kvStore platformstore.KVStore // Raft-compatible KV persistence (used when etcd is nil).
 
 	watchers      map[int]chan BucketEvent
 	nextWatcherID int
@@ -95,6 +97,18 @@ func (s *BucketStore) ConfigurePersistence(etcd *clientv3.Client) {
 	s.etcd = etcd
 	s.mu.Unlock()
 	s.loadFromEtcd()
+	s.persistAllToEtcd()
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for bucket resources.
+// This is used in Raft mode where etcd is not available. Existing buckets are
+// loaded from the KVStore when configured.
+func (s *BucketStore) ConfigureKVPersistence(kv platformstore.KVStore) {
+	s.mu.Lock()
+	s.kvStore = kv
+	s.mu.Unlock()
+	s.loadFromKVStore()
+	s.persistAllToKVStore()
 }
 
 func bucketKey(tenantID, name string) string {
@@ -236,8 +250,41 @@ func (s *BucketStore) loadFromEtcd() {
 	}
 }
 
+func (s *BucketStore) loadFromKVStore() {
+	s.mu.RLock()
+	kv := s.kvStore
+	s.mu.RUnlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+	defer cancel()
+	log.Printf("storage bucket store: starting load from KVStore (prefix: %s)", bucketStoreEtcdPrefix)
+	entries, err := kv.List(ctx, bucketStoreEtcdPrefix)
+	if err != nil {
+		log.Printf("⚠️  storage bucket store: kvstore load failed: %v", err)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	loaded := 0
+	for key, val := range entries {
+		var b models.BucketResource
+		if err := json.Unmarshal([]byte(val), &b); err != nil {
+			log.Printf("⚠️  storage bucket store: failed to unmarshal bucket at %s: %v", key, err)
+			continue
+		}
+		cb := b
+		s.buckets[bucketKey(cb.Metadata.TenantID, cb.Metadata.Name)] = &cb
+		loaded++
+	}
+	log.Printf("✅ storage bucket store: loaded %d buckets from KVStore", loaded)
+}
+
 func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
-	if b == nil || s.etcd == nil {
+	if b == nil {
 		return
 	}
 	data, err := json.Marshal(b)
@@ -245,23 +292,44 @@ func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
 		log.Printf("storage bucket store: marshal failed: %v", err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
-	defer cancel()
 	key := bucketStoreEtcdPrefix + bucketKey(b.Metadata.TenantID, b.Metadata.Name)
-	if _, err := s.etcd.Put(ctx, key, string(data)); err != nil {
-		log.Printf("storage bucket store: etcd put failed for key %s: %v", key, err)
+
+	// Prefer etcd, fall back to KVStore.
+	if s.etcd != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+		defer cancel()
+		if _, err := s.etcd.Put(ctx, key, string(data)); err != nil {
+			log.Printf("storage bucket store: etcd put failed for key %s: %v", key, err)
+		}
+		return
+	}
+	if s.kvStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+		defer cancel()
+		if err := s.kvStore.Put(ctx, key, string(data)); err != nil {
+			log.Printf("storage bucket store: kvstore put failed for key %s: %v", key, err)
+		}
 	}
 }
 
 func (s *BucketStore) deleteBucketFromEtcdUnlocked(tenantID, name string) {
-	if s.etcd == nil {
+	key := bucketStoreEtcdPrefix + bucketKey(tenantID, name)
+
+	// Prefer etcd, fall back to KVStore.
+	if s.etcd != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+		defer cancel()
+		if _, err := s.etcd.Delete(ctx, key); err != nil {
+			log.Printf("storage bucket store: etcd delete failed for key %s: %v", key, err)
+		}
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
-	defer cancel()
-	key := bucketStoreEtcdPrefix + bucketKey(tenantID, name)
-	if _, err := s.etcd.Delete(ctx, key); err != nil {
-		log.Printf("storage bucket store: etcd delete failed for key %s: %v", key, err)
+	if s.kvStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
+		defer cancel()
+		if err := s.kvStore.Delete(ctx, key); err != nil {
+			log.Printf("storage bucket store: kvstore delete failed for key %s: %v", key, err)
+		}
 	}
 }
 
@@ -271,6 +339,38 @@ func (s *BucketStore) emitEventUnlocked(ev BucketEvent) {
 		case ch <- ev:
 		default:
 		}
+	}
+}
+
+func (s *BucketStore) persistAllToEtcd() {
+	s.mu.RLock()
+	// Create a copy of buckets to avoid holding the lock during persistence
+	buckets := make([]*models.BucketResource, 0, len(s.buckets))
+	for _, b := range s.buckets {
+		buckets = append(buckets, b)
+	}
+	s.mu.RUnlock()
+
+	for _, b := range buckets {
+		s.mu.Lock()
+		s.persistBucketUnlocked(b)
+		s.mu.Unlock()
+	}
+}
+
+func (s *BucketStore) persistAllToKVStore() {
+	s.mu.RLock()
+	// Create a copy of buckets to avoid holding the lock during persistence
+	buckets := make([]*models.BucketResource, 0, len(s.buckets))
+	for _, b := range s.buckets {
+		buckets = append(buckets, b)
+	}
+	s.mu.RUnlock()
+
+	for _, b := range buckets {
+		s.mu.Lock()
+		s.persistBucketUnlocked(b)
+		s.mu.Unlock()
 	}
 }
 

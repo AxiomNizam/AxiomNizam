@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuditHandler handles audit endpoints
 type AuditHandler struct {
-	logger AuditLogger
+	logger         AuditLogger
+	dualWriteStore AuditDualWriteStore
 }
 
 // NewAuditHandler creates handler
@@ -34,6 +34,19 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 		return
 	}
 
+	// Phase 3: reconciler-authoritative path
+	if h.isAuthoritative() {
+		resource := h.buildPolicyResource(req.TenantID)
+		if h.dualWriteStore != nil {
+			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
+				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{"status": "Pending", "tenantId": req.TenantID, "message": "audit policy resource created"})
+		return
+	}
+
+	// Old path: direct logger call
 	log := &AuditLog{
 		TenantID:   req.TenantID,
 		UserID:     req.UserID,
@@ -51,6 +64,9 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"id": log.ID, "timestamp": log.Timestamp})
+
+	// Phase 2: dual-write audit policy to etcd
+	h.dualWritePolicy(req.TenantID)
 }
 
 // QueryLogs handles GET /api/v1/audit/logs

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/apiserver"
+	"example.com/axiomnizam/internal/platform/timing"
 	"example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/workqueue"
 )
@@ -84,7 +85,7 @@ func NewResourceController(
 		reconciler:    reconciler,
 		maxConcurrent: maxConcurrent,
 		finalizerName: fmt.Sprintf("%s.axiom.dev/controller", name),
-		resyncPeriod:  5 * time.Minute,
+		resyncPeriod:  timing.DefaultResyncPeriod,
 	}
 }
 
@@ -358,7 +359,7 @@ func (sr *ScheduleReconciler) Reconcile(ctx context.Context, req ReconcileReques
 	}
 
 	log.Printf("Schedule %s/%s is %s", req.Namespace, req.Name, status.Phase)
-	return ReconcileResult{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+	return ReconcileResult{Requeue: true, RequeueAfter: timing.DefaultRequeueAfter}, nil
 }
 
 // Finalize cleans up schedule resources

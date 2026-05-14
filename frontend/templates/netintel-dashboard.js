@@ -596,12 +596,12 @@
         const parserSelect = document.getElementById('parserLogType');
         if (select && select.options.length <= 1) {
             data.log_types.forEach(t => {
-                select.add(new Option(t.icon + ' ' + t.name, t.id));
+                select.add(new Option(t.name, t.id));
             });
         }
         if (parserSelect && parserSelect.options.length === 0) {
             data.log_types.forEach(t => {
-                parserSelect.add(new Option(t.icon + ' ' + t.name, t.id));
+                parserSelect.add(new Option(t.name, t.id));
             });
         }
     }

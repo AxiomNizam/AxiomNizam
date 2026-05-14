@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -20,14 +19,23 @@ import (
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/antivirus"
+	"example.com/axiomnizam/internal/apiscanner"
+	"example.com/axiomnizam/internal/logging"
+	"example.com/axiomnizam/internal/scanner"
+	"example.com/axiomnizam/internal/scanner/archivescan"
+	"example.com/axiomnizam/internal/scanner/macro"
+	"example.com/axiomnizam/internal/scanner/metadata"
+	"example.com/axiomnizam/internal/scanner/mimetype"
+	"example.com/axiomnizam/internal/scanner/native"
+	"example.com/axiomnizam/internal/scanner/svg"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
-
-	"example.com/axiomnizam/internal/apiscanner"
-	"example.com/axiomnizam/internal/scanner"
 )
 
 // =====================================================================
@@ -197,25 +205,16 @@ type apiBuilderState struct {
 	APIScanReports      map[string]*APIScanReport           `json:"api_scan_reports,omitempty"`
 }
 
-func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client) *APIBuilderHandler {
-	// Build scanner pipeline
-	orchestrator := scanner.NewOrchestrator(
-		scanner.NewMetadataScanner(100*1024*1024),
-		scanner.NewMIMEScanner([]string{
-			"text/plain", "text/csv", "text/html", "text/xml",
-			"application/json", "application/xml", "application/pdf",
-			"application/zip", "application/gzip",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"application/vnd.ms-excel",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/msword",
-			"image/png", "image/jpeg", "image/gif", "image/svg+xml", "image/webp",
-			"audio/mpeg", "video/mp4",
-		}),
-		&scanner.SVGScanner{},
-		&scanner.MacroScanner{},
-		scanner.NewArchiveScanner(5, 1024*1024*1024),
-		scanner.NewClamAVScanner(getClamAVAddr()),
+func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*gorm.DB, etcd *clientv3.Client, avEngine *antivirus.Engine) *APIBuilderHandler {
+	// Build scanner pipeline — uses subpackage scanners + native antivirus engine.
+	cfg := scanner.LoadConfigFromEnv()
+	orchestrator := scanner.NewOrchestratorWithConfig(cfg,
+		metadata.NewScannerWithConfig(cfg.MaxFileSize, cfg.NullByteSampleSize, cfg.MaxFilenameLength),
+		mimetype.NewScanner(cfg.AllowedMIMETypes),
+		svg.NewScanner(),
+		macro.NewScanner(),
+		archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize),
+		native.NewScanner(avEngine),
 	)
 	h := &APIBuilderHandler{
 		customAPIs:          make(map[string]*CustomAPI),
@@ -240,6 +239,23 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 	return h
 }
 
+// SetAVEngine wires the antivirus engine into the scanner orchestrator.
+// Called after storage system initialization provides the shared engine.
+func (h *APIBuilderHandler) SetAVEngine(engine *antivirus.Engine) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	cfg := scanner.LoadConfigFromEnv()
+	h.scanOrch = scanner.NewOrchestratorWithConfig(cfg,
+		metadata.NewScannerWithConfig(cfg.MaxFileSize, cfg.NullByteSampleSize, cfg.MaxFilenameLength),
+		mimetype.NewScanner(cfg.AllowedMIMETypes),
+		svg.NewScanner(),
+		macro.NewScanner(),
+		archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize),
+		native.NewScanner(engine),
+	)
+}
+
 func (h *APIBuilderHandler) loadState() bool {
 	if h.etcd == nil {
 		return false
@@ -250,7 +266,7 @@ func (h *APIBuilderHandler) loadState() bool {
 
 	resp, err := h.etcd.Get(ctx, h.stateKey)
 	if err != nil {
-		log.Printf("api-builder: failed to load persisted state from etcd: %v", err)
+		logging.Z().Warn("api-builder: failed to load persisted state", zap.Error(err))
 		return false
 	}
 	if len(resp.Kvs) == 0 {
@@ -259,7 +275,7 @@ func (h *APIBuilderHandler) loadState() bool {
 
 	var state apiBuilderState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("api-builder: failed to decode persisted state: %v", err)
+		logging.Z().Warn("api-builder: failed to decode persisted state", zap.Error(err))
 		return false
 	}
 
@@ -319,7 +335,7 @@ func (h *APIBuilderHandler) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("api-builder: failed to encode state: %v", err)
+		logging.Z().Warn("api-builder: failed to encode state", zap.Error(err))
 		return
 	}
 
@@ -327,16 +343,11 @@ func (h *APIBuilderHandler) persistStateLocked() {
 	defer cancel()
 
 	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
-		log.Printf("api-builder: failed to persist state to etcd: %v", err)
+		logging.Z().Warn("api-builder: failed to persist state", zap.Error(err))
 	}
 }
 
-func getClamAVAddr() string {
-	if v := strings.TrimSpace(os.Getenv("SAFEGATE_CLAMAV_ADDR")); v != "" {
-		return v
-	}
-	return "clamav:3310"
-}
+
 
 // ===================================================================
 // API Builder CRUD
@@ -2585,14 +2596,13 @@ func (h *APIBuilderHandler) GetScan(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "scan": record})
 }
 
-// GetScannerHealth returns the scanner pipeline status
+// GetScannerHealth returns the scanner pipeline health status and metrics.
 func (h *APIBuilderHandler) GetScannerHealth(c *gin.Context) {
-	scanners := h.scanOrch.ScannerNames()
+	includeMetrics := c.Query("metrics") == "true"
+	health := h.scanOrch.Health(includeMetrics)
 	c.JSON(http.StatusOK, gin.H{
-		"status":        "success",
-		"scanner_count": len(scanners),
-		"scanners":      scanners,
-		"total_scans":   len(h.scanRecords),
+		"status":  "success",
+		"health":  health,
 	})
 }
 
@@ -2957,7 +2967,7 @@ func (h *APIBuilderHandler) ChatSQLAssistant(c *gin.Context) {
 		assistant = remoteResp
 	} else if strings.TrimSpace(os.Getenv("OPENCLAW_SQL_ASSISTANT_URL")) != "" {
 		assistant.Warning = buildSQLAssistantFallbackWarning(err)
-		log.Printf("sql-assistant: OpenClaw request failed, using fallback: %v", err)
+		logging.Z().Warn("sql-assistant: OpenClaw request failed, using fallback", zap.Error(err))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "assistant": assistant})

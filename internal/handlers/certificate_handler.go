@@ -6,7 +6,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -17,7 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 const (
@@ -554,7 +556,7 @@ func parseMonitorTargets(raw string) []string {
 	for _, item := range entries {
 		normalized, _, _, err := normalizeCertificateTarget(item)
 		if err != nil {
-			log.Printf("⚠️  Skipping invalid CERT_MONITOR_TARGETS entry '%s': %v", strings.TrimSpace(item), err)
+			logging.Z().Warn("skipping invalid CERT_MONITOR_TARGETS entry", zap.String("entry", strings.TrimSpace(item)), zap.Error(err))
 			continue
 		}
 		if _, exists := seen[normalized]; exists {
@@ -583,7 +585,7 @@ func parseManagedCerts(raw string) []string {
 			continue
 		}
 		if _, ok := kubeadmCertFileMap[name]; !ok {
-			log.Printf("⚠️  Skipping invalid CERT_MANAGED_CERTS entry '%s'", name)
+			logging.Z().Warn("skipping invalid CERT_MANAGED_CERTS entry", zap.String("entry", name))
 			continue
 		}
 		if _, exists := seen[name]; exists {
@@ -679,7 +681,7 @@ func parseIntEnv(key string, fallback int) int {
 
 	v, err := strconv.Atoi(value)
 	if err != nil {
-		log.Printf("⚠️  Invalid integer for %s: %v (using %d)", key, err, fallback)
+		logging.Z().Warn("invalid integer env var", zap.String("key", key), zap.Error(err), zap.Int("fallback", fallback))
 		return fallback
 	}
 	return v

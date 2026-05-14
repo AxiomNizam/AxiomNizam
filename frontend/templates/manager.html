@@ -123,7 +123,7 @@
 <div id="mgrEditAPIModal" class="modal">
     <div class="modal-content" style="max-width:600px;">
         <div class="modal-header">
-            <h2>✏️ Edit API</h2>
+            <h2><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit API</h2>
             <button class="modal-close" onclick="mgrCloseEditAPIModal()">&times;</button>
         </div>
         <div class="modal-body">
@@ -171,7 +171,7 @@
             </div>
             <div class="form-actions" style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end;">
                 <button class="btn-secondary" onclick="mgrCloseEditAPIModal()">Cancel</button>
-                <button class="btn-primary" onclick="mgrSaveAPIEdit()">💾 Save Changes</button>
+                <button class="btn-primary" onclick="mgrSaveAPIEdit()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Changes</button>
             </div>
         </div>
     </div>
@@ -213,32 +213,33 @@
             document.querySelectorAll('[id$="CurrentIP"]').forEach(el => el.textContent = data.ip);
         }).catch(e => console.log('IP fetch failed', e));
 
-        // Setup live token countdown
-        let tokenSeconds = 0;
-        const updateTokenTime = () => {
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                try {
-                     const payload = JSON.parse(atob(token.split('.')[1]));
-                     if (payload.exp) {
-                         tokenSeconds = payload.exp - Math.floor(Date.now() / 1000);
-                     }
-                } catch(e) {}
-            }
-        };
-        updateTokenTime();
-
+        // Setup live token countdown — uses shared getTokenRemainingSeconds() from auth.js
         setInterval(() => {
+            const tokenSeconds = (typeof getTokenRemainingSeconds === 'function')
+                ? getTokenRemainingSeconds()
+                : 0;
+
             if (tokenSeconds > 0) {
-                tokenSeconds--;
                 const wH = Math.floor(tokenSeconds / 3600);
                 const wM = Math.floor((tokenSeconds % 3600) / 60);
                 const wS = tokenSeconds % 60;
                 document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
                     el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+                    el.style.color = tokenSeconds < 120 ? '#f59e0b' : '';
                 });
+            } else if (localStorage.getItem('refreshToken')) {
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = 'Refreshing...';
+                    el.style.color = '#f59e0b';
+                });
+                if (typeof refreshAccessToken === 'function') {
+                    refreshAccessToken();
+                }
             } else {
-                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => el.textContent = "Expired");
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = 'Expired';
+                    el.style.color = '#ef4444';
+                });
             }
         }, 1000);
 

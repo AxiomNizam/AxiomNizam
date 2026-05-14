@@ -4,18 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
-// GenericResource represents a Kubernetes-style resource stored in the API server
+// GenericResource is the wire-format DTO served by the /api/v1/resources
+// endpoints. It is intentionally JSON-stable (clients rely on this shape via
+// the Postman collections) and acts as a thin projection of the canonical
+// resources.BaseResource used elsewhere in the control plane.
+//
+// Invariants (P0.3):
+//   - This type DOES NOT drive reconciliation. Status transitions must be
+//     performed by a real controller reading from the work queue, not by a
+//     fake `go func(){ sleep; Ready }` simulation inside the HTTP handler.
+//   - GenericResource satisfies reconciler.Resource via GetKey / GetGeneration
+//     / GetObservedGeneration so it can be enqueued for reconciliation.
 type GenericResource struct {
 	APIVersion string                 `json:"apiVersion"`
 	Kind       string                 `json:"kind"`
@@ -24,7 +36,35 @@ type GenericResource struct {
 	Status     ResourceStatus         `json:"status,omitempty"`
 }
 
-// ResourceMetadata holds resource metadata
+// GetKey implements reconciler.Resource. Returns "namespace/name".
+func (g *GenericResource) GetKey() string {
+	if g == nil {
+		return ""
+	}
+	if g.Metadata.Namespace == "" {
+		return g.Metadata.Name
+	}
+	return g.Metadata.Namespace + "/" + g.Metadata.Name
+}
+
+// GetGeneration implements reconciler.Resource.
+func (g *GenericResource) GetGeneration() int64 {
+	if g == nil {
+		return 0
+	}
+	return g.Metadata.Generation
+}
+
+// GetObservedGeneration implements reconciler.Resource.
+func (g *GenericResource) GetObservedGeneration() int64 {
+	if g == nil {
+		return 0
+	}
+	return g.Status.ObservedGeneration
+}
+
+// ResourceMetadata holds resource metadata. The field set and JSON tags are
+// kept backward-compatible with pre-P0 clients.
 type ResourceMetadata struct {
 	Name              string            `json:"name"`
 	Namespace         string            `json:"namespace,omitempty"`
@@ -35,11 +75,13 @@ type ResourceMetadata struct {
 	Annotations       map[string]string `json:"annotations,omitempty"`
 }
 
-// ResourceStatus holds resource status
+// ResourceStatus holds resource status. ObservedGeneration was added in P0.1
+// so the HTTP-surface DTO participates in generation-based reconciliation.
 type ResourceStatus struct {
-	Phase      string                   `json:"phase,omitempty"`
-	Conditions []map[string]interface{} `json:"conditions,omitempty"`
-	Message    string                   `json:"message,omitempty"`
+	Phase              string                   `json:"phase,omitempty"`
+	Conditions         []map[string]interface{} `json:"conditions,omitempty"`
+	Message            string                   `json:"message,omitempty"`
+	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 }
 
 // ResourceHandler manages generic Kubernetes-style resources
@@ -71,7 +113,7 @@ func (h *ResourceHandler) loadState() {
 
 	resp, err := h.etcd.Get(ctx, h.stateKey)
 	if err != nil {
-		log.Printf("resources: failed to load persisted state from etcd: %v", err)
+		logging.Z().Warn("resources: failed to load persisted state", zap.Error(err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -80,7 +122,7 @@ func (h *ResourceHandler) loadState() {
 
 	var resourcesState map[string]map[string]map[string]*GenericResource
 	if err := json.Unmarshal(resp.Kvs[0].Value, &resourcesState); err != nil {
-		log.Printf("resources: failed to decode persisted state: %v", err)
+		logging.Z().Warn("resources: failed to decode persisted state", zap.Error(err))
 		return
 	}
 	if resourcesState == nil {
@@ -96,7 +138,7 @@ func (h *ResourceHandler) persistStateLocked() {
 
 	payload, err := json.Marshal(h.resources)
 	if err != nil {
-		log.Printf("resources: failed to encode state: %v", err)
+		logging.Z().Warn("resources: failed to encode state", zap.Error(err))
 		return
 	}
 
@@ -104,7 +146,7 @@ func (h *ResourceHandler) persistStateLocked() {
 	defer cancel()
 
 	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
-		log.Printf("resources: failed to persist state to etcd: %v", err)
+		logging.Z().Warn("resources: failed to persist state", zap.Error(err))
 	}
 }
 
@@ -172,17 +214,9 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		c.JSON(http.StatusCreated, &resource)
 	}
 
-	// Simulate async reconciliation
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if r, ok := h.resources[kind][ns][name]; ok {
-			r.Status.Phase = "Ready"
-			r.Status.Message = "Resource reconciled successfully"
-			h.persistStateLocked()
-		}
-	}()
+	// Real status transitions (Pending -> Reconciling -> Ready) are performed
+	// by the controller that owns this Kind, not by the HTTP handler. See
+	// P0.3 in ARCHITECTURE.md.
 }
 
 // Get retrieves a resource by namespace/kind/name
@@ -270,16 +304,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 
 	c.JSON(http.StatusOK, existing)
 
-	// Simulate reconciliation
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if r, ok := h.resources[kind][ns][name]; ok {
-			r.Status.Phase = "Ready"
-			h.persistStateLocked()
-		}
-	}()
+	// Status transitions are owned by the controller for this Kind (P0.3).
 }
 
 // Delete removes a resource

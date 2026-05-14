@@ -6,13 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
+
 	"github.com/gin-gonic/gin"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -74,7 +76,7 @@ func (h *PlatformUserHandler) loadState() {
 
 	resp, err := h.etcd.Get(ctx, h.stateKey)
 	if err != nil {
-		log.Printf("platform-users: failed to load persisted state from etcd: %v", err)
+		logging.Z().Warn("platform-users: failed to load persisted state", zap.Error(err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -83,7 +85,7 @@ func (h *PlatformUserHandler) loadState() {
 
 	var users map[string]*PlatformUser
 	if err := json.Unmarshal(resp.Kvs[0].Value, &users); err != nil {
-		log.Printf("platform-users: failed to decode persisted state: %v", err)
+		logging.Z().Warn("platform-users: failed to decode persisted state", zap.Error(err))
 		return
 	}
 	if users == nil {
@@ -99,7 +101,7 @@ func (h *PlatformUserHandler) persistStateLocked() {
 
 	payload, err := json.Marshal(h.users)
 	if err != nil {
-		log.Printf("platform-users: failed to encode state: %v", err)
+		logging.Z().Warn("platform-users: failed to encode state", zap.Error(err))
 		return
 	}
 
@@ -107,7 +109,7 @@ func (h *PlatformUserHandler) persistStateLocked() {
 	defer cancel()
 
 	if _, err := h.etcd.Put(ctx, h.stateKey, string(payload)); err != nil {
-		log.Printf("platform-users: failed to persist state to etcd: %v", err)
+		logging.Z().Warn("platform-users: failed to persist state", zap.Error(err))
 	}
 }
 
