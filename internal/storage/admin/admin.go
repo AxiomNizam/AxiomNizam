@@ -1099,15 +1099,21 @@ func (h *Handler) PutObject(c *gin.Context) {
 
 	h.metrics.RecordRequest(tenantID, bucket, "PUT", c.Request.ContentLength, latency, false)
 
+	// Record audit event for upload and trigger immediate stats update.
 	h.audit.Record(models.StorageEvent{
-		Type:     "object.uploaded",
+		Type:     events.EventObjectUploaded,
 		TenantID: tenantID,
 		UserID:   userID,
 		Bucket:   bucket,
 		Key:      key,
 		Size:     c.Request.ContentLength,
 		SourceIP: c.ClientIP(),
+		Details:  fmt.Sprintf("uploaded %d bytes", c.Request.ContentLength),
 	})
+
+	go func() {
+		_ = h.controller.ReconcileOne(context.Background(), tenantID, bucket)
+	}()
 
 	c.JSON(http.StatusOK, gin.H{
 		"bucket": bucket,

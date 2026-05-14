@@ -266,14 +266,18 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 
 	tenantBucket := bucket.Spec.Name
 	// Step 4: Gather stats (always run, even if ready, to keep dashboard accurate).
+	log.Printf("Storage: gathering stats for %s/%s (backend bucket=%s)", bucket.Metadata.TenantID, bucket.Metadata.Name, tenantBucket)
 	objects, err := bc.client.ListObjects(ctx, tenantBucket, "")
-	if err == nil {
+	if err != nil {
+		log.Printf("⚠️  Storage: failed to list objects for %s/%s stats: %v", bucket.Metadata.TenantID, bucket.Metadata.Name, err)
+	} else {
 		var totalSize int64
 		for _, o := range objects {
 			totalSize += o.Size
 		}
 		bucket.Status.ObjectCount = int64(len(objects))
 		bucket.Status.TotalSize = totalSize
+		log.Printf("✅ Storage: synced stats for %s/%s: %d objects, %d bytes", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObjectCount, bucket.Status.TotalSize)
 	}
 
 	// Step 5: Update status to Ready.
