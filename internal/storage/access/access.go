@@ -146,6 +146,9 @@ func (ac *Controller) ConfigurePersistence(etcd *clientv3.Client) {
 	ac.etcd = etcd
 	ac.mu.Unlock()
 	ac.loadFromEtcd()
+	ac.mu.Lock()
+	ac.persistAllUnlocked()
+	ac.mu.Unlock()
 }
 
 // ConfigureKVPersistence enables KVStore-backed persistence for access controller
@@ -155,6 +158,9 @@ func (ac *Controller) ConfigureKVPersistence(kv platformstore.KVStore) {
 	ac.kvStore = kv
 	ac.mu.Unlock()
 	ac.loadFromKVStore()
+	ac.mu.Lock()
+	ac.persistAllUnlocked()
+	ac.mu.Unlock()
 }
 
 // ---------------------------------------------------------------------------
@@ -1124,6 +1130,7 @@ func (ac *Controller) loadFromKVStore() {
 		}
 	}
 
+	log.Printf("storage access: starting load from KVStore")
 	loadKV(accessPolicyPrefix, func(v string) {
 		var p models.TenantPolicy
 		if err := json.Unmarshal([]byte(v), &p); err != nil {
@@ -1157,7 +1164,7 @@ func (ac *Controller) loadFromKVStore() {
 		ac.mu.Unlock()
 	})
 
-	log.Printf("storage access: loaded policies=%d keys=%d shares=%d from KVStore",
+	log.Printf("✅ storage access: loaded policies=%d keys=%d shares=%d from KVStore",
 		len(ac.policies), len(ac.accessKeys), len(ac.shares))
 }
 
@@ -1180,4 +1187,16 @@ func (ac *Controller) persistShareUnlocked(s *models.BucketShare) {
 		return
 	}
 	ac.putEtcdJSON(accessSharePrefix+s.ID, s)
+}
+
+func (ac *Controller) persistAllUnlocked() {
+	for _, p := range ac.policies {
+		ac.persistPolicyUnlocked(p)
+	}
+	for _, k := range ac.accessKeys {
+		ac.persistAccessKeyUnlocked(k)
+	}
+	for _, s := range ac.shares {
+		ac.persistShareUnlocked(s)
+	}
 }

@@ -97,6 +97,7 @@ func (s *BucketStore) ConfigurePersistence(etcd *clientv3.Client) {
 	s.etcd = etcd
 	s.mu.Unlock()
 	s.loadFromEtcd()
+	s.persistAllToEtcd()
 }
 
 // ConfigureKVPersistence enables KVStore-backed persistence for bucket resources.
@@ -107,6 +108,7 @@ func (s *BucketStore) ConfigureKVPersistence(kv platformstore.KVStore) {
 	s.kvStore = kv
 	s.mu.Unlock()
 	s.loadFromKVStore()
+	s.persistAllToKVStore()
 }
 
 func bucketKey(tenantID, name string) string {
@@ -258,27 +260,27 @@ func (s *BucketStore) loadFromKVStore() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
 	defer cancel()
+	log.Printf("storage bucket store: starting load from KVStore (prefix: %s)", bucketStoreEtcdPrefix)
 	entries, err := kv.List(ctx, bucketStoreEtcdPrefix)
 	if err != nil {
-		log.Printf("storage bucket store: kvstore load failed: %v", err)
+		log.Printf("⚠️  storage bucket store: kvstore load failed: %v", err)
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	loaded := 0
-	for _, val := range entries {
+	for key, val := range entries {
 		var b models.BucketResource
 		if err := json.Unmarshal([]byte(val), &b); err != nil {
+			log.Printf("⚠️  storage bucket store: failed to unmarshal bucket at %s: %v", key, err)
 			continue
 		}
 		cb := b
 		s.buckets[bucketKey(cb.Metadata.TenantID, cb.Metadata.Name)] = &cb
 		loaded++
 	}
-	if loaded > 0 {
-		log.Printf("storage bucket store: loaded %d buckets from KVStore", loaded)
-	}
+	log.Printf("✅ storage bucket store: loaded %d buckets from KVStore", loaded)
 }
 
 func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
@@ -337,6 +339,38 @@ func (s *BucketStore) emitEventUnlocked(ev BucketEvent) {
 		case ch <- ev:
 		default:
 		}
+	}
+}
+
+func (s *BucketStore) persistAllToEtcd() {
+	s.mu.RLock()
+	// Create a copy of buckets to avoid holding the lock during persistence
+	buckets := make([]*models.BucketResource, 0, len(s.buckets))
+	for _, b := range s.buckets {
+		buckets = append(buckets, b)
+	}
+	s.mu.RUnlock()
+
+	for _, b := range buckets {
+		s.mu.Lock()
+		s.persistBucketUnlocked(b)
+		s.mu.Unlock()
+	}
+}
+
+func (s *BucketStore) persistAllToKVStore() {
+	s.mu.RLock()
+	// Create a copy of buckets to avoid holding the lock during persistence
+	buckets := make([]*models.BucketResource, 0, len(s.buckets))
+	for _, b := range s.buckets {
+		buckets = append(buckets, b)
+	}
+	s.mu.RUnlock()
+
+	for _, b := range buckets {
+		s.mu.Lock()
+		s.persistBucketUnlocked(b)
+		s.mu.Unlock()
 	}
 }
 

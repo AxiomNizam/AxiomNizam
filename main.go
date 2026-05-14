@@ -1753,7 +1753,7 @@ func main() {
 				log.Println("✅ DEMO_JWT_SECRET synchronized via Raft KV store")
 			}
 
-			// Initialize IAM with KVStore backend.
+			// Initialize IAM with KVStore backend (if not already initialized).
 			if iamSystem == nil {
 				iamSystem, iamErr = iampkg.NewSystem(conns.PostgreSQL, nil, iampkg.Config{
 					IssuerURL: strings.TrimSpace(os.Getenv("IAM_ISSUER_URL")),
@@ -1776,19 +1776,20 @@ func main() {
 					if iamSystem.Authorizer != nil {
 						authHandler.SetIAMAuthorizer(iamSystem.Authorizer)
 					}
+				}
+			}
 
-					// Wire IAM into storage system (deferred).
-					if storageSys != nil && iamSystem.Issuer != nil {
-						storageSys.SetIAM(iamSystem.Issuer, iamSystem.RevokedStore)
-						log.Println("✅ Storage: IAM middleware attached (deferred, Raft KV backend)")
-					}
+			// Wire components into storage system (deferred).
+			// This must happen even if IAM failed, to ensure bucket persistence works.
+			if storageSys != nil {
+				// Wire KV persistence first so buckets can be loaded.
+				storageSys.SetKVStore(backendMgr.KV())
+				log.Println("✅ Storage: Raft KV persistence wired (deferred)")
 
-					// Wire KV persistence into storage system (deferred).
-					// This loads previously persisted buckets, access keys, and
-					// policies from the Raft KVStore.
-					if storageSys != nil {
-						storageSys.SetKVStore(backendMgr.KV())
-					}
+				// Wire IAM middleware if available.
+				if iamSystem != nil && iamSystem.Issuer != nil {
+					storageSys.SetIAM(iamSystem.Issuer, iamSystem.RevokedStore)
+					log.Println("✅ Storage: IAM middleware attached (deferred, Raft KV backend)")
 				}
 			}
 
