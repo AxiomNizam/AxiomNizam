@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
     'use strict';
 
     // ===== API Configuration =====
@@ -1691,7 +1691,108 @@
                 '</tr>';
             }).join('');
         } catch(e) { osToast('Error loading metrics: ' + e.message, true); }
+
+        // Load SafeGate scanner health metrics
+        osLoadScanMetrics();
     };
+
+    async function osLoadScanMetrics() {
+        const badge = document.getElementById('osScanHealthBadge');
+        const tbody = document.getElementById('osScannerPerfBody');
+        try {
+            const resp = await fetch('/api/v1/builder/scanner/health?metrics=true', {
+                headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('token') || '') }
+            });
+            if (!resp.ok) {
+                if (badge) { badge.textContent = 'Unavailable'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:16px; color:var(--text-muted);">Scanner health endpoint unavailable</td></tr>';
+                return;
+            }
+            const data = await resp.json();
+            const h = data.health || {};
+
+            // Health badge
+            if (badge) {
+                const status = (h.status || 'unknown').toLowerCase();
+                const statusColors = { healthy: '#22c55e', degraded: '#f59e0b', unavailable: '#ef4444' };
+                const color = statusColors[status] || '#94a3b8';
+                badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                badge.style.background = color + '22';
+                badge.style.color = color;
+            }
+
+            // Throughput cards — metrics is the MetricsSnapshot
+            var metrics = h.metrics || {};
+            var total = metrics.total_scans || h.total_scans || 0;
+            var safe = metrics.total_safe || 0;
+            var unsafe = metrics.total_unsafe || 0;
+            setText('osScanTotal', total);
+            setText('osScanSafe', safe);
+            setText('osScanUnsafe', unsafe);
+
+            // Severity distribution
+            var sev = metrics.findings_by_severity || {};
+            var critical = sev.critical || 0;
+            var high = sev.high || 0;
+            var medium = sev.medium || 0;
+            var low = sev.low || 0;
+            var info = sev.info || 0;
+            var sevTotal = critical + high + medium + low + info;
+
+            setText('osSevCriticalN', critical);
+            setText('osSevHighN', high);
+            setText('osSevMediumN', medium);
+            setText('osSevLowN', low);
+            setText('osSevInfoN', info);
+
+            if (sevTotal > 0) {
+                document.getElementById('osSevCritical').style.width = (critical / sevTotal * 100) + '%';
+                document.getElementById('osSevHigh').style.width = (high / sevTotal * 100) + '%';
+                document.getElementById('osSevMedium').style.width = (medium / sevTotal * 100) + '%';
+                document.getElementById('osSevLow').style.width = (low / sevTotal * 100) + '%';
+                document.getElementById('osSevInfo').style.width = (info / sevTotal * 100) + '%';
+            } else {
+                ['osSevCritical','osSevHigh','osSevMedium','osSevLow','osSevInfo'].forEach(function(id) {
+                    document.getElementById(id).style.width = '0%';
+                });
+            }
+
+            // Per-scanner performance table — scanners is an array
+            var scannerList = (metrics.scanners && Array.isArray(metrics.scanners)) ? metrics.scanners : [];
+            if (!scannerList.length) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:16px; color:var(--text-muted);">No scanner activity recorded yet</td></tr>';
+                return;
+            }
+
+            scannerList.sort(function(a, b) { return (b.total_runs || 0) - (a.total_runs || 0); });
+            if (tbody) {
+                tbody.innerHTML = scannerList.map(function(s) {
+                    var runs = s.total_runs || 0;
+                    var findings = s.total_findings || 0;
+                    var errors = s.total_errors || 0;
+                    var timeouts = s.total_timeouts || 0;
+                    var avgMs = s.avg_ms != null ? Number(s.avg_ms).toFixed(1) : '0';
+                    var totalMs = s.total_ms || 0;
+                    var errColor = errors > 0 ? '#ef4444' : 'inherit';
+                    var toColor = timeouts > 0 ? '#f59e0b' : 'inherit';
+                    var findColor = findings > 0 ? '#8b5cf6' : 'inherit';
+                    return '<tr>' +
+                        '<td><strong>' + escHtml(s.name || '-') + '</strong></td>' +
+                        '<td>' + runs + '</td>' +
+                        '<td style="color:' + findColor + ';">' + findings + '</td>' +
+                        '<td style="color:' + errColor + ';">' + errors + '</td>' +
+                        '<td style="color:' + toColor + ';">' + timeouts + '</td>' +
+                        '<td>' + avgMs + ' ms</td>' +
+                        '<td>' + totalMs + ' ms</td>' +
+                        '<td>' + (runs > 0 ? (totalMs / runs).toFixed(1) : '0') + ' ms/scan</td>' +
+                    '</tr>';
+                }).join('');
+            }
+        } catch (e) {
+            if (badge) { badge.textContent = 'Error'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
+            if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:16px; color:var(--text-muted);">Error loading scan metrics</td></tr>';
+        }
+    }
 
     function fmtDuration(sec) {
         if (!sec || sec <= 0) return '-';

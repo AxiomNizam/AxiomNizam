@@ -33,3 +33,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Runtime data (Raft storage, object storage, antivirus signatures)
+# In Docker/k8s this maps to a persistent volume mount.
+/data/
