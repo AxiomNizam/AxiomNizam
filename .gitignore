@@ -37,3 +37,6 @@ go.work.sum
 # Runtime data (Raft storage, object storage, antivirus signatures)
 # In Docker/k8s this maps to a persistent volume mount.
 /data/
+
+# AI context tracking
+claude.md

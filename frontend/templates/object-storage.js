@@ -1700,8 +1700,10 @@
         const badge = document.getElementById('osScanHealthBadge');
         const tbody = document.getElementById('osScannerPerfBody');
         try {
-            const resp = await fetch('/api/v1/builder/scanner/health?metrics=true', {
-                headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('token') || '') }
+            // Derive backend base from OS_API (strip /api/v1/storage suffix)
+            const backendBase = OS_API.replace(/\/api\/v1\/storage\/?$/, '');
+            const resp = await fetch(backendBase + '/api/v1/builder/scanner/health?metrics=true', {
+                headers: osHeaders()
             });
             if (!resp.ok) {
                 if (badge) { badge.textContent = 'Unavailable'; badge.style.background = '#ef444422'; badge.style.color = '#ef4444'; }
