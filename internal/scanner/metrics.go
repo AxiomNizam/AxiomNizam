@@ -1,10 +1,20 @@
 package scanner
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	platformstore "example.com/axiomnizam/internal/platform/store"
+)
+
+const (
+	scannerMetricsKVKey   = "storage:metrics:scanner"
+	scannerMetricsTimeout = 3 * time.Second
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +52,27 @@ type Metrics struct {
 	minDurationMs   int64     // Shortest single scan duration (-1 = unset).
 	lastScanAt      time.Time // Timestamp of the last completed scan.
 	startedAt       time.Time // When the metrics collector was created.
+
+	kvStore platformstore.KVStore
+}
+
+// metricsState is a serializable snapshot of the Metrics state.
+type metricsState struct {
+	TotalScans      int64            `json:"totalScans"`
+	TotalSafe       int64            `json:"totalSafe"`
+	TotalUnsafe     int64            `json:"totalUnsafe"`
+	TotalFindings   int64            `json:"totalFindings"`
+	BySeverity      map[string]int64 `json:"bySeverity"`
+	ScannerScans    map[string]int64 `json:"scannerScans"`
+	ScannerFindings map[string]int64 `json:"scannerFindings"`
+	ScannerErrors   map[string]int64 `json:"scannerErrors"`
+	ScannerTimeouts map[string]int64 `json:"scannerTimeouts"`
+	ScannerTotalMs  map[string]int64 `json:"scannerTotalMs"`
+	TotalDurationMs int64            `json:"totalDurationMs"`
+	MaxDurationMs   int64            `json:"maxDurationMs"`
+	MinDurationMs   int64            `json:"minDurationMs"`
+	LastScanAt      time.Time        `json:"lastScanAt"`
+	StartedAt       time.Time        `json:"startedAt"`
 }
 
 // NewMetrics creates an initialized Metrics instance.
@@ -62,8 +93,6 @@ func NewMetrics() *Metrics {
 // This is called automatically by the orchestrator after every scan.
 func (m *Metrics) Record(result *ScanResult) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	// Global counters
 	m.totalScans++
 	if result.Safe {
@@ -100,6 +129,107 @@ func (m *Metrics) Record(result *ScanResult) {
 			m.scannerTimeouts[t.Scanner]++
 		}
 	}
+	m.mu.Unlock()
+
+	// Async save to persistent store.
+	go m.save()
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for scanner metrics.
+func (m *Metrics) ConfigureKVPersistence(kv platformstore.KVStore) {
+	m.mu.Lock()
+	m.kvStore = kv
+	m.mu.Unlock()
+	m.load()
+}
+
+func (m *Metrics) load() {
+	m.mu.Lock()
+	kv := m.kvStore
+	m.mu.Unlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), scannerMetricsTimeout)
+	defer cancel()
+
+	val, err := kv.Get(ctx, scannerMetricsKVKey)
+	if err != nil {
+		return // not found
+	}
+
+	var state metricsState
+	if err := json.Unmarshal([]byte(val), &state); err != nil {
+		log.Printf("⚠️  scanner metrics: failed to unmarshal state: %v", err)
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.totalScans = state.TotalScans
+	m.totalSafe = state.TotalSafe
+	m.totalUnsafe = state.TotalUnsafe
+	m.totalFindings = state.TotalFindings
+	m.totalDurationMs = state.TotalDurationMs
+	m.maxDurationMs = state.MaxDurationMs
+	m.minDurationMs = state.MinDurationMs
+	m.lastScanAt = state.LastScanAt
+	m.startedAt = state.StartedAt
+
+	m.bySeverity = make(map[Severity]int64)
+	for k, v := range state.BySeverity {
+		m.bySeverity[Severity(k)] = v
+	}
+
+	m.scannerScans = state.ScannerScans
+	m.scannerFindings = state.ScannerFindings
+	m.scannerErrors = state.ScannerErrors
+	m.scannerTimeouts = state.ScannerTimeouts
+	m.scannerTotalMs = state.ScannerTotalMs
+
+	log.Printf("✅ scanner metrics: loaded persistent state (scans=%d)", state.TotalScans)
+}
+
+func (m *Metrics) save() {
+	m.mu.RLock()
+	kv := m.kvStore
+	if kv == nil {
+		m.mu.RUnlock()
+		return
+	}
+
+	state := metricsState{
+		TotalScans:      m.totalScans,
+		TotalSafe:       m.totalSafe,
+		TotalUnsafe:     m.totalUnsafe,
+		TotalFindings:   m.totalFindings,
+		ScannerScans:    m.scannerScans,
+		ScannerFindings: m.scannerFindings,
+		ScannerErrors:   m.scannerErrors,
+		ScannerTimeouts: m.scannerTimeouts,
+		ScannerTotalMs:  m.scannerTotalMs,
+		TotalDurationMs: m.totalDurationMs,
+		MaxDurationMs:   m.maxDurationMs,
+		MinDurationMs:   m.minDurationMs,
+		LastScanAt:      m.lastScanAt,
+		StartedAt:       m.startedAt,
+	}
+	state.BySeverity = make(map[string]int64)
+	for k, v := range m.bySeverity {
+		state.BySeverity[string(k)] = v
+	}
+	m.mu.RUnlock()
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), scannerMetricsTimeout)
+	defer cancel()
+	_ = kv.Put(ctx, scannerMetricsKVKey, string(data))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -83,6 +83,15 @@ func (s *System) SetIAM(issuer *token.Issuer, revokedStore *iamStorage.EtcdRevok
 func (s *System) SetKVStore(kv platformstore.KVStore) {
 	s.Store.ConfigureKVPersistence(kv)
 	s.Access.ConfigureKVPersistence(kv)
+	if s.Metrics != nil {
+		s.Metrics.ConfigureKVPersistence(kv)
+	}
+	if s.ScanOrch != nil && s.ScanOrch.Metrics() != nil {
+		s.ScanOrch.Metrics().ConfigureKVPersistence(kv)
+	}
+	if s.AuditLog != nil {
+		s.AuditLog.ConfigureKVPersistence(kv)
+	}
 	log.Println("✅ Storage: KVStore persistence configured (Raft mode)")
 }
 
