@@ -24,6 +24,8 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://axiomnizam.bitbd.net}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://axiom:axiom@rabbitmq:5672/axiom}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      AXIOMNIZAM_RAFT_DATA_DIR: /data/raft
+      STORAGE_DATA_DIR: /data/storage
     depends_on:
       # - valkey
       # - etcd  # Not required when STORAGE_BACKEND=raft
@@ -38,6 +40,7 @@ services:
     volumes:
       - query_logs:/data/query_logs
       - storage-data:/data/storage
+      - raft-data:/data/raft
     networks:
       - app-network
 
@@ -422,5 +425,6 @@ volumes:
   rabbitmq-data:
   query_logs:
   storage-data:
+  raft-data:
   openclaw-config:
   ollama-data:
