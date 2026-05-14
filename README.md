@@ -85,13 +85,13 @@ Runtime notes:
 <!-- README_METRICS:START -->
 Code inventory snapshot (workspace scan on 2026-05-03):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 725
-- Total code lines: 213000+
-- Go files (repository): 675
-- Go lines (repository): 176463
-- Internal modules: 100
-- Internal Go files: 632
-- Internal Go lines: 166000+
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 771
+- Total code lines: 226638+
+- Go files (repository): 719
+- Go lines (repository): 191827
+- Internal modules: 215
+- Internal Go files: 676
+- Internal Go lines: 179189+
 
 Counting method used:
 
