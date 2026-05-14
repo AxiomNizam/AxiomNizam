@@ -1782,6 +1782,13 @@ func main() {
 						storageSys.SetIAM(iamSystem.Issuer, iamSystem.RevokedStore)
 						log.Println("✅ Storage: IAM middleware attached (deferred, Raft KV backend)")
 					}
+
+					// Wire KV persistence into storage system (deferred).
+					// This loads previously persisted buckets, access keys, and
+					// policies from the Raft KVStore.
+					if storageSys != nil {
+						storageSys.SetKVStore(backendMgr.KV())
+					}
 				}
 			}
 

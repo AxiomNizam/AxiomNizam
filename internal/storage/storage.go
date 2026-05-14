@@ -19,6 +19,7 @@ import (
 	iamMiddleware "example.com/axiomnizam/internal/iam/middleware"
 	iamStorage "example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/iam/token"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/scanner"
 	"example.com/axiomnizam/internal/scanner/archivescan"
 	"example.com/axiomnizam/internal/scanner/macro"
@@ -74,6 +75,15 @@ type System struct {
 func (s *System) SetIAM(issuer *token.Issuer, revokedStore *iamStorage.EtcdRevokedTokenStore) {
 	s.iamIssuer = issuer
 	s.iamRevokedStore = revokedStore
+}
+
+// SetKVStore wires the KVStore-backed persistence into the BucketStore and
+// Access Controller. Called in Raft mode after the Raft KV becomes available.
+// This loads previously persisted buckets from the KVStore.
+func (s *System) SetKVStore(kv platformstore.KVStore) {
+	s.Store.ConfigureKVPersistence(kv)
+	s.Access.ConfigureKVPersistence(kv)
+	log.Println("✅ Storage: KVStore persistence configured (Raft mode)")
 }
 
 // Config holds configuration for the native object storage backend.

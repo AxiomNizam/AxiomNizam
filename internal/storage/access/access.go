@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/iam/token"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/storage/events"
 	"example.com/axiomnizam/internal/storage/models"
 	"example.com/axiomnizam/internal/storage/store"
@@ -32,6 +33,7 @@ type Controller struct {
 	shares     map[string]*models.BucketShare  // key = shareID
 	auditLog   *events.AuditLog
 	etcd       *clientv3.Client
+	kvStore    platformstore.KVStore // Raft-compatible KV persistence (used when etcd is nil).
 	rateMu     sync.Mutex
 	rateMap    map[string]*objectRateState
 	rateWindow time.Duration
@@ -144,6 +146,15 @@ func (ac *Controller) ConfigurePersistence(etcd *clientv3.Client) {
 	ac.etcd = etcd
 	ac.mu.Unlock()
 	ac.loadFromEtcd()
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for access controller
+// resources. This is used in Raft mode where etcd is not available.
+func (ac *Controller) ConfigureKVPersistence(kv platformstore.KVStore) {
+	ac.mu.Lock()
+	ac.kvStore = kv
+	ac.mu.Unlock()
+	ac.loadFromKVStore()
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,35 +1060,105 @@ func (ac *Controller) loadFromEtcd() {
 }
 
 func (ac *Controller) putEtcdJSON(key string, value interface{}) {
-	etcd := ac.etcd
-	if etcd == nil {
-		return
-	}
-
 	data, err := json.Marshal(value)
 	if err != nil {
-		log.Printf("storage access: etcd marshal failed for key %s: %v", key, err)
+		log.Printf("storage access: marshal failed for key %s: %v", key, err)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
-	defer cancel()
-	if _, err := etcd.Put(ctx, key, string(data)); err != nil {
-		log.Printf("storage access: etcd put failed for key %s: %v", key, err)
+	// Prefer etcd, fall back to KVStore.
+	if ac.etcd != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		defer cancel()
+		if _, err := ac.etcd.Put(ctx, key, string(data)); err != nil {
+			log.Printf("storage access: etcd put failed for key %s: %v", key, err)
+		}
+		return
+	}
+	if ac.kvStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		defer cancel()
+		if err := ac.kvStore.Put(ctx, key, string(data)); err != nil {
+			log.Printf("storage access: kvstore put failed for key %s: %v", key, err)
+		}
 	}
 }
 
 func (ac *Controller) deleteEtcdKey(key string) {
-	etcd := ac.etcd
-	if etcd == nil {
+	// Prefer etcd, fall back to KVStore.
+	if ac.etcd != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		defer cancel()
+		if _, err := ac.etcd.Delete(ctx, key); err != nil {
+			log.Printf("storage access: etcd delete failed for key %s: %v", key, err)
+		}
+		return
+	}
+	if ac.kvStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		defer cancel()
+		if err := ac.kvStore.Delete(ctx, key); err != nil {
+			log.Printf("storage access: kvstore delete failed for key %s: %v", key, err)
+		}
+	}
+}
+
+func (ac *Controller) loadFromKVStore() {
+	ac.mu.RLock()
+	kv := ac.kvStore
+	ac.mu.RUnlock()
+	if kv == nil {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
-	defer cancel()
-	if _, err := etcd.Delete(ctx, key); err != nil {
-		log.Printf("storage access: etcd delete failed for key %s: %v", key, err)
+	loadKV := func(prefix string, fn func(string)) {
+		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		defer cancel()
+		entries, err := kv.List(ctx, prefix)
+		if err != nil {
+			log.Printf("storage access: kvstore load failed for prefix %s: %v", prefix, err)
+			return
+		}
+		for _, val := range entries {
+			fn(val)
+		}
 	}
+
+	loadKV(accessPolicyPrefix, func(v string) {
+		var p models.TenantPolicy
+		if err := json.Unmarshal([]byte(v), &p); err != nil {
+			return
+		}
+		ac.mu.Lock()
+		cp := p
+		ac.policies[policyKey(cp.TenantID, cp.UserID, cp.BucketName)] = &cp
+		ac.mu.Unlock()
+	})
+
+	loadKV(accessKeyPrefix, func(v string) {
+		var k models.AccessKey
+		if err := json.Unmarshal([]byte(v), &k); err != nil {
+			return
+		}
+		ac.mu.Lock()
+		ck := k
+		ac.accessKeys[ck.AccessKeyID] = &ck
+		ac.mu.Unlock()
+	})
+
+	loadKV(accessSharePrefix, func(v string) {
+		var s models.BucketShare
+		if err := json.Unmarshal([]byte(v), &s); err != nil {
+			return
+		}
+		ac.mu.Lock()
+		cs := s
+		ac.shares[cs.ID] = &cs
+		ac.mu.Unlock()
+	})
+
+	log.Printf("storage access: loaded policies=%d keys=%d shares=%d from KVStore",
+		len(ac.policies), len(ac.accessKeys), len(ac.shares))
 }
 
 func (ac *Controller) persistPolicyUnlocked(p *models.TenantPolicy) {
