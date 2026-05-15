@@ -83,7 +83,7 @@ Runtime notes:
 ## Project Size Snapshot
 
 <!-- README_METRICS:START -->
-Code inventory snapshot (workspace scan on 2026-05-03):
+Code inventory snapshot (workspace scan on 2026-05-16):
 
 - Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 771
 - Total code lines: 227638+
