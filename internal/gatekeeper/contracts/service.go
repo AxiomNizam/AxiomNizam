@@ -5,47 +5,102 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/org/project/internal/twofactor/models"
+	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
 )
 
-// ─── Enrollment ───────────────────────────────────────────────────────────────
-
-// EnrollmentService manages the Factor lifecycle: enroll → activate → disable.
+// EnrollmentService defines the contract for MFA factor enrollment.
 type EnrollmentService interface {
-	// Enroll creates a Factor in Pending phase and returns a provisioning URI
-	// (otpauth://) for the authenticator app to scan.
-	Enroll(ctx context.Context, req EnrollRequest) (*EnrollResult, error)
+	// SetupFactor initiates factor setup
+	SetupFactor(ctx context.Context, userID models.UserID, factorType models.FactorType) (string, error)
 
-	// Activate transitions a Pending factor to Active after the user proves
-	// possession by submitting a valid OTP.
-	Activate(ctx context.Context, req ActivateRequest) error
+	// ActivateFactor completes enrollment by verifying OTP
+	ActivateFactor(ctx context.Context, factorID models.FactorID, code string) ([]string, error)
 
-	// Disable soft-disables an Active factor.  The factor is preserved for audit.
-	Disable(ctx context.Context, userID, factorID uuid.UUID) error
-
-	// Status returns the current phase and conditions for a factor.
-	Status(ctx context.Context, userID, factorID uuid.UUID) (*models.Factor, error)
-
-	// List returns all factors for a user.
-	List(ctx context.Context, userID uuid.UUID) ([]*models.Factor, error)
+	// DisableFactor removes a factor
+	DisableFactor(ctx context.Context, factorID models.FactorID) error
 }
 
-// EnrollRequest carries caller input for a new factor.
-type EnrollRequest struct {
-	UserID      uuid.UUID
-	Type        models.FactorType
-	Issuer      string
-	AccountName string // shown in the authenticator app (usually email)
-	PhoneNumber string // SMS only
-	Email       string // email-OTP only
+// ChallengeService defines the contract for MFA authentication challenges.
+type ChallengeService interface {
+	// BeginChallenge creates a new MFA challenge
+	BeginChallenge(ctx context.Context, userID models.UserID, factorID models.FactorID) (string, error)
+
+	// VerifyChallenge verifies a user's response
+	VerifyChallenge(ctx context.Context, challengeID string, code string) (bool, error)
+
+	// ExpireChallenge marks a challenge as expired
+	ExpireChallenge(ctx context.Context, challengeID string) error
 }
 
-// EnrollResult carries the provisioning data returned to the caller.
-type EnrollResult struct {
-	Factor          *models.Factor
-	ProvisioningURI string   // otpauth://
-	QRCodeSVG       string   // base64-encoded SVG for QR display
-	BackupCodes     []string // plaintext — shown once, then hashed
+// FactorService defines the contract for factor management.
+type FactorService interface {
+	// GetFactor retrieves a factor by ID
+	GetFactor(ctx context.Context, factorID models.FactorID) (*models.Factor, error)
+
+	// ListFactors returns all factors for a user
+	ListFactors(ctx context.Context, userID models.UserID) ([]*models.Factor, error)
+
+	// DeleteFactor removes a factor
+	DeleteFactor(ctx context.Context, factorID models.FactorID) error
+
+	// GetActiveFactorCount returns the number of active factors for a user
+	GetActiveFactorCount(ctx context.Context, userID models.UserID) (int, error)
+}
+
+// PolicyService defines the contract for MFA policy evaluation.
+type PolicyService interface {
+	// EvaluatePolicy determines if MFA is required for a request
+	EvaluatePolicy(ctx context.Context, userID models.UserID) (requiresMFA bool, factors []models.FactorType, err error)
+
+	// GetPolicy retrieves a specific policy
+	GetPolicy(ctx context.Context, policyID uuid.UUID) (*models.MFAPolicy, error)
+}
+
+// RiskService defines the contract for adaptive risk assessment.
+type RiskService interface {
+	// ScoreAuthentication calculates a risk score for an authentication attempt
+	ScoreAuthentication(ctx context.Context, userID models.UserID, ipAddress string) (int, error)
+
+	// IsHighRisk returns true if the risk score exceeds the threshold
+	IsHighRisk(ctx context.Context, score int) bool
+}
+
+// TrustedDeviceService defines the contract for device trust management.
+type TrustedDeviceService interface {
+	// TrustDevice registers a device after MFA verification
+	TrustDevice(ctx context.Context, userID models.UserID, fingerprint, userAgent, ipAddress string) (string, error)
+
+	// VerifyDeviceToken checks if a device token is valid
+	VerifyDeviceToken(ctx context.Context, userID models.UserID, token string) (bool, error)
+
+	// RevokeTrustedDevice revokes a specific device
+	RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error
+
+	// RevokeAllDevices revokes all devices for a user
+	RevokeAllDevices(ctx context.Context, userID models.UserID) error
+}
+
+// BackupCodeService defines the contract for backup code management.
+type BackupCodeService interface {
+	// ConsumeBackupCode marks a code as used
+	ConsumeBackupCode(ctx context.Context, userID models.UserID, code string) (bool, error)
+
+	// GetRemainingBackupCodes returns the count of unused codes
+	GetRemainingBackupCodes(ctx context.Context, userID models.UserID) (int, error)
+
+	// RegenerateBackupCodes generates new backup codes for a factor
+	RegenerateBackupCodes(ctx context.Context, factorID models.FactorID) ([]string, error)
+}
+
+// Provider aggregates all Gatekeeper services for dependency injection.
+type Provider interface {
+	EnrollmentService() EnrollmentService
+	ChallengeService() ChallengeService
+	FactorService() FactorService
+	PolicyService() PolicyService
+	RiskService() RiskService
+	TrustedDeviceService() TrustedDeviceService
+	BackupCodeService() BackupCodeService
 }
 
 // ActivateRequest carries the OTP the user submits to prove possession.
