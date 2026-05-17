@@ -156,6 +156,7 @@ func main() {
 	router.GET("/lineage-version", requireFrontendRoles("admin", "system-manager"), versionLineageHandler)
 	router.GET("/iam-admin", requireFrontendRoles("system-manager"), iamAdminHandler)
 	router.GET("/object-storage", requireFrontendRoles("system-manager"), objectStorageHandler)
+	router.GET("/two-factor", twoFactorHandler)
 	router.GET("/favicon.ico", faviconHandler)
 	router.GET("/api/health", apiHealthHandler)
 	router.GET("/api/status", apiStatusHandler)
@@ -178,7 +179,8 @@ func main() {
 	fmt.Printf("�🏛️ Governance Console: http://localhost:%s/governance\n", port)
 	fmt.Printf("🛠️ Operations Center: http://localhost:%s/operations-center\n", port)
 	fmt.Printf("🧭 Version & Lineage: http://localhost:%s/lineage-version\n", port)
-	fmt.Printf("� IAM Admin Console: http://localhost:%s/iam-admin\n", port)
+	fmt.Printf("🔐 IAM Admin Console: http://localhost:%s/iam-admin\n", port)
+	fmt.Printf("🔒 Two-Factor Auth: http://localhost:%s/two-factor\n", port)
 	fmt.Printf("📝 Signup: http://localhost:%s/signup\n", port)
 	fmt.Printf("📡 Backend (browser): %s\n", backendURL)
 	fmt.Printf("🔁 Backend (proxy): %s\n\n", backendProxyURL)
@@ -534,6 +536,31 @@ func objectStorageHandler(c *gin.Context) {
 		"title":      "AxiomNizam - Object Storage",
 		"pageName":   "object-storage",
 		"page":       "object-storage",
+		"isAuth":     isAuth,
+		"userName":   userName,
+		"backendURL": backendURL,
+	})
+}
+
+// twoFactorHandler serves the 2FA management page
+func twoFactorHandler(c *gin.Context) {
+	setNoCacheHeaders(c)
+
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		authToken, _ = c.Cookie("authToken")
+	}
+
+	isAuth := authToken != ""
+	userName := "User"
+	if fromCookie, _ := c.Cookie("userName"); strings.TrimSpace(fromCookie) != "" {
+		userName = fromCookie
+	}
+
+	c.HTML(http.StatusOK, "layout.html", gin.H{
+		"title":      "AxiomNizam - Two-Factor Authentication",
+		"pageName":   "two-factor",
+		"page":       "two-factor",
 		"isAuth":     isAuth,
 		"userName":   userName,
 		"backendURL": backendURL,
