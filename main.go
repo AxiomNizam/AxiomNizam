@@ -34,6 +34,7 @@ import (
 	"example.com/axiomnizam/internal/etl"
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
+	"example.com/axiomnizam/internal/gatekeeper"
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/heartbeat"
 	iampkg "example.com/axiomnizam/internal/iam"
@@ -1660,6 +1661,17 @@ func main() {
 		if storageSys.AVEngine != nil {
 			apiBuilderHandler.SetAVEngine(storageSys.AVEngine)
 		}
+	}
+
+	// ====================================
+	// GATEKEEPER 2FA MODULE
+	// ====================================
+	gkSystem, gkErr := gatekeeper.NewSystem(conns.PostgreSQL)
+	if gkErr != nil {
+		log.Printf("⚠️  Gatekeeper 2FA module initialization failed: %v — 2FA endpoints will be unavailable", gkErr)
+	} else {
+		gkSystem.RegisterRoutes(router)
+		log.Println("✅ Gatekeeper 2FA module started")
 	}
 
 	// ====================================

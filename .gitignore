@@ -40,3 +40,5 @@ go.work.sum
 
 # AI context tracking
 claude.md
+
+.vscode/settings.json
