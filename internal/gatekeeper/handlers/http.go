@@ -140,6 +140,11 @@ func (h *HTTPHandler) ListFactors(c *gin.Context) {
 		return
 	}
 
+	// Strip sensitive fields before returning
+	for _, f := range factors {
+		f.Spec.EncryptedSecret = nil
+	}
+
 	c.JSON(http.StatusOK, gin.H{"factors": factors})
 }
 
@@ -151,6 +156,11 @@ func (h *HTTPHandler) GetFactor(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Strip sensitive fields before returning
+	if factor != nil {
+		factor.Spec.EncryptedSecret = nil
 	}
 
 	c.JSON(http.StatusOK, factor)
