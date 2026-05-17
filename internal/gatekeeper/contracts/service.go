@@ -112,8 +112,8 @@ type ActivateRequest struct {
 
 // ─── Challenge ────────────────────────────────────────────────────────────────
 
-// ChallengeService orchestrates the runtime "prove it" flow.
-type ChallengeService interface {
+// ChallengeRuntimeService orchestrates the runtime "prove it" flow.
+type ChallengeRuntimeService interface {
 	// Begin creates a new Challenge for the user's active factor.
 	Begin(ctx context.Context, req BeginRequest) (*models.Challenge, error)
 

@@ -112,7 +112,7 @@ func (w *factorServiceWrapper) DeleteFactor(ctx context.Context, factorID models
 }
 
 func (w *factorServiceWrapper) GetActiveFactorCount(ctx context.Context, userID models.UserID) (int, error) {
-	factors, err := w.repo.ListByUser(ctx, userID)
+	factors, err := w.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		return 0, err
 	}

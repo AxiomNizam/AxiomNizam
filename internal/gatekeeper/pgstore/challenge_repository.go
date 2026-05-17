@@ -134,8 +134,6 @@ func (r *ChallengeRepository) GetByUserID(ctx context.Context, userID models.Use
 
 // Update writes changes to a challenge.
 func (r *ChallengeRepository) Update(ctx context.Context, challenge *models.Challenge) (*models.Challenge, error) {
-	now := time.Now().UTC()
-
 	query := `
 		UPDATE twofactor_challenges
 		SET phase = $2, nonce = $3, attempts = $4, expires_at = $5, resolved_at = $6, resource_version = resource_version + 1

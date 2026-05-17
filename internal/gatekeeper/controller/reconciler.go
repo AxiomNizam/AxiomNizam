@@ -83,14 +83,15 @@ func (r *FactorReconciler) reconcileFactor(ctx context.Context, factorID uuid.UU
 			verificationTTL := 30 * 24 * time.Hour // 30 days
 			if time.Since(*factor.Status.LastVerifiedAt) > verificationTTL {
 				factor.Status.SetCondition(models.Condition{
-					Type:    models.ConditionVerified,
+					Type:    models.ConditionTypeVerified,
 					Status:  models.ConditionStatusFalse,
 					Reason:  "VerificationExpired",
 					Message: "Factor requires re-verification",
 				})
 			}
 		}
-		return r.factorRepo.Update(ctx, factor)
+		_, err := r.factorRepo.Update(ctx, factor)
+		return err
 
 	case models.FactorPhaseDisabled:
 		// Factor is disabled - ensure it's properly cleaned up

@@ -40,7 +40,7 @@ func (s *Service) GenerateSecret(ctx context.Context, userID models.UserID, acco
 	secret = base32.StdEncoding.EncodeToString(secretBytes)
 
 	// Build OTPAuth URI for QR code
-	uri := BuildOTPAuthURI(accountName, issuerName, secret, "SHA256")
+	uri := s.issuer.BuildOTPAuthURI(secret, accountName, issuerName)
 	return secret, uri, nil
 }
 

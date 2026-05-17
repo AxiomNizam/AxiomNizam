@@ -2,9 +2,13 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"example.com/axiomnizam/internal/gatekeeper/models"
 )
+
+// ErrFactorNotFound is returned when a factor is not found.
+var ErrFactorNotFound = errors.New("factor not found")
 
 // FactorRepository defines CRUD operations for MFA factors.
 type FactorRepository interface {

@@ -44,7 +44,7 @@ func (g *Generator) Generate(count int) ([]string, error) {
 func (g *Generator) generateSingle() (string, error) {
 	bytes := make([]byte, 6) // 6 random bytes = 12 hex digits
 	if _, err := rand.Read(bytes); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	hex := fmt.Sprintf("%012x", bytes)
@@ -83,6 +83,7 @@ func (s *Service) ConsumeBackupCode(ctx context.Context, code string) (*models.B
 
 	// Normalize code (remove dashes)
 	normalizedCode := strings.ReplaceAll(code, "-", "")
+	_ = normalizedCode // TODO: use for hash lookup
 
 	// TODO: Look up backup code by hash from database
 	// For now, this is a stub that would require matching against hashed codes

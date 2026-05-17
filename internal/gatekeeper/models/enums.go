@@ -37,9 +37,11 @@ const (
 type ConditionType string
 
 const (
-	ConditionTypeReady        ConditionType = "Ready"
-	ConditionTypeProvisioning ConditionType = "Provisioning"
-	ConditionTypeError        ConditionType = "Error"
+	ConditionTypeReady         ConditionType = "Ready"
+	ConditionTypeProvisioning  ConditionType = "Provisioning"
+	ConditionTypeError         ConditionType = "Error"
+	ConditionTypeVerified      ConditionType = "Verified"
+	ConditionTypeMFARequired   ConditionType = "MFARequired"
 )
 
 // ConditionStatus is a K8s-style condition status.
@@ -97,4 +99,20 @@ const (
 	AuditEventHighRiskDetected     AuditEventType = "HighRiskDetected"
 	AuditEventChallengeCreated     AuditEventType = "ChallengeCreated"
 	AuditEventChallengeExpired     AuditEventType = "ChallengeExpired"
+)
+
+// RaftCommandType represents the type of Raft command for MFA state.
+type RaftCommandType string
+
+const (
+	RaftCmdEnrollFactor         RaftCommandType = "EnrollFactor"
+	RaftCmdActivateFactor      RaftCommandType = "ActivateFactor"
+	RaftCmdDisableFactor       RaftCommandType = "DisableFactor"
+	RaftCmdCreateChallenge     RaftCommandType = "CreateChallenge"
+	RaftCmdVerifyChallenge     RaftCommandType = "VerifyChallenge"
+	RaftCmdExpireChallenge     RaftCommandType = "ExpireChallenge"
+	RaftCmdGenerateBackupCodes RaftCommandType = "GenerateBackupCodes"
+	RaftCmdConsumeBackupCode   RaftCommandType = "ConsumeBackupCode"
+	RaftCmdTrustDevice         RaftCommandType = "TrustDevice"
+	RaftCmdRevokeDevice        RaftCommandType = "RevokeDevice"
 )

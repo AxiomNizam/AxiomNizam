@@ -24,6 +24,18 @@ type Clock interface {
 	Now() time.Time
 }
 
+// realClock implements Clock using system time.
+type realClock struct{}
+
+func (c *realClock) Now() time.Time {
+	return time.Now().UTC()
+}
+
+// NewRealClock creates a clock that returns the actual time.
+func NewRealClock() Clock {
+	return &realClock{}
+}
+
 // NewService creates a new challenge service.
 func NewService(cr repositories.ChallengeRepository, fr repositories.FactorRepository, c Clock) *Service {
 	return &Service{
