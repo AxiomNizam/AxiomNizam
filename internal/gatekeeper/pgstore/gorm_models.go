@@ -1,0 +1,82 @@
+package pgstore
+
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// ────────────────────────────────────────────────────────────────
+// GORM models for Gatekeeper 2FA tables.
+// These mirror the domain models but carry GORM struct tags
+// so that AutoMigrate can create / alter the schema.
+// ────────────────────────────────────────────────────────────────
+
+// FactorRow is the GORM representation of the twofactor_factors table.
+type FactorRow struct {
+	ID               string         `gorm:"primaryKey;type:varchar(36);not null"`
+	UserID           string         `gorm:"type:varchar(36);not null;index"`
+	Spec             []byte         `gorm:"type:jsonb;not null"`
+	Status           []byte         `gorm:"type:jsonb;not null"`
+	ResourceVersion  int64          `gorm:"not null;default:1"`
+	DeletedAt        gorm.DeletedAt `gorm:"index"`
+	CreatedAt        time.Time      `gorm:"not null;autoCreateTime"`
+	UpdatedAt        time.Time      `gorm:"not null;autoUpdateTime"`
+}
+
+func (FactorRow) TableName() string { return "twofactor_factors" }
+
+// ChallengeRow is the GORM representation of the twofactor_challenges table.
+type ChallengeRow struct {
+	ID              string    `gorm:"primaryKey;type:varchar(36);not null"`
+	UserID          string    `gorm:"type:varchar(36);not null;index"`
+	FactorID        string    `gorm:"type:varchar(36);not null;index"`
+	Phase           string    `gorm:"type:varchar(20);not null"`
+	Nonce           string    `gorm:"type:text"`
+	Attempts        int       `gorm:"not null;default:0"`
+	ExpiresAt       time.Time `gorm:"not null;index"`
+	ResolvedAt      *time.Time
+	IPAddress       string    `gorm:"type:varchar(45);not null"`
+	UserAgent       string    `gorm:"type:text;not null"`
+	ResourceVersion int64     `gorm:"not null;default:1"`
+	CreatedAt       time.Time `gorm:"not null;autoCreateTime"`
+}
+
+func (ChallengeRow) TableName() string { return "twofactor_challenges" }
+
+// BackupCodeRow is the GORM representation of the twofactor_backup_codes table.
+type BackupCodeRow struct {
+	ID        string     `gorm:"primaryKey;type:varchar(36);not null"`
+	UserID    string     `gorm:"type:varchar(36);not null;index"`
+	FactorID  string     `gorm:"type:varchar(36);not null;index"`
+	CodeHash  []byte     `gorm:"type:bytea;not null"`
+	UsedAt    *time.Time `gorm:"index"`
+	CreatedAt time.Time  `gorm:"not null;autoCreateTime"`
+}
+
+func (BackupCodeRow) TableName() string { return "twofactor_backup_codes" }
+
+// TrustedDeviceRow is the GORM representation of the twofactor_trusted_devices table.
+type TrustedDeviceRow struct {
+	ID          string     `gorm:"primaryKey;type:varchar(36);not null"`
+	UserID      string     `gorm:"type:varchar(36);not null;index"`
+	TokenHash   []byte     `gorm:"type:bytea;not null"`
+	Fingerprint string     `gorm:"type:varchar(255);not null"`
+	UserAgent   string     `gorm:"type:text;not null"`
+	IPAddress   string     `gorm:"type:varchar(45);not null"`
+	ExpiresAt   time.Time  `gorm:"not null;index"`
+	RevokedAt   *time.Time `gorm:"index"`
+	CreatedAt   time.Time  `gorm:"not null;autoCreateTime"`
+}
+
+func (TrustedDeviceRow) TableName() string { return "twofactor_trusted_devices" }
+
+// MigrateGatekeeperTables runs GORM AutoMigrate for all Gatekeeper 2FA tables.
+func MigrateGatekeeperTables(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&FactorRow{},
+		&ChallengeRow{},
+		&BackupCodeRow{},
+		&TrustedDeviceRow{},
+	)
+}

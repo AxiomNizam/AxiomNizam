@@ -3,6 +3,7 @@ package gatekeeper
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 
 	"example.com/axiomnizam/internal/gatekeeper/audit"
@@ -68,6 +69,11 @@ func NewSystem(gormDB *gorm.DB) (*System, error) {
 		return nil, err
 	}
 
+	// Auto-migrate Gatekeeper tables (same pattern as IAM pgstore.New)
+	if err := pgstore.MigrateGatekeeperTables(gormDB); err != nil {
+		return nil, fmt.Errorf("gatekeeper migration: %w", err)
+	}
+
 	sqlDB, err := gormDB.DB()
 	if err != nil {
 		return nil, err
@@ -90,6 +96,10 @@ func NewSystem(gormDB *gorm.DB) (*System, error) {
 func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+
+	if err := pgstore.MigrateGatekeeperTables(gormDB); err != nil {
+		return nil, fmt.Errorf("gatekeeper migration: %w", err)
 	}
 
 	sqlDB, err := gormDB.DB()

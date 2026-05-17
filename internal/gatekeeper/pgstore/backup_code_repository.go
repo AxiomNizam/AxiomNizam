@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,7 +46,7 @@ func (r *BackupCodeRepository) Create(ctx context.Context, codes []*models.Backu
 		if i > 0 {
 			query += ", "
 		}
-		query += `($` + string(rune(i*5+1)) + `, $` + string(rune(i*5+2)) + `, $` + string(rune(i*5+3)) + `, $` + string(rune(i*5+4)) + `, $` + string(rune(i*5+5)) + `)`
+		query += `($` + strconv.Itoa(i*5+1) + `, $` + strconv.Itoa(i*5+2) + `, $` + strconv.Itoa(i*5+3) + `, $` + strconv.Itoa(i*5+4) + `, $` + strconv.Itoa(i*5+5) + `)`
 
 		args = append(args, code.ID, code.UserID, code.FactorID, code.CodeHash, time.Now().UTC())
 	}
