@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"database/sql"
 
-	"github.com/gin-gonic/gin"
 	"example.com/axiomnizam/internal/gatekeeper/audit"
 	"example.com/axiomnizam/internal/gatekeeper/backupcodes"
 	"example.com/axiomnizam/internal/gatekeeper/cache"
@@ -18,6 +17,7 @@ import (
 	"example.com/axiomnizam/internal/gatekeeper/risk"
 	"example.com/axiomnizam/internal/gatekeeper/totp"
 	"example.com/axiomnizam/internal/gatekeeper/trusteddevices"
+	"github.com/gin-gonic/gin"
 )
 
 // Module bootstraps the Gatekeeper 2FA module.

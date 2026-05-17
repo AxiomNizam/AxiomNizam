@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"log"
 
-	"github.com/gin-gonic/gin"
-	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/gatekeeper/audit"
 	"example.com/axiomnizam/internal/gatekeeper/backupcodes"
 	gkcache "example.com/axiomnizam/internal/gatekeeper/cache"
@@ -22,6 +20,9 @@ import (
 	"example.com/axiomnizam/internal/gatekeeper/risk"
 	"example.com/axiomnizam/internal/gatekeeper/totp"
 	"example.com/axiomnizam/internal/gatekeeper/trusteddevices"
+	platformstore "example.com/axiomnizam/internal/platform/store"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // System holds the fully initialized Gatekeeper 2FA module.
@@ -35,7 +36,7 @@ type System struct {
 
 	// Repositories (PostgreSQL-backed)
 	factorRepo     repositories.FactorRepository
-	challengeRepo repositories.ChallengeRepository
+	challengeRepo  repositories.ChallengeRepository
 	backupCodeRepo repositories.BackupCodeRepository
 	trustedDevRepo repositories.TrustedDeviceRepository
 
@@ -61,15 +62,20 @@ type System struct {
 }
 
 // NewSystem initializes the Gatekeeper 2FA module.
-func NewSystem(db *sql.DB) (*System, error) {
+func NewSystem(gormDB *gorm.DB) (*System, error) {
 	cfg := config.DefaultConfig()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, err
+	}
+
 	s := &System{
 		cfg: cfg,
-		db:  db,
+		db:  sqlDB,
 	}
 
 	if err := s.initialize(); err != nil {
@@ -81,14 +87,19 @@ func NewSystem(db *sql.DB) (*System, error) {
 }
 
 // NewSystemWithConfig initializes Gatekeeper with custom config.
-func NewSystemWithConfig(db *sql.DB, cfg *config.Config) (*System, error) {
+func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
 	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	sqlDB, err := gormDB.DB()
+	if err != nil {
 		return nil, err
 	}
 
 	s := &System{
 		cfg: cfg,
-		db:  db,
+		db:  sqlDB,
 	}
 
 	if err := s.initialize(); err != nil {
@@ -108,9 +119,9 @@ func NewSystemWithKVStore(db *sql.DB, kvStore platformstore.KVStore) (*System, e
 	}
 
 	s := &System{
-		cfg:      cfg,
-		db:       db,
-		kvStore:  kvStore,
+		cfg:     cfg,
+		db:      db,
+		kvStore: kvStore,
 	}
 
 	if err := s.initialize(); err != nil {

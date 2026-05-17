@@ -3,10 +3,10 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"example.com/axiomnizam/internal/gatekeeper/contracts"
 	"example.com/axiomnizam/internal/gatekeeper/models"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // HTTPHandler provides REST endpoints for 2FA operations.
@@ -41,7 +41,7 @@ func NewHTTPHandler(
 	}
 }
 
-// RegisterRoutes registers all HTTP endpoints.
+// RegisterRoutes registers all HTTP endpoints under /api/v1/mfa.
 func (h *HTTPHandler) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api/v1/mfa")
 

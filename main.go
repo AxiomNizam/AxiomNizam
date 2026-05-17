@@ -34,8 +34,8 @@ import (
 	"example.com/axiomnizam/internal/etl"
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
-	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/gatekeeper"
+	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/heartbeat"
 	iampkg "example.com/axiomnizam/internal/iam"
 	iamstorage "example.com/axiomnizam/internal/iam/storage"
@@ -1670,8 +1670,7 @@ func main() {
 	if gkErr != nil {
 		log.Printf("⚠️  Gatekeeper 2FA module initialization failed: %v — 2FA endpoints will be unavailable", gkErr)
 	} else {
-		mfaAPI := router.Group("/api/v1/mfa")
-		gkSystem.RegisterRoutes(mfaAPI)
+		gkSystem.RegisterRoutes(router)
 		log.Println("✅ Gatekeeper 2FA module started")
 	}
 
