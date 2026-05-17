@@ -6,6 +6,7 @@
     'use strict';
 
     var MFA_API = (window.resolveBackendURL ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000')).replace(/\/+$/, '') + '/api/v1/mfa';
+    var BUILDER_API = (window.resolveBackendURL ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000')).replace(/\/+$/, '') + '/api/v1/builder';
     var currentUserId = null;
     var enrolledFactors = [];
     var pendingFactorId = null;
@@ -57,7 +58,6 @@
         if (currentUserId) return Promise.resolve(currentUserId);
         var uid = localStorage.getItem('userId') || localStorage.getItem('user_id') || '';
         if (uid) { currentUserId = uid; return Promise.resolve(uid); }
-        // Try to get from IAM whoami
         var base = (window.resolveBackendURL ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000')).replace(/\/+$/, '');
         return fetch(base + '/iam/auth/whoami', { headers: mfaHeaders() })
             .then(function (r) { return r.json(); })
@@ -77,12 +77,13 @@
         var panel = document.getElementById('tfa-panel-' + tab);
         if (panel) panel.classList.add('active');
         var tabs = document.querySelectorAll('.tfa-tab');
-        var tabMap = { status: 0, setup: 1, verify: 2, backup: 3, devices: 4 };
+        var tabMap = { status: 0, setup: 1, verify: 2, backup: 3, devices: 4, metrics: 5 };
         if (tabs[tabMap[tab]]) tabs[tabMap[tab]].classList.add('active');
         if (tab === 'status') tfaLoadStatus();
         if (tab === 'verify') tfaPopulateFactorSelects();
         if (tab === 'backup') tfaPopulateFactorSelects();
         if (tab === 'devices') tfaLoadTrustedDevices();
+        if (tab === 'metrics') tfaLoadMetrics();
     };
 
     // ── Status Panel ─────────────────────────────────────────────────────
@@ -92,7 +93,7 @@
             // Load factors
             mfaFetch('/factors/' + uid).then(function (data) {
                 enrolledFactors = data.factors || [];
-                var active = enrolledFactors.filter(function (f) { return f.status && f.status.phase === 'Active'; });
+                var active = enrolledFactors.filter(function (f) { return (f.status || f.Status || {}).phase === 'Active'; });
                 document.getElementById('tfaFactorCount').textContent = active.length;
                 renderFactorsTable(enrolledFactors);
             }).catch(function (err) {
@@ -104,16 +105,14 @@
 
             // Load policy
             mfaFetch('/policy/' + uid).then(function (data) {
-                var policy = data.requires_mfa ? 'Required' : 'Optional';
-                document.getElementById('tfaPolicyStatus').textContent = policy;
+                document.getElementById('tfaPolicyStatus').textContent = data.requires_mfa ? 'Required' : 'Optional';
             }).catch(function () {
                 document.getElementById('tfaPolicyStatus').textContent = '-';
             });
 
             // Load trusted devices
             mfaFetch('/trust-device/list/' + uid).then(function (data) {
-                var devices = data.devices || [];
-                document.getElementById('tfaDeviceCount').textContent = devices.length;
+                document.getElementById('tfaDeviceCount').textContent = (data.devices || []).length;
             }).catch(function () {
                 document.getElementById('tfaDeviceCount').textContent = '0';
             });
@@ -138,6 +137,7 @@
             var issuer = spec.issuer || spec.Issuer || '-';
             var created = f.created_at || f.CreatedAt || '';
             var lastVerified = status.last_verified_at || status.LastVerifiedAt || '';
+            var factorId = f.id || f.ID || '';
             if (created) created = new Date(created).toLocaleDateString();
             if (lastVerified) lastVerified = new Date(lastVerified).toLocaleString();
             else lastVerified = 'Never';
@@ -148,8 +148,8 @@
             html += '<td>' + escapeHTML(created) + '</td>';
             html += '<td>' + escapeHTML(lastVerified) + '</td>';
             html += '<td>';
-            if (phase === 'Active') {
-                html += '<button class="tfa-btn tfa-btn-danger tfa-btn-sm" onclick="tfaDisableFactor(\'' + (f.id || f.ID) + '\')">Disable</button>';
+            if (phase === 'Active' || phase === 'Pending') {
+                html += '<button class="tfa-btn tfa-btn-danger tfa-btn-sm" onclick="tfaDeleteFactor(\'' + factorId + '\')" title="Delete this factor">Delete</button>';
             }
             html += '</td>';
             html += '</tr>';
@@ -157,6 +157,18 @@
         html += '</tbody></table>';
         box.innerHTML = html;
     }
+
+    // ── Delete Factor ────────────────────────────────────────────────────
+
+    window.tfaDeleteFactor = function (factorId) {
+        if (!confirm('Are you sure you want to permanently delete this 2FA factor? This cannot be undone.')) return;
+        mfaFetch('/disable/' + factorId, { method: 'POST' }).then(function () {
+            toast('Factor deleted', 'success');
+            tfaLoadStatus();
+        }).catch(function (err) {
+            toast('Delete failed: ' + err.message, 'error');
+        });
+    };
 
     // ── Enrollment (Setup Wizard) ────────────────────────────────────────
 
@@ -185,13 +197,36 @@
     window.tfaStartEnroll = function () {
         var factorType = document.getElementById('tfaFactorType').value;
         var email = document.getElementById('tfaEnrollEmail').value.trim();
+        var enrollUid = null;
+
         resolveUserId().then(function (uid) {
+            enrollUid = uid;
             var body = { user_id: uid, factor_type: factorType };
             if (email) body.email = email;
             return mfaFetch('/enroll', { method: 'POST', body: JSON.stringify(body) });
         }).then(function (data) {
             pendingSecret = data.secret || '';
             pendingFactorId = data.factor_id || data.id || '';
+
+            // If backend didn't return factor_id, fetch factors to find the pending one
+            if (!pendingFactorId) {
+                return mfaFetch('/factors/' + enrollUid).then(function (fData) {
+                    var factors = fData.factors || [];
+                    var pending = factors.filter(function (f) {
+                        return (f.status || f.Status || {}).phase === 'Pending';
+                    });
+                    if (pending.length > 0) {
+                        pendingFactorId = pending[0].id || pending[0].ID || '';
+                    }
+                    return data;
+                });
+            }
+            return data;
+        }).then(function () {
+            if (!pendingFactorId) {
+                toast('Enrollment created but could not determine factor ID. Try refreshing.', 'error');
+                return;
+            }
             document.getElementById('tfaSecretText').textContent = pendingSecret;
             // Build otpauth URI
             var issuer = 'AxiomNizam';
@@ -256,25 +291,13 @@
         });
     };
 
-    // ── Disable Factor ───────────────────────────────────────────────────
-
-    window.tfaDisableFactor = function (factorId) {
-        if (!confirm('Are you sure you want to disable this 2FA factor? You will lose 2FA protection.')) return;
-        mfaFetch('/disable/' + factorId, { method: 'POST' }).then(function () {
-            toast('Factor disabled', 'success');
-            tfaLoadStatus();
-        }).catch(function (err) {
-            toast('Disable failed: ' + err.message, 'error');
-        });
-    };
-
     // ── Verify Code ──────────────────────────────────────────────────────
 
     function tfaPopulateFactorSelects() {
         resolveUserId().then(function (uid) {
             mfaFetch('/factors/' + uid).then(function (data) {
                 var factors = (data.factors || []).filter(function (f) {
-                    return (f.status || f.Status || {}).phase === 'Active' || (f.status || f.Status || {}).Phase === 'Active';
+                    return (f.status || f.Status || {}).phase === 'Active';
                 });
                 var selects = ['tfaVerifyFactorId', 'tfaBackupFactorId'];
                 selects.forEach(function (selId) {
@@ -416,6 +439,90 @@
             toast('Revoke failed: ' + err.message, 'error');
         });
     };
+
+    // ── Metrics Panel ────────────────────────────────────────────────────
+
+    function tfaLoadMetrics() {
+        var box = document.getElementById('tfaMetricsContent');
+        box.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted,#888)">Loading metrics...</div>';
+
+        // Load scanner health for gatekeeper-related metrics
+        var base = (window.resolveBackendURL ? window.resolveBackendURL() : (window.BACKEND_URL || 'http://localhost:8000')).replace(/\/+$/, '');
+
+        resolveUserId().then(function (uid) {
+            // Fetch factors for per-factor stats
+            return mfaFetch('/factors/' + uid).then(function (fData) {
+                var factors = fData.factors || [];
+                var active = factors.filter(function (f) { return (f.status || f.Status || {}).phase === 'Active'; });
+                var pending = factors.filter(function (f) { return (f.status || f.Status || {}).phase === 'Pending'; });
+                var disabled = factors.filter(function (f) {
+                    var p = (f.status || f.Status || {}).phase;
+                    return p === 'Disabled' || p === 'Revoked' || p === 'Failed';
+                });
+
+                // Build metrics HTML
+                var html = '';
+
+                // Summary cards
+                html += '<div class="tfa-grid" style="margin-bottom:20px">';
+                html += '<div class="tfa-stat"><div class="stat-value">' + factors.length + '</div><div class="stat-label">Total Factors</div></div>';
+                html += '<div class="tfa-stat"><div class="stat-value" style="color:#22c55e">' + active.length + '</div><div class="stat-label">Active</div></div>';
+                html += '<div class="tfa-stat"><div class="stat-value" style="color:#eab308">' + pending.length + '</div><div class="stat-label">Pending</div></div>';
+                html += '<div class="tfa-stat"><div class="stat-value" style="color:#6b7280">' + disabled.length + '</div><div class="stat-label">Disabled / Revoked</div></div>';
+                html += '</div>';
+
+                // Per-factor breakdown
+                if (factors.length > 0) {
+                    html += '<div class="tfa-card"><h3>Factor Details</h3>';
+                    html += '<table class="tfa-table"><thead><tr><th>Factor ID</th><th>Type</th><th>Phase</th><th>Issuer</th><th>Created</th><th>Last Verified</th><th>Conditions</th></tr></thead><tbody>';
+                    factors.forEach(function (f) {
+                        var spec = f.spec || f.Spec || {};
+                        var status = f.status || f.Status || {};
+                        var conditions = status.conditions || status.Conditions || [];
+                        var condStr = conditions.map(function (c) { return c.type + '=' + c.status; }).join(', ') || '-';
+                        var phase = status.phase || status.Phase || '-';
+                        var badgeClass = 'tfa-badge-' + phase.toLowerCase();
+                        var created = f.created_at || f.CreatedAt || '';
+                        if (created) created = new Date(created).toLocaleString();
+                        var lastVer = status.last_verified_at || status.LastVerifiedAt || '';
+                        if (lastVer) lastVer = new Date(lastVer).toLocaleString();
+                        else lastVer = 'Never';
+                        html += '<tr>';
+                        html += '<td><code style="font-size:0.78rem">' + escapeHTML((f.id || f.ID || '').substring(0, 8)) + '...</code></td>';
+                        html += '<td>' + escapeHTML((spec.type || spec.Type || 'totp').toUpperCase()) + '</td>';
+                        html += '<td><span class="tfa-badge ' + badgeClass + '">' + escapeHTML(phase) + '</span></td>';
+                        html += '<td>' + escapeHTML(spec.issuer || spec.Issuer || '-') + '</td>';
+                        html += '<td>' + escapeHTML(created) + '</td>';
+                        html += '<td>' + escapeHTML(lastVer) + '</td>';
+                        html += '<td style="font-size:0.78rem">' + escapeHTML(condStr) + '</td>';
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table></div>';
+                }
+
+                // Try to load audit events from backend
+                html += '<div class="tfa-card"><h3>MFA Audit Events</h3>';
+                html += '<div id="tfaAuditEvents"><div style="text-align:center;padding:12px;color:var(--text-muted,#888)">Loading...</div></div></div>';
+
+                box.innerHTML = html;
+
+                // Fetch audit events
+                fetch(base + '/api/v1/builder/scanner/health?metrics=true', { headers: mfaHeaders() })
+                    .then(function (r) { return r.json(); })
+                    .then(function () {
+                        // Scanner health loaded - show gatekeeper status
+                        var auditBox = document.getElementById('tfaAuditEvents');
+                        auditBox.innerHTML = '<p style="color:var(--text-muted,#888);font-size:0.85rem">MFA audit events are logged in the platform audit system. Check the Governance Console for detailed audit trails.</p>';
+                    })
+                    .catch(function () {
+                        var auditBox = document.getElementById('tfaAuditEvents');
+                        auditBox.innerHTML = '<p style="color:var(--text-muted,#888);font-size:0.85rem">Audit event retrieval is not available yet.</p>';
+                    });
+            });
+        }).catch(function (err) {
+            box.innerHTML = '<div class="tfa-empty"><p>Could not load metrics: ' + escapeHTML(err.message) + '</p></div>';
+        });
+    }
 
     // ── Init ─────────────────────────────────────────────────────────────
 

@@ -410,6 +410,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
             Trusted Devices
         </button>
+        <button class="tfa-tab" onclick="tfaSwitch('metrics')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+            Metrics
+        </button>
     </div>
 
     <!-- Status Panel -->
@@ -608,8 +612,15 @@
             </div>
         </div>
     </div>
+
+    <!-- Metrics Panel -->
+    <div class="tfa-panel" id="tfa-panel-metrics">
+        <div id="tfaMetricsContent">
+            <div style="text-align:center;padding:20px;color:var(--text-muted,#888)">Loading metrics...</div>
+        </div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
-<script src="/static/two-factor.js?v=20260517-2"></script>
+<script src="/static/two-factor.js?v=20260517-3"></script>
 {{ end }}
