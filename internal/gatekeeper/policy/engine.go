@@ -100,6 +100,30 @@ func (e *Engine) Evaluate(ctx context.Context, req *EvaluationRequest) (*Evaluat
 	return result, nil
 }
 
+// EvaluatePolicy determines if MFA is required for a user.
+// Implements contracts.PolicyService.
+func (e *Engine) EvaluatePolicy(ctx context.Context, userID models.UserID) (bool, []models.FactorType, error) {
+	req := &EvaluationRequest{
+		UserID:    userID.String(),
+		LastMFAAt: 0, // Would be fetched from user profile
+		RiskScore: 0,
+	}
+	result, err := e.Evaluate(ctx, req)
+	if err != nil {
+		return false, nil, err
+	}
+	return result.RequiresMFA, result.AllowedFactors, nil
+}
+
+// GetPolicy retrieves a policy by ID.
+// Currently returns default policy as MFA policies are not yet implemented.
+func (e *Engine) GetPolicy(ctx context.Context, policyID string) (*models.MFAPolicy, error) {
+	// Placeholder - return default policy
+	return &models.MFAPolicy{
+		Enforcement: models.PolicyEnforcementOptional,
+	}, nil
+}
+
 // DefaultEvaluator provides basic policy evaluation logic.
 type DefaultEvaluator struct{}
 

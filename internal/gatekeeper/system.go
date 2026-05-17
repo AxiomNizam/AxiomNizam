@@ -296,15 +296,15 @@ func (s *System) initialize() error {
 		s.challengeRepo,
 	)
 
-	// 14. Initialize HTTP handler with enrollment service wrapper
+	// 14. Initialize HTTP handler with service wrappers
 	s.httpHandler = handlers.NewHTTPHandler(
 		wrapEnrollmentService(s.EnrollmentService),
 		wrapChallengeService(s.ChallengeService),
 		wrapFactorService(s.factorRepo),
-		s.PolicyService,
-		s.RiskService,
-		s.DeviceService,
-		s.BackupCodeService,
+		wrapPolicyService(s.PolicyService),
+		wrapRiskService(s.RiskService),
+		wrapTrustedDeviceService(s.DeviceService),
+		wrapBackupCodeService(s.BackupCodeService),
 	)
 
 	return nil

@@ -108,3 +108,4 @@ func (s *Service) RegenerateCodes(ctx context.Context, factorID models.FactorID,
 	generator := &Generator{}
 	return generator.Generate(count)
 }
+

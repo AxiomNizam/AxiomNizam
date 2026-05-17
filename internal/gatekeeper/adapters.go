@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"example.com/axiomnizam/internal/gatekeeper/challenge"
 	"example.com/axiomnizam/internal/gatekeeper/contracts"
 	"example.com/axiomnizam/internal/gatekeeper/enrollment"
-	"example.com/axiomnizam/internal/gatekeeper/challenge"
 	"example.com/axiomnizam/internal/gatekeeper/models"
 	"example.com/axiomnizam/internal/gatekeeper/repositories"
+	"example.com/axiomnizam/internal/gatekeeper/trusteddevices"
 )
 
 // enrollmentServiceWrapper wraps enrollment.Service to match contracts.EnrollmentService.
@@ -123,4 +124,130 @@ func (w *factorServiceWrapper) GetActiveFactorCount(ctx context.Context, userID 
 		}
 	}
 	return count, nil
+}
+
+// policyServiceWrapper wraps policy.Engine to match contracts.PolicyService.
+type policyServiceWrapper struct {
+	svc interface {
+		EvaluatePolicy(ctx context.Context, userID models.UserID) (bool, []models.FactorType, error)
+		GetPolicy(ctx context.Context, policyID string) (*models.MFAPolicy, error)
+	}
+}
+
+func wrapPolicyService(svc interface {
+	EvaluatePolicy(ctx context.Context, userID models.UserID) (bool, []models.FactorType, error)
+	GetPolicy(ctx context.Context, policyID string) (*models.MFAPolicy, error)
+}) contracts.PolicyService {
+	return &policyServiceWrapper{svc: svc}
+}
+
+func (w *policyServiceWrapper) EvaluatePolicy(ctx context.Context, userID models.UserID) (bool, []models.FactorType, error) {
+	return w.svc.EvaluatePolicy(ctx, userID)
+}
+
+func (w *policyServiceWrapper) GetPolicy(ctx context.Context, policyID uuid.UUID) (*models.MFAPolicy, error) {
+	return w.svc.GetPolicy(ctx, policyID.String())
+}
+
+// riskServiceWrapper wraps risk.Engine to match contracts.RiskService.
+type riskServiceWrapper struct {
+	svc interface {
+		ScoreAuthentication(ctx context.Context, userID models.UserID, ipAddress string) (int, error)
+		IsHighRisk(ctx context.Context, score int) bool
+	}
+}
+
+func wrapRiskService(svc interface {
+	ScoreAuthentication(ctx context.Context, userID models.UserID, ipAddress string) (int, error)
+	IsHighRisk(ctx context.Context, score int) bool
+}) contracts.RiskService {
+	return &riskServiceWrapper{svc: svc}
+}
+
+func (w *riskServiceWrapper) ScoreAuthentication(ctx context.Context, userID models.UserID, ipAddress string) (int, error) {
+	return w.svc.ScoreAuthentication(ctx, userID, ipAddress)
+}
+
+func (w *riskServiceWrapper) IsHighRisk(ctx context.Context, score int) bool {
+	return w.svc.IsHighRisk(ctx, score)
+}
+
+// trustedDeviceServiceWrapper wraps trusteddevices.Service to match contracts.TrustedDeviceService.
+type trustedDeviceServiceWrapper struct {
+	svc interface {
+		TrustDevice(ctx context.Context, req *trusteddevices.TrustDeviceRequest) (*trusteddevices.TrustDeviceResponse, error)
+		VerifyDeviceToken(ctx context.Context, userID models.UserID, fingerprint string, token string) (bool, error)
+		RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error
+		RevokeAllDevices(ctx context.Context, userID models.UserID) error
+		DeviceCount(ctx context.Context, userID models.UserID) (int, error)
+	}
+}
+
+func wrapTrustedDeviceService(svc interface {
+	TrustDevice(ctx context.Context, req *trusteddevices.TrustDeviceRequest) (*trusteddevices.TrustDeviceResponse, error)
+	VerifyDeviceToken(ctx context.Context, userID models.UserID, fingerprint string, token string) (bool, error)
+	RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error
+	RevokeAllDevices(ctx context.Context, userID models.UserID) error
+	DeviceCount(ctx context.Context, userID models.UserID) (int, error)
+}) contracts.TrustedDeviceService {
+	return &trustedDeviceServiceWrapper{svc: svc}
+}
+
+func (w *trustedDeviceServiceWrapper) TrustDevice(ctx context.Context, userID models.UserID, fingerprint, userAgent, ipAddress string) (string, error) {
+	resp, err := w.svc.TrustDevice(ctx, &trusteddevices.TrustDeviceRequest{
+		UserID:     userID,
+		Fingerprint: fingerprint,
+		UserAgent:  userAgent,
+		IPAddress:  ipAddress,
+		TTLDays:    30,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.Token, nil
+}
+
+func (w *trustedDeviceServiceWrapper) VerifyDeviceToken(ctx context.Context, userID models.UserID, token string) (bool, error) {
+	return false, nil // Simplified - would need fingerprint
+}
+
+func (w *trustedDeviceServiceWrapper) RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error {
+	return w.svc.RevokeTrustedDevice(ctx, deviceID)
+}
+
+func (w *trustedDeviceServiceWrapper) RevokeAllDevices(ctx context.Context, userID models.UserID) error {
+	return w.svc.RevokeAllDevices(ctx, userID)
+}
+
+// backupCodeServiceWrapper wraps backupcodes.Service to match contracts.BackupCodeService.
+type backupCodeServiceWrapper struct {
+	svc interface {
+		ConsumeBackupCode(ctx context.Context, code string) (*models.BackupCode, error)
+		RemainingCodes(ctx context.Context, userID models.UserID) (int, error)
+		RegenerateCodes(ctx context.Context, factorID models.FactorID, count int) ([]string, error)
+	}
+}
+
+func wrapBackupCodeService(svc interface {
+	ConsumeBackupCode(ctx context.Context, code string) (*models.BackupCode, error)
+	RemainingCodes(ctx context.Context, userID models.UserID) (int, error)
+	RegenerateCodes(ctx context.Context, factorID models.FactorID, count int) ([]string, error)
+}) contracts.BackupCodeService {
+	return &backupCodeServiceWrapper{svc: svc}
+}
+
+func (w *backupCodeServiceWrapper) ConsumeBackupCode(ctx context.Context, userID models.UserID, code string) (bool, error) {
+	_, err := w.svc.ConsumeBackupCode(ctx, code)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (w *backupCodeServiceWrapper) GetRemainingBackupCodes(ctx context.Context, userID models.UserID) (int, error) {
+	return w.svc.RemainingCodes(ctx, userID)
+}
+
+func (w *backupCodeServiceWrapper) RegenerateBackupCodes(ctx context.Context, factorID models.FactorID) ([]string, error) {
+	return w.svc.RegenerateCodes(ctx, factorID, 10)
 }

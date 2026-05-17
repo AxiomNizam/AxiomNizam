@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"time"
+
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // Engine scores authentication requests based on risk signals.
@@ -63,6 +65,21 @@ func (e *Engine) Score(ctx context.Context, signals *Signals) (int, error) {
 		return 0, nil // No scorer = no risk
 	}
 	return e.scorer.Score(ctx, signals)
+}
+
+// ScoreAuthentication calculates a risk score for an authentication attempt.
+// Implements contracts.RiskService.
+func (e *Engine) ScoreAuthentication(ctx context.Context, userID models.UserID, ipAddress string) (int, error) {
+	signals := &Signals{
+		IPAddress: ipAddress,
+	}
+	return e.Score(ctx, signals)
+}
+
+// IsHighRisk returns true if the risk score exceeds the threshold (70).
+// Implements contracts.RiskService.
+func (e *Engine) IsHighRisk(ctx context.Context, score int) bool {
+	return score >= 70
 }
 
 // DefaultScorer provides a simple risk scoring implementation.
