@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // EnrollmentService defines the contract for MFA factor enrollment.

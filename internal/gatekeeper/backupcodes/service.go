@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/repositories"
+	"example.com/axiomnizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/repositories"
 )
 
 // Service manages backup code generation, validation, and consumption.

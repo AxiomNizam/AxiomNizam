@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // TrustedDeviceRepository defines operations for trusted device tokens.

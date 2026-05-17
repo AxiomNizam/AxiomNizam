@@ -7,13 +7,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/repositories"
+	platformstore "example.com/axiomnizam/internal/platform/store"
+	"example.com/axiomnizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/repositories"
 )
 
 // BackupCodeRepository implements repositories.BackupCodeRepository using PostgreSQL.
+// Supports optional KVStore persistence for Raft mode.
 type BackupCodeRepository struct {
-	db *sql.DB
+	db      *sql.DB
+	kvStore platformstore.KVStore
+}
+
+// ConfigureKVPersistence sets the KV store for optional Raft persistence.
+func (r *BackupCodeRepository) ConfigureKVPersistence(kv platformstore.KVStore) {
+	r.kvStore = kv
 }
 
 // NewBackupCodeRepository creates a new PostgreSQL-backed backup code repository.

@@ -1,1 +1,3 @@
-// Backup codes generation/validation
+package totp
+
+// Placeholder - implementation pending.

@@ -1,1 +1,3 @@
-// otpauth URI builder
+package totp
+
+// Placeholder - implementation pending.

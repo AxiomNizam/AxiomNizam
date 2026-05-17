@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // Store defines the interface for session/cache storage.

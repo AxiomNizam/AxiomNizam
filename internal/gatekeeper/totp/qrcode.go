@@ -1,1 +1,3 @@
-// QR code creation
+package totp
+
+// Placeholder - implementation pending.

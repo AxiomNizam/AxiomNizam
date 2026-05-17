@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/repositories"
+	"example.com/axiomnizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/repositories"
 )
 
 // Service manages the lifecycle of MFA challenges (authentication events).

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/org/project/internal/twofactor/models"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // ─── Command Payloads ─────────────────────────────────────────────────────────

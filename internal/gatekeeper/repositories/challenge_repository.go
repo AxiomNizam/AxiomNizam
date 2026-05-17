@@ -3,7 +3,7 @@ package repositories
 import (
 	"context"
 
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // ChallengeRepository defines CRUD operations for MFA challenges.

@@ -53,25 +53,3 @@ func (c *Challenge) IsTerminal() bool {
 func (c *Challenge) IsExpired(now time.Time) bool {
 	return now.After(c.ExpiresAt)
 }
-
-// BackupCode is a one-time recovery credential.
-type BackupCode struct {
-	ID        uuid.UUID  `db:"id"        json:"id"`
-	UserID    UserID     `db:"user_id"   json:"user_id"`
-	CodeHash  []byte     `db:"code_hash" json:"-"` // bcrypt / argon2id hash
-	UsedAt    *time.Time `db:"used_at"  json:"used_at,omitempty"`
-	CreatedAt time.Time  `db:"created_at" json:"created_at"`
-}
-
-// TrustedDevice represents a "remember this device" token.
-type TrustedDevice struct {
-	ID          uuid.UUID  `db:"id"           json:"id"`
-	UserID      UserID     `db:"user_id"      json:"user_id"`
-	TokenHash   []byte     `db:"token_hash"   json:"-"`
-	Fingerprint string     `db:"fingerprint"  json:"fingerprint"`
-	UserAgent   string     `db:"user_agent"   json:"user_agent"`
-	IPAddress   string     `db:"ip_address"   json:"ip_address"`
-	ExpiresAt   time.Time  `db:"expires_at"   json:"expires_at"`
-	RevokedAt   *time.Time `db:"revoked_at"   json:"revoked_at,omitempty"`
-	CreatedAt   time.Time  `db:"created_at"   json:"created_at"`
-}

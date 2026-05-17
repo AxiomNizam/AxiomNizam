@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	hraft "github.com/hashicorp/raft"
-	"github.com/org/project/internal/twofactor/models"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // FSM implements hashicorp/raft.FSM.

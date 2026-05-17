@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/contracts"
-	"github.com/shafiunmiraz0/AxiomNizam/internal/gatekeeper/models"
+	"example.com/axiomnizam/internal/gatekeeper/contracts"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
 // HTTPHandler provides REST endpoints for 2FA operations.
