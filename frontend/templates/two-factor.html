@@ -507,7 +507,10 @@
             <div id="tfaSetupStep2" class="tfa-wizard-hidden">
                 <p style="color:var(--text-secondary,#aaa);margin-bottom:12px;">Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.)</p>
                 <div style="text-align:center;margin:16px 0;">
-                    <div class="tfa-qr-box" id="tfaQRCode">Generating QR code...</div>
+                    <div class="tfa-qr-box" id="tfaQRCode" style="display:inline-block;background:#fff;padding:16px;border-radius:12px;">
+                        <div style="color:#888;font-size:0.85rem;">Generating QR code...</div>
+                    </div>
+                    <p style="color:var(--text-muted,#888);font-size:0.78rem;margin-top:8px;">Scan with Google Authenticator, Authy, 1Password, etc.</p>
                 </div>
                 <p style="color:var(--text-muted,#888);font-size:0.85rem;text-align:center;">Or manually enter this secret key:</p>
                 <div class="tfa-secret-box" id="tfaSecretKey">
@@ -607,5 +610,6 @@
     </div>
 </div>
 
-<script src="/static/two-factor.js?v=20260517-1"></script>
+<script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="/static/two-factor.js?v=20260517-2"></script>
 {{ end }}

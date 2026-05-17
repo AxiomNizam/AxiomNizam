@@ -160,6 +160,28 @@
 
     // ── Enrollment (Setup Wizard) ────────────────────────────────────────
 
+    function generateQRCodeSVG(text) {
+        if (typeof qrcode === 'undefined') {
+            return '<p style="color:#c00;font-size:0.85rem;">QR library not loaded. Use the secret key below.</p>';
+        }
+        var qr = qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        var size = 6;
+        var modules = qr.getModuleCount();
+        var dim = modules * size;
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + dim + '" height="' + dim + '" viewBox="0 0 ' + dim + ' ' + dim + '" shape-rendering="crispEdges">';
+        for (var r = 0; r < modules; r++) {
+            for (var c = 0; c < modules; c++) {
+                if (qr.isDark(r, c)) {
+                    svg += '<rect x="' + (c * size) + '" y="' + (r * size) + '" width="' + size + '" height="' + size + '" fill="#000"/>';
+                }
+            }
+        }
+        svg += '</svg>';
+        return svg;
+    }
+
     window.tfaStartEnroll = function () {
         var factorType = document.getElementById('tfaFactorType').value;
         var email = document.getElementById('tfaEnrollEmail').value.trim();
@@ -171,11 +193,13 @@
             pendingSecret = data.secret || '';
             pendingFactorId = data.factor_id || data.id || '';
             document.getElementById('tfaSecretText').textContent = pendingSecret;
-            // Generate QR as SVG text using otpauth URI
+            // Build otpauth URI
             var issuer = 'AxiomNizam';
-            var account = email || uid || 'user';
+            var account = email || 'user';
             var uri = 'otpauth://totp/' + encodeURIComponent(issuer + ':' + account) + '?secret=' + pendingSecret + '&issuer=' + encodeURIComponent(issuer) + '&algorithm=SHA1&digits=6&period=30';
-            document.getElementById('tfaQRCode').innerHTML = '<p style="color:#333;font-size:0.85rem;">TOTP URI:</p><code style="word-break:break-all;font-size:0.75rem;color:#333;">' + escapeHTML(uri) + '</code><p style="color:#666;font-size:0.78rem;margin-top:8px;">Add this URI to your authenticator app</p>';
+            // Generate QR code SVG
+            var qrBox = document.getElementById('tfaQRCode');
+            qrBox.innerHTML = generateQRCodeSVG(uri);
             tfaSetupGoto(2);
             toast('Factor enrolled! Scan the QR code.', 'success');
         }).catch(function (err) {
