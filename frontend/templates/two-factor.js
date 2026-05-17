@@ -95,10 +95,11 @@
                 var active = enrolledFactors.filter(function (f) { return f.status && f.status.phase === 'Active'; });
                 document.getElementById('tfaFactorCount').textContent = active.length;
                 renderFactorsTable(enrolledFactors);
-            }).catch(function () {
+            }).catch(function (err) {
                 enrolledFactors = [];
                 document.getElementById('tfaFactorCount').textContent = '0';
-                renderFactorsTable([]);
+                var box = document.getElementById('tfaFactorsTable');
+                box.innerHTML = '<div class="tfa-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg><p style="color:var(--text-muted,#888)">Could not load factors. The 2FA module may still be initializing.</p><p style="font-size:0.82rem;color:var(--text-muted,#666);margin-top:4px;">' + escapeHTML(err.message) + '</p></div>';
             });
 
             // Load policy
