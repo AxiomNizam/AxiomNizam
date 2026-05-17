@@ -53,6 +53,7 @@ func (h *HTTPHandler) RegisterRoutes(router *gin.Engine) {
 	// Factor endpoints
 	api.GET("/factors/:userID", h.ListFactors)
 	api.GET("/factor/:factorID", h.GetFactor)
+	api.DELETE("/factor/:factorID", h.DeleteFactor)
 
 	// Challenge endpoints
 	api.POST("/challenge/begin", h.BeginChallenge)
@@ -130,6 +131,18 @@ func (h *HTTPHandler) DisableFactor(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Factor disabled"})
+}
+
+// DeleteFactor permanently deletes (soft-delete) a factor.
+func (h *HTTPHandler) DeleteFactor(c *gin.Context) {
+	factorID := uuid.MustParse(c.Param("factorID"))
+
+	if err := h.factorSvc.DeleteFactor(c.Request.Context(), factorID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Factor deleted"})
 }
 
 // ListFactors lists all factors for a user.

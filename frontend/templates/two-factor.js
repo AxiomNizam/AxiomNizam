@@ -150,8 +150,8 @@
             html += '<td>' + escapeHTML(created) + '</td>';
             html += '<td>' + escapeHTML(lastVerified) + '</td>';
             html += '<td>';
-            if (phase === 'Active' || phase === 'Pending') {
-                html += '<button class="tfa-btn tfa-btn-danger tfa-btn-sm" onclick="tfaDeleteFactor(\'' + factorId + '\')" title="Delete this factor">Delete</button>';
+            if (phase === 'Active' || phase === 'Pending' || phase === 'Disabled') {
+                html += '<button class="tfa-btn tfa-btn-danger tfa-btn-sm" onclick="tfaDeleteFactor(\'' + factorId + '\')" title="Permanently delete this factor">Delete</button>';
             }
             html += '</td>';
             html += '</tr>';
@@ -164,7 +164,7 @@
 
     window.tfaDeleteFactor = function (factorId) {
         if (!confirm('Are you sure you want to permanently delete this 2FA factor? This cannot be undone.')) return;
-        mfaFetch('/disable/' + factorId, { method: 'POST' }).then(function () {
+        mfaFetch('/factor/' + factorId, { method: 'DELETE' }).then(function () {
             toast('Factor deleted', 'success');
             tfaLoadStatus();
         }).catch(function (err) {
