@@ -39,6 +39,7 @@ func NewService(
 type SetupRequest struct {
 	UserID     models.UserID
 	FactorType models.FactorType
+	Label      string // User-friendly name for the factor
 	Email      string // For email OTP
 	Phone      string // For SMS OTP
 	Issuer     string
@@ -78,6 +79,7 @@ func (s *Service) SetupFactor(ctx context.Context, req *SetupRequest) (*SetupRes
 		UserID: req.UserID,
 		Spec: models.FactorSpec{
 			Type:            req.FactorType,
+			Label:           req.Label,
 			PhoneNumber:     req.Phone,
 			Email:           req.Email,
 			EncryptedSecret: []byte(secret), // TODO: Encrypt this

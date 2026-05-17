@@ -16,7 +16,13 @@ import (
 type Service struct {
 	challengeRepo repositories.ChallengeRepository
 	factorRepo    repositories.FactorRepository
+	totpSvc       TOTPValidator
 	clock         Clock
+}
+
+// TOTPValidator validates TOTP codes against a secret.
+type TOTPValidator interface {
+	ValidateCode(ctx context.Context, secret, code string) (bool, error)
 }
 
 // Clock abstracts time for testability.
@@ -37,10 +43,11 @@ func NewRealClock() Clock {
 }
 
 // NewService creates a new challenge service.
-func NewService(cr repositories.ChallengeRepository, fr repositories.FactorRepository, c Clock) *Service {
+func NewService(cr repositories.ChallengeRepository, fr repositories.FactorRepository, tv TOTPValidator, c Clock) *Service {
 	return &Service{
 		challengeRepo: cr,
 		factorRepo:    fr,
+		totpSvc:       tv,
 		clock:         c,
 	}
 }
@@ -104,52 +111,62 @@ type VerifyRequest struct {
 // VerifyChallenge verifies a user's response to a challenge.
 func (s *Service) VerifyChallenge(ctx context.Context, req *VerifyRequest) (*models.Challenge, error) {
 	// Retrieve the challenge
-	challenge, err := s.challengeRepo.Get(ctx, req.ChallengeID)
+	ch, err := s.challengeRepo.Get(ctx, req.ChallengeID)
 	if err != nil {
 		return nil, err
 	}
-	if challenge == nil {
+	if ch == nil {
 		return nil, errors.New("challenge not found")
 	}
 
 	// Check if challenge is in terminal state
-	if challenge.IsTerminal() {
+	if ch.IsTerminal() {
 		return nil, errors.New("challenge is in terminal state")
 	}
 
 	// Check if challenge has expired
-	if challenge.IsExpired(s.clock.Now()) {
-		challenge.Phase = models.ChallengePhaseExpired
-		challenge.ResolvedAt = ptrTime(s.clock.Now())
-		_, _ = s.challengeRepo.Update(ctx, challenge)
+	if ch.IsExpired(s.clock.Now()) {
+		ch.Phase = models.ChallengePhaseExpired
+		ch.ResolvedAt = ptrTime(s.clock.Now())
+		_, _ = s.challengeRepo.Update(ctx, ch)
 		return nil, errors.New("challenge expired")
 	}
 
 	// Increment attempt counter
-	challenge.Attempts++
+	ch.Attempts++
 
-	// TODO: Validate OTP code against factor type
-	// For now, accept if code matches nonce (simplified)
-	if req.Code != challenge.Nonce {
+	// Retrieve the factor to get its secret for TOTP validation
+	factor, err := s.factorRepo.Get(ctx, ch.FactorID)
+	if err != nil || factor == nil {
+		ch.Phase = models.ChallengePhaseFailed
+		ch.ResolvedAt = ptrTime(s.clock.Now())
+		_, _ = s.challengeRepo.Update(ctx, ch)
+		return nil, errors.New("factor not found")
+	}
+
+	// Validate OTP code against the factor's TOTP secret
+	secret := string(factor.Spec.EncryptedSecret)
+	valid, err := s.totpSvc.ValidateCode(ctx, secret, req.Code)
+	if err != nil || !valid {
 		// Max 3 attempts before lockout
-		if challenge.Attempts >= 3 {
-			challenge.Phase = models.ChallengePhaseFailed
-			challenge.ResolvedAt = ptrTime(s.clock.Now())
+		if ch.Attempts >= 3 {
+			ch.Phase = models.ChallengePhaseFailed
+			ch.ResolvedAt = ptrTime(s.clock.Now())
 		}
-		_, _ = s.challengeRepo.Update(ctx, challenge)
+		_, _ = s.challengeRepo.Update(ctx, ch)
 		return nil, errors.New("invalid code")
 	}
 
 	// Code verified successfully
-	challenge.Phase = models.ChallengePhaseVerified
-	challenge.ResolvedAt = ptrTime(s.clock.Now())
+	ch.Phase = models.ChallengePhaseVerified
+	ch.ResolvedAt = ptrTime(s.clock.Now())
 
-	challenge, err = s.challengeRepo.Update(ctx, challenge)
+	ch, err = s.challengeRepo.Update(ctx, ch)
 	if err != nil {
 		return nil, err
 	}
 
-	return challenge, nil
+	return ch, nil
 }
 
 // ExpireChallenge marks a challenge as expired (for garbage collection).

@@ -21,16 +21,20 @@ func wrapEnrollmentService(svc *enrollment.Service) contracts.EnrollmentService 
 	return &enrollmentServiceWrapper{svc: svc}
 }
 
-func (w *enrollmentServiceWrapper) SetupFactor(ctx context.Context, userID models.UserID, factorType models.FactorType) (string, error) {
+func (w *enrollmentServiceWrapper) SetupFactor(ctx context.Context, userID models.UserID, factorType models.FactorType, label string) (*contracts.SetupResult, error) {
 	resp, err := w.svc.SetupFactor(ctx, &enrollment.SetupRequest{
 		UserID:     userID,
 		FactorType: factorType,
 		Issuer:     "AxiomNizam",
+		Label:      label,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return resp.Secret, nil
+	return &contracts.SetupResult{
+		FactorID: resp.FactorID,
+		Secret:   resp.Secret,
+	}, nil
 }
 
 func (w *enrollmentServiceWrapper) ActivateFactor(ctx context.Context, factorID models.FactorID, code string) ([]string, error) {

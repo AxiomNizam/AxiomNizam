@@ -75,6 +75,7 @@ func (h *HTTPHandler) EnrollFactor(c *gin.Context) {
 	var req struct {
 		UserID     uuid.UUID         `json:"user_id" binding:"required"`
 		FactorType models.FactorType `json:"factor_type" binding:"required"`
+		Label      string            `json:"label"`
 		Email      string            `json:"email"`
 		Phone      string            `json:"phone"`
 	}
@@ -84,14 +85,15 @@ func (h *HTTPHandler) EnrollFactor(c *gin.Context) {
 		return
 	}
 
-	secret, err := h.enrollmentSvc.SetupFactor(c.Request.Context(), req.UserID, req.FactorType)
+	result, err := h.enrollmentSvc.SetupFactor(c.Request.Context(), req.UserID, req.FactorType, req.Label)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"secret": secret,
+		"factor_id": result.FactorID,
+		"secret":    result.Secret,
 	})
 }
 

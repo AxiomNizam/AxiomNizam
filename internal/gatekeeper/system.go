@@ -275,6 +275,7 @@ func (s *System) initialize() error {
 	s.ChallengeService = challenge.NewService(
 		s.challengeRepo,
 		s.factorRepo,
+		s.TOTPService,
 		challenge.NewRealClock(),
 	)
 

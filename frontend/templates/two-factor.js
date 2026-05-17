@@ -127,13 +127,14 @@
             box.innerHTML = '<div class="tfa-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><p>No 2FA factors enrolled yet.</p><p style="margin-top:8px;"><a href="#" onclick="tfaSwitch(\'setup\');return false;" style="color:var(--primary-color,#60a5fa)">Set up 2FA now</a></p></div>';
             return;
         }
-        var html = '<table class="tfa-table"><thead><tr><th>Type</th><th>Status</th><th>Issuer</th><th>Created</th><th>Last Verified</th><th>Actions</th></tr></thead><tbody>';
+        var html = '<table class="tfa-table"><thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Issuer</th><th>Created</th><th>Last Verified</th><th>Actions</th></tr></thead><tbody>';
         factors.forEach(function (f) {
             var spec = f.spec || f.Spec || {};
             var status = f.status || f.Status || {};
             var phase = status.phase || status.Phase || 'Unknown';
             var badgeClass = 'tfa-badge-' + phase.toLowerCase();
             var type = spec.type || spec.Type || 'totp';
+            var label = spec.label || spec.Label || '-';
             var issuer = spec.issuer || spec.Issuer || '-';
             var created = f.created_at || f.CreatedAt || '';
             var lastVerified = status.last_verified_at || status.LastVerifiedAt || '';
@@ -142,6 +143,7 @@
             if (lastVerified) lastVerified = new Date(lastVerified).toLocaleString();
             else lastVerified = 'Never';
             html += '<tr>';
+            html += '<td>' + escapeHTML(label) + '</td>';
             html += '<td>' + escapeHTML(type.toUpperCase()) + '</td>';
             html += '<td><span class="tfa-badge ' + badgeClass + '">' + escapeHTML(phase) + '</span></td>';
             html += '<td>' + escapeHTML(issuer) + '</td>';
@@ -196,12 +198,14 @@
 
     window.tfaStartEnroll = function () {
         var factorType = document.getElementById('tfaFactorType').value;
+        var label = document.getElementById('tfaFactorLabel').value.trim();
         var email = document.getElementById('tfaEnrollEmail').value.trim();
         var enrollUid = null;
 
         resolveUserId().then(function (uid) {
             enrollUid = uid;
             var body = { user_id: uid, factor_type: factorType };
+            if (label) body.label = label;
             if (email) body.email = email;
             return mfaFetch('/enroll', { method: 'POST', body: JSON.stringify(body) });
         }).then(function (data) {
@@ -307,9 +311,12 @@
                     sel.innerHTML = '<option value="">-- Select a factor --</option>';
                     factors.forEach(function (f) {
                         var spec = f.spec || f.Spec || {};
+                        var label = spec.label || spec.Label || '';
+                        var typeName = (spec.type || spec.Type || 'TOTP').toUpperCase();
+                        var display = label ? typeName + ' — ' + label : typeName + ' — ' + (spec.issuer || spec.Issuer || 'Unknown');
                         var opt = document.createElement('option');
                         opt.value = f.id || f.ID;
-                        opt.textContent = (spec.type || spec.Type || 'TOTP').toUpperCase() + ' - ' + (spec.issuer || spec.Issuer || 'Unknown');
+                        opt.textContent = display;
                         sel.appendChild(opt);
                     });
                     if (current) sel.value = current;
@@ -474,7 +481,7 @@
                 // Per-factor breakdown
                 if (factors.length > 0) {
                     html += '<div class="tfa-card"><h3>Factor Details</h3>';
-                    html += '<table class="tfa-table"><thead><tr><th>Factor ID</th><th>Type</th><th>Phase</th><th>Issuer</th><th>Created</th><th>Last Verified</th><th>Conditions</th></tr></thead><tbody>';
+                    html += '<table class="tfa-table"><thead><tr><th>Factor ID</th><th>Name</th><th>Type</th><th>Phase</th><th>Issuer</th><th>Created</th><th>Last Verified</th><th>Conditions</th></tr></thead><tbody>';
                     factors.forEach(function (f) {
                         var spec = f.spec || f.Spec || {};
                         var status = f.status || f.Status || {};
@@ -482,6 +489,7 @@
                         var condStr = conditions.map(function (c) { return c.type + '=' + c.status; }).join(', ') || '-';
                         var phase = status.phase || status.Phase || '-';
                         var badgeClass = 'tfa-badge-' + phase.toLowerCase();
+                        var label = spec.label || spec.Label || '-';
                         var created = f.created_at || f.CreatedAt || '';
                         if (created) created = new Date(created).toLocaleString();
                         var lastVer = status.last_verified_at || status.LastVerifiedAt || '';
@@ -489,6 +497,7 @@
                         else lastVer = 'Never';
                         html += '<tr>';
                         html += '<td><code style="font-size:0.78rem">' + escapeHTML((f.id || f.ID || '').substring(0, 8)) + '...</code></td>';
+                        html += '<td>' + escapeHTML(label) + '</td>';
                         html += '<td>' + escapeHTML((spec.type || spec.Type || 'totp').toUpperCase()) + '</td>';
                         html += '<td><span class="tfa-badge ' + badgeClass + '">' + escapeHTML(phase) + '</span></td>';
                         html += '<td>' + escapeHTML(spec.issuer || spec.Issuer || '-') + '</td>';
