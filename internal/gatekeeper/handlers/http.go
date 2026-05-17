@@ -55,6 +55,9 @@ func (h *HTTPHandler) RegisterRoutes(router *gin.Engine) {
 	api.GET("/factor/:factorID", h.GetFactor)
 	api.DELETE("/factor/:factorID", h.DeleteFactor)
 
+	// Backup code endpoints
+	api.POST("/backup-codes/regenerate", h.RegenerateBackupCodes)
+
 	// Challenge endpoints
 	api.POST("/challenge/begin", h.BeginChallenge)
 	api.POST("/challenge/verify", h.VerifyChallenge)
@@ -143,6 +146,26 @@ func (h *HTTPHandler) DeleteFactor(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Factor deleted"})
+}
+
+// RegenerateBackupCodes generates new backup codes for a factor.
+func (h *HTTPHandler) RegenerateBackupCodes(c *gin.Context) {
+	var req struct {
+		FactorID uuid.UUID `json:"factor_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	codes, err := h.backupSvc.RegenerateBackupCodes(c.Request.Context(), req.FactorID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"backup_codes": codes})
 }
 
 // ListFactors lists all factors for a user.
