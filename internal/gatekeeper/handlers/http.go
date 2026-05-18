@@ -308,8 +308,15 @@ func (h *HTTPHandler) TrustDevice(c *gin.Context) {
 
 // ListTrustedDevices lists trusted devices for a user.
 func (h *HTTPHandler) ListTrustedDevices(c *gin.Context) {
-	// Placeholder implementation
-	c.JSON(http.StatusOK, gin.H{"devices": []interface{}{}})
+	userID := uuid.MustParse(c.Param("userID"))
+
+	devices, err := h.deviceSvc.ListTrustedDevices(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"devices": devices})
 }
 
 // RevokeTrustedDevice revokes a trusted device.

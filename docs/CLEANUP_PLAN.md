@@ -98,11 +98,12 @@ m.challengeSvc = challenge.NewService(m.challengeRepo, m.factorRepo, m.totpSvc, 
 
 ---
 
-## Phase 2: Fix Runtime-Critical Issues
+## Phase 2: Fix Runtime-Critical Issues ✅
 
 **Goal:** Module runs without panics or data corruption.
+**Status:** Completed 2026-05-18. All runtime-critical stubs and no-ops fixed.
 
-### 2.1 Fix `BackupCode.MarshalJSON()` returning `nil, nil`
+### 2.1 Fix `BackupCode.MarshalJSON()` returning `nil, nil` ✅
 
 **File:** `models/backup_code.go:27-29`
 
@@ -110,7 +111,9 @@ Returns `nil, nil` which corrupts JSON responses.
 
 **Action:** Implement proper JSON marshaling or remove the custom method (let default encoding handle it).
 
-### 2.2 Fix `StartControllers()` no-op
+**Done:** Removed the broken `MarshalJSON()` method. Struct tags already handle field exclusion (`CodeHash` uses `json:"-"`).
+
+### 2.2 Fix `StartControllers()` no-op ✅
 
 **File:** `system.go:342-347`
 
@@ -118,7 +121,9 @@ Logs "started" but never actually starts any controller loop. The `controller/ma
 
 **Action:** Wire `controller.Manager` in `StartControllers()` to actually run the reconcile loop.
 
-### 2.3 Fix `ConsumeBackupCode` stub
+**Done:** Added `ctrlMgr *gkcontroller.Manager` field to System struct. Created manager in `initialize()`. Updated `StartControllers()` to call `s.ctrlMgr.Start(ctx)`.
+
+### 2.3 Fix `ConsumeBackupCode` stub ✅
 
 **File:** `backupcodes/service.go:78-92`
 
@@ -126,7 +131,9 @@ Always returns `errors.New("backup code not found or already used")`. The hash l
 
 **Action:** Implement actual hash-based lookup using `backupCodeRepo`.
 
-### 2.4 Fix `VerifyDeviceToken` adapter stub
+**Done:** Implemented full hash-based lookup: validate format → hash code → `GetByCodeHash()` → `MarkUsed()`. Added `GetByCodeHash()` to `BackupCodeRepository` interface and `pgstore` implementation. Created `hasher.go` with SHA-256 hashing.
+
+### 2.4 Fix `VerifyDeviceToken` adapter stub ✅
 
 **File:** `adapters.go:215`
 
@@ -134,7 +141,9 @@ Always returns `false, nil` — trusted device bypass never works.
 
 **Action:** Implement actual token verification by delegating to the service with fingerprint lookup.
 
-### 2.5 Fix `ListTrustedDevices` handler stub
+**Done:** Implemented token verification by iterating user's devices and comparing token hashes. Added `ListTrustedDevices` to `TrustedDeviceService` contract. Made `HashDeviceToken` and `BytesEqual` public in `trusteddevices` package. Updated both `adapters.go` and `bootstrap/adapters.go`.
+
+### 2.5 Fix `ListTrustedDevices` handler stub ✅
 
 **File:** `handlers/http.go:310-313`
 
@@ -142,13 +151,17 @@ Returns hardcoded empty array, never calls device service.
 
 **Action:** Implement by calling `deviceSvc.ListTrustedDevices()` or querying the repo directly.
 
-### 2.6 Fix `loadFactorsFromKV()` and `loadPoliciesFromKV()` dead code
+**Done:** Implemented handler to parse `userID` from URL param and call `h.deviceSvc.ListTrustedDevices()`. Added `ListTrustedDevices` method to `TrustedDeviceService` contract interface.
+
+### 2.6 Fix `loadFactorsFromKV()` and `loadPoliciesFromKV()` dead code ✅
 
 **File:** `system.go:202-239`
 
 Iterates keys but does nothing with them (`_ = key`).
 
 **Action:** Implement actual deserialization and loading, or remove these methods.
+
+**Done:** Implemented actual JSON deserialization for both methods. `loadFactorsFromKV()` returns `[]*models.Factor`, `loadPoliciesFromKV()` returns `[]*models.MFAPolicy`. Both parse KV entries and skip malformed ones with warning logs.
 
 ---
 
@@ -328,4 +341,4 @@ Each phase should be a separate PR/branch to keep reviews manageable.
 
 ---
 
-*Last updated: 2026-05-18 — Phase 1 complete*
+*Last updated: 2026-05-18 — Phase 1 & 2 complete*

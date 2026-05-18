@@ -79,6 +79,9 @@ type TrustedDeviceService interface {
 	// VerifyDeviceToken checks if a device token is valid
 	VerifyDeviceToken(ctx context.Context, userID models.UserID, token string) (bool, error)
 
+	// ListTrustedDevices returns all active trusted devices for a user
+	ListTrustedDevices(ctx context.Context, userID models.UserID) ([]*models.TrustedDevice, error)
+
 	// RevokeTrustedDevice revokes a specific device
 	RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error
 

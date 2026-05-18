@@ -2,6 +2,7 @@ package gatekeeper
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"example.com/axiomnizam/internal/gatekeeper/challenge"
@@ -181,6 +182,7 @@ type trustedDeviceServiceWrapper struct {
 	svc interface {
 		TrustDevice(ctx context.Context, req *trusteddevices.TrustDeviceRequest) (*trusteddevices.TrustDeviceResponse, error)
 		VerifyDeviceToken(ctx context.Context, userID models.UserID, fingerprint string, token string) (bool, error)
+		ListTrustedDevices(ctx context.Context, userID models.UserID) ([]*models.TrustedDevice, error)
 		RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error
 		RevokeAllDevices(ctx context.Context, userID models.UserID) error
 		DeviceCount(ctx context.Context, userID models.UserID) (int, error)
@@ -190,6 +192,7 @@ type trustedDeviceServiceWrapper struct {
 func wrapTrustedDeviceService(svc interface {
 	TrustDevice(ctx context.Context, req *trusteddevices.TrustDeviceRequest) (*trusteddevices.TrustDeviceResponse, error)
 	VerifyDeviceToken(ctx context.Context, userID models.UserID, fingerprint string, token string) (bool, error)
+	ListTrustedDevices(ctx context.Context, userID models.UserID) ([]*models.TrustedDevice, error)
 	RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error
 	RevokeAllDevices(ctx context.Context, userID models.UserID) error
 	DeviceCount(ctx context.Context, userID models.UserID) (int, error)
@@ -199,11 +202,11 @@ func wrapTrustedDeviceService(svc interface {
 
 func (w *trustedDeviceServiceWrapper) TrustDevice(ctx context.Context, userID models.UserID, fingerprint, userAgent, ipAddress string) (string, error) {
 	resp, err := w.svc.TrustDevice(ctx, &trusteddevices.TrustDeviceRequest{
-		UserID:     userID,
+		UserID:      userID,
 		Fingerprint: fingerprint,
-		UserAgent:  userAgent,
-		IPAddress:  ipAddress,
-		TTLDays:    30,
+		UserAgent:   userAgent,
+		IPAddress:   ipAddress,
+		TTLDays:     30,
 	})
 	if err != nil {
 		return "", err
@@ -212,7 +215,26 @@ func (w *trustedDeviceServiceWrapper) TrustDevice(ctx context.Context, userID mo
 }
 
 func (w *trustedDeviceServiceWrapper) VerifyDeviceToken(ctx context.Context, userID models.UserID, token string) (bool, error) {
-	return false, nil // Simplified - would need fingerprint
+	// Look up all devices for the user and check token hash
+	devices, err := w.svc.ListTrustedDevices(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, d := range devices {
+		if d.IsExpired(time.Now().UTC()) || d.RevokedAt != nil {
+			continue
+		}
+		// Verify token hash matches
+		expectedHash := trusteddevices.HashDeviceToken(token)
+		if trusteddevices.BytesEqual(d.TokenHash, expectedHash) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (w *trustedDeviceServiceWrapper) ListTrustedDevices(ctx context.Context, userID models.UserID) ([]*models.TrustedDevice, error) {
+	return w.svc.ListTrustedDevices(ctx, userID)
 }
 
 func (w *trustedDeviceServiceWrapper) RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error {

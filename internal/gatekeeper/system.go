@@ -3,6 +3,7 @@ package gatekeeper
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -15,6 +16,7 @@ import (
 	"example.com/axiomnizam/internal/gatekeeper/enrollment"
 	"example.com/axiomnizam/internal/gatekeeper/handlers"
 	"example.com/axiomnizam/internal/gatekeeper/metrics"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 	"example.com/axiomnizam/internal/gatekeeper/pgstore"
 	"example.com/axiomnizam/internal/gatekeeper/policy"
 	"example.com/axiomnizam/internal/gatekeeper/repositories"
@@ -52,6 +54,7 @@ type System struct {
 
 	// Controllers/Reconcilers (K8s-style)
 	FactorController *gkcontroller.FactorReconciler
+	ctrlMgr          *gkcontroller.Manager
 
 	// Infrastructure
 	auditLog  *audit.Logger
@@ -199,7 +202,7 @@ func (s *System) loadFromKVStore() {
 	}
 }
 
-func (s *System) loadFactorsFromKV() ([]interface{}, error) {
+func (s *System) loadFactorsFromKV() ([]*models.Factor, error) {
 	if s.kvStore == nil {
 		return nil, nil
 	}
@@ -211,16 +214,20 @@ func (s *System) loadFactorsFromKV() ([]interface{}, error) {
 	}
 
 	// Parse and restore factors
-	var factors []interface{}
-	for key := range entries {
-		// Factors would be restored to the pgstore repository
-		_ = key
+	var factors []*models.Factor
+	for _, value := range entries {
+		var factor models.Factor
+		if err := json.Unmarshal([]byte(value), &factor); err != nil {
+			log.Printf("⚠️  Gatekeeper: skipping malformed factor KV entry: %v", err)
+			continue
+		}
+		factors = append(factors, &factor)
 	}
 
 	return factors, nil
 }
 
-func (s *System) loadPoliciesFromKV() ([]interface{}, error) {
+func (s *System) loadPoliciesFromKV() ([]*models.MFAPolicy, error) {
 	if s.kvStore == nil {
 		return nil, nil
 	}
@@ -231,9 +238,14 @@ func (s *System) loadPoliciesFromKV() ([]interface{}, error) {
 		return nil, err
 	}
 
-	var policies []interface{}
-	for key := range entries {
-		_ = key
+	var policies []*models.MFAPolicy
+	for _, value := range entries {
+		var policy models.MFAPolicy
+		if err := json.Unmarshal([]byte(value), &policy); err != nil {
+			log.Printf("⚠️  Gatekeeper: skipping malformed policy KV entry: %v", err)
+			continue
+		}
+		policies = append(policies, &policy)
 	}
 
 	return policies, nil
@@ -317,6 +329,7 @@ func (s *System) initialize() error {
 		s.factorRepo,
 		s.challengeRepo,
 	)
+	s.ctrlMgr = gkcontroller.NewManager(s.FactorController)
 
 	// 14. Initialize HTTP handler with service wrappers
 	s.httpHandler = handlers.NewHTTPHandler(
@@ -340,9 +353,9 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 
 // StartControllers starts the K8s-style reconciliation loops.
 func (s *System) StartControllers(ctx context.Context) {
-	if s.FactorController != nil {
-		// Factor controller handles factor state reconciliation
-		log.Println("✅ Gatekeeper: FactorController started")
+	if s.ctrlMgr != nil {
+		s.ctrlMgr.Start(ctx)
+		log.Println("✅ Gatekeeper: Controller manager started")
 	}
 }
 

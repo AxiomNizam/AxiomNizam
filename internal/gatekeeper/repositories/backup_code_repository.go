@@ -15,6 +15,9 @@ type BackupCodeRepository interface {
 	// Get retrieves a single backup code by ID
 	Get(ctx context.Context, id uuid.UUID) (*models.BackupCode, error)
 
+	// GetByCodeHash retrieves an unused backup code by its hash
+	GetByCodeHash(ctx context.Context, codeHash []byte) (*models.BackupCode, error)
+
 	// GetByUserID retrieves all backup codes for a user
 	GetByUserID(ctx context.Context, userID models.UserID) ([]*models.BackupCode, error)
 

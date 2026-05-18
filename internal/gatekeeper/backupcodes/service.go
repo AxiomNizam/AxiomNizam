@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"example.com/axiomnizam/internal/gatekeeper/models"
 	"example.com/axiomnizam/internal/gatekeeper/repositories"
@@ -81,14 +82,26 @@ func (s *Service) ConsumeBackupCode(ctx context.Context, code string) (*models.B
 		return nil, errors.New("invalid backup code format")
 	}
 
-	// Normalize code (remove dashes)
-	normalizedCode := strings.ReplaceAll(code, "-", "")
-	_ = normalizedCode // TODO: use for hash lookup
+	// Hash the provided code to look it up
+	hash := hashBackupCode(code)
 
-	// TODO: Look up backup code by hash from database
-	// For now, this is a stub that would require matching against hashed codes
+	// Find the unused code with this hash
+	backupCode, err := s.backupCodeRepo.GetByCodeHash(ctx, hash)
+	if err != nil {
+		return nil, fmt.Errorf("backup code lookup failed: %w", err)
+	}
+	if backupCode == nil {
+		return nil, errors.New("backup code not found or already used")
+	}
 
-	return nil, errors.New("backup code not found or already used")
+	// Mark as used
+	if err := s.backupCodeRepo.MarkUsed(ctx, backupCode.ID); err != nil {
+		return nil, fmt.Errorf("failed to mark backup code as used: %w", err)
+	}
+
+	now := time.Now().UTC()
+	backupCode.UsedAt = &now
+	return backupCode, nil
 }
 
 // RemainingCodes returns the count of unused backup codes for a user.

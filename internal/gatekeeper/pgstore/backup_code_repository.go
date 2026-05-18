@@ -55,6 +55,35 @@ func (r *BackupCodeRepository) Create(ctx context.Context, codes []*models.Backu
 	return err
 }
 
+// GetByCodeHash retrieves an unused backup code by its hash.
+func (r *BackupCodeRepository) GetByCodeHash(ctx context.Context, codeHash []byte) (*models.BackupCode, error) {
+	query := `
+		SELECT id, user_id, factor_id, code_hash, used_at, created_at
+		FROM twofactor_backup_codes
+		WHERE code_hash = $1 AND used_at IS NULL
+		LIMIT 1
+	`
+
+	code := &models.BackupCode{}
+	var usedAt sql.NullTime
+
+	err := r.db.QueryRowContext(ctx, query, codeHash).Scan(
+		&code.ID, &code.UserID, &code.FactorID, &code.CodeHash, &usedAt, &code.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if usedAt.Valid {
+		code.UsedAt = &usedAt.Time
+	}
+
+	return code, nil
+}
+
 // Get retrieves a single backup code by ID.
 func (r *BackupCodeRepository) Get(ctx context.Context, id uuid.UUID) (*models.BackupCode, error) {
 	query := `

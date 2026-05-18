@@ -23,8 +23,6 @@ func (b *BackupCode) IsUsed() bool {
 	return b.UsedAt != nil
 }
 
-// MarshalJSON excludes sensitive fields from JSON marshaling.
-func (b *BackupCode) MarshalJSON() ([]byte, error) {
-	type Alias BackupCode
-	return nil, nil // Handled by struct tags
-}
+// MarshalJSON is intentionally omitted — struct tags handle field exclusion:
+// - CodeHash uses json:"-" to exclude from JSON output
+// - All other fields use explicit json tags
