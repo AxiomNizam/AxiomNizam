@@ -9,19 +9,20 @@
 
 | Category | Count |
 |----------|-------|
-| Total .go files | 88 |
-| Broken (missing `package` declaration) | 27 |
+| Total .go files | 92 |
+| Broken (missing `package` declaration) | 0 |
 | Stub/placeholder files | ~32 |
-| Compilable packages | 16 |
-| Broken packages | 6 (`events`, `middleware`, `sms`, `email`, `webauthn`, `testutil`) |
+| Compilable packages | 22 |
+| Broken packages | 0 |
 
 ---
 
-## Phase 1: Fix Build-Blocking Issues
+## Phase 1: Fix Build-Blocking Issues ✅
 
 **Goal:** Module compiles without errors.
+**Status:** Completed 2026-05-18. `go build ./internal/gatekeeper/...` and `go vet ./internal/gatekeeper/...` pass clean.
 
-### 1.1 Fix 27 files with missing `package` declaration
+### 1.1 Fix 27 files with missing `package` declaration ✅
 
 All these files have `package ` with no package name — Go syntax errors:
 
@@ -37,7 +38,9 @@ All these files have `package ` with no package name — Go syntax errors:
 
 **Action:** Add correct `package <name>` declarations to each file. For files that are pure stubs, either add minimal compilable content or delete the file.
 
-### 1.2 Fix Raft FSM constant mismatches
+**Done:** All 27 files fixed with proper package declarations and minimal compilable content. Also fixed `raft/store.go` (28th file discovered during build).
+
+### 1.2 Fix Raft FSM constant mismatches ✅
 
 **File:** `raft/fsm.go`
 
@@ -63,7 +66,9 @@ Also fix:
 
 **Action:** Update FSM to use the actual constant names from `enums.go`. Add missing constants if they are needed.
 
-### 1.3 Fix Bootstrap `challenge.NewService()` arg count
+**Done:** Updated `raft/fsm.go` to use `RaftCmdEnrollFactor`, `RaftCmdActivateFactor`, `RaftCmdDisableFactor`, `RaftCmdCreateChallenge`, `RaftCmdVerifyChallenge`, `RaftCmdExpireChallenge`, `RaftCmdGenerateBackupCodes`, `RaftCmdConsumeBackupCode`, `RaftCmdTrustDevice`, `RaftCmdRevokeDevice`. Also added `fsmSnapshot` type to `raft/commands.go` and fixed `decodeCommand` return type.
+
+### 1.3 Fix Bootstrap `challenge.NewService()` arg count ✅
 
 **File:** `bootstrap/module.go:86-90`
 
@@ -79,13 +84,17 @@ m.challengeSvc = challenge.NewService(m.challengeRepo, m.factorRepo, m.totpSvc, 
 
 **Action:** Pass `m.totpSvc` as the `TOTPValidator` argument.
 
-### 1.4 Fix Bootstrap nil FactorService
+**Done:** Updated `bootstrap/module.go` line 89 to pass `m.totpSvc` as third argument.
+
+### 1.4 Fix Bootstrap nil FactorService ✅
 
 **File:** `bootstrap/module.go:129`
 
 `FactorService` is passed as `nil` to `NewHTTPHandler` — will nil-pointer panic on `ListFactors`, `GetFactor`, `DeleteFactor` endpoints.
 
 **Action:** Create a proper `factorServiceWrapper` via `wrapFactorService(m.factorRepo)` and pass it.
+
+**Done:** Created `bootstrap/adapters.go` with adapter wrappers for all 7 service interfaces (enrollment, challenge, factor, policy, risk, trusted device, backup code). Updated `bootstrap/module.go` to use `wrapFactorService(m.factorRepo)` instead of `nil`.
 
 ---
 
@@ -310,13 +319,13 @@ Each phase should be a separate PR/branch to keep reviews manageable.
 
 ## File Count After Cleanup
 
-| Category | Before | After (est.) |
-|----------|--------|--------------|
-| Total .go files | 88 | ~45 |
-| Broken files | 27 | 0 |
-| Stub files | ~32 | 0 |
-| Packages | 22 | ~14 |
+| Category | Before | Phase 1 | After (est.) |
+|----------|--------|---------|--------------|
+| Total .go files | 88 | 92 | ~45 |
+| Broken files | 27 | 0 | 0 |
+| Stub files | ~32 | ~32 | 0 |
+| Packages | 22 | 22 | ~14 |
 
 ---
 
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-18 — Phase 1 complete*
