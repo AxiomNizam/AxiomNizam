@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,19 +66,19 @@ func (r *AuditRepository) QueryEvents(ctx context.Context, filters map[string]in
 	argIdx := 1
 
 	if userID, ok := filters["user_id"].(string); ok && userID != "" {
-		query += ` AND user_id = $` + itoa(argIdx)
+		query += ` AND user_id = $` + strconv.Itoa(argIdx)
 		args = append(args, userID)
 		argIdx++
 	}
 
 	if eventType, ok := filters["event_type"].(string); ok && eventType != "" {
-		query += ` AND event_type = $` + itoa(argIdx)
+		query += ` AND event_type = $` + strconv.Itoa(argIdx)
 		args = append(args, eventType)
 		argIdx++
 	}
 
 	if severity, ok := filters["severity"].(string); ok && severity != "" {
-		query += ` AND severity = $` + itoa(argIdx)
+		query += ` AND severity = $` + strconv.Itoa(argIdx)
 		args = append(args, severity)
 		argIdx++
 	}
@@ -120,17 +121,4 @@ func (r *AuditRepository) QueryEvents(ctx context.Context, filters map[string]in
 	}
 
 	return events, nil
-}
-
-// itoa converts an integer to its string representation.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	result := ""
-	for n > 0 {
-		result = string(rune('0'+n%10)) + result
-		n /= 10
-	}
-	return result
 }
