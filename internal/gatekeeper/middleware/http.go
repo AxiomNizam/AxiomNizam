@@ -7,8 +7,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// TokenValidatorFunc validates a bearer token and returns the user ID.
+// Returns empty string and error if the token is invalid.
+type TokenValidatorFunc func(token string) (userID string, err error)
+
 // AuthMiddleware extracts and validates the Bearer token from the Authorization header.
-func AuthMiddleware() gin.HandlerFunc {
+// When a validator is provided, it performs JWT validation; otherwise it only checks format.
+func AuthMiddleware(validator TokenValidatorFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -28,7 +33,15 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Token validation would happen here (JWT verification, etc.)
+		if validator != nil {
+			userID, err := validator(token)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+				return
+			}
+			c.Set("user_id", userID)
+		}
+
 		c.Set("token", token)
 		c.Next()
 	}

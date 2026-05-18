@@ -5,7 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes registers all Gatekeeper HTTP routes on the given router.
-func RegisterRoutes(router *gin.Engine, httpHandler *handlers.HTTPHandler) {
-	httpHandler.RegisterRoutes(router)
+// RegisterRoutes registers all Gatekeeper HTTP routes on the given router group.
+func RegisterRoutes(api *gin.RouterGroup, httpHandler *handlers.HTTPHandler) {
+	httpHandler.RegisterRoutes(api)
 }

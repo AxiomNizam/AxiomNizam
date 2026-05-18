@@ -175,6 +175,16 @@ func (s *System) SetKVStore(kv platformstore.KVStore) {
 		}
 	}
 
+	// Configure persistence on metrics collector
+	if s.collector != nil {
+		s.collector.ConfigureKVPersistence(kv)
+	}
+
+	// Configure persistence on audit logger
+	if s.auditLog != nil {
+		s.auditLog.ConfigureKVPersistence(kv)
+	}
+
 	log.Println("✅ Gatekeeper: KVStore persistence configured (Raft mode)")
 }
 
@@ -358,9 +368,10 @@ func (s *System) initialize() error {
 	return nil
 }
 
-// RegisterRoutes registers all HTTP routes for the 2FA module.
-func (s *System) RegisterRoutes(router *gin.Engine) {
-	s.httpHandler.RegisterRoutes(router)
+// RegisterRoutes registers all HTTP routes for the 2FA module on the given router group.
+// The caller should apply auth middleware to the group before passing it.
+func (s *System) RegisterRoutes(api *gin.RouterGroup) {
+	s.httpHandler.RegisterRoutes(api)
 	log.Println("✅ Gatekeeper routes registered at /api/v1/mfa")
 }
 

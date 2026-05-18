@@ -41,9 +41,9 @@ func NewHTTPHandler(
 	}
 }
 
-// RegisterRoutes registers all HTTP endpoints under /api/v1/mfa.
-func (h *HTTPHandler) RegisterRoutes(router *gin.Engine) {
-	api := router.Group("/api/v1/mfa")
+// RegisterRoutes registers all HTTP endpoints under the provided router group.
+// The caller is responsible for applying auth middleware to the group.
+func (h *HTTPHandler) RegisterRoutes(api *gin.RouterGroup) {
 
 	// Enrollment endpoints
 	api.POST("/enroll", h.EnrollFactor)

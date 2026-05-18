@@ -144,9 +144,9 @@ func (m *Module) initialize() error {
 	return nil
 }
 
-// RegisterRoutes registers all HTTP routes.
-func (m *Module) RegisterRoutes(router *gin.Engine) {
-	m.httpHandler.RegisterRoutes(router)
+// RegisterRoutes registers all HTTP routes on the given router group.
+func (m *Module) RegisterRoutes(api *gin.RouterGroup) {
+	m.httpHandler.RegisterRoutes(api)
 }
 
 // TotpService returns the TOTP service.

@@ -1685,7 +1685,9 @@ func main() {
 	if gkErr != nil {
 		log.Printf("⚠️  Gatekeeper 2FA module initialization failed: %v — 2FA endpoints will be unavailable", gkErr)
 	} else {
-		gkSystem.RegisterRoutes(router)
+		mfaAPI := router.Group("/api/v1/mfa", authMiddleware)
+		gkSystem.RegisterRoutes(mfaAPI)
+		gkSystem.StartControllers(ctx)
 		log.Println("✅ Gatekeeper 2FA module started")
 	}
 
@@ -1818,6 +1820,12 @@ func main() {
 					storageSys.SetIAM(iamSystem.Issuer, iamSystem.RevokedStore)
 					log.Println("✅ Storage: IAM middleware attached (deferred, Raft KV backend)")
 				}
+			}
+
+			// Wire Gatekeeper 2FA module KV persistence.
+			if gkSystem != nil {
+				gkSystem.SetKVStore(backendMgr.KV())
+				log.Println("✅ Gatekeeper: Raft KV persistence wired (deferred)")
 			}
 
 			log.Println("  ℹ️  Module persistence: Raft KV available via backendMgr.KV()")
