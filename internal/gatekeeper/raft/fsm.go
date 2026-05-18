@@ -67,30 +67,28 @@ func (f *FSM) Apply(log *hraft.Log) interface{} {
 	f.index = log.Index
 
 	switch cmdType {
-	case models.CmdEnrollFactor:
+	case models.RaftCmdEnrollFactor:
 		return f.applyEnrollFactor(payload)
-	case models.CmdActivateFactor:
+	case models.RaftCmdActivateFactor:
 		return f.applyActivateFactor(payload)
-	case models.CmdDisableFactor:
+	case models.RaftCmdDisableFactor:
 		return f.applyDisableFactor(payload)
-	case models.CmdRevokeFactor:
-		return f.applyRevokeFactor(payload)
-	case models.CmdBeginChallenge:
+	case models.RaftCmdCreateChallenge:
 		return f.applyBeginChallenge(payload)
-	case models.CmdVerifyChallenge:
+	case models.RaftCmdVerifyChallenge:
 		return f.applyVerifyChallenge(payload)
-	case models.CmdExpireChallenge:
+	case models.RaftCmdExpireChallenge:
 		return f.applyExpireChallenge(payload)
-	case models.CmdFailChallenge:
-		return f.applyFailChallenge(payload)
-	case models.CmdUseBackupCode:
+	case models.RaftCmdGenerateBackupCodes:
 		return f.applyUseBackupCode(payload)
-	case models.CmdTrustDevice:
+	case models.RaftCmdConsumeBackupCode:
+		return f.applyUseBackupCode(payload)
+	case models.RaftCmdTrustDevice:
 		return f.applyTrustDevice(payload)
-	case models.CmdRevokeDevice:
+	case models.RaftCmdRevokeDevice:
 		return f.applyRevokeDevice(payload)
 	default:
-		return fmt.Errorf("fsm apply: unknown command type %d", cmdType)
+		return fmt.Errorf("fsm apply: unknown command type %q", cmdType)
 	}
 }
 
@@ -149,8 +147,8 @@ func (f *FSM) applyEnrollFactor(payload []byte) error {
 			Phase: models.FactorPhasePending,
 			Conditions: []models.Condition{
 				{
-					Type:               models.ConditionReady,
-					Status:             models.ConditionFalse,
+					Type:               models.ConditionTypeReady,
+					Status:             models.ConditionStatusFalse,
 					Reason:             "PendingActivation",
 					Message:            "Factor enrolled; awaiting OTP verification.",
 					LastTransitionTime: now,
@@ -176,8 +174,8 @@ func (f *FSM) applyActivateFactor(payload []byte) error {
 	factor.Status.Phase = models.FactorPhaseActive
 	factor.Status.ActivatedAt = &cmd.ActivatedAt
 	factor.Status.SetCondition(models.Condition{
-		Type:    models.ConditionReady,
-		Status:  models.ConditionTrue,
+		Type:    models.ConditionTypeReady,
+		Status:  models.ConditionStatusTrue,
 		Reason:  "Activated",
 		Message: "Factor verified and active.",
 	})
@@ -198,8 +196,8 @@ func (f *FSM) applyDisableFactor(payload []byte) error {
 	factor.Status.Phase = models.FactorPhaseDisabled
 	factor.Status.DisabledAt = &cmd.DisabledAt
 	factor.Status.SetCondition(models.Condition{
-		Type:    models.ConditionReady,
-		Status:  models.ConditionFalse,
+		Type:    models.ConditionTypeReady,
+		Status:  models.ConditionStatusFalse,
 		Reason:  "Disabled",
 		Message: "Factor disabled by user.",
 	})
@@ -220,8 +218,8 @@ func (f *FSM) applyRevokeFactor(payload []byte) error {
 	factor.Status.Phase = models.FactorPhaseRevoked
 	factor.Status.RevokedAt = &cmd.RevokedAt
 	factor.Status.SetCondition(models.Condition{
-		Type:    models.ConditionReady,
-		Status:  models.ConditionFalse,
+		Type:    models.ConditionTypeReady,
+		Status:  models.ConditionStatusFalse,
 		Reason:  "Revoked",
 		Message: cmd.Reason,
 	})
@@ -239,7 +237,7 @@ func (f *FSM) applyBeginChallenge(payload []byte) error {
 		ID:        cmd.ChallengeID,
 		UserID:    cmd.UserID,
 		FactorID:  cmd.FactorID,
-		Phase:     models.ChallengePhasePending,
+		Phase:     models.ChallengePhaseWaiting,
 		Nonce:     cmd.Nonce,
 		ExpiresAt: cmd.ExpiresAt,
 		IPAddress: cmd.IPAddress,

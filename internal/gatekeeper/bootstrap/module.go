@@ -86,6 +86,7 @@ func (m *Module) initialize() error {
 	m.challengeSvc = challenge.NewService(
 		m.challengeRepo,
 		m.factorRepo,
+		m.totpSvc,
 		challenge.NewRealClock(),
 	)
 
@@ -122,15 +123,15 @@ func (m *Module) initialize() error {
 	// 11. Initialize metrics
 	m.coll = metrics.NewCollector()
 
-	// 12. Initialize HTTP handler
+	// 12. Initialize HTTP handler (with adapter wrappers to match contracts interfaces)
 	m.httpHandler = handlers.NewHTTPHandler(
-		m.enrollmentSvc,
-		m.challengeSvc,
-		nil, // TODO: Implement FactorService
-		m.policySvc,
-		m.riskSvc,
-		m.deviceSvc,
-		m.backupCodeSvc,
+		wrapEnrollmentService(m.enrollmentSvc),
+		wrapChallengeService(m.challengeSvc),
+		wrapFactorService(m.factorRepo),
+		wrapPolicyService(m.policySvc),
+		wrapRiskService(m.riskSvc),
+		wrapTrustedDeviceService(m.deviceSvc),
+		wrapBackupCodeService(m.backupCodeSvc),
 	)
 
 	return nil

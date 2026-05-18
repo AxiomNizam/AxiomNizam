@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	hraft "github.com/hashicorp/raft"
 	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
@@ -124,7 +125,31 @@ func decodeCommand(data []byte) (models.RaftCommandType, []byte, error) {
 		Payload []byte                 `json:"payload"`
 	}
 	if err := json.Unmarshal(data, &cmd); err != nil {
-		return 0, nil, fmt.Errorf("raft decode command: %w", err)
+		return "", nil, fmt.Errorf("raft decode command: %w", err)
 	}
 	return cmd.Type, cmd.Payload, nil
 }
+
+// fsmSnapshot is the serializable snapshot of the FSM state.
+type fsmSnapshot struct {
+	Index           uint64                                      `json:"index"`
+	Factors         map[uuid.UUID]*models.Factor                `json:"factors"`
+	Challenges      map[uuid.UUID]*models.Challenge             `json:"challenges"`
+	BackupCodesUsed map[uuid.UUID]time.Time                     `json:"backup_codes_used"`
+	TrustedDevices  map[uuid.UUID]*models.TrustedDevice         `json:"trusted_devices"`
+}
+
+// Persist writes the snapshot to the sink.
+func (s *fsmSnapshot) Persist(sink hraft.SnapshotSink) error {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return fmt.Errorf("fsm snapshot persist: %w", err)
+	}
+	if _, err := sink.Write(data); err != nil {
+		return fmt.Errorf("fsm snapshot write: %w", err)
+	}
+	return sink.Close()
+}
+
+// Release is a no-op for this snapshot.
+func (s *fsmSnapshot) Release() {}
