@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"errors"
 	"os"
 	"time"
@@ -152,17 +153,31 @@ func DefaultConfig() *Config {
 }
 
 // LoadFromEnv loads security keys from environment variables.
-// Call this after DefaultConfig() to populate sensitive fields.
+// If keys are not set, auto-generates random keys for development use.
+// In production, ALWAYS set GATEKEEPER_ENCRYPTION_KEY and GATEKEEPER_HMAC_KEY.
 func (c *Config) LoadFromEnv() {
 	if key := os.Getenv("GATEKEEPER_ENCRYPTION_KEY"); key != "" {
 		c.EncryptionKey = []byte(key)
+	} else if len(c.EncryptionKey) < 32 {
+		// Auto-generate for development (NOT for production)
+		c.EncryptionKey = generateRandomKey(32)
 	}
 	if key := os.Getenv("GATEKEEPER_HMAC_KEY"); key != "" {
 		c.HMACKey = []byte(key)
+	} else if len(c.HMACKey) < 32 {
+		// Auto-generate for development (NOT for production)
+		c.HMACKey = generateRandomKey(32)
 	}
 	if issuer := os.Getenv("GATEKEEPER_TOTP_ISSUER"); issuer != "" {
 		c.TOTP.Issuer = issuer
 	}
+}
+
+// generateRandomKey creates a cryptographically secure random key.
+func generateRandomKey(length int) []byte {
+	key := make([]byte, length)
+	_, _ = rand.Read(key)
+	return key
 }
 
 // Validate checks the configuration for errors.
