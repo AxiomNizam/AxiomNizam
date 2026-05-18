@@ -16,6 +16,9 @@ import (
 	"syscall"
 	"time"
 
+	"example.com/axiomnizam/internal/alerting"
+	"example.com/axiomnizam/internal/anonymization"
+	"example.com/axiomnizam/internal/antivirus"
 	"example.com/axiomnizam/internal/apibanks"
 	"example.com/axiomnizam/internal/apiscanner"
 	"example.com/axiomnizam/internal/audit"
@@ -24,9 +27,12 @@ import (
 	"example.com/axiomnizam/internal/blocking"
 	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
+	"example.com/axiomnizam/internal/catalog"
 	"example.com/axiomnizam/internal/cdc"
 	"example.com/axiomnizam/internal/conductor"
 	"example.com/axiomnizam/internal/config"
+	"example.com/axiomnizam/internal/contracts"
+	"example.com/axiomnizam/internal/costing"
 	"example.com/axiomnizam/internal/database"
 	datasourceresource "example.com/axiomnizam/internal/datasource"
 	"example.com/axiomnizam/internal/deployment"
@@ -34,7 +40,10 @@ import (
 	"example.com/axiomnizam/internal/etl"
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
+	"example.com/axiomnizam/internal/federation"
+	"example.com/axiomnizam/internal/featurestore"
 	"example.com/axiomnizam/internal/gatekeeper"
+	"example.com/axiomnizam/internal/governance"
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/heartbeat"
 	iampkg "example.com/axiomnizam/internal/iam"
@@ -49,6 +58,7 @@ import (
 	"example.com/axiomnizam/internal/lineage"
 	"example.com/axiomnizam/internal/metrics"
 	"example.com/axiomnizam/internal/migrations"
+	"example.com/axiomnizam/internal/mlpipeline"
 	"example.com/axiomnizam/internal/models"
 	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/platform"
@@ -56,12 +66,17 @@ import (
 	"example.com/axiomnizam/internal/platform/featureflags"
 	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/policies"
+	"example.com/axiomnizam/internal/ratelimit"
 	"example.com/axiomnizam/internal/rbac"
 	reconcilerpkg "example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
+	"example.com/axiomnizam/internal/schemaregistry"
 	"example.com/axiomnizam/internal/serviceregistry"
+	"example.com/axiomnizam/internal/slo"
 	"example.com/axiomnizam/internal/storage"
+	"example.com/axiomnizam/internal/stream"
+	"example.com/axiomnizam/internal/streamanalytics"
 	"example.com/axiomnizam/internal/streaming"
 	"example.com/axiomnizam/internal/tenant"
 	"example.com/axiomnizam/internal/tracing"
@@ -2517,6 +2532,133 @@ func main() {
 		decisions := autopilotInstance.Evaluate(c.Request.Context(), body.Peers, body.LeaderIndex)
 		c.JSON(http.StatusOK, gin.H{"decisions": decisions})
 	})
+
+	// ====================================
+	// ANTIVIRUS MANAGEMENT API (uses existing engine from storage module)
+	// ====================================
+	if storageSys != nil && storageSys.AVEngine != nil {
+		avHandler := antivirus.NewAPIHandler(storageSys.AVEngine)
+		avHandler.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Antivirus management API registered (reusing storage engine)")
+	} else {
+		log.Println("⚠️  Antivirus engine not available — management API skipped")
+	}
+
+	// ====================================
+	// RATE LIMITING (previously unwired)
+	// ====================================
+	quotaMgr := ratelimit.NewQuotaManager()
+	rlMiddleware := ratelimit.NewRateLimitMiddleware(quotaMgr)
+	quotaHandler := ratelimit.NewQuotaHandler(quotaMgr)
+	router.Use(rlMiddleware.Handler())
+	quotaAPI := router.Group("/api/v1/quotas", authMiddleware)
+	{
+		quotaAPI.GET("", quotaHandler.ListQuotas)
+		quotaAPI.GET("/:userID", quotaHandler.GetQuota)
+		quotaAPI.POST("/:userID", adminOrSysMiddleware, quotaHandler.SetUserQuota)
+		quotaAPI.DELETE("/:userID", adminOrSysMiddleware, quotaHandler.ResetQuota)
+		quotaAPI.POST("/endpoint", adminOrSysMiddleware, quotaHandler.SetEndpointLimit)
+	}
+	log.Println("✅ Rate limiting module started")
+
+	// ====================================
+	// STREAM BROKER (previously unwired)
+	// ====================================
+	streamBroker := stream.NewBroker(10000)
+	streamHTTP := stream.HTTPHandler(streamBroker)
+	router.Any("/api/v1/stream", func(c *gin.Context) {
+		streamHTTP.ServeHTTP(c.Writer, c.Request)
+	})
+	log.Println("✅ Stream broker started")
+
+	// ====================================
+	// FEATURE MODULES (storage-backed)
+	// ====================================
+	if backendMgr != nil {
+		// Alerting
+		alertRuleStore := platformstore.NewStore[*alerting.AlertRuleResource](backendMgr, "alert-rules", func() *alerting.AlertRuleResource { return &alerting.AlertRuleResource{} })
+		alertIncidentStore := platformstore.NewStore[*alerting.AlertIncidentResource](backendMgr, "alert-incidents", func() *alerting.AlertIncidentResource { return &alerting.AlertIncidentResource{} })
+		alertChannelStore := platformstore.NewStore[*alerting.NotificationChannelResource](backendMgr, "alert-channels", func() *alerting.NotificationChannelResource { return &alerting.NotificationChannelResource{} })
+		alertHandlers := alerting.NewAlertHandlers(alertRuleStore, alertIncidentStore, alertChannelStore)
+		alertHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Alerting module started")
+
+		// Governance
+		complianceStore := platformstore.NewStore[*governance.CompliancePolicyResource](backendMgr, "compliance-policies", func() *governance.CompliancePolicyResource { return &governance.CompliancePolicyResource{} })
+		retentionStore := platformstore.NewStore[*governance.RetentionPolicyResource](backendMgr, "retention-policies", func() *governance.RetentionPolicyResource { return &governance.RetentionPolicyResource{} })
+		accessReqStore := platformstore.NewStore[*governance.AccessRequestResource](backendMgr, "access-requests", func() *governance.AccessRequestResource { return &governance.AccessRequestResource{} })
+		govHandlers := governance.NewGovernanceHandlers(complianceStore, retentionStore, accessReqStore)
+		govHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Governance module started")
+
+		// SLO
+		sloStore := platformstore.NewStore[*slo.SLOResource](backendMgr, "slos", func() *slo.SLOResource { return &slo.SLOResource{} })
+		sloHandlers := slo.NewSLOHandlers(sloStore)
+		sloHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ SLO module started")
+
+		// Catalog
+		assetStore := platformstore.NewStore[*catalog.CatalogAssetResource](backendMgr, "catalog-assets", func() *catalog.CatalogAssetResource { return &catalog.CatalogAssetResource{} })
+		collectionStore := platformstore.NewStore[*catalog.CatalogCollectionResource](backendMgr, "catalog-collections", func() *catalog.CatalogCollectionResource { return &catalog.CatalogCollectionResource{} })
+		catalogHandlers := catalog.NewCatalogHandlers(assetStore, collectionStore, nil)
+		catalogHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Catalog module started")
+
+		// Costing
+		costPolicyStore := platformstore.NewStore[*costing.CostPolicyResource](backendMgr, "cost-policies", func() *costing.CostPolicyResource { return &costing.CostPolicyResource{} })
+		usageStore := platformstore.NewStore[*costing.UsageRecordResource](backendMgr, "usage-records", func() *costing.UsageRecordResource { return &costing.UsageRecordResource{} })
+		costHandlers := costing.NewCostHandlers(costPolicyStore, usageStore)
+		costHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Costing module started")
+
+		// Contracts
+		contractStore := platformstore.NewStore[*contracts.DataContractResource](backendMgr, "data-contracts", func() *contracts.DataContractResource { return &contracts.DataContractResource{} })
+		contractHandlers := contracts.NewContractHandlers(contractStore)
+		contractHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Contracts module started")
+
+		// Schema Registry
+		schemaStore := platformstore.NewStore[*schemaregistry.SchemaResource](backendMgr, "schemas", func() *schemaregistry.SchemaResource { return &schemaregistry.SchemaResource{} })
+		subjectStore := platformstore.NewStore[*schemaregistry.SchemaSubjectResource](backendMgr, "schema-subjects", func() *schemaregistry.SchemaSubjectResource { return &schemaregistry.SchemaSubjectResource{} })
+		schemaChecker := schemaregistry.NewJSONSchemaCompatibilityChecker()
+		schemaHandlers := schemaregistry.NewSchemaRegistryHandlers(schemaStore, subjectStore, schemaChecker)
+		schemaHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Schema Registry module started")
+
+		// Anonymization
+		anonymPolicyStore := platformstore.NewStore[*anonymization.AnonymizationPolicyResource](backendMgr, "anonymization-policies", func() *anonymization.AnonymizationPolicyResource { return &anonymization.AnonymizationPolicyResource{} })
+		anonymHandlers := anonymization.NewAnonymizationHandlers(anonymPolicyStore)
+		anonymHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Anonymization module started")
+
+		// Stream Analytics
+		streamJobStore := platformstore.NewStore[*streamanalytics.StreamJobResource](backendMgr, "stream-jobs", func() *streamanalytics.StreamJobResource { return &streamanalytics.StreamJobResource{} })
+		streamHandlers := streamanalytics.NewStreamAnalyticsHandlers(streamJobStore)
+		streamHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Stream Analytics module started")
+
+		// Feature Store
+		featureGroupStore := platformstore.NewStore[*featurestore.FeatureGroupResource](backendMgr, "feature-groups", func() *featurestore.FeatureGroupResource { return &featurestore.FeatureGroupResource{} })
+		featureHandlers := featurestore.NewFeatureStoreHandlers(featureGroupStore)
+		featureHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Feature Store module started")
+
+		// Federation
+		vtStore := platformstore.NewStore[*federation.VirtualTableResource](backendMgr, "virtual-tables", func() *federation.VirtualTableResource { return &federation.VirtualTableResource{} })
+		fedQueryStore := platformstore.NewStore[*federation.FederatedQueryResource](backendMgr, "federated-queries", func() *federation.FederatedQueryResource { return &federation.FederatedQueryResource{} })
+		fedHandlers := federation.NewFederationHandlers(vtStore, fedQueryStore, nil)
+		fedHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ Federation module started")
+
+		// ML Pipeline
+		mlPipelineStore := platformstore.NewStore[*mlpipeline.MLPipelineResource](backendMgr, "ml-pipelines", func() *mlpipeline.MLPipelineResource { return &mlpipeline.MLPipelineResource{} })
+		modelDeployStore := platformstore.NewStore[*mlpipeline.ModelDeploymentResource](backendMgr, "model-deployments", func() *mlpipeline.ModelDeploymentResource { return &mlpipeline.ModelDeploymentResource{} })
+		mlHandlers := mlpipeline.NewMLPipelineHandlers(mlPipelineStore, modelDeployStore)
+		mlHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
+		log.Println("✅ ML Pipeline module started")
+	} else {
+		log.Println("⚠️  Storage backend not available — feature modules (alerting, governance, slo, catalog, costing, contracts, schemaregistry, anonymization, streamanalytics, featurestore, federation, mlpipeline) skipped")
+	}
 
 	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
