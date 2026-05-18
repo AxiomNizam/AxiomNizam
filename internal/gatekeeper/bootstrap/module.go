@@ -107,10 +107,17 @@ func (m *Module) initialize() error {
 		trusteddevices.NewRealClock(),
 	)
 
-	// 8. Initialize policy engine
+	// 8. Initialize policy engine with default rules
 	m.policySvc = policy.NewEngine(
 		&policy.DefaultEvaluator{},
-		[]policy.Rule{}, // TODO: Load from policy store
+		[]policy.Rule{
+			&policy.SensitiveResourceRule{
+				ResourceTypes: []string{"sensitive-operation", "admin", "billing"},
+			},
+			&policy.HighRiskBlockRule{
+				Threshold: 90,
+			},
+		},
 	)
 
 	// 9. Initialize risk engine

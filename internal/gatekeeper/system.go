@@ -311,17 +311,27 @@ func (s *System) initialize() error {
 		trusteddevices.NewRealClock(),
 	)
 
-	// 9. Initialize policy engine
+	// 9. Initialize policy engine with default rules
 	s.PolicyService = policy.NewEngine(
 		&policy.DefaultEvaluator{},
-		[]policy.Rule{},
+		[]policy.Rule{
+			&policy.SensitiveResourceRule{
+				ResourceTypes: []string{"sensitive-operation", "admin", "billing"},
+			},
+			&policy.HighRiskBlockRule{
+				Threshold: 90,
+			},
+		},
 	)
 
 	// 10. Initialize risk engine
 	s.RiskService = risk.NewEngine(&risk.DefaultScorer{})
 
-	// 11. Initialize audit logging (in-memory for now)
-	auditBackend := audit.NewInMemoryBackend()
+	// 11. Initialize audit logging
+	var auditBackend audit.AuditBackend = audit.NewInMemoryBackend()
+	if s.db != nil {
+		auditBackend = pgstore.NewAuditRepository(s.db)
+	}
 	s.auditLog = audit.NewLogger(auditBackend)
 
 	// 12. Initialize metrics
