@@ -3,6 +3,7 @@ package totp
 import (
 	"crypto/hmac"
 	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
 	"time"
@@ -33,8 +34,8 @@ func (v *ValidatorImpl) Validate(secret []byte, code string, now time.Time, time
 	// Generate the expected TOTP code
 	expectedCode := v.generateCode(secret, T)
 
-	// Compare codes (timing-safe comparison preferred)
-	return code == expectedCode
+	// Use constant-time comparison to prevent timing attacks
+	return subtle.ConstantTimeCompare([]byte(code), []byte(expectedCode)) == 1
 }
 
 // generateCode generates a TOTP code for a given time step.

@@ -95,7 +95,7 @@ func (m *Module) initialize() error {
 		m.factorRepo,
 		m.backupCodeRepo,
 		m.totpSvc,
-		[]byte("encryption-key-todo"), // TODO: Load from secure config
+		m.cfg.EncryptionKey,
 	)
 
 	// 6. Initialize backup code service

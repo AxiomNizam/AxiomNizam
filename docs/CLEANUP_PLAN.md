@@ -165,11 +165,12 @@ Iterates keys but does nothing with them (`_ = key`).
 
 ---
 
-## Phase 3: Security Fixes
+## Phase 3: Security Fixes ✅
 
 **Goal:** Eliminate known security vulnerabilities.
+**Status:** Completed 2026-05-18. All security issues fixed with dynamic configuration.
 
-### 3.1 Replace hardcoded encryption keys
+### 3.1 Replace hardcoded encryption keys ✅
 
 **Files:**
 - `system.go:287` — `[]byte("encryption-key-placeholder")`
@@ -177,7 +178,9 @@ Iterates keys but does nothing with them (`_ = key`).
 
 **Action:** Load encryption key from environment variable or config. Fail startup if not set.
 
-### 3.2 Encrypt TOTP secrets at rest
+**Done:** Added `EncryptionKey` and `HMACKey` fields to `config.Config`. Added `LoadFromEnv()` method that reads from `GATEKEEPER_ENCRYPTION_KEY`, `GATEKEEPER_HMAC_KEY`, and `GATEKEEPER_TOTP_ISSUER` environment variables. Updated `Validate()` to require min 32 bytes for both keys. Updated `system.go` and `bootstrap/module.go` to use `cfg.EncryptionKey`.
+
+### 3.2 Encrypt TOTP secrets at rest ✅
 
 **File:** `enrollment/service.go:85,140`
 
@@ -185,7 +188,9 @@ Currently stores `EncryptedSecret: []byte(secret)` in plaintext with `// TODO: E
 
 **Action:** Use AES-GCM encryption with the configured key before persisting, decrypt on read.
 
-### 3.3 Fix backup code hashing
+**Done:** Implemented AES-256-GCM encryption/decryption in `enrollment/service.go`. Added `encryptSecret()`, `decryptSecret()`, and `mustEncryptSecret()` helper functions. `SetupFactor` now encrypts secrets before storing. `ActivateFactor` decrypts secrets before OTP validation.
+
+### 3.3 Fix backup code hashing ✅
 
 **File:** `enrollment/service.go:215-217`
 
@@ -193,7 +198,9 @@ Currently stores `EncryptedSecret: []byte(secret)` in plaintext with `// TODO: E
 
 **Action:** Use `bcrypt` or `argon2id` for hashing backup codes.
 
-### 3.4 Fix device token hashing
+**Done:** Replaced base64 encoding with SHA-256 hashing. `hashCode()` now normalizes codes (lowercase, remove dashes) before hashing. Removed unused `encoding/base64` import.
+
+### 3.4 Fix device token hashing ✅
 
 **File:** `trusteddevices/service.go:179-182`
 
@@ -201,13 +208,17 @@ Currently stores `EncryptedSecret: []byte(secret)` in plaintext with `// TODO: E
 
 **Action:** Use `bcrypt` or `sha256` with salt.
 
-### 3.5 Fix non-constant-time OTP comparison
+**Done:** `HashDeviceToken()` now uses SHA-256 instead of base64 encoding. Added `crypto/sha256` import.
+
+### 3.5 Fix non-constant-time OTP comparison ✅
 
 **File:** `totp/validator.go:37`
 
 Uses `code == expectedCode` — enables timing attacks.
 
 **Action:** Use `crypto/subtle.ConstantTimeCompare()`.
+
+**Done:** Updated `Validate()` to use `subtle.ConstantTimeCompare([]byte(code), []byte(expectedCode)) == 1`. Added `crypto/subtle` import.
 
 ---
 
@@ -341,4 +352,4 @@ Each phase should be a separate PR/branch to keep reviews manageable.
 
 ---
 
-*Last updated: 2026-05-18 — Phase 1 & 2 complete*
+*Last updated: 2026-05-18 — Phase 1, 2 & 3 complete*

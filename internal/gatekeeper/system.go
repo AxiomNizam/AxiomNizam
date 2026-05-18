@@ -68,8 +68,9 @@ type System struct {
 // NewSystem initializes the Gatekeeper 2FA module.
 func NewSystem(gormDB *gorm.DB) (*System, error) {
 	cfg := config.DefaultConfig()
+	cfg.LoadFromEnv()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
 	// Auto-migrate Gatekeeper tables (same pattern as IAM pgstore.New)
@@ -97,8 +98,9 @@ func NewSystem(gormDB *gorm.DB) (*System, error) {
 
 // NewSystemWithConfig initializes Gatekeeper with custom config.
 func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
+	cfg.LoadFromEnv()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
 	if err := pgstore.MigrateGatekeeperTables(gormDB); err != nil {
@@ -127,8 +129,9 @@ func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
 // Used when running in Raft mode for distributed state persistence.
 func NewSystemWithKVStore(db *sql.DB, kvStore platformstore.KVStore) (*System, error) {
 	cfg := config.DefaultConfig()
+	cfg.LoadFromEnv()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
 	s := &System{
@@ -296,7 +299,7 @@ func (s *System) initialize() error {
 		s.factorRepo,
 		s.backupCodeRepo,
 		s.TOTPService,
-		[]byte("encryption-key-placeholder"), // TODO: Load from secure config
+		s.cfg.EncryptionKey,
 	)
 
 	// 7. Initialize backup code service

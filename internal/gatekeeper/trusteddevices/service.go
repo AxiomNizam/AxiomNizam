@@ -3,6 +3,7 @@ package trusteddevices
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"time"
@@ -174,11 +175,10 @@ func generateDeviceToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-// HashDeviceToken creates a hash of the device token for secure storage.
-// TODO: Use bcrypt or argon2 in production
+// HashDeviceToken creates a SHA-256 hash of the device token for secure storage.
 func HashDeviceToken(token string) []byte {
-	// Simplified: in production, use bcrypt.GenerateFromPassword
-	return []byte(base64.StdEncoding.EncodeToString([]byte(token)))
+	hash := sha256.Sum256([]byte(token))
+	return hash[:]
 }
 
 // BytesEqual compares two byte slices in constant time.

@@ -2,8 +2,14 @@ package enrollment
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,7 +88,7 @@ func (s *Service) SetupFactor(ctx context.Context, req *SetupRequest) (*SetupRes
 			Label:           req.Label,
 			PhoneNumber:     req.Phone,
 			Email:           req.Email,
-			EncryptedSecret: []byte(secret), // TODO: Encrypt this
+			EncryptedSecret: mustEncryptSecret(s.encryptionKey, secret),
 			Issuer:          req.Issuer,
 		},
 		Status: models.FactorStatus{
@@ -137,7 +143,10 @@ func (s *Service) ActivateFactor(ctx context.Context, req *ActivateRequest) (*Ac
 	var valid bool
 	switch factor.Spec.Type {
 	case models.FactorTypeTOTP:
-		secret := string(factor.Spec.EncryptedSecret) // TODO: Decrypt
+		secret, decErr := decryptSecret(s.encryptionKey, factor.Spec.EncryptedSecret)
+		if decErr != nil {
+			return nil, fmt.Errorf("failed to decrypt secret: %w", decErr)
+		}
 		valid, err = s.totpSvc.ValidateCode(ctx, secret, req.Code)
 		if err != nil {
 			return nil, err
@@ -211,7 +220,65 @@ func (s *Service) DisableFactor(ctx context.Context, factorID models.FactorID) e
 	return err
 }
 
-// hashCode creates a simple hash of a backup code (TODO: use bcrypt or argon2).
+// hashCode creates a SHA-256 hash of a backup code.
 func hashCode(code string) []byte {
-	return []byte(base64.StdEncoding.EncodeToString([]byte(code)))
+	normalized := strings.ToLower(strings.ReplaceAll(code, "-", ""))
+	hash := sha256.Sum256([]byte(normalized))
+	return hash[:]
+}
+
+// encryptSecret encrypts a TOTP secret using AES-GCM.
+func encryptSecret(key []byte, plaintext string) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, aesGCM.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	ciphertext := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
+	return ciphertext, nil
+}
+
+// decryptSecret decrypts a TOTP secret using AES-GCM.
+func decryptSecret(key []byte, ciphertext []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonceSize := aesGCM.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return "", errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return string(plaintext), nil
+}
+
+// mustEncryptSecret encrypts a secret and panics on error (used during setup).
+func mustEncryptSecret(key []byte, plaintext string) []byte {
+	encrypted, err := encryptSecret(key, plaintext)
+	if err != nil {
+		panic(fmt.Sprintf("failed to encrypt secret: %v", err))
+	}
+	return encrypted
 }
