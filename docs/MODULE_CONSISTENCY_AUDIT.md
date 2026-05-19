@@ -1,7 +1,7 @@
 # Internal Module Consistency Audit
 
 **Date:** 2026-05-19
-**Scope:** All 88 modules under `internal/` — 774 Go files, ~193,000 lines
+**Scope:** All 102 modules under `internal/` — 776 Go files, ~214,000 lines
 **Status:** Living document — re-run after each cleanup phase
 
 ---
@@ -913,30 +913,50 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 | Pattern | Current Compliance | Target |
 |---------|-------------------|--------|
-| `system.go` / bootstrap | 3/88 | 88/88 |
-| `handlers/` with DTOs | 3/88 | 88/88 |
-| `models/` domain types | ~20/88 | 88/88 |
-| `repositories/` interfaces | 1/88 | 88/88 |
-| `config/` package | 2/88 | 88/88 |
-| `metrics/` Prometheus | 2/88 | 88/88 |
-| `audit/` logging | 2/88 | 88/88 |
-| `SetKVStore(kv)` | 3/88 | 88/88 |
+| `system.go` / bootstrap | 3/102 | 102/102 |
+| `handlers/` with DTOs | 3/102 | 102/102 |
+| `models/` domain types | ~20/102 | 102/102 |
+| `repositories/` interfaces | 1/102 | 102/102 |
+| `config/` package | 2/102 | 102/102 |
+| `metrics/` Prometheus | 2/102 | 102/102 |
+| `audit/` logging | 4/102 | 102/102 |
+| `SetKVStore(kv)` | 5/102 | 102/102 |
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6) — Phase 1, 2 & 3 complete*
+*Last updated: 2026-05-19 (UTC+6) — Phases 1-4 DONE, 8 phases PARTIAL, 13 phases TODO*
 
 ---
 
 ## Phase Completion Tracker
 
-| Phase | Status | Completed |
-|-------|--------|-----------|
-| 1. Context propagation | ✅ DONE | 2026-05-19 |
-| 2. Swallowed errors | ✅ DONE | 2026-05-19 |
-| 3. Unify logging | ✅ DONE | 2026-05-19 |
-| 4. Dead code cleanup | ✅ DONE | 2026-05-19 |
-| 5. KV persistence gaps | ⬜ TODO | — |
+| Phase | Status | Completed | Notes |
+|-------|--------|-----------|-------|
+| 1. Context propagation | ✅ DONE | 2026-05-19 | 13 sites in 3 HTTP handler files |
+| 2. Swallowed errors | ✅ DONE | 2026-05-19 | 20 sites across 7 audit tasks |
+| 3. Unify logging | ✅ DONE | 2026-05-19 | 93 files migrated, zero `"log"` imports |
+| 4. Dead code repurpose | ✅ DONE | 2026-05-19 | 12 dirs restored, 4 wired (sqlfilter, keyring, evalbroker, periodic) |
+| 5. KV persistence gaps | 🔶 PARTIAL | — | storage, scanner, gatekeeper, audit done; workflows/vectorplus/reviewflow pending |
+| 6. Module lifecycle interface | ⬜ TODO | — | Needs `contracts.Module` interface |
+| 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
+| 8. Standardize handlers | ⬜ TODO | — | Handlers still in monolith `internal/handlers/` |
+| 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
+| 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
+| 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
+| 12. Standardize audit | 🔶 PARTIAL | — | gatekeeper + storage have audit; others don't |
+| 13. Eliminate global singletons | ⬜ TODO | — | 19+ singletons across 8 packages |
+| 14. Extract monolith handlers | ⬜ TODO | — | 42 files, 19K lines in one package |
+| 15. system.go bootstrap | ⬜ TODO | — | Only 3/88 modules have it |
+| 16. Central type package | ⬜ TODO | — | Types scattered across modules |
+| 17. Standardize error handling | 🔶 PARTIAL | — | `platform/errs/` exists, not widely adopted |
+| 18. Test infrastructure | ⬜ TODO | — | Only gatekeeper has `testutil/` |
+| 19. Configurable timeouts | ⬜ TODO | — | 15+ files with hardcoded values |
+| 20. Reconciler standardization | 🔶 PARTIAL | — | GenericController exists, 33 controllers running |
+| 21. Event bus standardization | ⬜ TODO | — | `events/` and `eventbus/` still separate |
+| 22. Storage backend abstraction | 🔶 PARTIAL | — | BackendManager with Raft/etcd dual backend |
+| 23. Observability stack | 🔶 PARTIAL | — | zap + Prometheus + tracing modules exist, not fully wired |
+| 24. Security hardening | 🔶 PARTIAL | — | sqlfilter + scanner + gatekeeper done; rate limiting, CSRF pending |
+| 25. Main.go decomposition | ⬜ TODO | — | ~2500 lines, needs decomposition |
 
 ---
 
