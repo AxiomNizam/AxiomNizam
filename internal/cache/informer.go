@@ -183,6 +183,7 @@ func (si *SharedInformer) GetByKey(key string) (interface{}, bool, error) {
 func (si *SharedInformer) run(ctx context.Context) {
 	eventsCh, err := si.watcher.Watch(ctx)
 	if err != nil {
+		log.Printf("cache informer: initial watch failed: %v", err)
 		return
 	}
 
