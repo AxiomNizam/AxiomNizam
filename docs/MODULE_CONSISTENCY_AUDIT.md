@@ -14,7 +14,7 @@ The codebase has **88 internal modules** with significant architectural inconsis
 
 | Category | Severity | Scope |
 |----------|----------|-------|
-| `context.Background()` in HTTP handlers | HIGH | 10+ handler files, ~40+ call sites |
+| `context.Background()` in HTTP handlers | HIGH | **FIXED** — 13 sites in 3 HTTP handler files; 15 remaining sites are non-handler code (correct) |
 | Silently swallowed errors (`_ = err`) | HIGH | ~25+ files |
 | Dual logging systems (`log` vs `zap`) | MEDIUM | ~40 files use `log`, ~30 use `zap` |
 | Global singletons (`var Global*`) | MEDIUM | 19+ across 8 packages |
@@ -356,16 +356,19 @@ These fix correctness bugs and data-loss risks. No architectural changes.
 
 **Goal:** All HTTP handlers use `c.Request.Context()`.
 
-| # | Task | File(s) | Impact |
-|---|------|---------|--------|
-| 1.1 | Replace `ctx := context.Background()` with `ctx := c.Request.Context()` in all refactored handlers | `handlers/refactored_auth_handler.go`, `refactored_user_handler.go`, `refactored_resource_handler.go`, `refactored_datasource_handler.go`, `refactored_job_handler.go` | Client disconnection detection |
-| 1.2 | Fix remaining handlers: `user_handler.go`, `resource_handler.go`, `datasource_handler.go`, `job_handler.go` | 4 files | Timeout propagation |
-| 1.3 | Fix `query_logger.go` — 7 call sites | `handlers/query_logger.go` | Tracing correlation |
-| 1.4 | Fix `mongodb.go` — 2 handlers | `handlers/mongodb.go` | Cancellation |
-| 1.5 | Fix `services/auth_service.go` and `services/user_service.go` internal `context.Background()` | 2 files | Service-layer context |
-| 1.6 | Where timeouts needed, use `context.WithTimeout(c.Request.Context(), ...)` | All fixed files | Proper deadlines |
+**Status:** ✅ COMPLETE (2026-05-19)
 
-**Scope:** ~40+ call sites across ~12 files | **Effort:** 1 day | **Impact:** HIGH | **Risk:** LOW
+| # | Task | File(s) | Status |
+|---|------|---------|--------|
+| 1.1 | Replace `ctx := context.Background()` with `ctx := c.Request.Context()` in refactored handlers | `handlers/refactored_auth_handler.go` (5 sites), `refactored_user_handler.go` (6 sites) | ✅ Done |
+| 1.2 | Fix `mongodb.go` — 2 HTTP handlers use `context.WithTimeout(c.Request.Context(), ...)` | `handlers/mongodb.go` (2 sites) | ✅ Done |
+| 1.3 | `query_logger.go` — 7 call sites | `handlers/query_logger.go` | ⏭️ N/A — not HTTP handlers (service methods on `*QueryLogger`) |
+| 1.4 | `user_handler.go`, `datasource_handler.go`, `job_handler.go`, `api_builder_handler.go` | 4 files | ⏭️ N/A — `loadState()`/`persistStateLocked()`/`startScheduler()` are not HTTP handlers |
+| 1.5 | `services/auth_service.go` and `services/user_service.go` | 2 files | ⏭️ N/A — `Health()` methods have no request context |
+| 1.6 | `api_metrics.go` — 2 call sites | `handlers/api_metrics.go` | ⏭️ N/A — `RecordAPICall()` called from middleware, `GetAllMetrics()` is standalone |
+
+**Actual scope:** 13 `context.Background()` sites fixed across 3 files (11 → `c.Request.Context()`, 2 → `WithTimeout(c.Request.Context(), ...)`).
+**15 sites unchanged** — correctly use `context.Background()` in non-handler code (loadState, persistState, scheduler, service methods, health probes).
 
 ---
 
@@ -876,7 +879,19 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6)*
+*Last updated: 2026-05-19 (UTC+6) — Phase 1 complete*
+
+---
+
+## Phase Completion Tracker
+
+| Phase | Status | Completed |
+|-------|--------|-----------|
+| 1. Context propagation | ✅ DONE | 2026-05-19 |
+| 2. Swallowed errors | ⬜ TODO | — |
+| 3. Unify logging | ⬜ TODO | — |
+| 4. Dead code cleanup | ⬜ TODO | — |
+| 5. KV persistence gaps | ⬜ TODO | — |
 
 ---
 

@@ -47,7 +47,7 @@ func (h *MongoDBHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
 	collection := h.client.Database(h.dbName).Collection("users")
@@ -79,7 +79,7 @@ func (h *MongoDBHandler) GetAllUsers(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
 	collection := h.client.Database(h.dbName).Collection("users")

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
@@ -34,7 +33,7 @@ func (h *RefactoredUserHandler) CreateUser(c *gin.Context) {
 	}
 
 	// Use service to create user with validation and business logic
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	createdUser, err := h.userService.CreateUser(ctx, &user)
 	if err != nil {
 		// Handle service errors appropriately
@@ -73,7 +72,7 @@ func (h *RefactoredUserHandler) CreateUser(c *gin.Context) {
 func (h *RefactoredUserHandler) GetUser(c *gin.Context) {
 	id := c.Param("id")
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	user, err := h.userService.GetUserByID(ctx, id)
 	if err != nil {
 		switch err {
@@ -106,7 +105,7 @@ func (h *RefactoredUserHandler) GetUser(c *gin.Context) {
 func (h *RefactoredUserHandler) GetUserByEmail(c *gin.Context) {
 	email := c.Param("email")
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	user, err := h.userService.GetUserByEmail(ctx, email)
 	if err != nil {
 		switch err {
@@ -148,7 +147,7 @@ func (h *RefactoredUserHandler) ListUsers(c *gin.Context) {
 		}
 	}
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	users, err := h.userService.ListUsers(ctx, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -187,7 +186,7 @@ func (h *RefactoredUserHandler) UpdateUser(c *gin.Context) {
 	}
 	user.ID = userID
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	updatedUser, err := h.userService.UpdateUser(ctx, &user)
 	if err != nil {
 		switch err {
@@ -220,7 +219,7 @@ func (h *RefactoredUserHandler) UpdateUser(c *gin.Context) {
 func (h *RefactoredUserHandler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	err := h.userService.DeleteUser(ctx, id)
 	if err != nil {
 		switch err {

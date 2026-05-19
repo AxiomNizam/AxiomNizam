@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 
 	"example.com/axiomnizam/internal/models"
@@ -45,7 +44,7 @@ func (h *RefactoredAuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	user, token, err := h.authService.Login(ctx, req.Username, req.Password)
 	if err != nil {
 		switch err {
@@ -98,7 +97,7 @@ func (h *RefactoredAuthHandler) Register(c *gin.Context) {
 		Username: req.Username,
 	}
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	createdUser, err := h.authService.Register(ctx, user, req.Password)
 	if err != nil {
 		switch err {
@@ -143,7 +142,7 @@ func (h *RefactoredAuthHandler) ValidateToken(c *gin.Context) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	valid, err := h.authService.ValidateToken(ctx, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -180,7 +179,7 @@ func (h *RefactoredAuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	newToken, err := h.authService.RefreshToken(ctx, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -209,7 +208,7 @@ func (h *RefactoredAuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	if err := h.authService.Logout(ctx, token); err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
