@@ -1,11 +1,11 @@
 package admin
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -574,7 +574,7 @@ func (h *Handler) Login(c *gin.Context) {
 	roleNames, _ := h.authorizer.GetUserRoleNames(user.ID)
 	if isBootstrapSysadminEmail(user.Email) && !hasRoleName(roleNames, "sysadmin") {
 		if ensureErr := h.ensureUserHasSysadminRole(user.ID); ensureErr != nil {
-			log.Printf("⚠️  IAM: failed to auto-heal sysadmin role binding for %s: %v", user.Email, ensureErr)
+			logging.Z().Info(fmt.Sprintf("⚠️  IAM: failed to auto-heal sysadmin role binding for %s: %v", user.Email, ensureErr))
 		} else if refreshedRoleNames, refreshedErr := h.authorizer.GetUserRoleNames(user.ID); refreshedErr == nil {
 			roleNames = refreshedRoleNames
 		}
@@ -605,7 +605,7 @@ func (h *Handler) Login(c *gin.Context) {
 	}, h.issuer.AccessTokenTTL)
 	if err != nil {
 		_ = h.sessions.Revoke(sessionID)
-		log.Printf("⚠️  IAM: login token issue/store failed for user=%s: %v", user.ID, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: login token issue/store failed for user=%s: %v", user.ID, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
 		return
 	}
@@ -664,7 +664,7 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	}
 
 	if err := h.refreshRepo.RevokeRefreshToken(claims.ID); err != nil {
-		log.Printf("⚠️  IAM: refresh token revoke failed for user=%s jti=%s: %v", user.ID, claims.ID, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: refresh token revoke failed for user=%s jti=%s: %v", user.ID, claims.ID, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token refresh failed"})
 		return
 	}
@@ -679,7 +679,7 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		Roles:       roleNames,
 	}, h.issuer.AccessTokenTTL)
 	if err != nil {
-		log.Printf("⚠️  IAM: refresh token rotation failed for user=%s: %v", user.ID, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: refresh token rotation failed for user=%s: %v", user.ID, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token re-issuance failed"})
 		return
 	}
@@ -1768,7 +1768,7 @@ func (h *Handler) handleAuthorizationCodeGrant(c *gin.Context, req *oauth.TokenR
 		Roles:       roleNames,
 	}, accessTTL)
 	if err != nil {
-		log.Printf("⚠️  IAM: auth code token issue/store failed for user=%s client=%s: %v", user.ID, req.ClientID, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: auth code token issue/store failed for user=%s client=%s: %v", user.ID, req.ClientID, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token issuance failed"})
 		return
 	}
@@ -1834,7 +1834,7 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 	accessTTL := resolvedClientAccessTokenTTL(client, h.issuer.AccessTokenTTL)
 
 	if err := h.refreshRepo.RevokeRefreshToken(claims.ID); err != nil {
-		log.Printf("⚠️  IAM: oauth refresh token revoke failed for user=%s client=%s jti=%s: %v", user.ID, req.ClientID, claims.ID, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: oauth refresh token revoke failed for user=%s client=%s jti=%s: %v", user.ID, req.ClientID, claims.ID, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token refresh failed"})
 		return
 	}
@@ -1849,7 +1849,7 @@ func (h *Handler) handleRefreshTokenGrant(c *gin.Context, req *oauth.TokenReques
 		Roles:       roleNames,
 	}, accessTTL)
 	if err != nil {
-		log.Printf("⚠️  IAM: oauth refresh token rotation failed for user=%s client=%s: %v", user.ID, req.ClientID, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: oauth refresh token rotation failed for user=%s client=%s: %v", user.ID, req.ClientID, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token re-issuance failed"})
 		return
 	}

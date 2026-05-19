@@ -16,7 +16,8 @@
 package heuristic
 
 import (
-	"log"
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"sync/atomic"
 
 	"example.com/axiomnizam/internal/antivirus"
@@ -112,7 +113,7 @@ func (l *Layer) Scan(target *antivirus.ScanTarget) ([]antivirus.ThreatInfo, erro
 		})
 	}
 
-	log.Printf("🛡️  heuristic: %d finding(s) in %q", len(threats), target.Filename)
+	logging.Z().Info(fmt.Sprintf("🛡️  heuristic: %d finding(s) in %q", len(threats), target.Filename))
 	return threats, nil
 }
 

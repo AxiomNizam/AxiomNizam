@@ -1,6 +1,7 @@
 ﻿package native
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -12,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -59,7 +59,7 @@ func New(root string, presignSecret string) (*Backend, error) {
 	if len(secret) == 0 {
 		secret = []byte("axiom-native-storage-default-key")
 	}
-	log.Printf("âœ… Storage: native filesystem backend at %s", abs)
+	logging.Z().Info(fmt.Sprintf("âœ… Storage: native filesystem backend at %s", abs))
 	return &Backend{
 		root:          abs,
 		endpoint:      "native://" + abs,
@@ -265,7 +265,7 @@ func (b *Backend) CreateBucket(_ context.Context, name string) error {
 	if err := b.writeConfig(name, bucketConfig{}); err != nil {
 		return fmt.Errorf("native storage: init bucket config %q: %w", name, err)
 	}
-	log.Printf("âœ… Storage: bucket %q created (native)", name)
+	logging.Z().Info(fmt.Sprintf("âœ… Storage: bucket %q created (native)", name))
 	return nil
 }
 
@@ -293,7 +293,7 @@ func (b *Backend) DeleteBucket(_ context.Context, name string) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("native storage: remove bucket %q: %w", name, err)
 	}
-	log.Printf("âœ… Storage: bucket %q deleted (native)", name)
+	logging.Z().Info(fmt.Sprintf("âœ… Storage: bucket %q deleted (native)", name))
 	return nil
 }
 
@@ -831,7 +831,7 @@ func (b *Backend) CopyObject(_ context.Context, srcBucket, srcKey, dstBucket, ds
 		return fmt.Errorf("native storage: copy meta: %w", err)
 	}
 
-	log.Printf("âœ… Storage: copied %s/%s â†’ %s/%s (native)", srcBucket, srcKey, dstBucket, dstKey)
+	logging.Z().Info(fmt.Sprintf("âœ… Storage: copied %s/%s â†’ %s/%s (native)", srcBucket, srcKey, dstBucket, dstKey))
 	return nil
 }
 

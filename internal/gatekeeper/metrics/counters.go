@@ -1,9 +1,10 @@
 package metrics
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -90,7 +91,7 @@ func (c *Collector) load() {
 
 	var state mfaCollectorState
 	if err := json.Unmarshal([]byte(val), &state); err != nil {
-		log.Printf("⚠️  gatekeeper metrics: failed to unmarshal state: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  gatekeeper metrics: failed to unmarshal state: %v", err))
 		return
 	}
 
@@ -107,8 +108,8 @@ func (c *Collector) load() {
 	c.ActiveFactorsTotal.Set(float64(state.ActiveFactors))
 	c.HighRiskEvents.Set(float64(state.HighRiskCount))
 
-	log.Printf("✅ gatekeeper metrics: loaded persistent state (enrollments=%d, verifications=%d)",
-		state.TotalEnrollments, state.TotalVerifications)
+	logging.Z().Info(fmt.Sprintf("✅ gatekeeper metrics: loaded persistent state (enrollments=%d, verifications=%d)",
+		state.TotalEnrollments, state.TotalVerifications))
 }
 
 func (c *Collector) save() {

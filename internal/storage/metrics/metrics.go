@@ -1,9 +1,10 @@
 package metrics
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -90,7 +91,7 @@ func (c *Collector) load() {
 
 	var state collectorState
 	if err := json.Unmarshal([]byte(val), &state); err != nil {
-		log.Printf("⚠️  storage metrics: failed to unmarshal state: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  storage metrics: failed to unmarshal state: %v", err))
 		return
 	}
 
@@ -107,7 +108,7 @@ func (c *Collector) load() {
 	c.totalErrors.Store(state.TotalErrors)
 	c.totalLatencyNs.Store(state.TotalLatencyNs)
 	c.startTime = state.StartTime
-	log.Printf("✅ storage metrics: loaded persistent state (requests=%d)", state.TotalRequests)
+	logging.Z().Info(fmt.Sprintf("✅ storage metrics: loaded persistent state (requests=%d)", state.TotalRequests))
 }
 
 func (c *Collector) save() {

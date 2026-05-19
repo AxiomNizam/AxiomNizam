@@ -1,10 +1,10 @@
 package conductor
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -53,7 +53,7 @@ func NewManager(cfg Config) *Manager {
 	if cfg.RabbitMQURL != "" {
 		m.rabbitmq = NewRabbitMQBackend(cfg.RabbitMQURL)
 		if err := m.rabbitmq.Connect(); err != nil {
-			log.Printf("[conductor] rabbitmq connect warning: %v (will retry on first use)", err)
+			logging.Z().Info(fmt.Sprintf("[conductor] rabbitmq connect warning: %v (will retry on first use)", err))
 		}
 	}
 	if len(cfg.KafkaBrokers) > 0 {

@@ -1,8 +1,9 @@
 package conductor
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"encoding/json"
-	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -162,28 +163,28 @@ func (m *Manager) InitPersistence(db *gorm.DB) {
 	}
 
 	if err := db.AutoMigrate(&DBProducer{}, &DBConsumer{}); err != nil {
-		log.Printf("[conductor] auto-migrate warning: %v", err)
+		logging.Z().Info(fmt.Sprintf("[conductor] auto-migrate warning: %v", err))
 		return
 	}
 
 	// Load saved producers
 	var dbProducers []DBProducer
 	if err := db.Find(&dbProducers).Error; err != nil {
-		log.Printf("[conductor] failed to load producers: %v", err)
+		logging.Z().Info(fmt.Sprintf("[conductor] failed to load producers: %v", err))
 	} else {
 		for i := range dbProducers {
 			p := producerFromDB(&dbProducers[i])
 			m.producers[p.ID] = p
 		}
 		if len(dbProducers) > 0 {
-			log.Printf("[conductor] restored %d producer(s) from database", len(dbProducers))
+			logging.Z().Info(fmt.Sprintf("[conductor] restored %d producer(s) from database", len(dbProducers)))
 		}
 	}
 
 	// Load saved consumers and reconnect active ones
 	var dbConsumers []DBConsumer
 	if err := db.Find(&dbConsumers).Error; err != nil {
-		log.Printf("[conductor] failed to load consumers: %v", err)
+		logging.Z().Info(fmt.Sprintf("[conductor] failed to load consumers: %v", err))
 	} else {
 		for i := range dbConsumers {
 			c := consumerFromDB(&dbConsumers[i])
@@ -194,7 +195,7 @@ func (m *Manager) InitPersistence(db *gorm.DB) {
 			}
 		}
 		if len(dbConsumers) > 0 {
-			log.Printf("[conductor] restored %d consumer(s) from database", len(dbConsumers))
+			logging.Z().Info(fmt.Sprintf("[conductor] restored %d consumer(s) from database", len(dbConsumers)))
 		}
 	}
 }
@@ -206,41 +207,41 @@ func (m *Manager) reconnectConsumer(c *Consumer) {
 	switch c.Backend {
 	case BackendRabbitMQ:
 		if m.rabbitmq == nil {
-			log.Printf("[conductor] skipping consumer %s: rabbitmq not configured", c.ID)
+			logging.Z().Info(fmt.Sprintf("[conductor] skipping consumer %s: rabbitmq not configured", c.ID))
 			c.Status = StatusStopped
 			return
 		}
 		if err := m.rabbitmq.Connect(); err != nil {
-			log.Printf("[conductor] rabbitmq reconnect failed for consumer %s: %v", c.ID, err)
+			logging.Z().Info(fmt.Sprintf("[conductor] rabbitmq reconnect failed for consumer %s: %v", c.ID, err))
 			c.Status = StatusError
 			return
 		}
 		if c.Queue != "" {
 			if err := m.rabbitmq.EnsureQueue(c.Queue, c.Exchange, c.RoutingKey); err != nil {
-				log.Printf("[conductor] queue setup failed for consumer %s: %v", c.ID, err)
+				logging.Z().Info(fmt.Sprintf("[conductor] queue setup failed for consumer %s: %v", c.ID, err))
 				c.Status = StatusError
 				return
 			}
 		}
 		if err := m.rabbitmq.StartConsumer(c, handler); err != nil {
-			log.Printf("[conductor] consumer %s reconnect failed: %v", c.ID, err)
+			logging.Z().Info(fmt.Sprintf("[conductor] consumer %s reconnect failed: %v", c.ID, err))
 			c.Status = StatusError
 			return
 		}
-		log.Printf("[conductor] consumer %s reconnected to rabbitmq", c.ID)
+		logging.Z().Info(fmt.Sprintf("[conductor] consumer %s reconnected to rabbitmq", c.ID))
 
 	case BackendKafka:
 		if m.kafka == nil {
-			log.Printf("[conductor] skipping consumer %s: kafka not configured", c.ID)
+			logging.Z().Info(fmt.Sprintf("[conductor] skipping consumer %s: kafka not configured", c.ID))
 			c.Status = StatusStopped
 			return
 		}
 		if err := m.kafka.StartConsumer(c, handler); err != nil {
-			log.Printf("[conductor] consumer %s reconnect failed: %v", c.ID, err)
+			logging.Z().Info(fmt.Sprintf("[conductor] consumer %s reconnect failed: %v", c.ID, err))
 			c.Status = StatusError
 			return
 		}
-		log.Printf("[conductor] consumer %s reconnected to kafka", c.ID)
+		logging.Z().Info(fmt.Sprintf("[conductor] consumer %s reconnected to kafka", c.ID))
 
 	case BackendMemory:
 		// no-op
@@ -254,7 +255,7 @@ func (m *Manager) saveProducer(p *Producer) {
 	}
 	rec := producerToDB(p)
 	if err := m.db.Save(rec).Error; err != nil {
-		log.Printf("[conductor] failed to save producer %s: %v", p.ID, err)
+		logging.Z().Info(fmt.Sprintf("[conductor] failed to save producer %s: %v", p.ID, err))
 	}
 }
 
@@ -264,7 +265,7 @@ func (m *Manager) deleteProducerDB(id string) {
 		return
 	}
 	if err := m.db.Delete(&DBProducer{}, "id = ?", id).Error; err != nil {
-		log.Printf("[conductor] failed to delete producer %s from db: %v", id, err)
+		logging.Z().Info(fmt.Sprintf("[conductor] failed to delete producer %s from db: %v", id, err))
 	}
 }
 
@@ -275,7 +276,7 @@ func (m *Manager) saveConsumer(c *Consumer) {
 	}
 	rec := consumerToDB(c)
 	if err := m.db.Save(rec).Error; err != nil {
-		log.Printf("[conductor] failed to save consumer %s: %v", c.ID, err)
+		logging.Z().Info(fmt.Sprintf("[conductor] failed to save consumer %s: %v", c.ID, err))
 	}
 }
 
@@ -285,6 +286,6 @@ func (m *Manager) deleteConsumerDB(id string) {
 		return
 	}
 	if err := m.db.Delete(&DBConsumer{}, "id = ?", id).Error; err != nil {
-		log.Printf("[conductor] failed to delete consumer %s from db: %v", id, err)
+		logging.Z().Info(fmt.Sprintf("[conductor] failed to delete consumer %s from db: %v", id, err))
 	}
 }

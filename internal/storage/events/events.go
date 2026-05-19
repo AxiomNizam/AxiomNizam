@@ -1,9 +1,10 @@
 package events
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
@@ -59,7 +60,7 @@ func (a *AuditLog) Record(ev models.StorageEvent) {
 	a.events = append(a.events, ev)
 	a.mu.Unlock()
 
-	log.Printf("📝 Storage audit: %s tenant=%s bucket=%s key=%s", ev.Type, ev.TenantID, ev.Bucket, ev.Key)
+	logging.Z().Info(fmt.Sprintf("📝 Storage audit: %s tenant=%s bucket=%s key=%s", ev.Type, ev.TenantID, ev.Bucket, ev.Key))
 
 	// Async save to persistent store.
 	go a.save()
@@ -91,14 +92,14 @@ func (a *AuditLog) load() {
 
 	var events []models.StorageEvent
 	if err := json.Unmarshal([]byte(val), &events); err != nil {
-		log.Printf("⚠️  storage audit: failed to unmarshal events: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  storage audit: failed to unmarshal events: %v", err))
 		return
 	}
 
 	a.mu.Lock()
 	a.events = events
 	a.mu.Unlock()
-	log.Printf("✅ storage audit: loaded %d persistent events", len(events))
+	logging.Z().Info(fmt.Sprintf("✅ storage audit: loaded %d persistent events", len(events)))
 }
 
 func (a *AuditLog) save() {

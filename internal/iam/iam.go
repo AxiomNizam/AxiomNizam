@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -8,7 +9,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -96,9 +96,9 @@ func ensureSharedIssuerPrivateKey(pg *gorm.DB, etcd *clientv3.Client) error {
 				return resolved, nil
 			})
 			if err != nil {
-				log.Printf("⚠️  failed to seed IAM RSA key into postgres bootstrap store: %v", err)
+				logging.Z().Info(fmt.Sprintf("⚠️  failed to seed IAM RSA key into postgres bootstrap store: %v", err))
 			} else if stored != resolved {
-				log.Printf("⚠️  postgres bootstrap IAM RSA key differs from env value; keeping env for current runtime")
+				logging.Z().Info(fmt.Sprintf("⚠️  postgres bootstrap IAM RSA key differs from env value; keeping env for current runtime"))
 			}
 		}
 
@@ -113,7 +113,7 @@ func ensureSharedIssuerPrivateKey(pg *gorm.DB, etcd *clientv3.Client) error {
 			}
 			return nil
 		}
-		log.Printf("⚠️  postgres bootstrap for IAM RSA key failed, falling back to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  postgres bootstrap for IAM RSA key failed, falling back to etcd: %v", err))
 	}
 
 	resolved, err := ensureSharedIssuerPrivateKeyFromEtcd(etcd)
@@ -254,7 +254,7 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config, kvOpt ...platform
 
 	// Seed system roles
 	if err := storage.SeedSystemRoles(roleRepo); err != nil {
-		log.Printf("⚠️  IAM: role seeding error (non-fatal): %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: role seeding error (non-fatal): %v", err))
 	}
 
 	// Authorizer
@@ -275,10 +275,10 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config, kvOpt ...platform
 
 	if sysadminEmail != "" && sysadminPassword != "" {
 		if err := bootstrapSysadmin(userRepo, roleRepo, authorizer, sysadminEmail, sysadminPassword); err != nil {
-			log.Printf("⚠️  IAM: sysadmin bootstrap error (non-fatal): %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  IAM: sysadmin bootstrap error (non-fatal): %v", err))
 		}
 	} else {
-		log.Println("⚠️  IAM: No sysadmin credentials configured. Set IAM_SYSADMIN_EMAIL and IAM_SYSADMIN_PASSWORD.")
+		logging.Z().Info("⚠️  IAM: No sysadmin credentials configured. Set IAM_SYSADMIN_EMAIL and IAM_SYSADMIN_PASSWORD.")
 	}
 
 	adminHandler := admin.NewHandler(
@@ -290,7 +290,7 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config, kvOpt ...platform
 	// ── Enhanced PostgreSQL-backed IAM store ──
 	pgStore, err := pgstore.New(pg)
 	if err != nil {
-		log.Printf("⚠️  IAM: enhanced pgstore init error (non-fatal): %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: enhanced pgstore init error (non-fatal): %v", err))
 	}
 
 	var enhancedHandler *admin.EnhancedHandler
@@ -300,15 +300,15 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config, kvOpt ...platform
 		// Seed default realm and its roles/scopes
 		defaultRealm, seedErr := pgStore.SeedDefaultRealm()
 		if seedErr != nil {
-			log.Printf("⚠️  IAM: default realm seed error: %v", seedErr)
+			logging.Z().Info(fmt.Sprintf("⚠️  IAM: default realm seed error: %v", seedErr))
 		} else if defaultRealm != nil {
 			if err := pgStore.SeedDefaultRoles(defaultRealm.ID); err != nil {
-				log.Printf("IAM: seed default roles error: %v", err)
+				logging.Z().Info(fmt.Sprintf("IAM: seed default roles error: %v", err))
 			}
 			if err := pgStore.SeedDefaultClientScopes(defaultRealm.ID); err != nil {
-				log.Printf("IAM: seed default scopes error: %v", err)
+				logging.Z().Info(fmt.Sprintf("IAM: seed default scopes error: %v", err))
 			}
-			log.Printf("✅ IAM: default realm '%s' ready (id=%s)", defaultRealm.Name, defaultRealm.ID)
+			logging.Z().Info(fmt.Sprintf("✅ IAM: default realm '%s' ready (id=%s)", defaultRealm.Name, defaultRealm.ID))
 		}
 	}
 
@@ -502,10 +502,10 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 			enhancedAPI.DELETE("/pg-clients/:id", eh.DeletePGClient)
 		}
 
-		log.Println("✅ IAM: enhanced Keycloak-style v2 routes registered")
+		logging.Z().Info("✅ IAM: enhanced Keycloak-style v2 routes registered")
 	}
 
-	log.Println("✅ IAM: all routes registered")
+	logging.Z().Info("✅ IAM: all routes registered")
 }
 
 // bootstrapSysadmin ensures the master-realm admin account exists.
@@ -519,7 +519,7 @@ func bootstrapSysadmin(
 
 	existing, _ := userRepo.GetByEmail(email)
 	if existing != nil {
-		log.Printf("✅ IAM: sysadmin account already exists (%s)", email)
+		logging.Z().Info(fmt.Sprintf("✅ IAM: sysadmin account already exists (%s)", email))
 		// Ensure sysadmin role is bound
 		sysRole, _ := roleRepo.GetRoleByName("sysadmin")
 		if sysRole != nil {
@@ -555,6 +555,6 @@ func bootstrapSysadmin(
 		}
 	}
 
-	log.Printf("✅ IAM: sysadmin account bootstrapped (%s)", email)
+	logging.Z().Info(fmt.Sprintf("✅ IAM: sysadmin account bootstrapped (%s)", email))
 	return nil
 }

@@ -1,9 +1,9 @@
 package controller
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -72,7 +72,7 @@ func (bc *BucketController) Start(ctx context.Context) {
 	bc.watchCh = watchCh
 	bc.mu.Unlock()
 
-	log.Printf("✅ Storage: BucketController started (event-driven, resync=%s)", bc.resyncInterval)
+	logging.Z().Info(fmt.Sprintf("✅ Storage: BucketController started (event-driven, resync=%s)", bc.resyncInterval))
 	go bc.worker(ctx)
 	go bc.run(ctx)
 }
@@ -93,7 +93,7 @@ func (bc *BucketController) Stop() {
 	bc.running = false
 	bc.pending = make(map[string]struct{})
 	bc.mu.Unlock()
-	log.Println("✅ Storage: BucketController stopped")
+	logging.Z().Info("✅ Storage: BucketController stopped")
 }
 
 func (bc *BucketController) run(ctx context.Context) {
@@ -135,7 +135,7 @@ func (bc *BucketController) worker(ctx context.Context) {
 		case req := <-bc.workCh:
 			bc.dequeue(req.key())
 			if err := bc.reconcileByKey(ctx, req); err != nil {
-				log.Printf("⚠️  Storage: reconcile error for %s/%s: %v", req.tenantID, req.name, err)
+				logging.Z().Info(fmt.Sprintf("⚠️  Storage: reconcile error for %s/%s: %v", req.tenantID, req.name, err))
 			}
 		}
 	}
@@ -211,9 +211,9 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 	// Only run provisioning steps if the bucket is not ready or the spec has changed.
 	if bucket.Status.Phase != models.BucketPhaseReady || specChanged {
 		if bucket.Status.ObservedGeneration == 0 {
-			log.Printf("Storage: reconciling new resource %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name)
+			logging.Z().Info(fmt.Sprintf("Storage: reconciling new resource %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name))
 		} else if specChanged {
-			log.Printf("Storage: reconciling spec change for %s/%s (observedGeneration=%d generation=%d)", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObservedGeneration, bucket.Generation)
+			logging.Z().Info(fmt.Sprintf("Storage: reconciling spec change for %s/%s (observedGeneration=%d generation=%d)", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObservedGeneration, bucket.Generation))
 		}
 
 		tenantBucket := bucket.Spec.Name
@@ -230,7 +230,7 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 				bc.setPhase(bucket, models.BucketPhaseError)
 				return fmt.Errorf("create bucket: %w", err)
 			}
-			log.Printf("Storage: created backend bucket for %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name)
+			logging.Z().Info(fmt.Sprintf("Storage: created backend bucket for %s/%s", bucket.Metadata.TenantID, bucket.Metadata.Name))
 			bc.setCondition(bucket, "BucketCreated", "True", "Created", "Bucket created in storage backend")
 		} else {
 			bc.setCondition(bucket, "BucketCreated", "True", "AlreadyExists", "Bucket already exists")
@@ -246,7 +246,7 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 			bc.setCondition(bucket, "VersioningConfigured", "True", "Enabled", "Versioning enabled")
 		} else if bucket.Spec.Versioning == models.VersioningDisabled {
 			if err := bc.client.SetBucketVersioning(ctx, tenantBucket, false); err != nil {
-				log.Printf("⚠️  Storage: could not suspend versioning on %s: %v", tenantBucket, err)
+				logging.Z().Info(fmt.Sprintf("⚠️  Storage: could not suspend versioning on %s: %v", tenantBucket, err))
 			}
 			bc.setCondition(bucket, "VersioningConfigured", "True", "Disabled", "Versioning suspended")
 		}
@@ -255,7 +255,7 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 		if len(bucket.Spec.LifecyclePolicy) > 0 {
 			if err := bc.client.SetBucketLifecycle(ctx, tenantBucket, bucket.Spec.LifecyclePolicy); err != nil {
 				bc.setCondition(bucket, "LifecycleApplied", "False", "LifecycleFailed", err.Error())
-				log.Printf("⚠️  Storage: lifecycle policy apply failed on %s: %v", tenantBucket, err)
+				logging.Z().Info(fmt.Sprintf("⚠️  Storage: lifecycle policy apply failed on %s: %v", tenantBucket, err))
 			} else {
 				bc.setCondition(bucket, "LifecycleApplied", "True", "Applied", fmt.Sprintf("%d rules applied", len(bucket.Spec.LifecyclePolicy)))
 			}
@@ -266,10 +266,10 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 
 	tenantBucket := bucket.Spec.Name
 	// Step 4: Gather stats (always run, even if ready, to keep dashboard accurate).
-	log.Printf("Storage: gathering stats for %s/%s (backend bucket=%s)", bucket.Metadata.TenantID, bucket.Metadata.Name, tenantBucket)
+	logging.Z().Info(fmt.Sprintf("Storage: gathering stats for %s/%s (backend bucket=%s)", bucket.Metadata.TenantID, bucket.Metadata.Name, tenantBucket))
 	objects, err := bc.client.ListObjects(ctx, tenantBucket, "")
 	if err != nil {
-		log.Printf("⚠️  Storage: failed to list objects for %s/%s stats: %v", bucket.Metadata.TenantID, bucket.Metadata.Name, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  Storage: failed to list objects for %s/%s stats: %v", bucket.Metadata.TenantID, bucket.Metadata.Name, err))
 	} else {
 		var totalSize int64
 		for _, o := range objects {
@@ -277,7 +277,7 @@ func (bc *BucketController) Reconcile(ctx context.Context, bucket *models.Bucket
 		}
 		bucket.Status.ObjectCount = int64(len(objects))
 		bucket.Status.TotalSize = totalSize
-		log.Printf("✅ Storage: synced stats for %s/%s: %d objects, %d bytes", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObjectCount, bucket.Status.TotalSize)
+		logging.Z().Info(fmt.Sprintf("✅ Storage: synced stats for %s/%s: %d objects, %d bytes", bucket.Metadata.TenantID, bucket.Metadata.Name, bucket.Status.ObjectCount, bucket.Status.TotalSize))
 	}
 
 	// Step 5: Update status to Ready.
@@ -345,7 +345,7 @@ func (bc *BucketController) debugf(format string, args ...interface{}) {
 	if !bc.debugEnabled {
 		return
 	}
-	log.Printf("Storage[debug]: "+format, args...)
+	logging.Z().Info(fmt.Sprintf("Storage[debug]: "+format, args...))
 }
 
 func debugEnabledFromEnv() bool {
@@ -360,7 +360,7 @@ func resyncIntervalFromEnv() time.Duration {
 	}
 	parsed, err := time.ParseDuration(raw)
 	if err != nil {
-		log.Printf("⚠️  Storage: invalid STORAGE_CONTROLLER_RESYNC_INTERVAL=%q, using default %s", raw, defaultResyncInterval)
+		logging.Z().Info(fmt.Sprintf("⚠️  Storage: invalid STORAGE_CONTROLLER_RESYNC_INTERVAL=%q, using default %s", raw, defaultResyncInterval))
 		return defaultResyncInterval
 	}
 	if parsed < 5*time.Minute {

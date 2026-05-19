@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -8,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -670,10 +670,10 @@ func logPresignedAttempt(status string, r *http.Request, accessKey, bucket, key 
 	}
 	ts := time.Now().UTC().Format(time.RFC3339)
 	if err != nil {
-		log.Printf("storage.presigned status=%s ip=%s accessKey=%s method=%s bucket=%s key=%s ts=%s error=%q", status, ip, accessKey, method, bucket, key, ts, err.Error())
+		logging.Z().Info(fmt.Sprintf("storage.presigned status=%s ip=%s accessKey=%s method=%s bucket=%s key=%s ts=%s error=%q", status, ip, accessKey, method, bucket, key, ts, err.Error()))
 		return
 	}
-	log.Printf("storage.presigned status=%s ip=%s accessKey=%s method=%s bucket=%s key=%s ts=%s", status, ip, accessKey, method, bucket, key, ts)
+	logging.Z().Info(fmt.Sprintf("storage.presigned status=%s ip=%s accessKey=%s method=%s bucket=%s key=%s ts=%s", status, ip, accessKey, method, bucket, key, ts))
 }
 
 func clientIP(r *http.Request) string {

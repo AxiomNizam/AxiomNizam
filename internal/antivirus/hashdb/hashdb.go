@@ -35,10 +35,10 @@
 package hashdb
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -255,8 +255,8 @@ func (db *DB) Scan(target *antivirus.ScanTarget) ([]antivirus.ThreatInfo, error)
 	if entry.FileSize > 0 && entry.FileSize != target.Size {
 		// File size mismatch — could be a hash collision or the file
 		// was modified. Log but don't flag.
-		log.Printf("🛡️  hashdb: hash match for %q but size mismatch (expected=%d, got=%d)",
-			target.Filename, entry.FileSize, target.Size)
+		logging.Z().Info(fmt.Sprintf("🛡️  hashdb: hash match for %q but size mismatch (expected=%d, got=%d)",
+			target.Filename, entry.FileSize, target.Size))
 		return nil, nil
 	}
 
@@ -356,8 +356,8 @@ func (db *DB) Reload(entries map[string]HashEntry, version string) {
 	db.version = version
 	db.loadedAt = time.Now()
 
-	log.Printf("🛡️  hashdb: reloaded — %d hashes, version=%q, bloom=%.1fKB",
-		len(entries), version, float64(newBloom.estimateMemoryBytes())/1024)
+	logging.Z().Info(fmt.Sprintf("🛡️  hashdb: reloaded — %d hashes, version=%q, bloom=%.1fKB",
+		len(entries), version, float64(newBloom.estimateMemoryBytes())/1024))
 }
 
 // Contains checks if a SHA-256 hash exists in the database (without

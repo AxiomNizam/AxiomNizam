@@ -1,9 +1,10 @@
 package audit
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
@@ -84,14 +85,14 @@ func (l *Logger) loadFromKV() {
 
 	var events []*Event
 	if err := json.Unmarshal([]byte(val), &events); err != nil {
-		log.Printf("⚠️  gatekeeper audit: failed to unmarshal events: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  gatekeeper audit: failed to unmarshal events: %v", err))
 		return
 	}
 
 	l.mu.Lock()
 	l.events = events
 	l.mu.Unlock()
-	log.Printf("✅ gatekeeper audit: loaded %d persistent events", len(events))
+	logging.Z().Info(fmt.Sprintf("✅ gatekeeper audit: loaded %d persistent events", len(events)))
 }
 
 func (l *Logger) saveToKV() {

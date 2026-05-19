@@ -1,13 +1,13 @@
 package access
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -1023,7 +1023,7 @@ func (ac *Controller) loadFromEtcd() {
 		defer cancel()
 		resp, err := etcd.Get(ctx, prefix, clientv3.WithPrefix())
 		if err != nil {
-			log.Printf("storage access: etcd load failed for prefix %s: %v", prefix, err)
+			logging.Z().Info(fmt.Sprintf("storage access: etcd load failed for prefix %s: %v", prefix, err))
 			return
 		}
 		for _, kv := range resp.Kvs {
@@ -1068,7 +1068,7 @@ func (ac *Controller) loadFromEtcd() {
 func (ac *Controller) putEtcdJSON(key string, value interface{}) {
 	data, err := json.Marshal(value)
 	if err != nil {
-		log.Printf("storage access: marshal failed for key %s: %v", key, err)
+		logging.Z().Info(fmt.Sprintf("storage access: marshal failed for key %s: %v", key, err))
 		return
 	}
 
@@ -1077,7 +1077,7 @@ func (ac *Controller) putEtcdJSON(key string, value interface{}) {
 		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
 		defer cancel()
 		if _, err := ac.etcd.Put(ctx, key, string(data)); err != nil {
-			log.Printf("storage access: etcd put failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage access: etcd put failed for key %s: %v", key, err))
 		}
 		return
 	}
@@ -1085,7 +1085,7 @@ func (ac *Controller) putEtcdJSON(key string, value interface{}) {
 		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
 		defer cancel()
 		if err := ac.kvStore.Put(ctx, key, string(data)); err != nil {
-			log.Printf("storage access: kvstore put failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage access: kvstore put failed for key %s: %v", key, err))
 		}
 	}
 }
@@ -1096,7 +1096,7 @@ func (ac *Controller) deleteEtcdKey(key string) {
 		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
 		defer cancel()
 		if _, err := ac.etcd.Delete(ctx, key); err != nil {
-			log.Printf("storage access: etcd delete failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage access: etcd delete failed for key %s: %v", key, err))
 		}
 		return
 	}
@@ -1104,7 +1104,7 @@ func (ac *Controller) deleteEtcdKey(key string) {
 		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
 		defer cancel()
 		if err := ac.kvStore.Delete(ctx, key); err != nil {
-			log.Printf("storage access: kvstore delete failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage access: kvstore delete failed for key %s: %v", key, err))
 		}
 	}
 }
@@ -1122,7 +1122,7 @@ func (ac *Controller) loadFromKVStore() {
 		defer cancel()
 		entries, err := kv.List(ctx, prefix)
 		if err != nil {
-			log.Printf("storage access: kvstore load failed for prefix %s: %v", prefix, err)
+			logging.Z().Info(fmt.Sprintf("storage access: kvstore load failed for prefix %s: %v", prefix, err))
 			return
 		}
 		for _, val := range entries {
@@ -1130,7 +1130,7 @@ func (ac *Controller) loadFromKVStore() {
 		}
 	}
 
-	log.Printf("storage access: starting load from KVStore")
+	logging.Z().Info(fmt.Sprintf("storage access: starting load from KVStore"))
 	loadKV(accessPolicyPrefix, func(v string) {
 		var p models.TenantPolicy
 		if err := json.Unmarshal([]byte(v), &p); err != nil {
@@ -1164,8 +1164,8 @@ func (ac *Controller) loadFromKVStore() {
 		ac.mu.Unlock()
 	})
 
-	log.Printf("✅ storage access: loaded policies=%d keys=%d shares=%d from KVStore",
-		len(ac.policies), len(ac.accessKeys), len(ac.shares))
+	logging.Z().Info(fmt.Sprintf("✅ storage access: loaded policies=%d keys=%d shares=%d from KVStore",
+		len(ac.policies), len(ac.accessKeys), len(ac.shares)))
 }
 
 func (ac *Controller) persistPolicyUnlocked(p *models.TenantPolicy) {

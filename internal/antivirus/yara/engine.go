@@ -22,12 +22,12 @@
 package yara
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"bufio"
 	"bytes"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -475,7 +475,7 @@ func LoadFromDir(rs *RuleSet, dir string) (int, []error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("🛡️  yara: rule directory %q does not exist, skipping", dir)
+			logging.Z().Info(fmt.Sprintf("🛡️  yara: rule directory %q does not exist, skipping", dir))
 			return 0, nil
 		}
 		return 0, []error{err}
@@ -504,7 +504,7 @@ func LoadFromDir(rs *RuleSet, dir string) (int, []error) {
 			rs.AddRule(r)
 		}
 		loaded += len(rules)
-		log.Printf("🛡️  yara: loaded %d rules from %s", len(rules), entry.Name())
+		logging.Z().Info(fmt.Sprintf("🛡️  yara: loaded %d rules from %s", len(rules), entry.Name()))
 	}
 
 	return loaded, errs
@@ -601,7 +601,7 @@ func (l *Layer) Scan(target *antivirus.ScanTarget) ([]antivirus.ThreatInfo, erro
 		})
 	}
 
-	log.Printf("🛡️  yara: %d rule(s) matched in %q", len(threats), target.Filename)
+	logging.Z().Info(fmt.Sprintf("🛡️  yara: %d rule(s) matched in %q", len(threats), target.Filename))
 	return threats, nil
 }
 

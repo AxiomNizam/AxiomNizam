@@ -10,9 +10,9 @@ package etl
 // =====================================================
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -171,7 +171,7 @@ func (c *PipelineController) Start(ctx context.Context) {
 			defer wg.Done()
 			w := workqueue.NewWorker(c.queue, process, 10)
 			if err := w.Run(wctx); err != nil {
-				log.Printf("[etl] pipeline worker exited: %v", err)
+				logging.Z().Info(fmt.Sprintf("[etl] pipeline worker exited: %v", err))
 			}
 		}()
 	}

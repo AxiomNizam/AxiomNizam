@@ -1,8 +1,9 @@
 package storage
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -92,7 +93,7 @@ func (s *System) SetKVStore(kv platformstore.KVStore) {
 	if s.AuditLog != nil {
 		s.AuditLog.ConfigureKVPersistence(kv)
 	}
-	log.Println("✅ Storage: KVStore persistence configured (Raft mode)")
+	logging.Z().Info("✅ Storage: KVStore persistence configured (Raft mode)")
 }
 
 // Config holds configuration for the native object storage backend.
@@ -256,7 +257,7 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 	})
 
 	if s.iamIssuer != nil {
-		log.Println("✅ Storage: secure presigned/IAM middleware attached to storage routes")
+		logging.Z().Info("✅ Storage: secure presigned/IAM middleware attached to storage routes")
 	}
 	s.Handler.RegisterRoutes(rg)
 }
@@ -272,7 +273,7 @@ func (s *System) Start(ctx context.Context) {
 	// Initialize antivirus signature database.
 	if s.AVSigDB != nil {
 		if _, err := s.AVSigDB.Init(); err != nil {
-			log.Printf("⚠️  Storage: antivirus sigdb init error: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Storage: antivirus sigdb init error: %v", err))
 		}
 	}
 
@@ -282,7 +283,7 @@ func (s *System) Start(ctx context.Context) {
 	}
 
 	s.Controller.Start(ctx)
-	log.Println("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)")
+	logging.Z().Info(fmt.Sprint("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)"))
 }
 
 // Stop gracefully shuts down the storage module.
@@ -293,5 +294,5 @@ func (s *System) Stop() {
 	}
 
 	s.Controller.Stop()
-	log.Println("✅ Storage: module stopped")
+	logging.Z().Info("✅ Storage: module stopped")
 }

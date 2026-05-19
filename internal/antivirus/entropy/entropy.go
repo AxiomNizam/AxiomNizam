@@ -30,9 +30,9 @@
 package entropy
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 	"sync/atomic"
 
@@ -297,8 +297,8 @@ func (l *Layer) Scan(target *antivirus.ScanTarget) ([]antivirus.ThreatInfo, erro
 	if isExpectedHighEntropy(target.MIMEType) {
 		if len(threats) > 0 {
 			l.findings.Add(int64(len(threats)))
-			log.Printf("🛡️  entropy: %d finding(s) in %q (packer only, high-entropy MIME skipped)",
-				len(threats), target.Filename)
+			logging.Z().Info(fmt.Sprintf("🛡️  entropy: %d finding(s) in %q (packer only, high-entropy MIME skipped)",
+				len(threats), target.Filename))
 		}
 		return threats, nil
 	}
@@ -369,8 +369,8 @@ func (l *Layer) Scan(target *antivirus.ScanTarget) ([]antivirus.ThreatInfo, erro
 
 	if len(threats) > 0 {
 		l.findings.Add(int64(len(threats)))
-		log.Printf("🛡️  entropy: %d finding(s) in %q (overall=%.2f, high-ratio=%.0f%%)",
-			len(threats), target.Filename, profile.WholeFileEntropy, profile.HighEntropyRatio*100)
+		logging.Z().Info(fmt.Sprintf("🛡️  entropy: %d finding(s) in %q (overall=%.2f, high-ratio=%.0f%%)",
+			len(threats), target.Filename, profile.WholeFileEntropy, profile.HighEntropyRatio*100))
 	}
 
 	return threats, nil

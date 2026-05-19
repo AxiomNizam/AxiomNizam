@@ -1,11 +1,11 @@
 package antivirus
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -100,7 +100,7 @@ func NewEngine(cfg *Config) *Engine {
 	// Validate and auto-correct configuration.
 	if warnings := cfg.Validate(); len(warnings) > 0 {
 		for _, w := range warnings {
-			log.Printf("⚠️  antivirus config: %s", w)
+			logging.Z().Info(fmt.Sprintf("⚠️  antivirus config: %s", w))
 		}
 	}
 
@@ -128,13 +128,13 @@ func (e *Engine) RegisterLayer(layer ScanLayer) {
 	// Guard against duplicate layer names.
 	for _, existing := range e.layers {
 		if existing.Name() == layer.Name() {
-			log.Printf("⚠️  antivirus: duplicate layer %q ignored", layer.Name())
+			logging.Z().Info(fmt.Sprintf("⚠️  antivirus: duplicate layer %q ignored", layer.Name()))
 			return
 		}
 	}
 
 	e.layers = append(e.layers, layer)
-	log.Printf("🛡️  antivirus: registered layer %q", layer.Name())
+	logging.Z().Info(fmt.Sprintf("🛡️  antivirus: registered layer %q", layer.Name()))
 }
 
 // LayerCount returns the number of registered scan layers.
@@ -152,12 +152,12 @@ func (e *Engine) LayerCount() int {
 // call, the layer list is frozen and Scan() may be called concurrently.
 func (e *Engine) Start() {
 	if !e.cfg.Enabled {
-		log.Println("🛡️  antivirus: engine disabled via ANTIVIRUS_ENABLED=false")
+		logging.Z().Info("🛡️  antivirus: engine disabled via ANTIVIRUS_ENABLED=false")
 		return
 	}
 
 	if !e.started.CompareAndSwap(false, true) {
-		log.Println("⚠️  antivirus: engine already started")
+		logging.Z().Info("⚠️  antivirus: engine already started")
 		return
 	}
 
@@ -173,8 +173,8 @@ func (e *Engine) Start() {
 	}
 	e.layersMu.Unlock()
 
-	log.Printf("🛡️  antivirus engine v%s started — %d layers: %v, workers: %d, queue: %d",
-		EngineVersion, len(layerNames), layerNames, e.cfg.Workers, e.cfg.QueueSize)
+	logging.Z().Info(fmt.Sprintf("🛡️  antivirus engine v%s started — %d layers: %v, workers: %d, queue: %d",
+		EngineVersion, len(layerNames), layerNames, e.cfg.Workers, e.cfg.QueueSize))
 
 	// Background heartbeat/stats logger.
 	e.wg.Add(1)
@@ -188,7 +188,7 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 		return nil // never started, nothing to do
 	}
 
-	log.Println("🛡️  antivirus: shutting down engine...")
+	logging.Z().Info("🛡️  antivirus: shutting down engine...")
 
 	if e.cancel != nil {
 		e.cancel()
@@ -203,10 +203,10 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-done:
-		log.Println("🛡️  antivirus: engine shut down cleanly")
+		logging.Z().Info("🛡️  antivirus: engine shut down cleanly")
 		return nil
 	case <-ctx.Done():
-		log.Println("⚠️  antivirus: shutdown timed out, some workers may still be running")
+		logging.Z().Info(fmt.Sprint("⚠️  antivirus: shutdown timed out, some workers may still be running"))
 		return ctx.Err()
 	}
 }
@@ -251,8 +251,8 @@ func (e *Engine) Scan(ctx context.Context, content []byte, filename string) (*Sc
 	// Validate file size.
 	fileSize := int64(len(content))
 	if fileSize > e.cfg.MaxFileSize {
-		log.Printf("🛡️  antivirus: skipping %q (%d bytes > max %d bytes)",
-			filename, fileSize, e.cfg.MaxFileSize)
+		logging.Z().Info(fmt.Sprintf("🛡️  antivirus: skipping %q (%d bytes > max %d bytes)",
+			filename, fileSize, e.cfg.MaxFileSize))
 		return &ScanResult{
 			Verdict:       VerdictClean,
 			FileSize:      fileSize,
@@ -314,7 +314,7 @@ func (e *Engine) Scan(ctx context.Context, content []byte, filename string) (*Sc
 
 		threats, err := layer.Scan(target)
 		if err != nil {
-			log.Printf("⚠️  antivirus: layer %q error on %q: %v", layer.Name(), filename, err)
+			logging.Z().Info(fmt.Sprintf("⚠️  antivirus: layer %q error on %q: %v", layer.Name(), filename, err))
 			// Layer errors are non-fatal — we continue with other layers.
 			// The error is logged but does not change the verdict unless
 			// ALL layers fail.
@@ -345,8 +345,8 @@ func (e *Engine) Scan(ctx context.Context, content []byte, filename string) (*Sc
 
 	// Log threat detections.
 	if result.Verdict.IsThreat() {
-		log.Printf("🚨 antivirus: THREAT in %q — %s [sha256=%s]",
-			filename, result.Summary(), sha256Hex)
+		logging.Z().Info(fmt.Sprintf("🚨 antivirus: THREAT in %q — %s [sha256=%s]",
+			filename, result.Summary(), sha256Hex))
 		e.recordThreat(*result)
 	}
 
@@ -511,9 +511,9 @@ func (e *Engine) statsLogger(ctx context.Context) {
 		case <-ticker.C:
 			s := e.Stats()
 			if s.TotalScanned > 0 {
-				log.Printf("🛡️  antivirus stats: scanned=%d threats=%d clean=%d errors=%d cache_hit=%.1f%% avg=%.1fms bytes=%s",
+				logging.Z().Info(fmt.Sprintf("🛡️  antivirus stats: scanned=%d threats=%d clean=%d errors=%d cache_hit=%.1f%% avg=%.1fms bytes=%s",
 					s.TotalScanned, s.ThreatsFound, s.CleanFiles, s.ErrorCount,
-					s.CacheHitRate*100, s.AvgScanMs, formatBytes(s.BytesScanned))
+					s.CacheHitRate*100, s.AvgScanMs, formatBytes(s.BytesScanned)))
 			}
 		}
 	}

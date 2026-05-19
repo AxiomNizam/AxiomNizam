@@ -1,8 +1,9 @@
 package cache
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -183,7 +184,7 @@ func (si *SharedInformer) GetByKey(key string) (interface{}, bool, error) {
 func (si *SharedInformer) run(ctx context.Context) {
 	eventsCh, err := si.watcher.Watch(ctx)
 	if err != nil {
-		log.Printf("cache informer: initial watch failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("cache informer: initial watch failed: %v", err))
 		return
 	}
 
@@ -197,11 +198,11 @@ func (si *SharedInformer) run(ctx context.Context) {
 		case event := <-eventsCh:
 			if event.Error != nil {
 				// Restart watch on error with backoff
-				log.Printf("cache informer: watch error, restarting: %v", event.Error)
+				logging.Z().Info(fmt.Sprintf("cache informer: watch error, restarting: %v", event.Error))
 				time.Sleep(time.Second)
 				newCh, watchErr := si.watcher.Watch(ctx)
 				if watchErr != nil {
-					log.Printf("cache informer: watch restart failed: %v", watchErr)
+					logging.Z().Info(fmt.Sprintf("cache informer: watch restart failed: %v", watchErr))
 					time.Sleep(5 * time.Second)
 					continue
 				}

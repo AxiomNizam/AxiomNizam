@@ -1,7 +1,8 @@
 package antivirus
 
 import (
-	"log"
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"os"
 	"strconv"
 	"strings"
@@ -259,7 +260,7 @@ func envBool(key string, fallback bool) bool {
 	case "false", "0", "no", "off":
 		return false
 	default:
-		log.Printf("⚠️  antivirus: invalid boolean for %s=%q, using default: %v", key, v, fallback)
+		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: invalid boolean for %s=%q, using default: %v", key, v, fallback))
 		return fallback
 	}
 }
@@ -271,7 +272,7 @@ func envInt(key string, fallback int) int {
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil {
-		log.Printf("⚠️  antivirus: invalid integer for %s=%q: %v, using default: %d", key, v, err, fallback)
+		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: invalid integer for %s=%q: %v, using default: %d", key, v, err, fallback))
 		return fallback
 	}
 	return n
@@ -284,7 +285,7 @@ func envInt64(key string, fallback int64) int64 {
 	}
 	n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 	if err != nil {
-		log.Printf("⚠️  antivirus: invalid int64 for %s=%q: %v, using default: %d", key, v, err, fallback)
+		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: invalid int64 for %s=%q: %v, using default: %d", key, v, err, fallback))
 		return fallback
 	}
 	return n
@@ -297,7 +298,7 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 	}
 	d, err := time.ParseDuration(strings.TrimSpace(v))
 	if err != nil {
-		log.Printf("⚠️  antivirus: invalid duration for %s=%q: %v, using default: %s", key, v, err, fallback)
+		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: invalid duration for %s=%q: %v, using default: %s", key, v, err, fallback))
 		return fallback
 	}
 	return d

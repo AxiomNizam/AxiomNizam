@@ -1,10 +1,10 @@
 package etl
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"strings"
 	"sync"
@@ -249,7 +249,7 @@ func (e *Engine) loadState() bool {
 
 	resp, err := e.etcd.Get(ctx, e.stateKey)
 	if err != nil {
-		log.Printf("etl: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("etl: failed to load persisted state from etcd: %v", err))
 		return false
 	}
 	if len(resp.Kvs) == 0 {
@@ -258,7 +258,7 @@ func (e *Engine) loadState() bool {
 
 	var state engineState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("etl: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("etl: failed to decode persisted state: %v", err))
 		return false
 	}
 
@@ -274,7 +274,7 @@ func (e *Engine) loadState() bool {
 		e.observability = state.Observability
 	}
 	e.sequence = state.Sequence
-	log.Printf("etl: restored state from etcd (%d pipelines, %d runs)", len(e.pipelines), len(e.runs))
+	logging.Z().Info(fmt.Sprintf("etl: restored state from etcd (%d pipelines, %d runs)", len(e.pipelines), len(e.runs)))
 	return true
 }
 
@@ -292,7 +292,7 @@ func (e *Engine) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("etl: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("etl: failed to encode state: %v", err))
 		return
 	}
 
@@ -300,7 +300,7 @@ func (e *Engine) persistStateLocked() {
 	defer cancel()
 
 	if _, err := e.etcd.Put(ctx, e.stateKey, string(payload)); err != nil {
-		log.Printf("etl: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("etl: failed to persist state to etcd: %v", err))
 	}
 }
 

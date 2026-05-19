@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -47,7 +47,7 @@ func Middleware(validator *TokenValidator) gin.HandlerFunc {
 		c.Set("email", claims.Email)
 		c.Set("roles", claims.collectRoles())
 
-		log.Printf("✅ Token validated for user: %s (roles: %v)", claims.PreferredUsername, claims.collectRoles())
+		logging.Z().Info(fmt.Sprintf("✅ Token validated for user: %s (roles: %v)", claims.PreferredUsername, claims.collectRoles()))
 		c.Next()
 	}
 }
@@ -85,7 +85,7 @@ func RequireRole(requiredRole string) gin.HandlerFunc {
 			return
 		}
 
-		log.Printf("✅ User %s authorized with role: %s", claims.PreferredUsername, requiredRole)
+		logging.Z().Info(fmt.Sprintf("✅ User %s authorized with role: %s", claims.PreferredUsername, requiredRole))
 		c.Next()
 	}
 }
@@ -131,7 +131,7 @@ func RequireAnyRole(requiredRoles ...string) gin.HandlerFunc {
 
 		for _, role := range normalized {
 			if claims.HasRole(role) {
-				log.Printf("✅ User %s authorized with role: %s", claims.PreferredUsername, role)
+				logging.Z().Info(fmt.Sprintf("✅ User %s authorized with role: %s", claims.PreferredUsername, role))
 				c.Next()
 				return
 			}

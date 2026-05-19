@@ -1,10 +1,10 @@
 package scanner
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -161,7 +161,7 @@ func (m *Metrics) load() {
 
 	var state metricsState
 	if err := json.Unmarshal([]byte(val), &state); err != nil {
-		log.Printf("⚠️  scanner metrics: failed to unmarshal state: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  scanner metrics: failed to unmarshal state: %v", err))
 		return
 	}
 
@@ -189,7 +189,7 @@ func (m *Metrics) load() {
 	m.scannerTimeouts = state.ScannerTimeouts
 	m.scannerTotalMs = state.ScannerTotalMs
 
-	log.Printf("✅ scanner metrics: loaded persistent state (scans=%d)", state.TotalScans)
+	logging.Z().Info(fmt.Sprintf("✅ scanner metrics: loaded persistent state (scans=%d)", state.TotalScans))
 }
 
 func (m *Metrics) save() {

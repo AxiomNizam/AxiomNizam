@@ -1,11 +1,11 @@
 package gatekeeper
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"example.com/axiomnizam/internal/gatekeeper/audit"
 	"example.com/axiomnizam/internal/gatekeeper/backupcodes"
@@ -92,7 +92,7 @@ func NewSystem(gormDB *gorm.DB) (*System, error) {
 		return nil, err
 	}
 
-	log.Println("✅ Gatekeeper 2FA module initialized")
+	logging.Z().Info("✅ Gatekeeper 2FA module initialized")
 	return s, nil
 }
 
@@ -121,7 +121,7 @@ func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
 		return nil, err
 	}
 
-	log.Println("✅ Gatekeeper 2FA module initialized with custom config")
+	logging.Z().Info("✅ Gatekeeper 2FA module initialized with custom config")
 	return s, nil
 }
 
@@ -149,7 +149,7 @@ func NewSystemWithKVStore(db *sql.DB, kvStore platformstore.KVStore) (*System, e
 		s.loadFromKVStore()
 	}
 
-	log.Println("✅ Gatekeeper 2FA module initialized with KV store")
+	logging.Z().Info("✅ Gatekeeper 2FA module initialized with KV store")
 	return s, nil
 }
 
@@ -185,7 +185,7 @@ func (s *System) SetKVStore(kv platformstore.KVStore) {
 		s.auditLog.ConfigureKVPersistence(kv)
 	}
 
-	log.Println("✅ Gatekeeper: KVStore persistence configured (Raft mode)")
+	logging.Z().Info("✅ Gatekeeper: KVStore persistence configured (Raft mode)")
 }
 
 // loadFromKVStore loads persisted state from Raft KV on startup.
@@ -198,9 +198,9 @@ func (s *System) loadFromKVStore() {
 	if s.factorRepo != nil {
 		factors, err := s.loadFactorsFromKV()
 		if err != nil {
-			log.Printf("⚠️  Gatekeeper: failed to load factors from KV: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Gatekeeper: failed to load factors from KV: %v", err))
 		} else if len(factors) > 0 {
-			log.Printf("✅ Gatekeeper: loaded %d factors from KV store", len(factors))
+			logging.Z().Info(fmt.Sprintf("✅ Gatekeeper: loaded %d factors from KV store", len(factors)))
 		}
 	}
 
@@ -208,9 +208,9 @@ func (s *System) loadFromKVStore() {
 	if s.PolicyService != nil {
 		policies, err := s.loadPoliciesFromKV()
 		if err != nil {
-			log.Printf("⚠️  Gatekeeper: failed to load policies from KV: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Gatekeeper: failed to load policies from KV: %v", err))
 		} else if len(policies) > 0 {
-			log.Printf("✅ Gatekeeper: loaded %d policies from KV store", len(policies))
+			logging.Z().Info(fmt.Sprintf("✅ Gatekeeper: loaded %d policies from KV store", len(policies)))
 		}
 	}
 }
@@ -231,7 +231,7 @@ func (s *System) loadFactorsFromKV() ([]*models.Factor, error) {
 	for _, value := range entries {
 		var factor models.Factor
 		if err := json.Unmarshal([]byte(value), &factor); err != nil {
-			log.Printf("⚠️  Gatekeeper: skipping malformed factor KV entry: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Gatekeeper: skipping malformed factor KV entry: %v", err))
 			continue
 		}
 		factors = append(factors, &factor)
@@ -255,7 +255,7 @@ func (s *System) loadPoliciesFromKV() ([]*models.MFAPolicy, error) {
 	for _, value := range entries {
 		var policy models.MFAPolicy
 		if err := json.Unmarshal([]byte(value), &policy); err != nil {
-			log.Printf("⚠️  Gatekeeper: skipping malformed policy KV entry: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Gatekeeper: skipping malformed policy KV entry: %v", err))
 			continue
 		}
 		policies = append(policies, &policy)
@@ -372,14 +372,14 @@ func (s *System) initialize() error {
 // The caller should apply auth middleware to the group before passing it.
 func (s *System) RegisterRoutes(api *gin.RouterGroup) {
 	s.httpHandler.RegisterRoutes(api)
-	log.Println("✅ Gatekeeper routes registered at /api/v1/mfa")
+	logging.Z().Info("✅ Gatekeeper routes registered at /api/v1/mfa")
 }
 
 // StartControllers starts the K8s-style reconciliation loops.
 func (s *System) StartControllers(ctx context.Context) {
 	if s.ctrlMgr != nil {
 		s.ctrlMgr.Start(ctx)
-		log.Println("✅ Gatekeeper: Controller manager started")
+		logging.Z().Info("✅ Gatekeeper: Controller manager started")
 	}
 }
 

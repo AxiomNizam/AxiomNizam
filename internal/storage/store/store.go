@@ -1,10 +1,10 @@
 package store
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -234,7 +234,7 @@ func (s *BucketStore) loadFromEtcd() {
 	defer cancel()
 	resp, err := etcd.Get(ctx, bucketStoreEtcdPrefix, clientv3.WithPrefix())
 	if err != nil {
-		log.Printf("storage bucket store: etcd load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("storage bucket store: etcd load failed: %v", err))
 		return
 	}
 
@@ -260,10 +260,10 @@ func (s *BucketStore) loadFromKVStore() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
 	defer cancel()
-	log.Printf("storage bucket store: starting load from KVStore (prefix: %s)", bucketStoreEtcdPrefix)
+	logging.Z().Info(fmt.Sprintf("storage bucket store: starting load from KVStore (prefix: %s)", bucketStoreEtcdPrefix))
 	entries, err := kv.List(ctx, bucketStoreEtcdPrefix)
 	if err != nil {
-		log.Printf("⚠️  storage bucket store: kvstore load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  storage bucket store: kvstore load failed: %v", err))
 		return
 	}
 
@@ -273,14 +273,14 @@ func (s *BucketStore) loadFromKVStore() {
 	for key, val := range entries {
 		var b models.BucketResource
 		if err := json.Unmarshal([]byte(val), &b); err != nil {
-			log.Printf("⚠️  storage bucket store: failed to unmarshal bucket at %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("⚠️  storage bucket store: failed to unmarshal bucket at %s: %v", key, err))
 			continue
 		}
 		cb := b
 		s.buckets[bucketKey(cb.Metadata.TenantID, cb.Metadata.Name)] = &cb
 		loaded++
 	}
-	log.Printf("✅ storage bucket store: loaded %d buckets from KVStore", loaded)
+	logging.Z().Info(fmt.Sprintf("✅ storage bucket store: loaded %d buckets from KVStore", loaded))
 }
 
 func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
@@ -289,7 +289,7 @@ func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
 	}
 	data, err := json.Marshal(b)
 	if err != nil {
-		log.Printf("storage bucket store: marshal failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("storage bucket store: marshal failed: %v", err))
 		return
 	}
 	key := bucketStoreEtcdPrefix + bucketKey(b.Metadata.TenantID, b.Metadata.Name)
@@ -299,7 +299,7 @@ func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
 		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
 		defer cancel()
 		if _, err := s.etcd.Put(ctx, key, string(data)); err != nil {
-			log.Printf("storage bucket store: etcd put failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage bucket store: etcd put failed for key %s: %v", key, err))
 		}
 		return
 	}
@@ -307,7 +307,7 @@ func (s *BucketStore) persistBucketUnlocked(b *models.BucketResource) {
 		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
 		defer cancel()
 		if err := s.kvStore.Put(ctx, key, string(data)); err != nil {
-			log.Printf("storage bucket store: kvstore put failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage bucket store: kvstore put failed for key %s: %v", key, err))
 		}
 	}
 }
@@ -320,7 +320,7 @@ func (s *BucketStore) deleteBucketFromEtcdUnlocked(tenantID, name string) {
 		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
 		defer cancel()
 		if _, err := s.etcd.Delete(ctx, key); err != nil {
-			log.Printf("storage bucket store: etcd delete failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage bucket store: etcd delete failed for key %s: %v", key, err))
 		}
 		return
 	}
@@ -328,7 +328,7 @@ func (s *BucketStore) deleteBucketFromEtcdUnlocked(tenantID, name string) {
 		ctx, cancel := context.WithTimeout(context.Background(), bucketStoreEtcdTimeout)
 		defer cancel()
 		if err := s.kvStore.Delete(ctx, key); err != nil {
-			log.Printf("storage bucket store: kvstore delete failed for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("storage bucket store: kvstore delete failed for key %s: %v", key, err))
 		}
 	}
 }

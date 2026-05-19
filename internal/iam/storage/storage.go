@@ -1,11 +1,11 @@
 package storage
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -129,7 +129,7 @@ func (r *PostgresUserRepository) GetByLoginIdentifier(identifier string) (*ident
 		return nil, nil
 	}
 	if len(rows) > 1 {
-		log.Printf("⚠️  IAM: login identifier %q is ambiguous; use full email", normalized)
+		logging.Z().Info(fmt.Sprintf("⚠️  IAM: login identifier %q is ambiguous; use full email", normalized))
 		return nil, nil
 	}
 
@@ -291,7 +291,7 @@ func (r *EtcdClientRepository) ListClients() ([]*oauth.OAuthClient, error) {
 	for _, data := range entries {
 		var c oauth.OAuthClient
 		if err := json.Unmarshal(data, &c); err != nil {
-			log.Printf("⚠️  IAM: skipping corrupt client entry: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  IAM: skipping corrupt client entry: %v", err))
 			continue
 		}
 		clients = append(clients, &c)
@@ -672,7 +672,7 @@ func SeedSystemRoles(repo *EtcdRoleRepository) error {
 			if err := repo.CreateRole(role); err != nil {
 				return fmt.Errorf("seeding role %s: %w", role.Name, err)
 			}
-			log.Printf("✅ IAM: seeded system role: %s", role.Name)
+			logging.Z().Info(fmt.Sprintf("✅ IAM: seeded system role: %s", role.Name))
 		}
 	}
 	return nil

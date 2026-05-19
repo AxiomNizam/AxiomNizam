@@ -1,10 +1,10 @@
 package cdc
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -170,7 +170,7 @@ func (pe *PipelineEngine) loadState() bool {
 
 	resp, err := pe.etcd.Get(ctx, pe.stateKey)
 	if err != nil {
-		log.Printf("cdc-pipeline: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to load persisted state from etcd: %v", err))
 		return false
 	}
 	if len(resp.Kvs) == 0 {
@@ -179,7 +179,7 @@ func (pe *PipelineEngine) loadState() bool {
 
 	var state pipelineEngineState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("cdc-pipeline: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to decode persisted state: %v", err))
 		return false
 	}
 
@@ -190,7 +190,7 @@ func (pe *PipelineEngine) loadState() bool {
 		pe.observability = state.Observability
 	}
 	pe.sequence = state.Sequence
-	log.Printf("cdc-pipeline: restored state from etcd (%d pipelines)", len(pe.pipelines))
+	logging.Z().Info(fmt.Sprintf("cdc-pipeline: restored state from etcd (%d pipelines)", len(pe.pipelines)))
 	return true
 }
 
@@ -206,7 +206,7 @@ func (pe *PipelineEngine) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("cdc-pipeline: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to encode state: %v", err))
 		return
 	}
 
@@ -214,7 +214,7 @@ func (pe *PipelineEngine) persistStateLocked() {
 	defer cancel()
 
 	if _, err := pe.etcd.Put(ctx, pe.stateKey, string(payload)); err != nil {
-		log.Printf("cdc-pipeline: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to persist state to etcd: %v", err))
 	}
 }
 

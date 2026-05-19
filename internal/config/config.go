@@ -1,8 +1,8 @@
 package config
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -92,7 +92,7 @@ type FirebaseConfig struct {
 func LoadConfig() *Config {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("⚠️  No .env file found, using system environment variables")
+		logging.Z().Info(fmt.Sprint("⚠️  No .env file found, using system environment variables"))
 	}
 
 	return &Config{
@@ -202,7 +202,7 @@ func getEnvInt(key string, defaultValue int64) int64 {
 	}
 	intVal, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		log.Printf("⚠️  Invalid integer for %s: %v, using default: %d", key, err, defaultValue)
+		logging.Z().Info(fmt.Sprintf("⚠️  Invalid integer for %s: %v, using default: %d", key, err, defaultValue))
 		return defaultValue
 	}
 	return intVal

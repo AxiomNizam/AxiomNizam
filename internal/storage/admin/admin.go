@@ -1,12 +1,12 @@
 package admin
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -411,7 +411,7 @@ func (h *Handler) CreateBucket(c *gin.Context) {
 		SourceIP: c.ClientIP(),
 	})
 
-	log.Printf("Storage: bucket %q created for tenant %q by %s", req.Name, sc.TenantID, sc.UserID)
+	logging.Z().Info(fmt.Sprintf("Storage: bucket %q created for tenant %q by %s", req.Name, sc.TenantID, sc.UserID))
 	c.JSON(http.StatusCreated, bucket)
 }
 
@@ -571,7 +571,7 @@ func (h *Handler) SetBucketEncryption(c *gin.Context) {
 	}
 	b.Spec.Encryption = req
 	if err := h.store.Update(b); err != nil {
-		log.Printf("storage: failed to persist bucket encryption config for %s/%s: %v", sc.TenantID, bucket, err)
+		logging.Z().Info(fmt.Sprintf("storage: failed to persist bucket encryption config for %s/%s: %v", sc.TenantID, bucket, err))
 	}
 	h.audit.Record(models.StorageEvent{
 		Type: "bucket.encryption.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
@@ -594,7 +594,7 @@ func (h *Handler) DeleteBucketEncryption(c *gin.Context) {
 	}
 	b.Spec.Encryption = models.BucketEncryption{}
 	if err := h.store.Update(b); err != nil {
-		log.Printf("storage: failed to persist bucket encryption removal for %s/%s: %v", sc.TenantID, bucket, err)
+		logging.Z().Info(fmt.Sprintf("storage: failed to persist bucket encryption removal for %s/%s: %v", sc.TenantID, bucket, err))
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true, "bucket": bucket})
 }
@@ -638,7 +638,7 @@ func (h *Handler) SetObjectLockConfig(c *gin.Context) {
 	}
 	b.Spec.ObjectLock = req
 	if err := h.store.Update(b); err != nil {
-		log.Printf("storage: failed to persist bucket object-lock config for %s/%s: %v", sc.TenantID, bucket, err)
+		logging.Z().Info(fmt.Sprintf("storage: failed to persist bucket object-lock config for %s/%s: %v", sc.TenantID, bucket, err))
 	}
 	h.audit.Record(models.StorageEvent{
 		Type: "bucket.objectlock.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
@@ -844,7 +844,7 @@ func (h *Handler) SetBucketNotifications(c *gin.Context) {
 	}
 	b.Spec.Notifications = req
 	if err := h.store.Update(b); err != nil {
-		log.Printf("storage: failed to persist bucket notifications config for %s/%s: %v", sc.TenantID, bucket, err)
+		logging.Z().Info(fmt.Sprintf("storage: failed to persist bucket notifications config for %s/%s: %v", sc.TenantID, bucket, err))
 	}
 	h.audit.Record(models.StorageEvent{
 		Type: "bucket.notifications.set", TenantID: sc.TenantID, UserID: sc.UserID, Bucket: bucket,
@@ -2004,7 +2004,7 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 	// Re-read the object from the backend.
 	reader, err := h.client.GetObject(ctx, bucket, key)
 	if err != nil {
-		log.Printf("⚠️  safegate: failed to re-read %s/%s for scan: %v", bucket, key, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  safegate: failed to re-read %s/%s for scan: %v", bucket, key, err))
 		return
 	}
 	defer reader.Close()
@@ -2017,12 +2017,12 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 	}
 	content, err := io.ReadAll(io.LimitReader(reader, maxSize+1))
 	if err != nil {
-		log.Printf("⚠️  safegate: failed to read %s/%s: %v", bucket, key, err)
+		logging.Z().Info(fmt.Sprintf("⚠️  safegate: failed to read %s/%s: %v", bucket, key, err))
 		return
 	}
 	if int64(len(content)) > maxSize {
-		log.Printf("🛡️  safegate: skipping %s/%s (%d bytes > max %d bytes)",
-			bucket, key, len(content), maxSize)
+		logging.Z().Info(fmt.Sprintf("🛡️  safegate: skipping %s/%s (%d bytes > max %d bytes)",
+			bucket, key, len(content), maxSize))
 		return
 	}
 
@@ -2104,8 +2104,8 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 				Size:     size,
 				Details:  fmt.Sprintf("THREAT: %s (sha256=%s, %dms)", strings.Join(threatDescs, "; "), scanResult.SHA256, scanResult.DurationMs),
 			})
-			log.Printf("🚨 safegate: THREAT in %s/%s — %s [%dms]",
-				bucket, key, strings.Join(threatDescs, "; "), scanResult.DurationMs)
+			logging.Z().Info(fmt.Sprintf("🚨 safegate: THREAT in %s/%s — %s [%dms]",
+				bucket, key, strings.Join(threatDescs, "; "), scanResult.DurationMs))
 		} else {
 			h.audit.Record(models.StorageEvent{
 				Type:     events.EventObjectScanClean,
@@ -2123,7 +2123,7 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 	// Fallback: direct antivirus engine scan when no orchestrator is configured.
 	avResult, avErr := h.avEngine.Scan(ctx, content, key)
 	if avErr != nil {
-		log.Printf("⚠️  antivirus: scan error for %s/%s: %v", bucket, key, avErr)
+		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: scan error for %s/%s: %v", bucket, key, avErr))
 		return
 	}
 
@@ -2147,8 +2147,8 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 			Size:     size,
 			Details:  fmt.Sprintf("THREAT: %s (verdict=%s, sha256=%s)", strings.Join(threatNames, ", "), avResult.Verdict, avResult.SHA256),
 		})
-		log.Printf("🚨 antivirus: THREAT in %s/%s — %s [verdict=%s]",
-			bucket, key, strings.Join(threatNames, ", "), avResult.Verdict)
+		logging.Z().Info(fmt.Sprintf("🚨 antivirus: THREAT in %s/%s — %s [verdict=%s]",
+			bucket, key, strings.Join(threatNames, ", "), avResult.Verdict))
 	} else {
 		h.audit.Record(models.StorageEvent{
 			Type:     events.EventObjectScanClean,

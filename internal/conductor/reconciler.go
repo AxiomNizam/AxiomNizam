@@ -3,8 +3,9 @@ package conductor
 // Reconciler for ProducerResource and ConsumerResource.
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
@@ -54,7 +55,7 @@ func (r *ProducerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 				Config:      res.Spec.Config,
 			}
 			if _, err := r.manager.CreateProducer(req); err != nil {
-				log.Printf("conductor: create producer %s error: %v", res.Name, err)
+				logging.Z().Info(fmt.Sprintf("conductor: create producer %s error: %v", res.Name, err))
 			}
 		}
 	}
@@ -115,7 +116,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 				Config:        res.Spec.Config,
 			}
 			if _, err := r.manager.CreateConsumer(req); err != nil {
-				log.Printf("conductor: create consumer %s error: %v", res.Name, err)
+				logging.Z().Info(fmt.Sprintf("conductor: create consumer %s error: %v", res.Name, err))
 			}
 		}
 	}

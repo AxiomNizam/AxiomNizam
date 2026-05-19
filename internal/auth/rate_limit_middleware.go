@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 
 	"github.com/gin-gonic/gin"
 )
@@ -60,7 +60,7 @@ func RateLimitMiddleware(limiter *RateLimiter) gin.HandlerFunc {
 
 		// Increment call count
 		if err := limiter.IncrementCallCount(token); err != nil {
-			log.Printf("⚠️  Failed to increment call count: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Failed to increment call count: %v", err))
 		}
 
 		// Add rate limit info to context
@@ -73,7 +73,7 @@ func RateLimitMiddleware(limiter *RateLimiter) gin.HandlerFunc {
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
-		log.Printf("✅ Rate limit check passed - Calls remaining: %d", callsRemaining)
+		logging.Z().Info(fmt.Sprintf("✅ Rate limit check passed - Calls remaining: %d", callsRemaining))
 		c.Next()
 	}
 }
@@ -142,7 +142,7 @@ func CombinedAuthMiddleware(validator *TokenValidator, limiter *RateLimiter) gin
 
 		// Increment call count
 		if err := limiter.IncrementCallCount(token); err != nil {
-			log.Printf("⚠️  Failed to increment call count: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Failed to increment call count: %v", err))
 		}
 
 		// Store claims in context
@@ -159,7 +159,7 @@ func CombinedAuthMiddleware(validator *TokenValidator, limiter *RateLimiter) gin
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
-		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", claims.PreferredUsername, callsRemaining)
+		logging.Z().Info(fmt.Sprintf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", claims.PreferredUsername, callsRemaining))
 		c.Next()
 	}
 }
