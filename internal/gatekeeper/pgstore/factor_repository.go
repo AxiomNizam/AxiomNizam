@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,8 +60,12 @@ func (r *FactorRepository) Create(ctx context.Context, factor *models.Factor) (*
 		return nil, err
 	}
 
-	_ = json.Unmarshal(specJSON, &factor.Spec)
-	_ = json.Unmarshal(statusJSON, &factor.Status)
+	if err := json.Unmarshal(specJSON, &factor.Spec); err != nil {
+		return nil, fmt.Errorf("unmarshal factor spec: %w", err)
+	}
+	if err := json.Unmarshal(statusJSON, &factor.Status); err != nil {
+		return nil, fmt.Errorf("unmarshal factor status: %w", err)
+	}
 
 	if deletedAt.Valid {
 		factor.DeletedAt = &deletedAt.Time
@@ -96,8 +101,12 @@ func (r *FactorRepository) Get(ctx context.Context, id models.FactorID) (*models
 		return nil, err
 	}
 
-	_ = json.Unmarshal(specJSON, &factor.Spec)
-	_ = json.Unmarshal(statusJSON, &factor.Status)
+	if err := json.Unmarshal(specJSON, &factor.Spec); err != nil {
+		return nil, fmt.Errorf("unmarshal factor spec: %w", err)
+	}
+	if err := json.Unmarshal(statusJSON, &factor.Status); err != nil {
+		return nil, fmt.Errorf("unmarshal factor status: %w", err)
+	}
 
 	if deletedAt.Valid {
 		factor.DeletedAt = &deletedAt.Time
@@ -133,8 +142,12 @@ func (r *FactorRepository) GetByUserID(ctx context.Context, userID models.UserID
 			return nil, err
 		}
 
-		_ = json.Unmarshal(specJSON, &factor.Spec)
-		_ = json.Unmarshal(statusJSON, &factor.Status)
+		if err := json.Unmarshal(specJSON, &factor.Spec); err != nil {
+			return nil, fmt.Errorf("unmarshal factor spec: %w", err)
+		}
+		if err := json.Unmarshal(statusJSON, &factor.Status); err != nil {
+			return nil, fmt.Errorf("unmarshal factor status: %w", err)
+		}
 
 		if deletedAt.Valid {
 			factor.DeletedAt = &deletedAt.Time
@@ -173,8 +186,12 @@ func (r *FactorRepository) List(ctx context.Context, filters map[string]interfac
 			return nil, err
 		}
 
-		_ = json.Unmarshal(specJSON, &factor.Spec)
-		_ = json.Unmarshal(statusJSON, &factor.Status)
+		if err := json.Unmarshal(specJSON, &factor.Spec); err != nil {
+			return nil, fmt.Errorf("unmarshal factor spec: %w", err)
+		}
+		if err := json.Unmarshal(statusJSON, &factor.Status); err != nil {
+			return nil, fmt.Errorf("unmarshal factor status: %w", err)
+		}
 
 		if deletedAt.Valid {
 			factor.DeletedAt = &deletedAt.Time
@@ -288,8 +305,12 @@ func (r *FactorRepository) ListExpiredPending(ctx context.Context, gracePeriodDa
 			return nil, err
 		}
 
-		_ = json.Unmarshal(specJSON, &factor.Spec)
-		_ = json.Unmarshal(statusJSON, &factor.Status)
+		if err := json.Unmarshal(specJSON, &factor.Spec); err != nil {
+			return nil, fmt.Errorf("unmarshal factor spec: %w", err)
+		}
+		if err := json.Unmarshal(statusJSON, &factor.Status); err != nil {
+			return nil, fmt.Errorf("unmarshal factor status: %w", err)
+		}
 
 		if deletedAt.Valid {
 			factor.DeletedAt = &deletedAt.Time

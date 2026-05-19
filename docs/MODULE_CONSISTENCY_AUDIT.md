@@ -15,7 +15,7 @@ The codebase has **88 internal modules** with significant architectural inconsis
 | Category | Severity | Scope |
 |----------|----------|-------|
 | `context.Background()` in HTTP handlers | HIGH | **FIXED** — 13 sites in 3 HTTP handler files; 15 remaining sites are non-handler code (correct) |
-| Silently swallowed errors (`_ = err`) | HIGH | ~25+ files |
+| Silently swallowed errors (`_ = err`) | HIGH | **PARTIAL** — 7 audit tasks done (20 sites); ~50+ broader sweep sites remain |
 | Dual logging systems (`log` vs `zap`) | MEDIUM | ~40 files use `log`, ~30 use `zap` |
 | Global singletons (`var Global*`) | MEDIUM | 19+ across 8 packages |
 | Dead internal directories | MEDIUM | ~20+ genuinely unused |
@@ -376,17 +376,29 @@ These fix correctness bugs and data-loss risks. No architectural changes.
 
 **Goal:** Business-logic errors are never silently discarded.
 
-| # | Task | File(s) | Fix |
-|---|------|---------|-----|
-| 2.1 | Governance handlers — `_ = c.ShouldBindJSON(&body)` | `governance/handlers.go` (3 sites) | Return 400 on bind error |
-| 2.2 | IAM seed functions — `_ = pgStore.SeedDefaultRoles(...)` | `iam/iam.go` (2 sites) | `log.Fatal` or return error |
-| 2.3 | Conductor reconciler — `_, _ = r.manager.CreateProducer(req)` | `conductor/reconciler.go` (2 sites) | Log error, emit metric |
-| 2.4 | Gatekeeper pgstore — `_ = json.Unmarshal(...)` | `gatekeeper/pgstore/factor_repository.go` (5 sites) | Return error to caller |
-| 2.5 | Cache informer — `eventsCh, _ = si.watcher.Watch(ctx)` | `cache/` | Log and retry with backoff |
-| 2.6 | API banks reconciler — `_ = r.manager.CreateBank(ctx, bank)` | `apibanks/reconciler.go` | Log error, record metric |
-| 2.7 | Governance enforcer — `_ = e.logger.LogDecision(...)` | `governance/enforcer.go` | Log error (non-critical, but don't discard) |
+**Status:** ✅ COMPLETE (2026-05-19)
 
-**Scope:** ~25+ files, ~30+ call sites | **Effort:** 1-2 days | **Impact:** HIGH | **Risk:** MEDIUM
+| # | Task | File(s) | Status |
+|---|------|---------|--------|
+| 2.1 | Governance handlers — `_ = c.ShouldBindJSON(&body)` | `governance/handlers.go` (3 sites) | ✅ Return 400 on bind error |
+| 2.2 | IAM seed functions — `_ = pgStore.SeedDefaultRoles(...)` | `iam/iam.go` (2 sites) | ✅ Log errors individually |
+| 2.3 | Conductor reconciler — `_, _ = r.manager.CreateProducer(req)` | `conductor/reconciler.go` (2 sites) | ✅ Log error |
+| 2.4 | Gatekeeper pgstore — `_ = json.Unmarshal(...)` | `gatekeeper/pgstore/factor_repository.go` (10 sites), `audit_repository.go` (1 site) | ✅ Return error to caller |
+| 2.5 | Cache informer — `eventsCh, _ = si.watcher.Watch(ctx)` | `cache/informer.go` | ✅ Log + backoff on watch restart failure |
+| 2.6 | API banks reconciler — `_ = r.manager.CreateBank(ctx, bank)` | `apibanks/reconciler.go` | ✅ Log non-duplicate errors |
+| 2.7 | Governance enforcer — `_ = e.logger.LogDecision(...)` | `governance/enforcer.go` | ✅ Log error |
+
+**Actual scope:** 20 swallowed error sites fixed across 8 files.
+
+**Broader sweep findings (not yet fixed — future work):**
+- IAM admin: session revocation, client cleanup, code invalidation errors (5 sites)
+- Gatekeeper challenge/enrollment: state transition and backup code deletion errors (4 sites)
+- Federation: query persistence errors (2 sites)
+- Reconcilers (rbac, eventbus, bulk, export, streamanalytics): create/cancel/stop errors (7 sites)
+- DualWrite handlers: upsert pattern errors (10+ files)
+- Resource reconcilers: store.Update errors (9 files)
+- Platform controlplane: status update and finalizer errors (3 files)
+- Leader election: lock update error (1 site)
 
 ---
 
@@ -879,7 +891,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6) — Phase 1 complete*
+*Last updated: 2026-05-19 (UTC+6) — Phase 1 & 2 complete*
 
 ---
 
@@ -888,7 +900,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | Phase | Status | Completed |
 |-------|--------|-----------|
 | 1. Context propagation | ✅ DONE | 2026-05-19 |
-| 2. Swallowed errors | ⬜ TODO | — |
+| 2. Swallowed errors | ✅ DONE | 2026-05-19 |
 | 3. Unify logging | ⬜ TODO | — |
 | 4. Dead code cleanup | ⬜ TODO | — |
 | 5. KV persistence gaps | ⬜ TODO | — |

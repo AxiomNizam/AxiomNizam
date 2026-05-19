@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -194,8 +195,16 @@ func (si *SharedInformer) run(ctx context.Context) {
 
 		case event := <-eventsCh:
 			if event.Error != nil {
-				// Restart watch on error
-				eventsCh, _ = si.watcher.Watch(ctx)
+				// Restart watch on error with backoff
+				log.Printf("cache informer: watch error, restarting: %v", event.Error)
+				time.Sleep(time.Second)
+				newCh, watchErr := si.watcher.Watch(ctx)
+				if watchErr != nil {
+					log.Printf("cache informer: watch restart failed: %v", watchErr)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				eventsCh = newCh
 				continue
 			}
 

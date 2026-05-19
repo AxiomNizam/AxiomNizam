@@ -4,6 +4,7 @@ package conductor
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
@@ -52,7 +53,9 @@ func (r *ProducerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 				Headers:     res.Spec.Headers,
 				Config:      res.Spec.Config,
 			}
-			_, _ = r.manager.CreateProducer(req)
+			if _, err := r.manager.CreateProducer(req); err != nil {
+				log.Printf("conductor: create producer %s error: %v", res.Name, err)
+			}
 		}
 	}
 
@@ -111,7 +114,9 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 				ConsumerGroup: res.Spec.ConsumerGroup,
 				Config:        res.Spec.Config,
 			}
-			_, _ = r.manager.CreateConsumer(req)
+			if _, err := r.manager.CreateConsumer(req); err != nil {
+				log.Printf("conductor: create consumer %s error: %v", res.Name, err)
+			}
 		}
 	}
 

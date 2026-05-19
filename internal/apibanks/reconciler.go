@@ -21,6 +21,8 @@ package apibanks
 
 import (
 	"context"
+	"log"
+	"strings"
 	"time"
 
 	"example.com/axiomnizam/internal/platform/store"
@@ -66,7 +68,9 @@ func (r *APIBankReconciler) Reconcile(ctx context.Context, obj reconciler.Resour
 		// CreateBank fails if the bank already exists; treat that as
 		// "already reconciled" — the manager has no Update today, so
 		// once created the runtime state matches spec.
-		_ = r.manager.CreateBank(ctx, bank)
+		if err := r.manager.CreateBank(ctx, bank); err != nil && !strings.Contains(err.Error(), "already exists") {
+			log.Printf("apibanks: create bank %s error: %v", res.Name, err)
+		}
 	}
 
 	// Update Status.

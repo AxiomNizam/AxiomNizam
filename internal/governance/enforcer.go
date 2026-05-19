@@ -11,6 +11,7 @@ package governance
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -132,7 +133,9 @@ func (e *Enforcer) Enforce(ctx context.Context, access AccessContext) (*Enforcem
 
 	// Log the decision.
 	if e.logger != nil {
-		_ = e.logger.LogDecision(ctx, access, *decision)
+		if logErr := e.logger.LogDecision(ctx, access, *decision); logErr != nil {
+			log.Printf("governance: failed to log enforcement decision: %v", logErr)
+		}
 	}
 
 	return decision, nil

@@ -315,7 +315,10 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 	var body struct {
 		ApprovedBy string `json:"approvedBy"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	now := time.Now()
 	req.Status.ApprovalStatus = "approved"
@@ -355,7 +358,10 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 		DeniedBy string `json:"deniedBy"`
 		Reason   string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	now := time.Now()
 	req.Status.ApprovalStatus = "denied"
@@ -386,7 +392,10 @@ func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	now := time.Now()
 	req.Status.ApprovalStatus = "revoked"

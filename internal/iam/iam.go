@@ -302,8 +302,12 @@ func NewSystem(pg *gorm.DB, etcd *clientv3.Client, cfg Config, kvOpt ...platform
 		if seedErr != nil {
 			log.Printf("⚠️  IAM: default realm seed error: %v", seedErr)
 		} else if defaultRealm != nil {
-			_ = pgStore.SeedDefaultRoles(defaultRealm.ID)
-			_ = pgStore.SeedDefaultClientScopes(defaultRealm.ID)
+			if err := pgStore.SeedDefaultRoles(defaultRealm.ID); err != nil {
+				log.Printf("IAM: seed default roles error: %v", err)
+			}
+			if err := pgStore.SeedDefaultClientScopes(defaultRealm.ID); err != nil {
+				log.Printf("IAM: seed default scopes error: %v", err)
+			}
 			log.Printf("✅ IAM: default realm '%s' ready (id=%s)", defaultRealm.Name, defaultRealm.ID)
 		}
 	}
