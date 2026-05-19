@@ -24,7 +24,6 @@ import (
 	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/autopilot"
-	"example.com/axiomnizam/internal/blocking"
 	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
 	"example.com/axiomnizam/internal/catalog"
@@ -1709,9 +1708,7 @@ func main() {
 	// ====================================
 	// Note: InMemorySecretsManager is used directly; the SecretsManager
 	// interface has a signature mismatch that will be unified in a follow-up.
-	encryptionMgr := encryption.NewInMemorySecretsManager()
 	encryptionHandler := encryption.NewEncryptionHandler(nil)
-	_ = encryptionMgr // reconciler uses this directly
 	encryptionAPI := router.Group("/api/v1/encryption", authMiddleware)
 	{
 		encryptionAPI.POST("/keys", adminOrSysMiddleware, encryptionHandler.CreateKey)
@@ -1725,13 +1722,6 @@ func main() {
 		encryptionAPI.GET("/policies", encryptionHandler.ListPolicies)
 	}
 	log.Println("✅ Encryption routes registered")
-
-	// ====================================
-	// JOBS OBSERVABILITY (previously unwired)
-	// ====================================
-	jobMetricsCollector := jobs.NewMetricsCollector("axiom_nizam")
-	_ = jobMetricsCollector // available for observability handler when job manager is wired
-	log.Println("✅ Jobs metrics collector initialized")
 
 	// ====================================
 	// RECONCILER CONTROLLERS (P2 — AxiomNizam architecture)
@@ -2162,6 +2152,14 @@ func main() {
 
 		log.Println("🔄 Phase 6 P2: +5 controllers started (gis, analytics, transform, notification, netintel)")
 
+		// APIBank reconciler
+		apiBankReconcilerStore := platformstore.NewStore[*apibanks.APIBankResource](backendMgr, "apibanks", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} })
+		apiBankReconciler := reconcilerpkg.NewInstrumented("apibanks",
+			apibanks.NewAPIBankReconciler(apiBankReconcilerStore, nil), reconcilerMetrics)
+		reconcilerMetrics.Register("apibanks")
+		go genericctrl.NewGenericController("apibanks", apiBankReconcilerStore, apiBankReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ APIBank controller started")
+
 		// Phase 0.4: etcd key-space monitoring
 		etcdPrefixes := []string{
 			"/axiomnizam/bulkoperations/",
@@ -2215,13 +2213,6 @@ func main() {
 	}
 
 	// ====================================
-	// BLOCKING QUERY NOTIFIER (previously unwired)
-	// ====================================
-	blockingNotifier := blocking.NewNotifier()
-	_ = blockingNotifier // available for long-poll list endpoints
-	log.Println("✅ Blocking query notifier initialized")
-
-	// ====================================
 	// HEARTBEAT TRACKER (previously unwired)
 	// ====================================
 	heartbeatTracker := heartbeat.New(func(id string) {
@@ -2266,14 +2257,6 @@ func main() {
 	apiBankCatalog := apibanks.NewAPIBankCatalog(apiBankManager)
 	_ = apiBankCatalog // available for API discovery
 
-	// APIBank reconciler (storage-backed)
-	if backendMgr != nil {
-		apiBankStore := platformstore.NewStore[*apibanks.APIBankResource](backendMgr, "apibanks", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} })
-		apiBankReconciler := apibanks.NewAPIBankReconciler(apiBankStore, apiBankManager)
-		_ = apiBankReconciler
-		metrics.GlobalReconcilerMetrics.Register("apibanks")
-		log.Println("  ✅ APIBank reconciler initialized")
-	}
 	log.Println("✅ API Banks module initialized")
 
 	// ====================================

@@ -5,12 +5,14 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 func ExampleEtcdStore() {
 	store, err := NewEtcdStateStore([]string{"localhost:2379"})
 	if err != nil {
-		logging.Z().Fatal(err)
+		logging.Z().Fatal("etcd store failed", zap.Error(err))
 	}
 	defer store.Close()
 
@@ -21,7 +23,7 @@ func ExampleEtcdStore() {
 
 	value, err := store.Get(ctx, "config/app")
 	if err != nil {
-		logging.Z().Fatal(err)
+		logging.Z().Fatal("etcd store failed", zap.Error(err))
 	}
 
 	fmt.Println("Config:", value)
@@ -83,7 +85,7 @@ func ExampleLeaderElection() {
 
 	go func() {
 		if err := election.Start(ctx); err != nil {
-			logging.Z().Fatal(err)
+			logging.Z().Fatal("etcd store failed", zap.Error(err))
 		}
 	}()
 

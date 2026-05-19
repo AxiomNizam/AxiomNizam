@@ -9,6 +9,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/keyring"
 )
 
 // FieldLevelEncryption manages field-level encryption
@@ -21,10 +23,15 @@ type FieldLevelEncryption struct {
 	encryptionMetrics *EncryptionStats
 	maxKeyVersions    int
 	maxLogSize        int
+	ring              *keyring.Keyring // AES-GCM key rotation manager
 }
 
 // NewFieldLevelEncryption creates encryption manager
 func NewFieldLevelEncryption() *FieldLevelEncryption {
+	ring := keyring.New()
+	// Install an initial active key so Encrypt works immediately.
+	ring.Rotate()
+
 	return &FieldLevelEncryption{
 		keys:              make(map[string]*EncryptionKey),
 		policies:          make(map[string][]*FieldEncryptionPolicy),
@@ -33,6 +40,7 @@ func NewFieldLevelEncryption() *FieldLevelEncryption {
 		encryptionMetrics: &EncryptionStats{},
 		maxKeyVersions:    10,
 		maxLogSize:        10000,
+		ring:              ring,
 	}
 }
 
@@ -294,4 +302,67 @@ func (fle *FieldLevelEncryption) GetKeyRotationLog(limit int) []*KeyRotationEven
 	}
 
 	return fle.keyRotationLog[len(fle.keyRotationLog)-limit:]
+}
+
+// RotateKeyring generates a new active AES-GCM key in the keyring.
+// The previous active key is automatically retired and kept for
+// decryption of older ciphertexts. Returns the new key ID.
+func (fle *FieldLevelEncryption) RotateKeyring() (string, error) {
+	fle.mu.Lock()
+	defer fle.mu.Unlock()
+
+	newID, err := fle.ring.Rotate()
+	if err != nil {
+		return "", err
+	}
+
+	fle.encryptionMetrics.KeyRotationsCount++
+	fle.encryptionMetrics.LastKeyRotation = time.Now()
+
+	event := &KeyRotationEvent{
+		ID:        fmt.Sprintf("rot-%d", time.Now().UnixNano()),
+		KeyID:     newID.String(),
+		StartedAt: time.Now(),
+		Status:    "completed",
+	}
+	fle.keyRotationLog = append(fle.keyRotationLog, event)
+	if len(fle.keyRotationLog) > fle.maxLogSize {
+		fle.keyRotationLog = fle.keyRotationLog[1:]
+	}
+
+	return newID.String(), nil
+}
+
+// EncryptWithKeyring encrypts using the keyring's active key.
+// The ciphertext includes the key ID prefix, enabling automatic
+// key selection during decryption.
+func (fle *FieldLevelEncryption) EncryptWithKeyring(plaintext []byte) ([]byte, error) {
+	fle.mu.RLock()
+	defer fle.mu.RUnlock()
+
+	ciphertext, err := fle.ring.Encrypt(plaintext, nil)
+	if err != nil {
+		fle.encryptionMetrics.FailureCount++
+		return nil, err
+	}
+
+	fle.encryptionMetrics.TotalEncryptions++
+	fle.encryptionMetrics.BytesEncrypted += int64(len(plaintext))
+	return ciphertext, nil
+}
+
+// DecryptWithKeyring decrypts using the keyring, automatically
+// selecting the correct key (active or retired) from the ciphertext prefix.
+func (fle *FieldLevelEncryption) DecryptWithKeyring(ciphertext []byte) ([]byte, error) {
+	fle.mu.RLock()
+	defer fle.mu.RUnlock()
+
+	plaintext, err := fle.ring.Decrypt(ciphertext, nil)
+	if err != nil {
+		fle.encryptionMetrics.FailureCount++
+		return nil, err
+	}
+
+	fle.encryptionMetrics.TotalDecryptions++
+	return plaintext, nil
 }
