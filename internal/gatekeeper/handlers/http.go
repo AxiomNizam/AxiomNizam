@@ -41,9 +41,9 @@ func NewHTTPHandler(
 	}
 }
 
-// RegisterRoutes registers all HTTP endpoints under /api/v1/mfa.
-func (h *HTTPHandler) RegisterRoutes(router *gin.Engine) {
-	api := router.Group("/api/v1/mfa")
+// RegisterRoutes registers all HTTP endpoints under the provided router group.
+// The caller is responsible for applying auth middleware to the group.
+func (h *HTTPHandler) RegisterRoutes(api *gin.RouterGroup) {
 
 	// Enrollment endpoints
 	api.POST("/enroll", h.EnrollFactor)
@@ -53,6 +53,10 @@ func (h *HTTPHandler) RegisterRoutes(router *gin.Engine) {
 	// Factor endpoints
 	api.GET("/factors/:userID", h.ListFactors)
 	api.GET("/factor/:factorID", h.GetFactor)
+	api.DELETE("/factor/:factorID", h.DeleteFactor)
+
+	// Backup code endpoints
+	api.POST("/backup-codes/regenerate", h.RegenerateBackupCodes)
 
 	// Challenge endpoints
 	api.POST("/challenge/begin", h.BeginChallenge)
@@ -75,6 +79,7 @@ func (h *HTTPHandler) EnrollFactor(c *gin.Context) {
 	var req struct {
 		UserID     uuid.UUID         `json:"user_id" binding:"required"`
 		FactorType models.FactorType `json:"factor_type" binding:"required"`
+		Label      string            `json:"label"`
 		Email      string            `json:"email"`
 		Phone      string            `json:"phone"`
 	}
@@ -84,14 +89,15 @@ func (h *HTTPHandler) EnrollFactor(c *gin.Context) {
 		return
 	}
 
-	secret, err := h.enrollmentSvc.SetupFactor(c.Request.Context(), req.UserID, req.FactorType)
+	result, err := h.enrollmentSvc.SetupFactor(c.Request.Context(), req.UserID, req.FactorType, req.Label)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"secret": secret,
+		"factor_id": result.FactorID,
+		"secret":    result.Secret,
 	})
 }
 
@@ -130,6 +136,38 @@ func (h *HTTPHandler) DisableFactor(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Factor disabled"})
 }
 
+// DeleteFactor permanently deletes (soft-delete) a factor.
+func (h *HTTPHandler) DeleteFactor(c *gin.Context) {
+	factorID := uuid.MustParse(c.Param("factorID"))
+
+	if err := h.factorSvc.DeleteFactor(c.Request.Context(), factorID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Factor deleted"})
+}
+
+// RegenerateBackupCodes generates new backup codes for a factor.
+func (h *HTTPHandler) RegenerateBackupCodes(c *gin.Context) {
+	var req struct {
+		FactorID uuid.UUID `json:"factor_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	codes, err := h.backupSvc.RegenerateBackupCodes(c.Request.Context(), req.FactorID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"backup_codes": codes})
+}
+
 // ListFactors lists all factors for a user.
 func (h *HTTPHandler) ListFactors(c *gin.Context) {
 	userID := uuid.MustParse(c.Param("userID"))
@@ -138,6 +176,11 @@ func (h *HTTPHandler) ListFactors(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Strip sensitive fields before returning
+	for _, f := range factors {
+		f.Spec.EncryptedSecret = nil
 	}
 
 	c.JSON(http.StatusOK, gin.H{"factors": factors})
@@ -151,6 +194,11 @@ func (h *HTTPHandler) GetFactor(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Strip sensitive fields before returning
+	if factor != nil {
+		factor.Spec.EncryptedSecret = nil
 	}
 
 	c.JSON(http.StatusOK, factor)
@@ -260,8 +308,15 @@ func (h *HTTPHandler) TrustDevice(c *gin.Context) {
 
 // ListTrustedDevices lists trusted devices for a user.
 func (h *HTTPHandler) ListTrustedDevices(c *gin.Context) {
-	// Placeholder implementation
-	c.JSON(http.StatusOK, gin.H{"devices": []interface{}{}})
+	userID := uuid.MustParse(c.Param("userID"))
+
+	devices, err := h.deviceSvc.ListTrustedDevices(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"devices": devices})
 }
 
 // RevokeTrustedDevice revokes a trusted device.

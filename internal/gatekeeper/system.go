@@ -3,6 +3,7 @@ package gatekeeper
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -15,6 +16,7 @@ import (
 	"example.com/axiomnizam/internal/gatekeeper/enrollment"
 	"example.com/axiomnizam/internal/gatekeeper/handlers"
 	"example.com/axiomnizam/internal/gatekeeper/metrics"
+	"example.com/axiomnizam/internal/gatekeeper/models"
 	"example.com/axiomnizam/internal/gatekeeper/pgstore"
 	"example.com/axiomnizam/internal/gatekeeper/policy"
 	"example.com/axiomnizam/internal/gatekeeper/repositories"
@@ -52,6 +54,7 @@ type System struct {
 
 	// Controllers/Reconcilers (K8s-style)
 	FactorController *gkcontroller.FactorReconciler
+	ctrlMgr          *gkcontroller.Manager
 
 	// Infrastructure
 	auditLog  *audit.Logger
@@ -65,8 +68,9 @@ type System struct {
 // NewSystem initializes the Gatekeeper 2FA module.
 func NewSystem(gormDB *gorm.DB) (*System, error) {
 	cfg := config.DefaultConfig()
+	cfg.LoadFromEnv()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
 	// Auto-migrate Gatekeeper tables (same pattern as IAM pgstore.New)
@@ -94,8 +98,9 @@ func NewSystem(gormDB *gorm.DB) (*System, error) {
 
 // NewSystemWithConfig initializes Gatekeeper with custom config.
 func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
+	cfg.LoadFromEnv()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
 	if err := pgstore.MigrateGatekeeperTables(gormDB); err != nil {
@@ -124,8 +129,9 @@ func NewSystemWithConfig(gormDB *gorm.DB, cfg *config.Config) (*System, error) {
 // Used when running in Raft mode for distributed state persistence.
 func NewSystemWithKVStore(db *sql.DB, kvStore platformstore.KVStore) (*System, error) {
 	cfg := config.DefaultConfig()
+	cfg.LoadFromEnv()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
 	s := &System{
@@ -169,6 +175,16 @@ func (s *System) SetKVStore(kv platformstore.KVStore) {
 		}
 	}
 
+	// Configure persistence on metrics collector
+	if s.collector != nil {
+		s.collector.ConfigureKVPersistence(kv)
+	}
+
+	// Configure persistence on audit logger
+	if s.auditLog != nil {
+		s.auditLog.ConfigureKVPersistence(kv)
+	}
+
 	log.Println("✅ Gatekeeper: KVStore persistence configured (Raft mode)")
 }
 
@@ -199,7 +215,7 @@ func (s *System) loadFromKVStore() {
 	}
 }
 
-func (s *System) loadFactorsFromKV() ([]interface{}, error) {
+func (s *System) loadFactorsFromKV() ([]*models.Factor, error) {
 	if s.kvStore == nil {
 		return nil, nil
 	}
@@ -211,16 +227,20 @@ func (s *System) loadFactorsFromKV() ([]interface{}, error) {
 	}
 
 	// Parse and restore factors
-	var factors []interface{}
-	for key := range entries {
-		// Factors would be restored to the pgstore repository
-		_ = key
+	var factors []*models.Factor
+	for _, value := range entries {
+		var factor models.Factor
+		if err := json.Unmarshal([]byte(value), &factor); err != nil {
+			log.Printf("⚠️  Gatekeeper: skipping malformed factor KV entry: %v", err)
+			continue
+		}
+		factors = append(factors, &factor)
 	}
 
 	return factors, nil
 }
 
-func (s *System) loadPoliciesFromKV() ([]interface{}, error) {
+func (s *System) loadPoliciesFromKV() ([]*models.MFAPolicy, error) {
 	if s.kvStore == nil {
 		return nil, nil
 	}
@@ -231,9 +251,14 @@ func (s *System) loadPoliciesFromKV() ([]interface{}, error) {
 		return nil, err
 	}
 
-	var policies []interface{}
-	for key := range entries {
-		_ = key
+	var policies []*models.MFAPolicy
+	for _, value := range entries {
+		var policy models.MFAPolicy
+		if err := json.Unmarshal([]byte(value), &policy); err != nil {
+			log.Printf("⚠️  Gatekeeper: skipping malformed policy KV entry: %v", err)
+			continue
+		}
+		policies = append(policies, &policy)
 	}
 
 	return policies, nil
@@ -275,6 +300,7 @@ func (s *System) initialize() error {
 	s.ChallengeService = challenge.NewService(
 		s.challengeRepo,
 		s.factorRepo,
+		s.TOTPService,
 		challenge.NewRealClock(),
 	)
 
@@ -283,7 +309,7 @@ func (s *System) initialize() error {
 		s.factorRepo,
 		s.backupCodeRepo,
 		s.TOTPService,
-		[]byte("encryption-key-placeholder"), // TODO: Load from secure config
+		s.cfg.EncryptionKey,
 	)
 
 	// 7. Initialize backup code service
@@ -295,17 +321,27 @@ func (s *System) initialize() error {
 		trusteddevices.NewRealClock(),
 	)
 
-	// 9. Initialize policy engine
+	// 9. Initialize policy engine with default rules
 	s.PolicyService = policy.NewEngine(
 		&policy.DefaultEvaluator{},
-		[]policy.Rule{},
+		[]policy.Rule{
+			&policy.SensitiveResourceRule{
+				ResourceTypes: []string{"sensitive-operation", "admin", "billing"},
+			},
+			&policy.HighRiskBlockRule{
+				Threshold: 90,
+			},
+		},
 	)
 
 	// 10. Initialize risk engine
 	s.RiskService = risk.NewEngine(&risk.DefaultScorer{})
 
-	// 11. Initialize audit logging (in-memory for now)
-	auditBackend := audit.NewInMemoryBackend()
+	// 11. Initialize audit logging
+	var auditBackend audit.AuditBackend = audit.NewInMemoryBackend()
+	if s.db != nil {
+		auditBackend = pgstore.NewAuditRepository(s.db)
+	}
 	s.auditLog = audit.NewLogger(auditBackend)
 
 	// 12. Initialize metrics
@@ -316,6 +352,7 @@ func (s *System) initialize() error {
 		s.factorRepo,
 		s.challengeRepo,
 	)
+	s.ctrlMgr = gkcontroller.NewManager(s.FactorController)
 
 	// 14. Initialize HTTP handler with service wrappers
 	s.httpHandler = handlers.NewHTTPHandler(
@@ -331,17 +368,18 @@ func (s *System) initialize() error {
 	return nil
 }
 
-// RegisterRoutes registers all HTTP routes for the 2FA module.
-func (s *System) RegisterRoutes(router *gin.Engine) {
-	s.httpHandler.RegisterRoutes(router)
+// RegisterRoutes registers all HTTP routes for the 2FA module on the given router group.
+// The caller should apply auth middleware to the group before passing it.
+func (s *System) RegisterRoutes(api *gin.RouterGroup) {
+	s.httpHandler.RegisterRoutes(api)
 	log.Println("✅ Gatekeeper routes registered at /api/v1/mfa")
 }
 
 // StartControllers starts the K8s-style reconciliation loops.
 func (s *System) StartControllers(ctx context.Context) {
-	if s.FactorController != nil {
-		// Factor controller handles factor state reconciliation
-		log.Println("✅ Gatekeeper: FactorController started")
+	if s.ctrlMgr != nil {
+		s.ctrlMgr.Start(ctx)
+		log.Println("✅ Gatekeeper: Controller manager started")
 	}
 }
 

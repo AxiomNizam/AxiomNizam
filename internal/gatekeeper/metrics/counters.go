@@ -1,11 +1,22 @@
 package metrics
 
 import (
+	"context"
+	"encoding/json"
+	"log"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	platformstore "example.com/axiomnizam/internal/platform/store"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+const (
+	mfaMetricsKVKey = "gatekeeper:metrics:collector"
+	mfaMetricsTTL   = 3 * time.Second
 )
 
 // Collector gathers metrics for MFA operations.
@@ -26,11 +37,113 @@ type Collector struct {
 	// Histogram metrics (latency)
 	VerificationDuration prometheus.Histogram
 	EnrollmentDuration   prometheus.Histogram
+
+	// Atomic counters for KV persistence (survive restarts)
+	totalEnrollments   atomic.Int64
+	totalVerifications atomic.Int64
+	totalFailures      atomic.Int64
+	totalBackupUsed    atomic.Int64
+	totalDevicesCreated atomic.Int64
+	activeFactors      atomic.Int64
+	highRiskCount      atomic.Int64
+	startTime          time.Time
+
+	// KV store for Raft persistence
+	kvStore platformstore.KVStore
+}
+
+// mfaCollectorState is a serializable snapshot of the Collector's state.
+type mfaCollectorState struct {
+	TotalEnrollments   int64     `json:"totalEnrollments"`
+	TotalVerifications int64     `json:"totalVerifications"`
+	TotalFailures      int64     `json:"totalFailures"`
+	TotalBackupUsed    int64     `json:"totalBackupUsed"`
+	TotalDevicesCreated int64   `json:"totalDevicesCreated"`
+	ActiveFactors      int64     `json:"activeFactors"`
+	HighRiskCount      int64     `json:"highRiskCount"`
+	StartTime          time.Time `json:"startTime"`
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for MFA metrics.
+func (c *Collector) ConfigureKVPersistence(kv platformstore.KVStore) {
+	c.mu.Lock()
+	c.kvStore = kv
+	c.mu.Unlock()
+	c.load()
+}
+
+func (c *Collector) load() {
+	c.mu.Lock()
+	kv := c.kvStore
+	c.mu.Unlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), mfaMetricsTTL)
+	defer cancel()
+
+	val, err := kv.Get(ctx, mfaMetricsKVKey)
+	if err != nil {
+		return // likely not found
+	}
+
+	var state mfaCollectorState
+	if err := json.Unmarshal([]byte(val), &state); err != nil {
+		log.Printf("⚠️  gatekeeper metrics: failed to unmarshal state: %v", err)
+		return
+	}
+
+	c.totalEnrollments.Store(state.TotalEnrollments)
+	c.totalVerifications.Store(state.TotalVerifications)
+	c.totalFailures.Store(state.TotalFailures)
+	c.totalBackupUsed.Store(state.TotalBackupUsed)
+	c.totalDevicesCreated.Store(state.TotalDevicesCreated)
+	c.activeFactors.Store(state.ActiveFactors)
+	c.highRiskCount.Store(state.HighRiskCount)
+	c.startTime = state.StartTime
+
+	// Re-apply counters to Prometheus gauges
+	c.ActiveFactorsTotal.Set(float64(state.ActiveFactors))
+	c.HighRiskEvents.Set(float64(state.HighRiskCount))
+
+	log.Printf("✅ gatekeeper metrics: loaded persistent state (enrollments=%d, verifications=%d)",
+		state.TotalEnrollments, state.TotalVerifications)
+}
+
+func (c *Collector) save() {
+	c.mu.RLock()
+	kv := c.kvStore
+	c.mu.RUnlock()
+	if kv == nil {
+		return
+	}
+
+	state := mfaCollectorState{
+		TotalEnrollments:    c.totalEnrollments.Load(),
+		TotalVerifications:  c.totalVerifications.Load(),
+		TotalFailures:       c.totalFailures.Load(),
+		TotalBackupUsed:     c.totalBackupUsed.Load(),
+		TotalDevicesCreated: c.totalDevicesCreated.Load(),
+		ActiveFactors:       c.activeFactors.Load(),
+		HighRiskCount:       c.highRiskCount.Load(),
+		StartTime:           c.startTime,
+	}
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), mfaMetricsTTL)
+	defer cancel()
+	_ = kv.Put(ctx, mfaMetricsKVKey, string(data))
 }
 
 // NewCollector creates a new metrics collector with Prometheus.
 func NewCollector() *Collector {
 	return &Collector{
+		startTime: time.Now(),
 		EnrollmentsTotal: promauto.NewCounter(prometheus.CounterOpts{
 			Namespace: "mfa",
 			Name:      "enrollments_total",
@@ -84,26 +197,36 @@ func NewCollector() *Collector {
 // RecordEnrollment increments enrollment counter.
 func (c *Collector) RecordEnrollment() {
 	c.EnrollmentsTotal.Inc()
+	c.totalEnrollments.Add(1)
+	go c.save()
 }
 
 // RecordVerification increments verification counter.
 func (c *Collector) RecordVerification() {
 	c.VerificationsTotal.Inc()
+	c.totalVerifications.Add(1)
+	go c.save()
 }
 
 // RecordVerificationFailure increments failure counter.
 func (c *Collector) RecordVerificationFailure() {
 	c.VerificationFailures.Inc()
+	c.totalFailures.Add(1)
+	go c.save()
 }
 
 // RecordBackupCodeUsed increments backup code usage counter.
 func (c *Collector) RecordBackupCodeUsed() {
 	c.BackupCodesUsed.Inc()
+	c.totalBackupUsed.Add(1)
+	go c.save()
 }
 
 // RecordTrustedDeviceCreated increments trusted device counter.
 func (c *Collector) RecordTrustedDeviceCreated() {
 	c.TrustedDevicesCreated.Inc()
+	c.totalDevicesCreated.Add(1)
+	go c.save()
 }
 
 // SetActiveFactors sets the current number of active factors.
@@ -111,6 +234,8 @@ func (c *Collector) SetActiveFactors(count float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ActiveFactorsTotal.Set(count)
+	c.activeFactors.Store(int64(count))
+	go c.save()
 }
 
 // SetHighRiskEvents sets the current number of high-risk events.
@@ -118,6 +243,8 @@ func (c *Collector) SetHighRiskEvents(count float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.HighRiskEvents.Set(count)
+	c.highRiskCount.Store(int64(count))
+	go c.save()
 }
 
 // RecordVerificationDuration records verification latency.

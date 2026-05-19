@@ -42,10 +42,11 @@ type Factor struct {
 // FactorSpec is the desired configuration for a Factor.
 type FactorSpec struct {
 	Type        FactorType `db:"type"         json:"type"`
+	Label       string     `db:"label"        json:"label,omitempty"`        // User-friendly name
 	PhoneNumber string     `db:"phone_number" json:"phone_number,omitempty"` // SMS only
 	Email       string     `db:"email"        json:"email,omitempty"`        // email only
-	// Secret is AES-GCM encrypted at rest; never returned to callers.
-	EncryptedSecret []byte `db:"encrypted_secret" json:"-"`
+	// Secret is AES-GCM encrypted at rest; persisted in JSONB but excluded from API responses.
+	EncryptedSecret []byte `db:"encrypted_secret" json:"encrypted_secret,omitempty"`
 	// Issuer shown inside authenticator apps (e.g. "Acme Corp").
 	Issuer string `db:"issuer" json:"issuer"`
 }

@@ -8,10 +8,16 @@ import (
 	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
+// SetupResult contains the enrollment setup response.
+type SetupResult struct {
+	FactorID models.FactorID `json:"factor_id"`
+	Secret   string          `json:"secret"`
+}
+
 // EnrollmentService defines the contract for MFA factor enrollment.
 type EnrollmentService interface {
 	// SetupFactor initiates factor setup
-	SetupFactor(ctx context.Context, userID models.UserID, factorType models.FactorType) (string, error)
+	SetupFactor(ctx context.Context, userID models.UserID, factorType models.FactorType, label string) (*SetupResult, error)
 
 	// ActivateFactor completes enrollment by verifying OTP
 	ActivateFactor(ctx context.Context, factorID models.FactorID, code string) ([]string, error)
@@ -72,6 +78,9 @@ type TrustedDeviceService interface {
 
 	// VerifyDeviceToken checks if a device token is valid
 	VerifyDeviceToken(ctx context.Context, userID models.UserID, token string) (bool, error)
+
+	// ListTrustedDevices returns all active trusted devices for a user
+	ListTrustedDevices(ctx context.Context, userID models.UserID) ([]*models.TrustedDevice, error)
 
 	// RevokeTrustedDevice revokes a specific device
 	RevokeTrustedDevice(ctx context.Context, deviceID uuid.UUID) error

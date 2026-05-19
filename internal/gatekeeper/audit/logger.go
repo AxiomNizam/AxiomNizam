@@ -2,15 +2,31 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
+	"log"
+	"sync"
 	"time"
+
+	platformstore "example.com/axiomnizam/internal/platform/store"
 
 	"github.com/google/uuid"
 	"example.com/axiomnizam/internal/gatekeeper/models"
 )
 
+const (
+	gkAuditKVKey = "gatekeeper:audit:log"
+	gkAuditMax   = 1000
+	gkAuditTTL   = 5 * time.Second
+)
+
 // Logger provides security audit logging for MFA events.
 type Logger struct {
 	backend AuditBackend
+
+	// KV persistence for Raft mode
+	mu     sync.RWMutex
+	events []*Event
+	kvStore platformstore.KVStore
 }
 
 // AuditBackend defines where audit logs are written.
@@ -36,7 +52,88 @@ type Event struct {
 
 // NewLogger creates a new audit logger.
 func NewLogger(backend AuditBackend) *Logger {
-	return &Logger{backend: backend}
+	return &Logger{
+		backend: backend,
+		events:  make([]*Event, 0, 128),
+	}
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for the audit log.
+func (l *Logger) ConfigureKVPersistence(kv platformstore.KVStore) {
+	l.mu.Lock()
+	l.kvStore = kv
+	l.mu.Unlock()
+	l.loadFromKV()
+}
+
+func (l *Logger) loadFromKV() {
+	l.mu.Lock()
+	kv := l.kvStore
+	l.mu.Unlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gkAuditTTL)
+	defer cancel()
+
+	val, err := kv.Get(ctx, gkAuditKVKey)
+	if err != nil {
+		return // not found
+	}
+
+	var events []*Event
+	if err := json.Unmarshal([]byte(val), &events); err != nil {
+		log.Printf("⚠️  gatekeeper audit: failed to unmarshal events: %v", err)
+		return
+	}
+
+	l.mu.Lock()
+	l.events = events
+	l.mu.Unlock()
+	log.Printf("✅ gatekeeper audit: loaded %d persistent events", len(events))
+}
+
+func (l *Logger) saveToKV() {
+	l.mu.RLock()
+	kv := l.kvStore
+	events := l.events
+	l.mu.RUnlock()
+	if kv == nil {
+		return
+	}
+
+	// Cap persistent events to avoid large KV entries
+	persistEvents := events
+	if len(persistEvents) > gkAuditMax {
+		persistEvents = persistEvents[len(persistEvents)-gkAuditMax:]
+	}
+
+	data, err := json.Marshal(persistEvents)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gkAuditTTL)
+	defer cancel()
+	_ = kv.Put(ctx, gkAuditKVKey, string(data))
+}
+
+// recordToBuffer adds an event to the in-memory buffer for KV persistence.
+func (l *Logger) recordToBuffer(event *Event) {
+	l.mu.Lock()
+	if len(l.events) >= gkAuditMax {
+		// Evict oldest 10%
+		evict := gkAuditMax / 10
+		if evict < 1 {
+			evict = 1
+		}
+		l.events = l.events[evict:]
+	}
+	l.events = append(l.events, event)
+	l.mu.Unlock()
+
+	go l.saveToKV()
 }
 
 // LogEnrollment logs factor enrollment events.
@@ -55,6 +152,7 @@ func (l *Logger) LogEnrollment(ctx context.Context, userID models.UserID, factor
 		},
 	}
 
+	l.recordToBuffer(event)
 	return l.backend.LogEvent(ctx, event)
 }
 
@@ -73,6 +171,7 @@ func (l *Logger) LogVerification(ctx context.Context, userID models.UserID, fact
 		Timestamp:   time.Now().UTC(),
 	}
 
+	l.recordToBuffer(event)
 	return l.backend.LogEvent(ctx, event)
 }
 
@@ -92,6 +191,7 @@ func (l *Logger) LogVerificationFailure(ctx context.Context, userID models.UserI
 		},
 	}
 
+	l.recordToBuffer(event)
 	return l.backend.LogEvent(ctx, event)
 }
 
@@ -108,6 +208,7 @@ func (l *Logger) LogDisabled(ctx context.Context, userID models.UserID, factorID
 		Timestamp: time.Now().UTC(),
 	}
 
+	l.recordToBuffer(event)
 	return l.backend.LogEvent(ctx, event)
 }
 
@@ -124,6 +225,7 @@ func (l *Logger) LogBackupCodeUsed(ctx context.Context, userID models.UserID, fa
 		Timestamp: time.Now().UTC(),
 	}
 
+	l.recordToBuffer(event)
 	return l.backend.LogEvent(ctx, event)
 }
 
@@ -143,6 +245,7 @@ func (l *Logger) LogHighRiskDetected(ctx context.Context, userID models.UserID, 
 		},
 	}
 
+	l.recordToBuffer(event)
 	return l.backend.LogEvent(ctx, event)
 }
 

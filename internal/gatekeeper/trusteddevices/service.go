@@ -3,6 +3,7 @@ package trusteddevices
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"time"
@@ -78,7 +79,7 @@ func (s *Service) TrustDevice(ctx context.Context, req *TrustDeviceRequest) (*Tr
 	}
 
 	// Hash the token for storage
-	tokenHash := hashDeviceToken(token)
+	tokenHash := HashDeviceToken(token)
 
 	// Calculate expiration
 	now := s.clock.Now()
@@ -132,8 +133,8 @@ func (s *Service) VerifyDeviceToken(ctx context.Context, userID models.UserID, f
 	}
 
 	// Verify token hash matches
-	expectedHash := hashDeviceToken(token)
-	if !bytesEqual(device.TokenHash, expectedHash) {
+	expectedHash := HashDeviceToken(token)
+	if !BytesEqual(device.TokenHash, expectedHash) {
 		return false, nil
 	}
 
@@ -174,15 +175,14 @@ func generateDeviceToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-// hashDeviceToken creates a hash of the device token for secure storage.
-// TODO: Use bcrypt or argon2 in production
-func hashDeviceToken(token string) []byte {
-	// Simplified: in production, use bcrypt.GenerateFromPassword
-	return []byte(base64.StdEncoding.EncodeToString([]byte(token)))
+// HashDeviceToken creates a SHA-256 hash of the device token for secure storage.
+func HashDeviceToken(token string) []byte {
+	hash := sha256.Sum256([]byte(token))
+	return hash[:]
 }
 
-// bytesEqual compares two byte slices in constant time.
-func bytesEqual(a, b []byte) bool {
+// BytesEqual compares two byte slices in constant time.
+func BytesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
 	}

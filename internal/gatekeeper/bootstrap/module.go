@@ -86,6 +86,7 @@ func (m *Module) initialize() error {
 	m.challengeSvc = challenge.NewService(
 		m.challengeRepo,
 		m.factorRepo,
+		m.totpSvc,
 		challenge.NewRealClock(),
 	)
 
@@ -94,7 +95,7 @@ func (m *Module) initialize() error {
 		m.factorRepo,
 		m.backupCodeRepo,
 		m.totpSvc,
-		[]byte("encryption-key-todo"), // TODO: Load from secure config
+		m.cfg.EncryptionKey,
 	)
 
 	// 6. Initialize backup code service
@@ -106,10 +107,17 @@ func (m *Module) initialize() error {
 		trusteddevices.NewRealClock(),
 	)
 
-	// 8. Initialize policy engine
+	// 8. Initialize policy engine with default rules
 	m.policySvc = policy.NewEngine(
 		&policy.DefaultEvaluator{},
-		[]policy.Rule{}, // TODO: Load from policy store
+		[]policy.Rule{
+			&policy.SensitiveResourceRule{
+				ResourceTypes: []string{"sensitive-operation", "admin", "billing"},
+			},
+			&policy.HighRiskBlockRule{
+				Threshold: 90,
+			},
+		},
 	)
 
 	// 9. Initialize risk engine
@@ -122,23 +130,23 @@ func (m *Module) initialize() error {
 	// 11. Initialize metrics
 	m.coll = metrics.NewCollector()
 
-	// 12. Initialize HTTP handler
+	// 12. Initialize HTTP handler (with adapter wrappers to match contracts interfaces)
 	m.httpHandler = handlers.NewHTTPHandler(
-		m.enrollmentSvc,
-		m.challengeSvc,
-		nil, // TODO: Implement FactorService
-		m.policySvc,
-		m.riskSvc,
-		m.deviceSvc,
-		m.backupCodeSvc,
+		wrapEnrollmentService(m.enrollmentSvc),
+		wrapChallengeService(m.challengeSvc),
+		wrapFactorService(m.factorRepo),
+		wrapPolicyService(m.policySvc),
+		wrapRiskService(m.riskSvc),
+		wrapTrustedDeviceService(m.deviceSvc),
+		wrapBackupCodeService(m.backupCodeSvc),
 	)
 
 	return nil
 }
 
-// RegisterRoutes registers all HTTP routes.
-func (m *Module) RegisterRoutes(router *gin.Engine) {
-	m.httpHandler.RegisterRoutes(router)
+// RegisterRoutes registers all HTTP routes on the given router group.
+func (m *Module) RegisterRoutes(api *gin.RouterGroup) {
+	m.httpHandler.RegisterRoutes(api)
 }
 
 // TotpService returns the TOTP service.

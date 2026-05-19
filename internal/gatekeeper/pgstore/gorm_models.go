@@ -71,6 +71,23 @@ type TrustedDeviceRow struct {
 
 func (TrustedDeviceRow) TableName() string { return "twofactor_trusted_devices" }
 
+// AuditLogRow is the GORM representation of the twofactor_audit_log table.
+type AuditLogRow struct {
+	ID          string     `gorm:"primaryKey;type:varchar(36);not null"`
+	EventType   string     `gorm:"type:varchar(50);not null;index"`
+	UserID      string     `gorm:"type:varchar(36);not null;index"`
+	FactorID    *string    `gorm:"type:varchar(36)"`
+	ChallengeID *string    `gorm:"type:varchar(36)"`
+	Severity    string     `gorm:"type:varchar(20);not null;index"`
+	Message     string     `gorm:"type:text;not null"`
+	SourceIP    string     `gorm:"type:varchar(45)"`
+	UserAgent   string     `gorm:"type:text"`
+	Metadata    []byte     `gorm:"type:jsonb"`
+	CreatedAt   time.Time  `gorm:"not null;autoCreateTime;index"`
+}
+
+func (AuditLogRow) TableName() string { return "twofactor_audit_log" }
+
 // MigrateGatekeeperTables runs GORM AutoMigrate for all Gatekeeper 2FA tables.
 func MigrateGatekeeperTables(db *gorm.DB) error {
 	return db.AutoMigrate(
@@ -78,5 +95,6 @@ func MigrateGatekeeperTables(db *gorm.DB) error {
 		&ChallengeRow{},
 		&BackupCodeRow{},
 		&TrustedDeviceRow{},
+		&AuditLogRow{},
 	)
 }

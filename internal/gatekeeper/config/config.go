@@ -1,12 +1,18 @@
 package config
 
 import (
+	"crypto/rand"
 	"errors"
+	"os"
 	"time"
 )
 
 // Config holds Gatekeeper 2FA module configuration.
 type Config struct {
+	// Security keys (loaded from environment variables)
+	EncryptionKey []byte `yaml:"-"` // AES-256 key for encrypting secrets at rest
+	HMACKey       []byte `yaml:"-"` // HMAC key for signing tokens
+
 	// TOTP settings
 	TOTP TOTPConfig `yaml:"totp"`
 
@@ -146,8 +152,44 @@ func DefaultConfig() *Config {
 	}
 }
 
+// LoadFromEnv loads security keys from environment variables.
+// If keys are not set, auto-generates random keys for development use.
+// In production, ALWAYS set GATEKEEPER_ENCRYPTION_KEY and GATEKEEPER_HMAC_KEY.
+func (c *Config) LoadFromEnv() {
+	if key := os.Getenv("GATEKEEPER_ENCRYPTION_KEY"); key != "" {
+		c.EncryptionKey = []byte(key)
+	} else if len(c.EncryptionKey) < 32 {
+		// Auto-generate for development (NOT for production)
+		c.EncryptionKey = generateRandomKey(32)
+	}
+	if key := os.Getenv("GATEKEEPER_HMAC_KEY"); key != "" {
+		c.HMACKey = []byte(key)
+	} else if len(c.HMACKey) < 32 {
+		// Auto-generate for development (NOT for production)
+		c.HMACKey = generateRandomKey(32)
+	}
+	if issuer := os.Getenv("GATEKEEPER_TOTP_ISSUER"); issuer != "" {
+		c.TOTP.Issuer = issuer
+	}
+}
+
+// generateRandomKey creates a cryptographically secure random key.
+func generateRandomKey(length int) []byte {
+	key := make([]byte, length)
+	_, _ = rand.Read(key)
+	return key
+}
+
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
+	if len(c.EncryptionKey) < 32 {
+		return errors.New("GATEKEEPER_ENCRYPTION_KEY must be at least 32 bytes")
+	}
+
+	if len(c.HMACKey) < 32 {
+		return errors.New("GATEKEEPER_HMAC_KEY must be at least 32 bytes")
+	}
+
 	if c.TOTP.Digits < 4 || c.TOTP.Digits > 8 {
 		return errors.New("TOTP digits must be between 4 and 8")
 	}
