@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/keyring"
+	"example.com/axiomnizam/internal/logging"
+
+	"go.uber.org/zap"
 )
 
 // FieldLevelEncryption manages field-level encryption
@@ -30,7 +33,10 @@ type FieldLevelEncryption struct {
 func NewFieldLevelEncryption() *FieldLevelEncryption {
 	ring := keyring.New()
 	// Install an initial active key so Encrypt works immediately.
-	ring.Rotate()
+	if _, err := ring.Rotate(); err != nil {
+		// Log but don't fail — callers can retry via RotateKeyring().
+		logging.Z().Warn("initial keyring rotation failed", zap.Error(err))
+	}
 
 	return &FieldLevelEncryption{
 		keys:              make(map[string]*EncryptionKey),
