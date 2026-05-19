@@ -1,9 +1,10 @@
 package integration
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
@@ -47,7 +48,7 @@ func loadStateFromEtcd(etcd *clientv3.Client, stateKey string, out interface{}) 
 
 	resp, err := etcd.Get(ctx, stateKey)
 	if err != nil {
-		log.Printf("integration: failed to load persisted state from etcd (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to load persisted state from etcd (%s): %v", stateKey, err))
 		return false
 	}
 	if len(resp.Kvs) == 0 {
@@ -55,7 +56,7 @@ func loadStateFromEtcd(etcd *clientv3.Client, stateKey string, out interface{}) 
 	}
 
 	if err := json.Unmarshal(resp.Kvs[0].Value, out); err != nil {
-		log.Printf("integration: failed to decode persisted state (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to decode persisted state (%s): %v", stateKey, err))
 		return false
 	}
 	return true
@@ -68,7 +69,7 @@ func saveStateToEtcd(etcd *clientv3.Client, stateKey string, payload interface{}
 
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("integration: failed to encode state (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to encode state (%s): %v", stateKey, err))
 		return
 	}
 
@@ -76,6 +77,6 @@ func saveStateToEtcd(etcd *clientv3.Client, stateKey string, payload interface{}
 	defer cancel()
 
 	if _, err := etcd.Put(ctx, stateKey, string(encoded)); err != nil {
-		log.Printf("integration: failed to persist state to etcd (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to persist state to etcd (%s): %v", stateKey, err))
 	}
 }

@@ -1,8 +1,8 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"math"
 	"sync"
 	"time"
@@ -13,7 +13,6 @@ type FairnessScheduler struct {
 	mu              sync.RWMutex
 	jobTypes        map[JobType]*TypeStats
 	weights         map[JobType]float64
-	logger          *log.Logger
 	agingFactor     float64
 	starvationLimit time.Duration
 	lastScheduled   map[JobType]time.Time
@@ -35,7 +34,6 @@ func NewFairnessScheduler() *FairnessScheduler {
 	return &FairnessScheduler{
 		jobTypes:        make(map[JobType]*TypeStats),
 		weights:         make(map[JobType]float64),
-		logger:          log.New(log.Writer(), "[FAIRNESS_SCHEDULER] ", log.LstdFlags),
 		agingFactor:     0.1,
 		starvationLimit: 5 * time.Minute,
 		lastScheduled:   make(map[JobType]time.Time),
@@ -52,7 +50,7 @@ func (fs *FairnessScheduler) SetWeight(jobType JobType, weight float64) error {
 	fs.weights[jobType] = weight
 	fs.mu.Unlock()
 
-	fs.logger.Printf("Weight set for %s: %.2f", jobType, weight)
+	logging.Z().Info(fmt.Sprintf("Weight set for %s: %.2f", jobType, weight))
 	return nil
 }
 
@@ -146,7 +144,7 @@ func (fs *FairnessScheduler) RecordExecution(jobType JobType, duration time.Dura
 	stats.TotalProcessed++
 	stats.LastScheduled = time.Now()
 
-	fs.logger.Printf("Execution recorded for %s: %v (avg: %v)", jobType, duration, stats.AverageTime)
+	logging.Z().Info(fmt.Sprintf("Execution recorded for %s: %v (avg: %v)", jobType, duration, stats.AverageTime))
 }
 
 // GetTypeStats returns statistics for a job type
@@ -196,7 +194,6 @@ type AgeingScheduler struct {
 	jobs           map[string]*JobAgingInfo
 	baseAge        time.Duration
 	ageBoost       float64
-	logger         *log.Logger
 	starvationTime time.Duration
 }
 
@@ -217,7 +214,6 @@ func NewAgeingScheduler() *AgeingScheduler {
 		baseAge:        1 * time.Minute,
 		ageBoost:       0.5,
 		starvationTime: 10 * time.Minute,
-		logger:         log.New(log.Writer(), "[AGEING_SCHEDULER] ", log.LstdFlags),
 	}
 }
 
@@ -296,7 +292,6 @@ type JobAffinityScheduler struct {
 	affinities  map[string]string // jobID -> workerID
 	workerLoads map[string]int
 	affinityMap map[string][]string // workerID -> compatible job types
-	logger      *log.Logger
 	stickiness  float64 // 0.0-1.0 probability of sticking to same worker
 }
 
@@ -306,7 +301,6 @@ func NewJobAffinityScheduler() *JobAffinityScheduler {
 		affinities:  make(map[string]string),
 		workerLoads: make(map[string]int),
 		affinityMap: make(map[string][]string),
-		logger:      log.New(log.Writer(), "[AFFINITY_SCHEDULER] ", log.LstdFlags),
 		stickiness:  0.7,
 	}
 }
@@ -322,7 +316,7 @@ func (jas *JobAffinityScheduler) SetWorkerAffinity(workerID string, jobTypes []J
 	}
 
 	jas.affinityMap[workerID] = types
-	jas.logger.Printf("Worker affinity set: %s -> %v", workerID, types)
+	logging.Z().Info(fmt.Sprintf("Worker affinity set: %s -> %v", workerID, types))
 }
 
 // SelectWorkerForJob selects a worker for job placement
@@ -404,7 +398,6 @@ func (jas *JobAffinityScheduler) GetWorkerLoad(workerID string) int {
 type WorkloadBalancer struct {
 	mu              sync.RWMutex
 	workerMetrics   map[string]*WorkerMetrics
-	logger          *log.Logger
 	balancingPolicy string // "round-robin", "least-loaded", "weighted"
 	weights         map[string]float64
 }
@@ -425,7 +418,6 @@ type WorkerMetrics struct {
 func NewWorkloadBalancer() *WorkloadBalancer {
 	return &WorkloadBalancer{
 		workerMetrics:   make(map[string]*WorkerMetrics),
-		logger:          log.New(log.Writer(), "[WORKLOAD_BALANCER] ", log.LstdFlags),
 		balancingPolicy: "least-loaded",
 		weights:         make(map[string]float64),
 	}
@@ -578,7 +570,7 @@ func (wb *WorkloadBalancer) SetBalancingPolicy(policy string) {
 	wb.balancingPolicy = policy
 	wb.mu.Unlock()
 
-	wb.logger.Printf("Balancing policy set to: %s", policy)
+	logging.Z().Info(fmt.Sprintf("Balancing policy set to: %s", policy))
 }
 
 // Helper function

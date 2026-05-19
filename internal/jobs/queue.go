@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"time"
@@ -15,7 +15,6 @@ type MemoryQueue struct {
 	jobs    map[string]*Job
 	pending []*Job
 	maxSize int
-	logger  *log.Logger
 	closed  bool
 }
 
@@ -29,7 +28,6 @@ func NewMemoryQueue(maxSize int) *MemoryQueue {
 		jobs:    make(map[string]*Job),
 		pending: make([]*Job, 0),
 		maxSize: maxSize,
-		logger:  log.New(log.Writer(), "[MEMORY_QUEUE] ", log.LstdFlags),
 	}
 }
 
@@ -60,7 +58,7 @@ func (mq *MemoryQueue) Submit(ctx context.Context, job *Job) error {
 		return mq.pending[i].Priority > mq.pending[j].Priority
 	})
 
-	mq.logger.Printf("Job submitted: %s (id: %s, priority: %d)", job.Type, job.ID, job.Priority)
+	logging.Z().Info(fmt.Sprintf("Job submitted: %s (id: %s, priority: %d)", job.Type, job.ID, job.Priority))
 	return nil
 }
 
@@ -80,7 +78,7 @@ func (mq *MemoryQueue) Dequeue(ctx context.Context) (*Job, error) {
 	// Check if job is expired
 	if job.IsExpired() {
 		job.Status = JobStatusCancelled
-		mq.logger.Printf("Job expired: %s (id: %s)", job.Type, job.ID)
+		logging.Z().Info(fmt.Sprintf("Job expired: %s (id: %s)", job.Type, job.ID))
 		return nil, ErrJobCancelled
 	}
 
@@ -165,7 +163,7 @@ func (mq *MemoryQueue) Clear(ctx context.Context) error {
 	mq.jobs = make(map[string]*Job)
 	mq.pending = make([]*Job, 0)
 
-	mq.logger.Printf("Queue cleared")
+	logging.Z().Info(fmt.Sprintf("Queue cleared"))
 	return nil
 }
 
@@ -209,7 +207,6 @@ func (mq *MemoryQueue) GetStats(ctx context.Context) (*QueueStats, error) {
 // Processor processes jobs from the queue
 type MemoryProcessor struct {
 	queue      Queue
-	logger     *log.Logger
 	handlers   map[JobType]JobHandler
 	workers    int
 	running    bool
@@ -226,7 +223,6 @@ type MemoryProcessor struct {
 func NewMemoryProcessor(queue Queue) *MemoryProcessor {
 	return &MemoryProcessor{
 		queue:      queue,
-		logger:     log.New(log.Writer(), "[PROCESSOR] ", log.LstdFlags),
 		handlers:   make(map[JobType]JobHandler),
 		running:    false,
 		stats:      &ProcessorStats{},
@@ -241,7 +237,7 @@ func (mp *MemoryProcessor) Register(jobType JobType, handler JobHandler) {
 	defer mp.mu.Unlock()
 
 	mp.handlers[jobType] = handler
-	mp.logger.Printf("Handler registered for job type: %s", jobType)
+	logging.Z().Info(fmt.Sprintf("Handler registered for job type: %s", jobType))
 }
 
 // Start starts processing jobs
@@ -264,7 +260,7 @@ func (mp *MemoryProcessor) Start(ctx context.Context, numWorkers int) error {
 		go mp.worker(i)
 	}
 
-	mp.logger.Printf("Processor started with %d workers", numWorkers)
+	logging.Z().Info(fmt.Sprintf("Processor started with %d workers", numWorkers))
 	return nil
 }
 
@@ -275,7 +271,7 @@ func (mp *MemoryProcessor) worker(id int) {
 	for {
 		select {
 		case <-mp.ctx.Done():
-			mp.logger.Printf("Worker %d stopping", id)
+			logging.Z().Info(fmt.Sprintf("Worker %d stopping", id))
 			return
 		default:
 		}
@@ -413,7 +409,7 @@ func (mp *MemoryProcessor) Stop() error {
 	mp.cancel()
 	mp.wg.Wait()
 
-	mp.logger.Printf("Processor stopped")
+	logging.Z().Info(fmt.Sprintf("Processor stopped"))
 	return nil
 }
 

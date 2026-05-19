@@ -20,8 +20,9 @@ package apibanks
 // iteration that plugs in behind the `act` step.
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"strings"
 	"time"
 
@@ -69,7 +70,7 @@ func (r *APIBankReconciler) Reconcile(ctx context.Context, obj reconciler.Resour
 		// "already reconciled" — the manager has no Update today, so
 		// once created the runtime state matches spec.
 		if err := r.manager.CreateBank(ctx, bank); err != nil && !strings.Contains(err.Error(), "already exists") {
-			log.Printf("apibanks: create bank %s error: %v", res.Name, err)
+			logging.Z().Info(fmt.Sprintf("apibanks: create bank %s error: %v", res.Name, err))
 		}
 	}
 

@@ -9,9 +9,9 @@ package governance
 // =====================================================
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -134,7 +134,7 @@ func (e *Enforcer) Enforce(ctx context.Context, access AccessContext) (*Enforcem
 	// Log the decision.
 	if e.logger != nil {
 		if logErr := e.logger.LogDecision(ctx, access, *decision); logErr != nil {
-			log.Printf("governance: failed to log enforcement decision: %v", logErr)
+			logging.Z().Info(fmt.Sprintf("governance: failed to log enforcement decision: %v", logErr))
 		}
 	}
 

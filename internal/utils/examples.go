@@ -4,7 +4,8 @@ package utils
 // SQL Injection Protection and Input Validation in the AxiomNizam application
 
 import (
-	"log"
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"time"
 )
 
@@ -505,20 +506,20 @@ func (h *ReportHandler) ExportData(c *gin.Context) {
 
 // LogValidationError logs validation errors safely
 func LogValidationError(fieldName string, err error) {
-	log.Printf("[VALIDATION] Field: %s, Error: %v\n", fieldName, err)
+	logging.Z().Info(fmt.Sprintf("[VALIDATION] Field: %s, Error: %v\n", fieldName, err))
 }
 
 // LogSecurityEvent logs security-related events
 func LogSecurityEvent(eventType string, details map[string]interface{}) {
-	log.Printf("[SECURITY] Event: %s, Details: %+v\n", eventType, details)
+	logging.Z().Info(fmt.Sprintf("[SECURITY] Event: %s, Details: %+v\n", eventType, details))
 }
 
 // LogSQLInjectionAttempt logs potential SQL injection attempts
 func LogSQLInjectionAttempt(input string, source string) {
-	log.Printf("[SECURITY] Potential SQL Injection Attempt\n")
-	log.Printf("  Source: %s\n", source)
-	log.Printf("  Input length: %d\n", len(input))
-	log.Printf("  Timestamp: %v\n", time.Now())
+	logging.Z().Info(fmt.Sprintf("[SECURITY] Potential SQL Injection Attempt\n"))
+	logging.Z().Info(fmt.Sprintf("  Source: %s\n", source))
+	logging.Z().Info(fmt.Sprintf("  Input length: %d\n", len(input)))
+	logging.Z().Info(fmt.Sprintf("  Timestamp: %v\n", time.Now()))
 }
 
 // =============================================================================

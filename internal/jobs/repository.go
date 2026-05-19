@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -86,14 +86,12 @@ type RepositoryStats struct {
 // PostgresJobRepository implements JobRepository using PostgreSQL
 type PostgresJobRepository struct {
 	db     *gorm.DB
-	logger *log.Logger
 }
 
 // NewPostgresJobRepository creates a new PostgreSQL job repository
 func NewPostgresJobRepository(db *gorm.DB) *PostgresJobRepository {
 	repo := &PostgresJobRepository{
 		db:     db,
-		logger: log.New(log.Writer(), "[JOB_REPOSITORY] ", log.LstdFlags),
 	}
 
 	// Auto-migrate schema
@@ -105,7 +103,7 @@ func NewPostgresJobRepository(db *gorm.DB) *PostgresJobRepository {
 // migrateSchema creates the jobs table if it doesn't exist
 func (pjr *PostgresJobRepository) migrateSchema() {
 	if err := pjr.db.AutoMigrate(&PersistentJob{}); err != nil {
-		pjr.logger.Printf("Error migrating schema: %v", err)
+		logging.Z().Info(fmt.Sprintf("Error migrating schema: %v", err))
 	}
 
 	// Create indexes
@@ -117,7 +115,7 @@ func (pjr *PostgresJobRepository) migrateSchema() {
 		CREATE INDEX IF NOT EXISTS idx_jobs_completed_at ON jobs(completed_at DESC);
 	`)
 
-	pjr.logger.Printf("Schema migration completed")
+	logging.Z().Info(fmt.Sprintf("Schema migration completed"))
 }
 
 // toPersistent converts Job to PersistentJob
@@ -221,11 +219,11 @@ func (pjr *PostgresJobRepository) Create(ctx context.Context, job *Job) error {
 	}
 
 	if err := pjr.db.WithContext(ctx).Create(pj).Error; err != nil {
-		pjr.logger.Printf("Error creating job: %v", err)
+		logging.Z().Info(fmt.Sprintf("Error creating job: %v", err))
 		return err
 	}
 
-	pjr.logger.Printf("Job created: %s", job.ID)
+	logging.Z().Info(fmt.Sprintf("Job created: %s", job.ID))
 	return nil
 }
 
@@ -241,11 +239,11 @@ func (pjr *PostgresJobRepository) Update(ctx context.Context, job *Job) error {
 	}
 
 	if err := pjr.db.WithContext(ctx).Save(pj).Error; err != nil {
-		pjr.logger.Printf("Error updating job: %v", err)
+		logging.Z().Info(fmt.Sprintf("Error updating job: %v", err))
 		return err
 	}
 
-	pjr.logger.Printf("Job updated: %s", job.ID)
+	logging.Z().Info(fmt.Sprintf("Job updated: %s", job.ID))
 	return nil
 }
 
@@ -314,7 +312,7 @@ func (pjr *PostgresJobRepository) Delete(ctx context.Context, jobID string) erro
 		return err
 	}
 
-	pjr.logger.Printf("Job deleted: %s", jobID)
+	logging.Z().Info(fmt.Sprintf("Job deleted: %s", jobID))
 	return nil
 }
 

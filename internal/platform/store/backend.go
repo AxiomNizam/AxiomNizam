@@ -15,8 +15,8 @@
 package store
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -122,7 +122,7 @@ func (bm *BackendManager) KV() KVStore {
 }
 
 func (bm *BackendManager) initRaft(tableNames []string) error {
-	log.Println("📦 Initializing embedded Raft storage backend...")
+	logging.Z().Info("📦 Initializing embedded Raft storage backend...")
 
 	// Build a single go-memdb schema with all resource tables.
 	schema := NewMultiTableSchema(tableNames)
@@ -139,8 +139,8 @@ func (bm *BackendManager) initRaft(tableNames []string) error {
 	}
 
 	bm.RaftServer = server
-	log.Printf("  ✅ Raft server started (node=%s, addr=%s, leader=%v)",
-		cfg.NodeID, cfg.BindAddr, server.IsLeader())
+	logging.Z().Info(fmt.Sprintf("  ✅ Raft server started (node=%s, addr=%s, leader=%v)",
+		cfg.NodeID, cfg.BindAddr, server.IsLeader()))
 	return nil
 }
 

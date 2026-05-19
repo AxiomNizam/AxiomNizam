@@ -1,8 +1,8 @@
 package cache
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -10,7 +10,6 @@ import (
 type Manager struct {
 	cache   Cache
 	config  *CacheConfig
-	logger  *log.Logger
 	backend string
 }
 
@@ -24,12 +23,9 @@ func NewCacheManager(config *CacheConfig) (*Manager, error) {
 		}
 	}
 
-	logger := log.New(log.Writer(), "[CACHE_MANAGER] ", log.LstdFlags)
 
 	manager := &Manager{
-		config: config,
-		logger: logger,
-	}
+		config: config,	}
 
 	// Initialize cache backend
 	if err := manager.initializeCache(); err != nil {
@@ -49,12 +45,12 @@ func (m *Manager) initializeCache() error {
 		}
 		m.cache = cache
 		m.backend = "Redis"
-		m.logger.Printf("Redis cache initialized: %s:%d", m.config.Host, m.config.Port)
+		logging.Z().Info(fmt.Sprintf("Redis cache initialized: %s:%d", m.config.Host, m.config.Port))
 
 	case "memory":
 		m.cache = NewMemoryCache(m.config.MaxSize)
 		m.backend = "Memory"
-		m.logger.Printf("Memory cache initialized (max size: %d)", m.config.MaxSize)
+		logging.Z().Info(fmt.Sprintf("Memory cache initialized (max size: %d)", m.config.MaxSize))
 
 	default:
 		return fmt.Errorf("unknown cache type: %s", m.config.Type)
@@ -96,11 +92,11 @@ func (m *Manager) SwitchBackend(cacheType string) error {
 
 	m.config.Type = cacheType
 	if err := m.initializeCache(); err != nil {
-		m.logger.Printf("Error switching to %s cache, keeping %s", cacheType, oldBackend)
+		logging.Z().Info(fmt.Sprintf("Error switching to %s cache, keeping %s", cacheType, oldBackend))
 		return err
 	}
 
-	m.logger.Printf("Switched from %s to %s cache", oldBackend, m.backend)
+	logging.Z().Info(fmt.Sprintf("Switched from %s to %s cache", oldBackend, m.backend))
 	return nil
 }
 

@@ -1,10 +1,11 @@
 package jobs
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/logging"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -14,7 +15,6 @@ type ObservabilityHandler struct {
 	manager          JobManager
 	metricsCollector *MetricsCollector
 	healthMetrics    *HealthMetrics
-	logger           *log.Logger
 }
 
 // NewObservabilityHandler creates a new observability handler
@@ -26,7 +26,6 @@ func NewObservabilityHandler(
 		manager:          manager,
 		metricsCollector: metricsCollector,
 		healthMetrics:    NewHealthMetrics(metricsCollector, manager),
-		logger:           log.New(log.Writer(), "[OBSERVABILITY] ", log.LstdFlags),
 	}
 }
 
@@ -377,8 +376,8 @@ func (mgm *MetricsGinMiddleware) Middleware() gin.HandlerFunc {
 		method := c.Request.Method
 
 		// Log metrics
-		log.Printf("[METRICS] %s %s %d took %dms",
+		logging.Z().Info(fmt.Sprintf("[METRICS] %s %s %d took %dms",
 			method, path, statusCode, duration.Milliseconds(),
-		)
+		))
 	}
 }

@@ -16,7 +16,7 @@ The codebase has **88 internal modules** with significant architectural inconsis
 |----------|----------|-------|
 | `context.Background()` in HTTP handlers | HIGH | **FIXED** — 13 sites in 3 HTTP handler files; 15 remaining sites are non-handler code (correct) |
 | Silently swallowed errors (`_ = err`) | HIGH | **PARTIAL** — 7 audit tasks done (20 sites); ~50+ broader sweep sites remain |
-| Dual logging systems (`log` vs `zap`) | MEDIUM | **PARTIAL** — 49 files migrated to `logging.Z()`; 44 remain using `log` |
+| Dual logging systems (`log` vs `zap`) | MEDIUM | **FIXED** — 93 files migrated to `logging.Z()`; zero `"log"` imports remain |
 | Global singletons (`var Global*`) | MEDIUM | 19+ across 8 packages |
 | Dead internal directories | MEDIUM | ~20+ genuinely unused |
 | Hardcoded timeouts (`5*time.Second`) | MEDIUM | 15+ files |
@@ -406,34 +406,24 @@ These fix correctness bugs and data-loss risks. No architectural changes.
 
 **Goal:** One logger (`zap`) across all modules.
 
-**Status:** ✅ PARTIAL (2026-05-19) — 49 files migrated, 44 remaining
+**Status:** ✅ COMPLETE (2026-05-19) — 93 files migrated, zero `"log"` imports remaining
 
 | # | Task | Scope | Status |
 |---|------|-------|--------|
 | 3.1 | Enhance `internal/logging/logging.go` as factory: `logging.For("storage")` returns `*zap.Logger` | 1 file | ✅ Done |
-| 3.2 | Migrate core modules: `storage`, `gatekeeper`, `iam`, `antivirus`, `scanner` | ~33 files | ✅ Done |
-| 3.3 | Migrate infrastructure: `conductor`, `auth`, `cdc`, `etl`, `config`, `database` | ~16 files | ✅ Done |
-| 3.4 | Migrate `jobs` and `cache` — struct field `*log.Logger` pattern | ~21 files | ⏳ Pending (different pattern: `xxx.logger.Printf(...)` not direct `log.Printf(...)`) |
-| 3.5 | Migrate remaining: `handlers`, `controllers`, `integration`, `utils` | ~23 files | ⏳ Pending |
-| 3.6 | Remove dual-logging from `utils`, `integration`, `controllers` | 3 modules | ⏳ Pending |
+| 3.2 | Migrate core modules: `storage`, `gatekeeper`, `iam`, `antivirus`, `scanner`, `jobs` | ~49 files | ✅ Done |
+| 3.3 | Migrate infrastructure: `conductor`, `cache`, `auth`, `cdc`, `etl`, `config`, `database` | ~20 files | ✅ Done |
+| 3.4 | Migrate `jobs` and `cache` — struct field `*log.Logger` pattern | ~21 files | ✅ Done |
+| 3.5 | Migrate remaining: `handlers`, `controllers`, `integration`, `utils`, `platform`, `runtime`, `serverboot`, `events`, `reconciler`, `metrics`, `services` | ~23 files | ✅ Done |
+| 3.6 | Remove stdlib `"log"` from Phase 2 files (`apibanks`, `governance`, `conductor`) | 3 files | ✅ Done |
 
-**Migrated (49 files, 243 call sites):**
-- storage: 11 files (66 calls) — `controller/controller.go`, `admin/admin.go`, `store/store.go`, `access/access.go`, `s3client/client.go`, `storage.go`, `native/native.go`, `events/events.go`, `signature.go`, `metrics/metrics.go`, `policy/policy.go`
-- antivirus: 12 files (50 calls) — `engine.go`, `sigdb/database.go`, `sigdb/updater.go`, `config.go`, `yara/engine.go`, `hashdb/loader.go`, `matcher/signature.go`, `matcher/patterns.go`, `entropy/entropy.go`, `hashdb/hashdb.go`, `matcher/ahocorasick.go`, `heuristic/heuristic.go`
-- gatekeeper: 5 files (21 calls) — `system.go`, `controller/manager.go`, `audit/logger.go`, `metrics/counters.go`, `controller/reconciler.go`
-- iam: 3 files (25 calls) — `iam.go`, `admin/admin.go`, `storage/storage.go`
-- conductor: 5 files (24 calls) — `persistence.go`, `reconciler.go`, `kafka.go`, `rabbitmq.go`, `manager.go`
-- auth: 3 files (12 calls) — `auth.go`, `rate_limit_middleware.go`, `middleware.go`
-- cdc: 3 files (10 calls) — `pipeline.go`, `capture.go`, `controller.go`
-- etl: 2 files (6 calls) — `engine.go`, `controller.go`
-- config: 1 file (2 calls) — `config.go`
-- database: 1 file (20 calls) — `connections.go`
-- scanner: 1 file (2 calls) — `metrics.go`
+**Total migrated: 93 files, ~460 call sites. Zero `"log"` imports remain in `internal/`.**
 
-**Remaining (44 files):**
-- jobs: 16 files (use `*log.Logger` struct fields — needs manual migration)
-- cache: 5 files (use `*log.Logger` struct fields — needs manual migration)
-- Remaining ~23 files with direct `log.*` calls in handlers, controllers, integration, utils, etc.
+Migration approach:
+- Direct `log.Printf(...)` → `logging.Z().Info(fmt.Sprintf(...))` (balanced paren matching)
+- Struct field `*log.Logger` → removed field + removed constructor + `.logger.Printf(...)` → `logging.Z().Info(fmt.Sprintf(...))`
+- `log.Fatal(...)` → `logging.Z().Fatal(...)`
+- Unused `"log"` imports removed
 
 ---
 
@@ -909,7 +899,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6) — Phase 1 & 2 complete, Phase 3 partial*
+*Last updated: 2026-05-19 (UTC+6) — Phase 1, 2 & 3 complete*
 
 ---
 
@@ -919,7 +909,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 |-------|--------|-----------|
 | 1. Context propagation | ✅ DONE | 2026-05-19 |
 | 2. Swallowed errors | ✅ DONE | 2026-05-19 |
-| 3. Unify logging | ⬜ PARTIAL | 49/93 files migrated |
+| 3. Unify logging | ✅ DONE | 2026-05-19 |
 | 4. Dead code cleanup | ⬜ TODO | — |
 | 5. KV persistence gaps | ⬜ TODO | — |
 

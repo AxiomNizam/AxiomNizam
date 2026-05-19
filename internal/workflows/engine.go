@@ -1,10 +1,10 @@
 package workflows
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -119,7 +119,7 @@ func (we *WorkflowEngine) loadState() {
 
 	resp, err := we.etcd.Get(ctx, we.stateKey)
 	if err != nil {
-		log.Printf("workflows: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("workflows: failed to load persisted state from etcd: %v", err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -128,7 +128,7 @@ func (we *WorkflowEngine) loadState() {
 
 	var state workflowEngineState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("workflows: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("workflows: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -154,7 +154,7 @@ func (we *WorkflowEngine) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("workflows: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("workflows: failed to encode state: %v", err))
 		return
 	}
 
@@ -162,7 +162,7 @@ func (we *WorkflowEngine) persistStateLocked() {
 	defer cancel()
 
 	if _, err := we.etcd.Put(ctx, we.stateKey, string(payload)); err != nil {
-		log.Printf("workflows: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("workflows: failed to persist state to etcd: %v", err))
 	}
 }
 

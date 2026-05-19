@@ -10,9 +10,9 @@ package reconciler
 // endpoint and Prometheus-style counters.
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -63,11 +63,11 @@ func (ir *InstrumentedReconciler) Reconcile(ctx context.Context, obj Resource) R
 	}
 
 	if success {
-		log.Printf("reconcile module=%s key=%s gen=%d observed=%d duration=%s result=success requeue=%v",
-			ir.Module, key, gen, observedGen, duration.Round(time.Millisecond), requeued)
+		logging.Z().Info(fmt.Sprintf("reconcile module=%s key=%s gen=%d observed=%d duration=%s result=success requeue=%v",
+			ir.Module, key, gen, observedGen, duration.Round(time.Millisecond), requeued))
 	} else {
-		log.Printf("reconcile module=%s key=%s gen=%d observed=%d duration=%s result=error requeue=%v err=%q",
-			ir.Module, key, gen, observedGen, duration.Round(time.Millisecond), requeued, errMsg)
+		logging.Z().Info(fmt.Sprintf("reconcile module=%s key=%s gen=%d observed=%d duration=%s result=error requeue=%v err=%q",
+			ir.Module, key, gen, observedGen, duration.Round(time.Millisecond), requeued, errMsg))
 	}
 
 	// Record metrics.

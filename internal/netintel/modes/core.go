@@ -1,9 +1,10 @@
 package modes
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -100,7 +101,7 @@ func (m *Manager) loadState() {
 
 	resp, err := etcdClient.Get(ctx, m.stateKey)
 	if err != nil {
-		log.Printf("netintel-modes: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("netintel-modes: failed to load persisted state from etcd: %v", err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -109,7 +110,7 @@ func (m *Manager) loadState() {
 
 	var state managerState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("netintel-modes: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("netintel-modes: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -140,7 +141,7 @@ func (m *Manager) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("netintel-modes: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("netintel-modes: failed to encode state: %v", err))
 		return
 	}
 
@@ -148,7 +149,7 @@ func (m *Manager) persistStateLocked() {
 	defer cancel()
 
 	if _, err := etcdClient.Put(ctx, m.stateKey, string(payload)); err != nil {
-		log.Printf("netintel-modes: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("netintel-modes: failed to persist state to etcd: %v", err))
 	}
 }
 

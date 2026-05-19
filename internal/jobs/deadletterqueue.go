@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -30,7 +30,6 @@ type DeadLetterQueue struct {
 	jobs       map[string]*DeadLetterJob
 	maxSize    int
 	retention  time.Duration
-	logger     *log.Logger
 	repository JobRepository
 }
 
@@ -47,7 +46,6 @@ func NewDeadLetterQueue(maxSize int, retention time.Duration) *DeadLetterQueue {
 		jobs:      make(map[string]*DeadLetterJob),
 		maxSize:   maxSize,
 		retention: retention,
-		logger:    log.New(log.Writer(), "[DEAD_LETTER_QUEUE] ", log.LstdFlags),
 	}
 
 	// Start background cleanup
@@ -84,7 +82,7 @@ func (dlq *DeadLetterQueue) MoveToDeadLetter(job *Job, manualReview bool) error 
 	}
 
 	dlq.jobs[dlqJob.ID] = dlqJob
-	dlq.logger.Printf("Job moved to DLQ: %s (original: %s)", dlqJob.ID, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job moved to DLQ: %s (original: %s)", dlqJob.ID, job.ID))
 
 	return nil
 }
@@ -149,7 +147,7 @@ func (dlq *DeadLetterQueue) RetryDeadLetterJob(ctx context.Context, dlqJobID str
 		return err
 	}
 
-	dlq.logger.Printf("DLQ job retried: %s -> %s", dlqJobID, newJob.ID)
+	logging.Z().Info(fmt.Sprintf("DLQ job retried: %s -> %s", dlqJobID, newJob.ID))
 	return nil
 }
 
@@ -173,7 +171,7 @@ func (dlq *DeadLetterQueue) DeleteDeadLetterJob(dlqJobID string) error {
 	defer dlq.mu.Unlock()
 
 	delete(dlq.jobs, dlqJobID)
-	dlq.logger.Printf("DLQ job deleted: %s", dlqJobID)
+	logging.Z().Info(fmt.Sprintf("DLQ job deleted: %s", dlqJobID))
 	return nil
 }
 
@@ -231,7 +229,7 @@ func (dlq *DeadLetterQueue) cleanupExpired() {
 		dlq.mu.Unlock()
 
 		if deleted > 0 {
-			dlq.logger.Printf("Cleaned up %d expired DLQ jobs", deleted)
+			logging.Z().Info(fmt.Sprintf("Cleaned up %d expired DLQ jobs", deleted))
 		}
 	}
 }
@@ -241,7 +239,6 @@ type DLQProcessor struct {
 	dlq     *DeadLetterQueue
 	queue   Queue
 	manager JobManager
-	logger  *log.Logger
 	handler func(ctx context.Context, dlqJob *DeadLetterJob) error
 }
 
@@ -251,7 +248,6 @@ func NewDLQProcessor(dlq *DeadLetterQueue, queue Queue, manager JobManager) *DLQ
 		dlq:     dlq,
 		queue:   queue,
 		manager: manager,
-		logger:  log.New(log.Writer(), "[DLQ_PROCESSOR] ", log.LstdFlags),
 	}
 }
 
@@ -288,28 +284,26 @@ func (dp *DLQProcessor) ProcessAll(ctx context.Context) (int, error) {
 	for _, dlqJob := range dlqJobs {
 		if dlqJob.Retryable {
 			if err := dp.ProcessJob(ctx, dlqJob.ID); err != nil {
-				dp.logger.Printf("Error processing DLQ job: %v", err)
+				logging.Z().Info(fmt.Sprintf("Error processing DLQ job: %v", err))
 				continue
 			}
 			processed++
 		}
 	}
 
-	dp.logger.Printf("Processed %d DLQ jobs", processed)
+	logging.Z().Info(fmt.Sprintf("Processed %d DLQ jobs", processed))
 	return processed, nil
 }
 
 // DLQAnalyzer analyzes DLQ patterns
 type DLQAnalyzer struct {
 	dlq    *DeadLetterQueue
-	logger *log.Logger
 }
 
 // NewDLQAnalyzer creates a new DLQ analyzer
 func NewDLQAnalyzer(dlq *DeadLetterQueue) *DLQAnalyzer {
 	return &DLQAnalyzer{
 		dlq:    dlq,
-		logger: log.New(log.Writer(), "[DLQ_ANALYZER] ", log.LstdFlags),
 	}
 }
 

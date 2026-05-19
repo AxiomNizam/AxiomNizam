@@ -1,9 +1,10 @@
 package services
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"errors"
-	"log"
 
 	"example.com/axiomnizam/internal/repositories"
 	"example.com/axiomnizam/internal/utils"
@@ -20,7 +21,6 @@ type Service interface {
 type BaseService struct {
 	validator     *utils.InputValidator
 	sqlProtection *utils.SQLInjectionProtection
-	logger        *log.Logger
 }
 
 // NewBaseService creates a new base service
@@ -28,7 +28,6 @@ func NewBaseService(validator *utils.InputValidator, sqlProtection *utils.SQLInj
 	return &BaseService{
 		validator:     validator,
 		sqlProtection: sqlProtection,
-		logger:        log.New(log.Writer(), "[SERVICE] ", log.LstdFlags),
 	}
 }
 
@@ -48,20 +47,17 @@ func (s *BaseService) GetSQLProtection() *utils.SQLInjectionProtection {
 }
 
 // GetLogger returns the service logger
-func (s *BaseService) GetLogger() *log.Logger {
-	return s.logger
-}
 
 // LogError logs an error message
 func (s *BaseService) LogError(msg string, err error) {
 	if err != nil {
-		s.logger.Printf("ERROR: %s - %v", msg, err)
+		logging.Z().Info(fmt.Sprintf("ERROR: %s - %v", msg, err))
 	}
 }
 
 // LogInfo logs an info message
 func (s *BaseService) LogInfo(msg string) {
-	s.logger.Printf("INFO: %s", msg)
+	logging.Z().Info(fmt.Sprintf("INFO: %s", msg))
 }
 
 // Common service errors

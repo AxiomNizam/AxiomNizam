@@ -1,9 +1,10 @@
 package jobs
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"errors"
-	"log"
 	"time"
 )
 
@@ -228,34 +229,32 @@ type JobResult struct {
 
 // JobLogger provides logging for jobs
 type JobLogger struct {
-	logger *log.Logger
 }
 
 // NewJobLogger creates a new job logger
 func NewJobLogger() *JobLogger {
 	return &JobLogger{
-		logger: log.New(log.Writer(), "[JOBS] ", log.LstdFlags),
 	}
 }
 
 // LogJobStart logs job start
 func (jl *JobLogger) LogJobStart(job *Job) {
-	jl.logger.Printf("Job started: %s (type: %s, id: %s)", job.Type, job.Type, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job started: %s (type: %s, id: %s)", job.Type, job.Type, job.ID))
 }
 
 // LogJobComplete logs job completion
 func (jl *JobLogger) LogJobComplete(job *Job, duration time.Duration) {
-	jl.logger.Printf("Job completed: %s (duration: %s, id: %s)", job.Type, duration, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job completed: %s (duration: %s, id: %s)", job.Type, duration, job.ID))
 }
 
 // LogJobFailed logs job failure
 func (jl *JobLogger) LogJobFailed(job *Job, err error) {
-	jl.logger.Printf("Job failed: %s (error: %v, id: %s, retries: %d/%d)", job.Type, err, job.ID, job.Retries, job.MaxRetries)
+	logging.Z().Info(fmt.Sprintf("Job failed: %s (error: %v, id: %s, retries: %d/%d)", job.Type, err, job.ID, job.Retries, job.MaxRetries))
 }
 
 // LogJobRetry logs job retry
 func (jl *JobLogger) LogJobRetry(job *Job) {
-	jl.logger.Printf("Job retrying: %s (attempt: %d/%d, id: %s)", job.Type, job.Retries+1, job.MaxRetries, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job retrying: %s (attempt: %d/%d, id: %s)", job.Type, job.Retries+1, job.MaxRetries, job.ID))
 }
 
 // CreateJob creates a new job

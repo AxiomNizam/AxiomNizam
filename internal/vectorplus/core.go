@@ -1,9 +1,10 @@
 package vectorplus
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"math"
 	"sort"
 	"sync"
@@ -91,7 +92,7 @@ func (idx *Index) loadState() {
 
 	resp, err := etcdClient.Get(ctx, idx.stateKey)
 	if err != nil {
-		log.Printf("vectorplus: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("vectorplus: failed to load persisted state from etcd: %v", err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -100,7 +101,7 @@ func (idx *Index) loadState() {
 
 	var state indexState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("vectorplus: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("vectorplus: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -128,7 +129,7 @@ func (idx *Index) persistStateLocked() {
 	state := indexState{Dim: idx.dim, Records: idx.records}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("vectorplus: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("vectorplus: failed to encode state: %v", err))
 		return
 	}
 
@@ -136,7 +137,7 @@ func (idx *Index) persistStateLocked() {
 	defer cancel()
 
 	if _, err := etcdClient.Put(ctx, idx.stateKey, string(payload)); err != nil {
-		log.Printf("vectorplus: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("vectorplus: failed to persist state to etcd: %v", err))
 	}
 }
 

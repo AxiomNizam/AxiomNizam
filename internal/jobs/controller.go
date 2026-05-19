@@ -13,9 +13,9 @@ package jobs
 // =====================================================
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -204,7 +204,7 @@ func (c *JobController) Start(ctx context.Context) {
 			defer wg.Done()
 			w := workqueue.NewWorker(c.queue, process, 20)
 			if err := w.Run(wctx); err != nil {
-				log.Printf("[jobs] reconciler worker exited: %v", err)
+				logging.Z().Info(fmt.Sprintf("[jobs] reconciler worker exited: %v", err))
 			}
 		}()
 	}

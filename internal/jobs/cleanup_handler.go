@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -40,7 +40,6 @@ type CleanupOperation struct {
 // DataCleanupService handles data cleanup operations
 type DataCleanupService struct {
 	config     *DataCleanupConfig
-	logger     *log.Logger
 	operations map[string]*CleanupOperation
 }
 
@@ -52,7 +51,6 @@ func NewDataCleanupService(config *DataCleanupConfig) *DataCleanupService {
 
 	return &DataCleanupService{
 		config:     config,
-		logger:     log.New(log.Writer(), "[CLEANUP_SERVICE] ", log.LstdFlags),
 		operations: make(map[string]*CleanupOperation),
 	}
 }
@@ -67,7 +65,7 @@ func (dcs *DataCleanupService) CleanupLogs(ctx context.Context, retentionDays in
 		Config:        dcs.config,
 	}
 
-	dcs.logger.Printf("Starting log cleanup (retention: %d days)", retentionDays)
+	logging.Z().Info(fmt.Sprintf("Starting log cleanup (retention: %d days)", retentionDays))
 
 	// Simulate log cleanup
 	// In real implementation, this would query a logs database/table
@@ -88,7 +86,7 @@ func (dcs *DataCleanupService) CleanupLogs(ctx context.Context, retentionDays in
 		}
 
 		itemsDeleted += batchSize
-		dcs.logger.Printf("Deleted %d log entries (batch)", batchSize)
+		logging.Z().Info(fmt.Sprintf("Deleted %d log entries (batch)", batchSize))
 
 		time.Sleep(100 * time.Millisecond) // Simulate DB operation
 	}
@@ -98,7 +96,7 @@ func (dcs *DataCleanupService) CleanupLogs(ctx context.Context, retentionDays in
 	now := time.Now()
 	operation.EndTime = &now
 
-	dcs.logger.Printf("Log cleanup completed: deleted %d entries", itemsDeleted)
+	logging.Z().Info(fmt.Sprintf("Log cleanup completed: deleted %d entries", itemsDeleted))
 	dcs.operations[operation.ID] = operation
 
 	return operation, nil
@@ -114,7 +112,7 @@ func (dcs *DataCleanupService) CleanupExpiredTokens(ctx context.Context) (*Clean
 		Config:        dcs.config,
 	}
 
-	dcs.logger.Printf("Starting expired tokens cleanup")
+	logging.Z().Info(fmt.Sprintf("Starting expired tokens cleanup"))
 
 	// Simulate token cleanup
 	itemsDeleted := 0
@@ -133,7 +131,7 @@ func (dcs *DataCleanupService) CleanupExpiredTokens(ctx context.Context) (*Clean
 		}
 
 		itemsDeleted += batchSize
-		dcs.logger.Printf("Deleted %d expired tokens (batch)", batchSize)
+		logging.Z().Info(fmt.Sprintf("Deleted %d expired tokens (batch)", batchSize))
 
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -143,7 +141,7 @@ func (dcs *DataCleanupService) CleanupExpiredTokens(ctx context.Context) (*Clean
 	now := time.Now()
 	operation.EndTime = &now
 
-	dcs.logger.Printf("Token cleanup completed: deleted %d tokens", itemsDeleted)
+	logging.Z().Info(fmt.Sprintf("Token cleanup completed: deleted %d tokens", itemsDeleted))
 	dcs.operations[operation.ID] = operation
 
 	return operation, nil
@@ -159,7 +157,7 @@ func (dcs *DataCleanupService) CleanupOldSessions(ctx context.Context, olderThan
 		Config:        dcs.config,
 	}
 
-	dcs.logger.Printf("Starting old sessions cleanup (older than %d days)", olderThanDays)
+	logging.Z().Info(fmt.Sprintf("Starting old sessions cleanup (older than %d days)", olderThanDays))
 
 	// Simulate session cleanup
 	itemsDeleted := 0
@@ -178,7 +176,7 @@ func (dcs *DataCleanupService) CleanupOldSessions(ctx context.Context, olderThan
 		}
 
 		itemsDeleted += batchSize
-		dcs.logger.Printf("Deleted %d old sessions (batch)", batchSize)
+		logging.Z().Info(fmt.Sprintf("Deleted %d old sessions (batch)", batchSize))
 
 		time.Sleep(75 * time.Millisecond)
 	}
@@ -188,7 +186,7 @@ func (dcs *DataCleanupService) CleanupOldSessions(ctx context.Context, olderThan
 	now := time.Now()
 	operation.EndTime = &now
 
-	dcs.logger.Printf("Session cleanup completed: deleted %d sessions", itemsDeleted)
+	logging.Z().Info(fmt.Sprintf("Session cleanup completed: deleted %d sessions", itemsDeleted))
 	dcs.operations[operation.ID] = operation
 
 	return operation, nil
@@ -204,7 +202,7 @@ func (dcs *DataCleanupService) CleanupTemporaryFiles(ctx context.Context, olderT
 		Config:        dcs.config,
 	}
 
-	dcs.logger.Printf("Starting temporary files cleanup (older than %d hours)", olderThanHours)
+	logging.Z().Info(fmt.Sprintf("Starting temporary files cleanup (older than %d hours)", olderThanHours))
 
 	// Simulate file cleanup
 	itemsDeleted := 0
@@ -223,7 +221,7 @@ func (dcs *DataCleanupService) CleanupTemporaryFiles(ctx context.Context, olderT
 		}
 
 		itemsDeleted += batchSize
-		dcs.logger.Printf("Deleted %d temporary files (batch)", batchSize)
+		logging.Z().Info(fmt.Sprintf("Deleted %d temporary files (batch)", batchSize))
 
 		time.Sleep(60 * time.Millisecond)
 	}
@@ -233,7 +231,7 @@ func (dcs *DataCleanupService) CleanupTemporaryFiles(ctx context.Context, olderT
 	now := time.Now()
 	operation.EndTime = &now
 
-	dcs.logger.Printf("Temporary files cleanup completed: deleted %d files", itemsDeleted)
+	logging.Z().Info(fmt.Sprintf("Temporary files cleanup completed: deleted %d files", itemsDeleted))
 	dcs.operations[operation.ID] = operation
 
 	return operation, nil
@@ -250,14 +248,12 @@ func (dcs *DataCleanupService) GetOperation(operationID string) (*CleanupOperati
 // DataCleanupJobHandler handles cleanup job processing
 type DataCleanupJobHandler struct {
 	service *DataCleanupService
-	logger  *log.Logger
 }
 
 // NewDataCleanupJobHandler creates a new cleanup job handler
 func NewDataCleanupJobHandler(service *DataCleanupService) *DataCleanupJobHandler {
 	return &DataCleanupJobHandler{
 		service: service,
-		logger:  log.New(log.Writer(), "[CLEANUP_HANDLER] ", log.LstdFlags),
 	}
 }
 
@@ -269,7 +265,7 @@ func (dcjh *DataCleanupJobHandler) Handle(ctx context.Context, job *Job) error {
 		return fmt.Errorf("missing or invalid 'type' field")
 	}
 
-	dcjh.logger.Printf("Processing cleanup job %s: type=%s", job.ID, cleanupType)
+	logging.Z().Info(fmt.Sprintf("Processing cleanup job %s: type=%s", job.ID, cleanupType))
 
 	var operation *CleanupOperation
 	var err error
@@ -304,7 +300,7 @@ func (dcjh *DataCleanupJobHandler) Handle(ctx context.Context, job *Job) error {
 	}
 
 	if err != nil {
-		dcjh.logger.Printf("Cleanup job %s failed: %v", job.ID, err)
+		logging.Z().Info(fmt.Sprintf("Cleanup job %s failed: %v", job.ID, err))
 		return err
 	}
 
@@ -317,7 +313,7 @@ func (dcjh *DataCleanupJobHandler) Handle(ctx context.Context, job *Job) error {
 		"completed_at":   operation.EndTime,
 	}
 
-	dcjh.logger.Printf("Cleanup job %s completed: deleted %d items", job.ID, operation.ItemsDeleted)
+	logging.Z().Info(fmt.Sprintf("Cleanup job %s completed: deleted %d items", job.ID, operation.ItemsDeleted))
 	return nil
 }
 

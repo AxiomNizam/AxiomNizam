@@ -1,10 +1,10 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -22,7 +22,6 @@ type RedisQueue struct {
 	queueKey      string
 	dlqKey        string
 	processingKey string
-	logger        *log.Logger
 	mu            sync.RWMutex
 }
 
@@ -48,7 +47,6 @@ func NewRedisQueue(redisAddr string) (*RedisQueue, error) {
 		queueKey:      "axiom:jobs:queue",
 		dlqKey:        "axiom:jobs:dlq",
 		processingKey: "axiom:jobs:processing",
-		logger:        log.New(log.Writer(), "[REDIS_QUEUE] ", log.LstdFlags),
 	}, nil
 }
 
@@ -78,7 +76,7 @@ func (rq *RedisQueue) Submit(ctx context.Context, job *Job) error {
 		return fmt.Errorf("failed to store job data: %w", err)
 	}
 
-	rq.logger.Printf("Job submitted: %s (priority: %d)", job.ID, job.Priority)
+	logging.Z().Info(fmt.Sprintf("Job submitted: %s (priority: %d)", job.ID, job.Priority))
 	return nil
 }
 
@@ -120,7 +118,7 @@ func (rq *RedisQueue) UpdateStatus(ctx context.Context, jobID string, status Job
 		return fmt.Errorf("failed to update job: %w", err)
 	}
 
-	rq.logger.Printf("Job status updated: %s -> %s", jobID, status)
+	logging.Z().Info(fmt.Sprintf("Job status updated: %s -> %s", jobID, status))
 	return nil
 }
 
@@ -139,7 +137,7 @@ func (rq *RedisQueue) Delete(ctx context.Context, jobID string) error {
 		return fmt.Errorf("failed to delete job data: %w", err)
 	}
 
-	rq.logger.Printf("Job deleted: %s", jobID)
+	logging.Z().Info(fmt.Sprintf("Job deleted: %s", jobID))
 	return nil
 }
 
@@ -203,7 +201,7 @@ func (rq *RedisQueue) Dequeue(ctx context.Context) (*Job, error) {
 	data, _ := json.Marshal(job)
 	rq.client.HSet(ctx, fmt.Sprintf("job:%s", jobID), "data", data)
 
-	rq.logger.Printf("Job dequeued: %s", jobID)
+	logging.Z().Info(fmt.Sprintf("Job dequeued: %s", jobID))
 	return job, nil
 }
 
@@ -229,7 +227,7 @@ func (rq *RedisQueue) Requeue(ctx context.Context, jobID string) error {
 		rq.client.HSet(ctx, fmt.Sprintf("job:%s", jobID), "data", data)
 	}
 
-	rq.logger.Printf("Job requeued: %s", jobID)
+	logging.Z().Info(fmt.Sprintf("Job requeued: %s", jobID))
 	return nil
 }
 
@@ -294,7 +292,7 @@ func (rq *RedisQueue) Clear(ctx context.Context) error {
 	rq.client.Del(ctx, rq.queueKey)
 	rq.client.Del(ctx, rq.processingKey)
 
-	rq.logger.Printf("Queue cleared (%d jobs)", len(jobIDs))
+	logging.Z().Info(fmt.Sprintf("Queue cleared (%d jobs)", len(jobIDs)))
 	return nil
 }
 
@@ -339,7 +337,7 @@ func (rq *RedisQueue) MoveToDeadLetter(ctx context.Context, jobID string) error 
 	data, _ := json.Marshal(job)
 	rq.client.HSet(ctx, fmt.Sprintf("job:%s", jobID), "data", data)
 
-	rq.logger.Printf("Job moved to DLQ: %s", jobID)
+	logging.Z().Info(fmt.Sprintf("Job moved to DLQ: %s", jobID))
 	return nil
 }
 
@@ -380,7 +378,6 @@ func (rq *RedisQueue) Close() error {
 type RedisQueueCluster struct {
 	client   *redis.ClusterClient
 	queueKey string
-	logger   *log.Logger
 }
 
 // NewRedisQueueCluster creates a Redis cluster-backed queue
@@ -399,7 +396,6 @@ func NewRedisQueueCluster(nodes []string) (*RedisQueueCluster, error) {
 	return &RedisQueueCluster{
 		client:   client,
 		queueKey: "axiom:jobs:queue",
-		logger:   log.New(log.Writer(), "[REDIS_CLUSTER_QUEUE] ", log.LstdFlags),
 	}, nil
 }
 
@@ -422,7 +418,7 @@ func (rqc *RedisQueueCluster) Submit(ctx context.Context, job *Job) error {
 		return fmt.Errorf("failed to store job in cluster: %w", err)
 	}
 
-	rqc.logger.Printf("Job submitted to cluster: %s", job.ID)
+	logging.Z().Info(fmt.Sprintf("Job submitted to cluster: %s", job.ID))
 	return nil
 }
 

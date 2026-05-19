@@ -1,10 +1,10 @@
 package platform
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -136,7 +136,7 @@ func newPersistentBulkManager(store *platformStateStore) *persistentBulkManager 
 		},
 	}
 	if err := store.loadJSON(platformStateKeyBulk, &m.state); err != nil {
-		log.Printf("bulk state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("bulk state load failed: %v", err))
 	}
 	if m.state.Operations == nil {
 		m.state.Operations = make(map[string]*bulk.BulkOperation)
@@ -149,7 +149,7 @@ func newPersistentBulkManager(store *platformStateStore) *persistentBulkManager 
 
 func (m *persistentBulkManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyBulk, &m.state); err != nil {
-		log.Printf("bulk state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("bulk state persist failed: %v", err))
 	}
 }
 
@@ -260,7 +260,7 @@ func newPersistentEventBusManager(store *platformStateStore) *persistentEventBus
 		},
 	}
 	if err := store.loadJSON(platformStateKeyEventBus, &m.state); err != nil {
-		log.Printf("eventbus state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("eventbus state load failed: %v", err))
 	}
 	if m.state.Events == nil {
 		m.state.Events = make(map[string]*eventbus.EventBusEvent)
@@ -279,7 +279,7 @@ func newPersistentEventBusManager(store *platformStateStore) *persistentEventBus
 
 func (m *persistentEventBusManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyEventBus, &m.state); err != nil {
-		log.Printf("eventbus state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("eventbus state persist failed: %v", err))
 	}
 }
 
@@ -516,7 +516,7 @@ func newPersistentStreamManager(store *platformStateStore) *persistentStreamMana
 		},
 	}
 	if err := store.loadJSON(platformStateKeyStreams, &m.state); err != nil {
-		log.Printf("stream state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("stream state load failed: %v", err))
 	}
 	if m.state.Streams == nil {
 		m.state.Streams = make(map[string]*streaming.StreamSession)
@@ -529,7 +529,7 @@ func newPersistentStreamManager(store *platformStateStore) *persistentStreamMana
 
 func (m *persistentStreamManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyStreams, &m.state); err != nil {
-		log.Printf("stream state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("stream state persist failed: %v", err))
 	}
 }
 
@@ -640,7 +640,7 @@ func newPersistentWebhookManager(store *platformStateStore) *persistentWebhookMa
 		},
 	}
 	if err := store.loadJSON(platformStateKeyWebhooks, &m.state); err != nil {
-		log.Printf("webhook state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("webhook state load failed: %v", err))
 	}
 	if m.state.Hooks == nil {
 		m.state.Hooks = make(map[string]*webhooks.Webhook)
@@ -653,7 +653,7 @@ func newPersistentWebhookManager(store *platformStateStore) *persistentWebhookMa
 
 func (m *persistentWebhookManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyWebhooks, &m.state); err != nil {
-		log.Printf("webhook state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("webhook state persist failed: %v", err))
 	}
 }
 
@@ -768,7 +768,7 @@ func newPersistentTenantManager(store *platformStateStore) *persistentTenantMana
 		},
 	}
 	if err := store.loadJSON(platformStateKeyTenants, &m.state); err != nil {
-		log.Printf("tenant state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("tenant state load failed: %v", err))
 	}
 	if m.state.Tenants == nil {
 		m.state.Tenants = make(map[string]*tenant.Tenant)
@@ -784,7 +784,7 @@ func newPersistentTenantManager(store *platformStateStore) *persistentTenantMana
 
 func (m *persistentTenantManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyTenants, &m.state); err != nil {
-		log.Printf("tenant state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("tenant state persist failed: %v", err))
 	}
 }
 
@@ -1066,7 +1066,7 @@ func newPersistentVersionManager(store *platformStateStore) *persistentVersionMa
 		},
 	}
 	if err := store.loadJSON(platformStateKeyVersion, &m.state); err != nil {
-		log.Printf("versioning state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("versioning state load failed: %v", err))
 	}
 	if m.state.Versions == nil {
 		m.state.Versions = make(map[string][]*versioning.ResourceVersion)
@@ -1086,7 +1086,7 @@ func versionKey(resourceType, resourceID string) string {
 
 func (m *persistentVersionManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyVersion, &m.state); err != nil {
-		log.Printf("versioning state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("versioning state persist failed: %v", err))
 	}
 }
 
@@ -1263,7 +1263,7 @@ func newPersistentLineageCoreManager(store *platformStateStore) *persistentLinea
 		},
 	}
 	if err := store.loadJSON(platformStateKeyLineage, &m.state); err != nil {
-		log.Printf("lineage state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("lineage state load failed: %v", err))
 	}
 	if m.state.Nodes == nil {
 		m.state.Nodes = make(map[string]*lineage.LineageNode)
@@ -1279,7 +1279,7 @@ func newPersistentLineageCoreManager(store *platformStateStore) *persistentLinea
 
 func (m *persistentLineageCoreManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyLineage, &m.state); err != nil {
-		log.Printf("lineage state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("lineage state persist failed: %v", err))
 	}
 }
 
@@ -1464,7 +1464,7 @@ func newPersistentTracingCoreManager(store *platformStateStore) *persistentTraci
 		},
 	}
 	if err := store.loadJSON(platformStateKeyTracing, &m.state); err != nil {
-		log.Printf("tracing state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("tracing state load failed: %v", err))
 	}
 	if m.state.Traces == nil {
 		m.state.Traces = make(map[string]*tracing.Trace)
@@ -1483,7 +1483,7 @@ func newPersistentTracingCoreManager(store *platformStateStore) *persistentTraci
 
 func (m *persistentTracingCoreManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyTracing, &m.state); err != nil {
-		log.Printf("tracing state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("tracing state persist failed: %v", err))
 	}
 }
 
@@ -1912,7 +1912,7 @@ func newPersistentExportCoreManager(store *platformStateStore) *persistentExport
 		},
 	}
 	if err := store.loadJSON(platformStateKeyExport, &m.state); err != nil {
-		log.Printf("export state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("export state load failed: %v", err))
 	}
 	if m.state.Exports == nil {
 		m.state.Exports = make(map[string]*exportpkg.ExportJob)
@@ -1925,7 +1925,7 @@ func newPersistentExportCoreManager(store *platformStateStore) *persistentExport
 
 func (m *persistentExportCoreManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyExport, &m.state); err != nil {
-		log.Printf("export state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("export state persist failed: %v", err))
 	}
 }
 
@@ -2033,7 +2033,7 @@ func newPersistentRBACCoreManager(store *platformStateStore) *persistentRBACCore
 		},
 	}
 	if err := store.loadJSON(platformStateKeyRBAC, &m.state); err != nil {
-		log.Printf("rbac state load failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("rbac state load failed: %v", err))
 	}
 	if m.state.Roles == nil {
 		m.state.Roles = make(map[string]*rbac.Role)
@@ -2052,7 +2052,7 @@ func newPersistentRBACCoreManager(store *platformStateStore) *persistentRBACCore
 
 func (m *persistentRBACCoreManager) persist() {
 	if err := m.store.saveJSON(platformStateKeyRBAC, &m.state); err != nil {
-		log.Printf("rbac state persist failed: %v", err)
+		logging.Z().Info(fmt.Sprintf("rbac state persist failed: %v", err))
 	}
 }
 

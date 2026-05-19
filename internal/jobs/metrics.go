@@ -3,7 +3,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"example.com/axiomnizam/internal/events"
@@ -43,7 +42,6 @@ type MetricsCollector struct {
 	processorWorkerCount   prometheus.Gauge
 	processorSuccessRate   prometheus.Gauge
 
-	logger *log.Logger
 }
 
 // NewMetricsCollector creates a new metrics collector
@@ -227,7 +225,6 @@ func NewMetricsCollector(namespace string) *MetricsCollector {
 			Help:      "Job success rate (0-1)",
 		}),
 
-		logger: log.New(log.Writer(), "[METRICS] ", log.LstdFlags),
 	}
 
 	return mc
@@ -352,14 +349,12 @@ func StartMetricsCollection(ctx context.Context, manager JobManager, collector *
 // MetricsMiddleware provides middleware for recording job metrics
 type MetricsMiddleware struct {
 	collector *MetricsCollector
-	logger    *log.Logger
 }
 
 // NewMetricsMiddleware creates a new metrics middleware
 func NewMetricsMiddleware(collector *MetricsCollector) *MetricsMiddleware {
 	return &MetricsMiddleware{
 		collector: collector,
-		logger:    log.New(log.Writer(), "[METRICS_MIDDLEWARE] ", log.LstdFlags),
 	}
 }
 
@@ -405,14 +400,12 @@ func (mm *MetricsMiddleware) WrapEventHandler(eventType events.EventType, handle
 // MetricsExporter exports metrics in Prometheus format
 type MetricsExporter struct {
 	collector *MetricsCollector
-	logger    *log.Logger
 }
 
 // NewMetricsExporter creates a new metrics exporter
 func NewMetricsExporter(collector *MetricsCollector) *MetricsExporter {
 	return &MetricsExporter{
 		collector: collector,
-		logger:    log.New(log.Writer(), "[METRICS_EXPORTER] ", log.LstdFlags),
 	}
 }
 
@@ -463,7 +456,6 @@ func (me *MetricsExporter) Export() string {
 type HealthMetrics struct {
 	collector *MetricsCollector
 	manager   JobManager
-	logger    *log.Logger
 }
 
 // NewHealthMetrics creates health metrics monitor
@@ -471,7 +463,6 @@ func NewHealthMetrics(collector *MetricsCollector, manager JobManager) *HealthMe
 	return &HealthMetrics{
 		collector: collector,
 		manager:   manager,
-		logger:    log.New(log.Writer(), "[HEALTH_METRICS] ", log.LstdFlags),
 	}
 }
 

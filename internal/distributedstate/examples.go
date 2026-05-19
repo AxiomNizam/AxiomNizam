@@ -1,16 +1,16 @@
 package distributedstate
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"time"
 )
 
 func ExampleEtcdStore() {
 	store, err := NewEtcdStateStore([]string{"localhost:2379"})
 	if err != nil {
-		log.Fatal(err)
+		logging.Z().Fatal(err)
 	}
 	defer store.Close()
 
@@ -21,7 +21,7 @@ func ExampleEtcdStore() {
 
 	value, err := store.Get(ctx, "config/app")
 	if err != nil {
-		log.Fatal(err)
+		logging.Z().Fatal(err)
 	}
 
 	fmt.Println("Config:", value)
@@ -58,7 +58,7 @@ func ExampleDistributedLock() {
 
 	acquired, err := lock.Acquire(ctx)
 	if err != nil || !acquired {
-		log.Fatal("Failed to acquire lock")
+		logging.Z().Fatal("Failed to acquire lock")
 	}
 	fmt.Println("Lock acquired")
 
@@ -83,7 +83,7 @@ func ExampleLeaderElection() {
 
 	go func() {
 		if err := election.Start(ctx); err != nil {
-			log.Fatal(err)
+			logging.Z().Fatal(err)
 		}
 	}()
 

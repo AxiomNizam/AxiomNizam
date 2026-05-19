@@ -1,9 +1,9 @@
 package services
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 
 	"example.com/axiomnizam/internal/models"
 	"example.com/axiomnizam/internal/repositories"
@@ -35,7 +35,6 @@ type AuthService interface {
 type authService struct {
 	*BaseService
 	userRepo repositories.UserRepository
-	logger   *log.Logger
 }
 
 // NewAuthService creates a new auth service
@@ -43,7 +42,6 @@ func NewAuthService(userRepo repositories.UserRepository, validator *utils.Input
 	return &authService{
 		BaseService: NewBaseService(validator, sqlProtection),
 		userRepo:    userRepo,
-		logger:      log.New(log.Writer(), "[AUTH_SERVICE] ", log.LstdFlags),
 	}
 }
 
@@ -69,7 +67,7 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 	user, err := s.userRepo.GetByEmail(ctx, username)
 	if err != nil {
 		if err == repositories.ErrNotFound {
-			s.logger.Printf("LOGIN_ATTEMPT_FAILED: email=%s, reason=not_found", username)
+			logging.Z().Info(fmt.Sprintf("LOGIN_ATTEMPT_FAILED: email=%s, reason=not_found", username))
 			// Don't reveal if user exists
 			return nil, "", ErrUnauthorized
 		}
@@ -80,7 +78,7 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 	// TODO: Verify password hash
 	// This should use bcrypt or similar to compare hashed passwords
 	// if !VerifyPasswordHash(user.PasswordHash, password) {
-	//     s.logger.Printf("LOGIN_ATTEMPT_FAILED: username=%s, reason=invalid_password", username)
+	//     logging.Z().Info(fmt.Sprintf("LOGIN_ATTEMPT_FAILED: username=%s, reason=invalid_password", username))
 	//     return nil, "", ErrUnauthorized
 	// }
 
@@ -88,7 +86,7 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 	// TODO: Implement JWT token generation
 	token := "jwt-token-placeholder"
 
-	s.logger.Printf("LOGIN_SUCCESS: username=%s, user_id=%s", username, user.ID)
+	logging.Z().Info(fmt.Sprintf("LOGIN_SUCCESS: username=%s, user_id=%s", username, user.ID))
 	return user, token, nil
 }
 
@@ -127,7 +125,7 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrInternalServer
 	}
 	if existsByEmail {
-		s.logger.Printf("REGISTER_FAILED: email=%s, reason=already_exists", user.Email)
+		logging.Z().Info(fmt.Sprintf("REGISTER_FAILED: email=%s, reason=already_exists", user.Email))
 		return nil, ErrDuplicateEntry
 	}
 
@@ -145,7 +143,7 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrInternalServer
 	}
 
-	s.logger.Printf("REGISTER_SUCCESS: email=%s, name=%s, user_id=%d", user.Email, user.Name, user.ID)
+	logging.Z().Info(fmt.Sprintf("REGISTER_SUCCESS: email=%s, name=%s, user_id=%d", user.Email, user.Name, user.ID))
 	return user, nil
 }
 

@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"net/smtp"
 	"time"
 )
@@ -37,7 +37,6 @@ func DefaultEmailConfig() *EmailConfig {
 // EmailService handles email sending
 type EmailService struct {
 	config  *EmailConfig
-	logger  *log.Logger
 	manager JobManager
 }
 
@@ -49,7 +48,6 @@ func NewEmailService(config *EmailConfig) *EmailService {
 
 	return &EmailService{
 		config: config,
-		logger: log.New(log.Writer(), "[EMAIL_SERVICE] ", log.LstdFlags),
 	}
 }
 
@@ -67,7 +65,7 @@ func (es *EmailService) sendWithRetry(ctx context.Context, to string, subject st
 
 	for attempt := 0; attempt <= es.config.RetryCount; attempt++ {
 		if attempt > 0 {
-			es.logger.Printf("Retrying email send to %s (attempt %d)", to, attempt)
+			logging.Z().Info(fmt.Sprintf("Retrying email send to %s (attempt %d)", to, attempt))
 			select {
 			case <-time.After(es.config.RetryDelay):
 			case <-ctx.Done():
@@ -77,12 +75,12 @@ func (es *EmailService) sendWithRetry(ctx context.Context, to string, subject st
 
 		err := es.send(ctx, to, subject, body)
 		if err == nil {
-			es.logger.Printf("Email sent successfully to: %s", to)
+			logging.Z().Info(fmt.Sprintf("Email sent successfully to: %s", to))
 			return nil
 		}
 
 		lastErr = err
-		es.logger.Printf("Error sending email (attempt %d): %v", attempt+1, err)
+		logging.Z().Info(fmt.Sprintf("Error sending email (attempt %d): %v", attempt+1, err))
 	}
 
 	return lastErr
@@ -141,14 +139,12 @@ func (es *EmailService) send(ctx context.Context, to string, subject string, bod
 // EmailJobHandler handles email job processing
 type EmailJobHandler struct {
 	service *EmailService
-	logger  *log.Logger
 }
 
 // NewEmailJobHandler creates a new email job handler
 func NewEmailJobHandler(emailService *EmailService) *EmailJobHandler {
 	return &EmailJobHandler{
 		service: emailService,
-		logger:  log.New(log.Writer(), "[EMAIL_HANDLER] ", log.LstdFlags),
 	}
 }
 
@@ -171,12 +167,12 @@ func (ejh *EmailJobHandler) Handle(ctx context.Context, job *Job) error {
 	}
 
 	// Log attempt
-	ejh.logger.Printf("Processing email job %s: sending to %s", job.ID, to)
+	logging.Z().Info(fmt.Sprintf("Processing email job %s: sending to %s", job.ID, to))
 
 	// Send email
 	err := ejh.service.SendEmail(to, subject, body)
 	if err != nil {
-		ejh.logger.Printf("Email job %s failed: %v", job.ID, err)
+		logging.Z().Info(fmt.Sprintf("Email job %s failed: %v", job.ID, err))
 		return err
 	}
 
@@ -187,7 +183,7 @@ func (ejh *EmailJobHandler) Handle(ctx context.Context, job *Job) error {
 		"status":  "sent",
 	}
 
-	ejh.logger.Printf("Email job %s completed successfully", job.ID)
+	logging.Z().Info(fmt.Sprintf("Email job %s completed successfully", job.ID))
 	return nil
 }
 
@@ -201,14 +197,12 @@ type EmailTemplate struct {
 // EmailTemplateService manages email templates
 type EmailTemplateService struct {
 	templates map[string]*EmailTemplate
-	logger    *log.Logger
 }
 
 // NewEmailTemplateService creates a new email template service
 func NewEmailTemplateService() *EmailTemplateService {
 	return &EmailTemplateService{
 		templates: make(map[string]*EmailTemplate),
-		logger:    log.New(log.Writer(), "[EMAIL_TEMPLATE] ", log.LstdFlags),
 	}
 }
 
@@ -219,7 +213,7 @@ func (ets *EmailTemplateService) RegisterTemplate(id string, subject string, bod
 		Subject: subject,
 		Body:    body,
 	}
-	ets.logger.Printf("Template registered: %s", id)
+	logging.Z().Info(fmt.Sprintf("Template registered: %s", id))
 }
 
 // GetTemplate retrieves an email template
@@ -301,7 +295,6 @@ type BulkEmailJob struct {
 	Subject    string
 	Body       string
 	Manager    JobManager
-	Logger     *log.Logger
 }
 
 // NewBulkEmailJob creates a new bulk email job
@@ -311,7 +304,6 @@ func NewBulkEmailJob(recipients []string, subject string, body string, manager J
 		Subject:    subject,
 		Body:       body,
 		Manager:    manager,
-		Logger:     log.New(log.Writer(), "[BULK_EMAIL] ", log.LstdFlags),
 	}
 }
 
@@ -332,7 +324,7 @@ func (bej *BulkEmailJob) Submit(ctx context.Context) ([]string, error) {
 
 		if bej.Manager != nil {
 			if _, err := bej.Manager.SubmitJob(job); err != nil {
-				bej.Logger.Printf("Error submitting email to %s: %v", recipient, err)
+				logging.Z().Info(fmt.Sprintf("Error submitting email to %s: %v", recipient, err))
 				continue
 			}
 		}
@@ -340,6 +332,6 @@ func (bej *BulkEmailJob) Submit(ctx context.Context) ([]string, error) {
 		jobIDs = append(jobIDs, job.ID)
 	}
 
-	bej.Logger.Printf("Submitted %d email jobs out of %d recipients", len(jobIDs), len(bej.Recipients))
+	logging.Z().Info(fmt.Sprintf("Submitted %d email jobs out of %d recipients", len(jobIDs), len(bej.Recipients)))
 	return jobIDs, nil
 }

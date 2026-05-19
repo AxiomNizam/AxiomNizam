@@ -1,9 +1,10 @@
 package reviewflow
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -88,7 +89,7 @@ func (p *Pipeline) loadState() {
 
 	resp, err := etcdClient.Get(ctx, p.stateKey)
 	if err != nil {
-		log.Printf("reviewflow: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("reviewflow: failed to load persisted state from etcd: %v", err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -97,7 +98,7 @@ func (p *Pipeline) loadState() {
 
 	var state pipelineState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("reviewflow: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("reviewflow: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -122,7 +123,7 @@ func (p *Pipeline) persistStateLocked() {
 	state := pipelineState{Items: p.items}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("reviewflow: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("reviewflow: failed to encode state: %v", err))
 		return
 	}
 
@@ -130,7 +131,7 @@ func (p *Pipeline) persistStateLocked() {
 	defer cancel()
 
 	if _, err := etcdClient.Put(ctx, p.stateKey, string(payload)); err != nil {
-		log.Printf("reviewflow: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("reviewflow: failed to persist state to etcd: %v", err))
 	}
 }
 
