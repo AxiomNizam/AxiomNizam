@@ -150,18 +150,25 @@ func (e *Engine) LayerCount() int {
 
 // Start initialises the engine and begins background workers. After this
 // call, the layer list is frozen and Scan() may be called concurrently.
+// Start starts the antivirus engine with a background context.
 func (e *Engine) Start() {
+	_ = e.StartCtx(context.Background())
+}
+
+// StartCtx starts the antivirus engine with the given context.
+// Satisfies the contracts.Module lifecycle interface.
+func (e *Engine) StartCtx(ctx context.Context) error {
 	if !e.cfg.Enabled {
 		logging.Z().Info("🛡️  antivirus: engine disabled via ANTIVIRUS_ENABLED=false")
-		return
+		return nil
 	}
 
 	if !e.started.CompareAndSwap(false, true) {
 		logging.Z().Info("⚠️  antivirus: engine already started")
-		return
+		return nil
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
 	e.startTime = time.Now()
 
@@ -179,6 +186,7 @@ func (e *Engine) Start() {
 	// Background heartbeat/stats logger.
 	e.wg.Add(1)
 	go e.statsLogger(ctx)
+	return nil
 }
 
 // Shutdown gracefully stops the engine and waits for in-flight scans to
@@ -481,6 +489,15 @@ func (e *Engine) getSigDBVersion() string {
 	e.sigDBMu.RLock()
 	defer e.sigDBMu.RUnlock()
 	return e.sigDBVersion
+}
+
+// Name returns the module identifier.
+func (e *Engine) Name() string { return "antivirus" }
+
+// Stop gracefully shuts down the antivirus engine.
+func (e *Engine) Stop() error {
+	e.Shutdown(context.Background())
+	return nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

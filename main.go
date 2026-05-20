@@ -115,6 +115,9 @@ func main() {
 		log.Fatalf("Failed to initialize runtime: %v", err)
 	}
 
+	// Module registry — collects all modules for uniform lifecycle management.
+	var modules []contracts.Module
+
 	// Load configuration
 	cfg := config.LoadConfig()
 	applySecurityGuardrails(cfg)
@@ -1668,8 +1671,8 @@ func main() {
 	} else {
 		storageAPI := router.Group("/api/v1")
 		storageSys.RegisterRoutes(storageAPI)
-		storageSys.Start(ctx)
-		log.Println("✅ Object Storage module started (native backend, data:", storageCfg.DataDir, ")")
+		modules = append(modules, storageSys)
+		log.Println("✅ Object Storage module registered (native backend, data:", storageCfg.DataDir, ")")
 
 		// Wire antivirus engine to API builder scanner pipeline.
 		if storageSys.AVEngine != nil {
@@ -1686,8 +1689,17 @@ func main() {
 	} else {
 		mfaAPI := router.Group("/api/v1/mfa", authMiddleware)
 		gkSystem.RegisterRoutes(mfaAPI)
-		gkSystem.StartControllers(ctx)
-		log.Println("✅ Gatekeeper 2FA module started")
+		modules = append(modules, gkSystem)
+		log.Println("✅ Gatekeeper 2FA module registered")
+	}
+
+	// Start all registered modules.
+	for _, m := range modules {
+		if err := m.Start(ctx); err != nil {
+			log.Printf("⚠️  Module %s failed to start: %v", m.Name(), err)
+		} else {
+			log.Printf("✅ Module %s started", m.Name())
+		}
 	}
 
 	// ====================================
@@ -2767,9 +2779,13 @@ func main() {
 		log.Printf("Runtime stop error: %v", err)
 	}
 
-	// Stop object storage module
-	if storageSys != nil {
-		storageSys.Stop()
+	// Stop all registered modules (reverse order).
+	for i := len(modules) - 1; i >= 0; i-- {
+		if err := modules[i].Stop(); err != nil {
+			log.Printf("⚠️  Module %s stop error: %v", modules[i].Name(), err)
+		} else {
+			log.Printf("✅ Module %s stopped", modules[i].Name())
+		}
 	}
 
 	// Flush conductor stats to DB before exit

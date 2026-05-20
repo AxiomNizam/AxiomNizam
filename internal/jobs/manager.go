@@ -279,3 +279,22 @@ func (jm *JobManagerImpl) GetResults() <-chan *JobResult {
 	}
 	return jm.resultChan
 }
+
+// Name returns the module identifier.
+func (jm *JobManagerImpl) Name() string { return "jobs" }
+
+// Start starts the job scheduler.
+func (jm *JobManagerImpl) Start(ctx context.Context) error {
+	if ss, ok := jm.scheduler.(*SimpleScheduler); ok {
+		return ss.Start(ctx, jm.queue)
+	}
+	return nil
+}
+
+// Stop stops the job scheduler and processor.
+func (jm *JobManagerImpl) Stop() error {
+	if ss, ok := jm.scheduler.(*SimpleScheduler); ok {
+		return ss.Stop()
+	}
+	return nil
+}

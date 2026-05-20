@@ -219,7 +219,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 // RegisterRoutes mounts all object storage endpoints on the provided router group.
 // When an IAM issuer is configured, the storage route group is wrapped with JWTAuth
 // middleware so that downstream handlers can extract iam_claims for access control.
-func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
+func (s *System) RegisterRoutes(rg *gin.RouterGroup) error {
 	presignedLimit := 0
 	if raw := os.Getenv("STORAGE_PRESIGN_RATE_LIMIT_PER_MINUTE"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil {
@@ -260,6 +260,7 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 		logging.Z().Info("✅ Storage: secure presigned/IAM middleware attached to storage routes")
 	}
 	s.Handler.RegisterRoutes(rg)
+	return nil
 }
 
 type sigV4PresignSigner struct{}
@@ -268,8 +269,11 @@ func (sigV4PresignSigner) Generate(method, bucket, objectKey string, expiry time
 	return GeneratePresignedURLWithHost(method, bucket, objectKey, expiry, accessKey, secretKey, host)
 }
 
+// Name returns the module identifier.
+func (s *System) Name() string { return "storage" }
+
 // Start begins the reconciliation controller.
-func (s *System) Start(ctx context.Context) {
+func (s *System) Start(ctx context.Context) error {
 	// Initialize antivirus signature database.
 	if s.AVSigDB != nil {
 		if _, err := s.AVSigDB.Init(); err != nil {
@@ -284,10 +288,11 @@ func (s *System) Start(ctx context.Context) {
 
 	s.Controller.Start(ctx)
 	logging.Z().Info(fmt.Sprint("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)"))
+	return nil
 }
 
 // Stop gracefully shuts down the storage module.
-func (s *System) Stop() {
+func (s *System) Stop() error {
 	// Shutdown antivirus engine.
 	if s.AVEngine != nil {
 		s.AVEngine.Shutdown(context.Background())
@@ -295,4 +300,5 @@ func (s *System) Stop() {
 
 	s.Controller.Stop()
 	logging.Z().Info("✅ Storage: module stopped")
+	return nil
 }

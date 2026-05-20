@@ -508,6 +508,21 @@ func (s *System) RegisterRoutes(router *gin.Engine) {
 	logging.Z().Info("✅ IAM: all routes registered")
 }
 
+// Name returns the module identifier.
+func (s *System) Name() string { return "iam" }
+
+// Start initializes the module.
+func (s *System) Start(ctx context.Context) error {
+	logging.Z().Info("✅ IAM: module started")
+	return nil
+}
+
+// Stop gracefully shuts down the module.
+func (s *System) Stop() error {
+	logging.Z().Info("IAM: stopping")
+	return nil
+}
+
 // bootstrapSysadmin ensures the master-realm admin account exists.
 func bootstrapSysadmin(
 	userRepo *storage.PostgresUserRepository,

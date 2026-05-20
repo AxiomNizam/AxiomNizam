@@ -468,7 +468,7 @@ Migration approach:
 
 ---
 
-#### Phase 5: Fix KV Persistence Gaps
+#### Phase 5: Fix KV Persistence Gaps — **DONE**
 
 **Goal:** All in-memory state survives restarts in Raft mode.
 
@@ -490,7 +490,7 @@ These bring all modules toward the gatekeeper reference architecture.
 
 ---
 
-#### Phase 6: Define Module Lifecycle Interface
+#### Phase 6: Define Module Lifecycle Interface — **DONE**
 
 **Goal:** Common contract every module must implement.
 
@@ -846,10 +846,11 @@ Tier 1 (Critical Fixes) — Independent, any order
 ├── Phase 2: Swallowed errors
 ├── Phase 3: Unify logging
 ├── Phase 4: Dead code → repurposed with real integrations ✅
-└── Phase 5: KV persistence gaps
+└── Phase 5: KV persistence gaps ✅
 
 Tier 2 (Structural Alignment) — Sequential dependency
-├── Phase 6: Module lifecycle interface
+├── Phase 6: Module lifecycle interface ✅
+├── Phase 7: Standardize config       ← YOU ARE HERE
 ├── Phase 7: Standardize config       ← needs Phase 6
 ├── Phase 8: Standardize handlers     ← needs Phase 6
 ├── Phase 9: Standardize models       ← needs Phase 6
@@ -883,8 +884,8 @@ Tier 4 (Production Readiness) — Depends on Tier 3
 | 2. Swallowed errors | HIGH | MEDIUM | 1-2 days | **P0** |
 | 3. Unify logging | HIGH | LOW | 2-3 days | **P1** |
 | 4. Dead code cleanup | MEDIUM | LOW | 1 day | **DONE** |
-| 5. KV persistence gaps | MEDIUM | LOW | 1 day | **P1** |
-| 6. Module lifecycle interface | HIGH | MEDIUM | 2-3 days | **P1** |
+| 5. KV persistence gaps | MEDIUM | LOW | 1 day | **DONE** |
+| 6. Module lifecycle interface | HIGH | MEDIUM | 2-3 days | **DONE** |
 | 7. Standardize config | HIGH | LOW | 2-3 days | **P2** |
 | 8. Standardize handlers | HIGH | MEDIUM | 3-5 days | **P2** |
 | 9. Standardize models | MEDIUM | LOW | 2-3 days | **P2** |
@@ -924,7 +925,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6) — Phases 1-4 DONE, 8 phases PARTIAL, 13 phases TODO*
+*Last updated: 2026-05-19 (UTC+6) — Phases 1-6 DONE, 8 phases PARTIAL, 11 phases TODO*
 
 ---
 
@@ -937,7 +938,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 3. Unify logging | ✅ DONE | 2026-05-19 | 93 files migrated, zero `"log"` imports |
 | 4. Dead code repurpose | ✅ DONE | 2026-05-19 | 12 dirs restored, 4 wired (sqlfilter, keyring, evalbroker, periodic) |
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
-| 6. Module lifecycle interface | ⬜ TODO | — | Needs `contracts.Module` interface |
+| 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
 | 8. Standardize handlers | ⬜ TODO | — | Handlers still in monolith `internal/handlers/` |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |

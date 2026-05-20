@@ -340,9 +340,10 @@ func (s *System) initialize() error {
 
 // RegisterRoutes registers all HTTP routes for the 2FA module on the given router group.
 // The caller should apply auth middleware to the group before passing it.
-func (s *System) RegisterRoutes(api *gin.RouterGroup) {
+func (s *System) RegisterRoutes(api *gin.RouterGroup) error {
 	s.httpHandler.RegisterRoutes(api)
 	logging.Z().Info("✅ Gatekeeper routes registered at /api/v1/mfa")
+	return nil
 }
 
 // StartControllers starts the K8s-style reconciliation loops.
@@ -351,6 +352,21 @@ func (s *System) StartControllers(ctx context.Context) {
 		s.ctrlMgr.Start(ctx)
 		logging.Z().Info("✅ Gatekeeper: Controller manager started")
 	}
+}
+
+// Name returns the module identifier.
+func (s *System) Name() string { return "gatekeeper" }
+
+// Start initializes the module — starts controllers, schedulers, background workers.
+func (s *System) Start(ctx context.Context) error {
+	s.StartControllers(ctx)
+	return nil
+}
+
+// Stop gracefully shuts down the module.
+func (s *System) Stop() error {
+	logging.Z().Info("Gatekeeper: stopping")
+	return nil
 }
 
 // Config returns the module configuration.
