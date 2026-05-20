@@ -76,38 +76,27 @@ func (h *HTTPHandler) RegisterRoutes(api *gin.RouterGroup) {
 
 // EnrollFactor enrolls a new factor for a user.
 func (h *HTTPHandler) EnrollFactor(c *gin.Context) {
-	var req struct {
-		UserID     uuid.UUID         `json:"user_id" binding:"required"`
-		FactorType models.FactorType `json:"factor_type" binding:"required"`
-		Label      string            `json:"label"`
-		Email      string            `json:"email"`
-		Phone      string            `json:"phone"`
-	}
-
+	var req EnrollRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	result, err := h.enrollmentSvc.SetupFactor(c.Request.Context(), req.UserID, req.FactorType, req.Label)
+	result, err := h.enrollmentSvc.SetupFactor(c.Request.Context(), req.UserID, models.FactorType(req.FactorType), req.Label)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"factor_id": result.FactorID,
-		"secret":    result.Secret,
+	c.JSON(http.StatusOK, EnrollResponse{
+		FactorID: result.FactorID,
+		Secret:   result.Secret,
 	})
 }
 
 // ActivateFactor completes factor activation.
 func (h *HTTPHandler) ActivateFactor(c *gin.Context) {
-	var req struct {
-		FactorID uuid.UUID `json:"factor_id" binding:"required"`
-		Code     string    `json:"code" binding:"required"`
-	}
-
+	var req ActivateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -119,8 +108,9 @@ func (h *HTTPHandler) ActivateFactor(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"backup_codes": codes,
+	c.JSON(http.StatusOK, ActivateResponse{
+		FactorID:    req.FactorID,
+		BackupCodes: codes,
 	})
 }
 
@@ -153,7 +143,6 @@ func (h *HTTPHandler) RegenerateBackupCodes(c *gin.Context) {
 	var req struct {
 		FactorID uuid.UUID `json:"factor_id" binding:"required"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -178,12 +167,7 @@ func (h *HTTPHandler) ListFactors(c *gin.Context) {
 		return
 	}
 
-	// Strip sensitive fields before returning
-	for _, f := range factors {
-		f.Spec.EncryptedSecret = nil
-	}
-
-	c.JSON(http.StatusOK, gin.H{"factors": factors})
+	c.JSON(http.StatusOK, gin.H{"factors": FactorsToResponse(factors)})
 }
 
 // GetFactor retrieves a single factor.
@@ -196,21 +180,17 @@ func (h *HTTPHandler) GetFactor(c *gin.Context) {
 		return
 	}
 
-	// Strip sensitive fields before returning
-	if factor != nil {
-		factor.Spec.EncryptedSecret = nil
+	if factor == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "factor not found"})
+		return
 	}
 
-	c.JSON(http.StatusOK, factor)
+	c.JSON(http.StatusOK, FactorToResponse(factor))
 }
 
 // BeginChallenge starts a new MFA challenge.
 func (h *HTTPHandler) BeginChallenge(c *gin.Context) {
-	var req struct {
-		UserID   uuid.UUID `json:"user_id" binding:"required"`
-		FactorID uuid.UUID `json:"factor_id" binding:"required"`
-	}
-
+	var req BeginChallengeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -227,11 +207,7 @@ func (h *HTTPHandler) BeginChallenge(c *gin.Context) {
 
 // VerifyChallenge verifies a challenge response.
 func (h *HTTPHandler) VerifyChallenge(c *gin.Context) {
-	var req struct {
-		ChallengeID string `json:"challenge_id" binding:"required"`
-		Code        string `json:"code" binding:"required"`
-	}
-
+	var req VerifyChallengeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -243,7 +219,9 @@ func (h *HTTPHandler) VerifyChallenge(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"verified": verified})
+	c.JSON(http.StatusOK, VerifyChallengeResponse{
+		Verified: verified,
+	})
 }
 
 // EvaluatePolicy evaluates if MFA is required for a user.
@@ -264,11 +242,7 @@ func (h *HTTPHandler) EvaluatePolicy(c *gin.Context) {
 
 // ScoreRisk scores the risk of an authentication request.
 func (h *HTTPHandler) ScoreRisk(c *gin.Context) {
-	var req struct {
-		UserID    uuid.UUID `json:"user_id" binding:"required"`
-		IPAddress string    `json:"ip_address" binding:"required"`
-	}
-
+	var req ScoreRiskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -280,18 +254,17 @@ func (h *HTTPHandler) ScoreRisk(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"risk_score": score})
+	c.JSON(http.StatusOK, ScoreRiskResponse{
+		Score:     score,
+		Level:     RiskLevelForScore(score),
+		IsHigh:    score >= 61,
+		IPAddress: req.IPAddress,
+	})
 }
 
 // TrustDevice registers a trusted device.
 func (h *HTTPHandler) TrustDevice(c *gin.Context) {
-	var req struct {
-		UserID      uuid.UUID `json:"user_id" binding:"required"`
-		Fingerprint string    `json:"fingerprint" binding:"required"`
-		UserAgent   string    `json:"user_agent" binding:"required"`
-		IPAddress   string    `json:"ip_address" binding:"required"`
-	}
-
+	var req TrustDeviceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -316,7 +289,12 @@ func (h *HTTPHandler) ListTrustedDevices(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"devices": devices})
+	responses := make([]*TrustDeviceResponse, len(devices))
+	for i, d := range devices {
+		responses[i] = DeviceToResponse(d)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"devices": responses})
 }
 
 // RevokeTrustedDevice revokes a trusted device.

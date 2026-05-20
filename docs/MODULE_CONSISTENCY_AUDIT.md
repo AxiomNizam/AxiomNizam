@@ -540,19 +540,26 @@ These bring all modules toward the gatekeeper reference architecture.
 
 ---
 
-#### Phase 8: Standardize Handler Pattern
+#### Phase 8: Standardize Handler Pattern — **IN PROGRESS**
 
 **Goal:** Every module has `handlers/` with typed DTOs, mappers, clean request/response.
 
-| # | Task | Module(s) |
-|---|------|-----------|
-| 8.1 | Move `storage/admin/` handlers into `storage/handlers/` with DTOs | storage |
-| 8.2 | Move `iam/admin/` handlers into `iam/handlers/` with DTOs | iam |
-| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected modules |
-| 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers |
-| 8.5 | Add DTO structs + mappers to each module's handlers | All modules with handlers |
+| # | Task | Module(s) | Status |
+|---|------|-----------|--------|
+| 8.0 | Wire gatekeeper DTOs/mappers into http.go (reference fix) | gatekeeper | DONE |
+| 8.1 | Add storage DTOs + mappers (`admin/dto.go`, `admin/mapper.go`) | storage | DONE |
+| 8.2 | Add IAM DTOs + mappers | iam | PENDING |
+| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | PENDING (incremental) |
+| 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
+| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | PENDING |
 
 **Scope:** 10+ modules, ~40 files | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** MEDIUM
+
+**Key changes (2026-05-20):**
+- `gatekeeper/handlers/http.go` — rewrote all 15 handlers to use named DTOs from `dto.go` and mappers from `mapper.go`; fixed VerifyChallengeRequest to use string (matches service contract)
+- `storage/admin/dto.go` — 15 request/response DTO structs: CreateBucketRequest, BucketResponse, ObjectResponse, PresignURLRequest/Response, AccessKeyRequest/Response, BucketShareRequest/Response, RateLimitRequest/Response, PolicyRequest, EventResponse
+- `storage/admin/mapper.go` — 9 mapper functions: BucketToResponse, BucketsToResponse, ObjectToResponse, ObjectsToResponse, AccessKeyToResponse, ShareToResponse, EventToResponse, EventsToResponse, TimePtr
+- Monolith `internal/handlers/` (42 files, 100+ handlers) identified for incremental extraction — too large for single pass
 
 ---
 
