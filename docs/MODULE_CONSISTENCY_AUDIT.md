@@ -506,22 +506,37 @@ These bring all modules toward the gatekeeper reference architecture.
 
 ---
 
-#### Phase 7: Standardize Config Pattern
+#### Phase 7: Standardize Config Pattern — **DONE**
 
 **Goal:** Every module has a `config/` package with `DefaultConfig()`, `LoadFromEnv()`, `Validate()`.
 
-| # | Task | Module(s) |
-|---|------|-----------|
-| 7.1 | Extract `storage` inline config into `storage/config/` | storage |
-| 7.2 | Extract `iam` inline config into `iam/config/` | iam |
-| 7.3 | Create `scanner/config/` package (currently single file) | scanner |
-| 7.4 | Create `antivirus/config/` with scanner engine settings | antivirus |
-| 7.5 | Create `jobs/config/` with scheduler settings | jobs |
-| 7.6 | Create `conductor/config/` with workflow settings | conductor |
-| 7.7 | Create `cache/config/` with Redis/connection settings | cache |
-| 7.8 | Deprecate `internal/config/` god-object — split into `config/database/` for DB connections only | config |
+| # | Task | Module(s) | Status |
+|---|------|-----------|--------|
+| 7.1 | Expand `storage/config/` with rate limits, controller, timeouts, capacity | storage | DONE |
+| 7.2 | Consolidate `iam/config/` — RSA key, realm, crypto params, client defaults | iam | DONE |
+| 7.3 | Wire scanner config to sub-scanners (archivescan ratio/files, metadata thresholds) | scanner | DONE |
+| 7.4 | Create `antivirus/config/` + add entropy thresholds, engine timeouts | antivirus | DONE |
+| 7.5 | Expand `jobs/config/` — DLQ, channel sizes, health threshold; fix CreateJob() | jobs | DONE |
+| 7.6 | Expand `conductor/config/` — maxMessages, Kafka settings, stats interval | conductor | DONE |
+| 7.7 | Fix `cache/config/` TTL mismatch (15m→5m), use config defaults in manager | cache | DONE |
+| 7.8 | `internal/config/` god-object — confirmed infrastructure-only (2 importers), added Validate() | config | DONE |
 
-**Scope:** 8 modules | **Effort:** 2-3 days | **Impact:** HIGH | **Risk:** LOW
+**Scope:** 8 modules | **Effort:** 1 day | **Impact:** HIGH | **Risk:** LOW
+
+**Key changes:**
+- `storage/config/` expanded from 3 fields to 22 — rate limits, controller intervals, timeouts, capacity limits
+- `storage/access/access.go` — removed 3 direct `os.Getenv` reads, accepts `ControllerConfig` struct
+- `storage/controller/controller.go` — removed `resyncIntervalFromEnv()`/`debugEnabledFromEnv()`, accepts params
+- `iam/config/` — added RSA key, realm name, etcd timeout, bcrypt cost, client defaults
+- `iam/token/token.go`, `iam/admin/admin.go`, `iam/pgstore/pgstore.go` — reference config constants instead of hardcoded strings
+- `antivirus/config/` sub-package created (re-exports root Config for pattern consistency)
+- `antivirus/config.go` — added 10 new fields: MaxThreatLogSize, StatsLogInterval, ManualScanTimeout, 6 entropy thresholds
+- `jobs/config/` — added DLQMaxSize, DLQRetention, EmailQueueSize, ResultQueueSize, HealthFailureRate
+- `jobs/job.go` — `CreateJob()` now uses config for MaxRetries, Timeout, Priority (was hardcoded)
+- `conductor/config/` — added MaxMessages, KafkaProducerAcks, KafkaProducerRetries, StatsPersistInterval
+- `conductor/manager.go` — uses `cfg.MaxMessages` instead of hardcoded 10000
+- `cache/manager.go` — all TTL defaults now sourced from `cacheconfig.DefaultConfig()` (was 15m, now 5m)
+- `scanner/archivescan/` — added `NewScannerWithLimits()` accepting ratio limit and max files from config
 
 ---
 

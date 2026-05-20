@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/bootstrapsecrets"
+	iamconfig "example.com/axiomnizam/internal/iam/config"
 	"example.com/axiomnizam/internal/iam/admin"
 	"example.com/axiomnizam/internal/iam/authn"
 	"example.com/axiomnizam/internal/iam/authz"
@@ -50,21 +51,8 @@ type System struct {
 	RevokedStore *storage.EtcdRevokedTokenStore
 }
 
-// Config specifies IAM startup options.
-type Config struct {
-	// IssuerURL is the public URL of this IAM instance (e.g. https://api.example.com).
-	IssuerURL string
-
-	// SysadminEmail is the bootstrap sysadmin account email.
-	SysadminEmail string
-	// SysadminPassword is the bootstrap sysadmin password.
-	SysadminPassword string
-
-	// AccessTokenTTL overrides the default 15-minute access token lifetime.
-	AccessTokenTTL time.Duration
-	// RefreshTokenTTL overrides the default 7-day refresh token lifetime.
-	RefreshTokenTTL time.Duration
-}
+// Config re-exports the config type from the config subpackage.
+type Config = iamconfig.Config
 
 const (
 	issuerPrivateKeyStoreKey = "iam-rsa-private-key-pem"
@@ -178,7 +166,7 @@ func ensureSharedIssuerPrivateKeyFromEtcd(etcd *clientv3.Client) (string, error)
 }
 
 func generateRSAPrivateKeyPEM() (string, error) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	priv, err := rsa.GenerateKey(rand.Reader, iamconfig.DefaultRSAKeyBits)
 	if err != nil {
 		return "", fmt.Errorf("generate IAM RSA key: %w", err)
 	}

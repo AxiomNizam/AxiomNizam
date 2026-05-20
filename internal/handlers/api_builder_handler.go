@@ -214,7 +214,7 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 		mimetype.NewScanner(cfg.AllowedMIMETypes),
 		svg.NewScanner(),
 		macro.NewScanner(),
-		archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize),
+		archivescan.NewScannerWithLimits(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize, cfg.ArchiveCompressionRatioLimit, cfg.ArchiveMaxFiles),
 		native.NewScanner(avEngine),
 	)
 	h := &APIBuilderHandler{
@@ -252,7 +252,7 @@ func (h *APIBuilderHandler) SetAVEngine(engine *antivirus.Engine) {
 		mimetype.NewScanner(cfg.AllowedMIMETypes),
 		svg.NewScanner(),
 		macro.NewScanner(),
-		archivescan.NewScanner(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize),
+		archivescan.NewScannerWithLimits(cfg.ArchiveMaxDepth, cfg.ArchiveMaxDecompressedSize, cfg.ArchiveCompressionRatioLimit, cfg.ArchiveMaxFiles),
 		native.NewScanner(engine),
 	)
 }

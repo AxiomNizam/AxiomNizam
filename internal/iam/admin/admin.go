@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	iamconfig "example.com/axiomnizam/internal/iam/config"
 	"example.com/axiomnizam/internal/iam/authn"
 	"example.com/axiomnizam/internal/iam/authz"
 	"example.com/axiomnizam/internal/iam/identity"
@@ -271,7 +272,7 @@ func containsGrantType(grantTypes []string, target string) bool {
 func configuredRealm() string {
 	realm := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_REALM")))
 	if realm == "" {
-		realm = "axiomnizam"
+		realm = iamconfig.DefaultRealm
 	}
 	return strings.ToLower(realm)
 }

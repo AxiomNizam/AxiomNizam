@@ -1,6 +1,7 @@
 package conductor
 
 import (
+	"example.com/axiomnizam/internal/conductor/config"
 	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
@@ -29,12 +30,8 @@ type Manager struct {
 	maxMessages int
 }
 
-// Config configures the conductor.
-type Config struct {
-	RabbitMQURL  string
-	KafkaBrokers []string
-	MaxStream    int // how many recent messages to keep for live view
-}
+// Config re-exports the config type from the config subpackage.
+type Config = config.Config
 
 // NewManager creates a conductor manager.
 func NewManager(cfg Config) *Manager {
@@ -44,7 +41,7 @@ func NewManager(cfg Config) *Manager {
 		messages:    make(map[string]*Message),
 		dlq:         make(map[string]*DLQEntry),
 		maxStream:   cfg.MaxStream,
-		maxMessages: 10000,
+		maxMessages: cfg.MaxMessages,
 	}
 	if m.maxStream == 0 {
 		m.maxStream = 500

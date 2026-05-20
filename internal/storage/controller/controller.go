@@ -4,7 +4,6 @@ import (
 	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -45,14 +44,17 @@ type BucketController struct {
 
 // NewBucketController creates a new controller that reconciles BucketResources
 // against the storage backend.
-func NewBucketController(s *store.BucketStore, client models.Backend, endpoint string) *BucketController {
+func NewBucketController(s *store.BucketStore, client models.Backend, endpoint string, resyncInterval time.Duration, debug bool) *BucketController {
+	if resyncInterval <= 0 {
+		resyncInterval = defaultResyncInterval
+	}
 	return &BucketController{
 		store:          s,
 		client:         client,
 		endpoint:       endpoint,
 		pending:        make(map[string]struct{}),
-		resyncInterval: resyncIntervalFromEnv(),
-		debugEnabled:   debugEnabledFromEnv(),
+		resyncInterval: resyncInterval,
+		debugEnabled:   debug,
 	}
 }
 
@@ -348,26 +350,3 @@ func (bc *BucketController) debugf(format string, args ...interface{}) {
 	logging.Z().Info(fmt.Sprintf("Storage[debug]: "+format, args...))
 }
 
-func debugEnabledFromEnv() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_CONTROLLER_DEBUG")))
-	return v == "1" || v == "true" || v == "yes" || v == "on"
-}
-
-func resyncIntervalFromEnv() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("STORAGE_CONTROLLER_RESYNC_INTERVAL"))
-	if raw == "" {
-		return defaultResyncInterval
-	}
-	parsed, err := time.ParseDuration(raw)
-	if err != nil {
-		logging.Z().Info(fmt.Sprintf("⚠️  Storage: invalid STORAGE_CONTROLLER_RESYNC_INTERVAL=%q, using default %s", raw, defaultResyncInterval))
-		return defaultResyncInterval
-	}
-	if parsed < 5*time.Minute {
-		return 5 * time.Minute
-	}
-	if parsed > 10*time.Minute {
-		return 10 * time.Minute
-	}
-	return parsed
-}

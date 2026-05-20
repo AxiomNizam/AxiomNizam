@@ -1024,13 +1024,7 @@ func main() {
 	}
 
 	// Conductor (RabbitMQ / Kafka producer & consumer management)
-	conductorCfg := conductor.Config{
-		RabbitMQURL:  os.Getenv("RABBITMQ_URL"),
-		KafkaBrokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
-	}
-	if conductorCfg.KafkaBrokers[0] == "" {
-		conductorCfg.KafkaBrokers = nil
-	}
+	conductorCfg := conductor.LoadConfigFromEnv()
 	conductorMgr := conductor.NewManager(conductorCfg)
 	conductorMgr.InitPersistence(conns.PostgreSQL)
 	conductor.RegisterRoutes(router, conductorMgr, authMiddleware, adminOrSysMiddleware)

@@ -188,8 +188,8 @@ func NewJobManager(config *JobConfig) *JobManagerImpl {
 		processor:  NewMemoryProcessor(NewMemoryQueue(config.MaxQueueSize)),
 		scheduler:  NewSimpleScheduler(),
 		config:     config,
-		emailQueue: make(chan *Job, 100),
-		resultChan: make(chan *JobResult, 100),
+		emailQueue: make(chan *Job, config.EmailQueueSize),
+		resultChan: make(chan *JobResult, config.ResultQueueSize),
 	}
 }
 
@@ -265,7 +265,7 @@ func (jm *JobManagerImpl) Health() error {
 		return err
 	}
 
-	if stats.Failed > 0 && float64(stats.Failed)/float64(stats.Total) > 0.5 {
+	if stats.Failed > 0 && float64(stats.Failed)/float64(stats.Total) > jm.config.HealthFailureRate {
 		return fmt.Errorf("high failure rate: %d/%d", stats.Failed, stats.Total)
 	}
 

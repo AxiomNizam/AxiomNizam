@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"fmt"
+	"example.com/axiomnizam/internal/jobs/config"
 	"example.com/axiomnizam/internal/logging"
 	"context"
 	"errors"
@@ -179,41 +180,21 @@ var (
 	ErrJobTimeout     = errors.New("job timeout")
 )
 
-// JobConfig contains job configuration
-type JobConfig struct {
-	// Max size of queue
-	MaxQueueSize int
+// JobConfig re-exports the config type from the config subpackage.
+type JobConfig = config.Config
 
-	// Max retries for failed jobs
-	MaxRetries int
-
-	// Default timeout for jobs
-	DefaultTimeout time.Duration
-
-	// Default job priority
-	DefaultPriority JobPriority
-
-	// Number of worker goroutines
-	NumWorkers int
-
-	// Enable persistence
-	PersistResults bool
-
-	// Log level
-	LogLevel string
-}
+// defaultCfg holds the package-level default configuration.
+var defaultCfg = config.DefaultConfig()
 
 // DefaultJobConfig returns a default configuration
 func DefaultJobConfig() *JobConfig {
-	return &JobConfig{
-		MaxQueueSize:    10000,
-		MaxRetries:      3,
-		DefaultTimeout:  30 * time.Minute,
-		DefaultPriority: PriorityNormal,
-		NumWorkers:      10,
-		PersistResults:  true,
-		LogLevel:        "info",
-	}
+	cfg := defaultCfg
+	return &cfg
+}
+
+// SetDefaultConfig updates the package-level default configuration.
+func SetDefaultConfig(cfg JobConfig) {
+	defaultCfg = cfg
 }
 
 // JobResult represents the result of a job execution
@@ -257,19 +238,19 @@ func (jl *JobLogger) LogJobRetry(job *Job) {
 	logging.Z().Info(fmt.Sprintf("Job retrying: %s (attempt: %d/%d, id: %s)", job.Type, job.Retries+1, job.MaxRetries, job.ID))
 }
 
-// CreateJob creates a new job
+// CreateJob creates a new job using the package-level default config.
 func CreateJob(jobType JobType, data map[string]interface{}) *Job {
 	return &Job{
 		ID:         generateJobID(),
 		Type:       jobType,
 		Status:     JobStatusPending,
-		Priority:   PriorityNormal,
+		Priority:   JobPriority(defaultCfg.DefaultPriority),
 		Data:       data,
 		Result:     make(map[string]interface{}),
 		Retries:    0,
-		MaxRetries: 3,
+		MaxRetries: defaultCfg.MaxRetries,
 		CreatedAt:  time.Now(),
-		Timeout:    30 * time.Minute,
+		Timeout:    defaultCfg.DefaultTimeout,
 		Tags:       []string{},
 	}
 }

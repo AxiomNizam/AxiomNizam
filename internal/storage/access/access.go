@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +33,7 @@ type Controller struct {
 	auditLog   *events.AuditLog
 	etcd       *clientv3.Client
 	kvStore    platformstore.KVStore // Raft-compatible KV persistence (used when etcd is nil).
+	etcdTimeout time.Duration
 	rateMu     sync.Mutex
 	rateMap    map[string]*objectRateState
 	rateWindow time.Duration
@@ -44,12 +44,17 @@ type Controller struct {
 	bucketStore *store.BucketStore
 }
 
+// ControllerConfig holds configuration for the access controller.
+type ControllerConfig struct {
+	DefaultReadRateLimit  int
+	DefaultWriteRateLimit int
+	EtcdTimeout           time.Duration
+}
+
 const (
-	accessEtcdTimeout               = 3 * time.Second
-	accessPolicyPrefix              = "storage:access:policies/"
-	accessKeyPrefix                 = "storage:access:keys/"
-	accessSharePrefix               = "storage:access:shares/"
-	defaultObjectRateLimitPerMinute = 240
+	accessPolicyPrefix = "storage:access:policies/"
+	accessKeyPrefix    = "storage:access:keys/"
+	accessSharePrefix  = "storage:access:shares/"
 )
 
 type objectRateState struct {
@@ -58,37 +63,21 @@ type objectRateState struct {
 }
 
 // NewController creates an access controller.
-func NewController(auditLog *events.AuditLog) *Controller {
-	legacyLimit := defaultObjectRateLimitPerMinute
-	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_RATE_LIMIT_PER_MINUTE")); s != "" {
-		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
-			legacyLimit = parsed
-		}
+func NewController(auditLog *events.AuditLog, cfg ControllerConfig) *Controller {
+	etcdTimeout := cfg.EtcdTimeout
+	if etcdTimeout <= 0 {
+		etcdTimeout = 3 * time.Second
 	}
-
-	readLimit := legacyLimit
-	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_READ_RATE_LIMIT_PER_MINUTE")); s != "" {
-		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
-			readLimit = parsed
-		}
-	}
-
-	writeLimit := legacyLimit
-	if s := strings.TrimSpace(os.Getenv("STORAGE_OBJECT_WRITE_RATE_LIMIT_PER_MINUTE")); s != "" {
-		if parsed, err := strconv.Atoi(s); err == nil && parsed > 0 {
-			writeLimit = parsed
-		}
-	}
-
 	return &Controller{
 		policies:              make(map[string]*models.TenantPolicy),
 		accessKeys:            make(map[string]*models.AccessKey),
 		shares:                make(map[string]*models.BucketShare),
 		auditLog:              auditLog,
 		rateMap:               make(map[string]*objectRateState),
-		defaultReadRateLimit:  readLimit,
-		defaultWriteRateLimit: writeLimit,
+		defaultReadRateLimit:  cfg.DefaultReadRateLimit,
+		defaultWriteRateLimit: cfg.DefaultWriteRateLimit,
 		rateWindow:            time.Minute,
+		etcdTimeout:           etcdTimeout,
 	}
 }
 
@@ -972,7 +961,10 @@ func (ac *Controller) enforceObjectRateLimit(c *gin.Context, sc *StorageContext)
 		limit = writeLimit
 	}
 	if limit <= 0 {
-		limit = defaultObjectRateLimitPerMinute
+		limit = ac.defaultReadRateLimit
+		if limit <= 0 {
+			limit = 240
+		}
 	}
 
 	rateKey := strings.Join([]string{tenantID, bucket, opClass}, "|")
@@ -1019,7 +1011,7 @@ func (ac *Controller) loadFromEtcd() {
 	}
 
 	load := func(prefix string, fn func([]byte)) {
-		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), ac.etcdTimeout)
 		defer cancel()
 		resp, err := etcd.Get(ctx, prefix, clientv3.WithPrefix())
 		if err != nil {
@@ -1074,7 +1066,7 @@ func (ac *Controller) putEtcdJSON(key string, value interface{}) {
 
 	// Prefer etcd, fall back to KVStore.
 	if ac.etcd != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), ac.etcdTimeout)
 		defer cancel()
 		if _, err := ac.etcd.Put(ctx, key, string(data)); err != nil {
 			logging.Z().Info(fmt.Sprintf("storage access: etcd put failed for key %s: %v", key, err))
@@ -1082,7 +1074,7 @@ func (ac *Controller) putEtcdJSON(key string, value interface{}) {
 		return
 	}
 	if ac.kvStore != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), ac.etcdTimeout)
 		defer cancel()
 		if err := ac.kvStore.Put(ctx, key, string(data)); err != nil {
 			logging.Z().Info(fmt.Sprintf("storage access: kvstore put failed for key %s: %v", key, err))
@@ -1093,7 +1085,7 @@ func (ac *Controller) putEtcdJSON(key string, value interface{}) {
 func (ac *Controller) deleteEtcdKey(key string) {
 	// Prefer etcd, fall back to KVStore.
 	if ac.etcd != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), ac.etcdTimeout)
 		defer cancel()
 		if _, err := ac.etcd.Delete(ctx, key); err != nil {
 			logging.Z().Info(fmt.Sprintf("storage access: etcd delete failed for key %s: %v", key, err))
@@ -1101,7 +1093,7 @@ func (ac *Controller) deleteEtcdKey(key string) {
 		return
 	}
 	if ac.kvStore != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), ac.etcdTimeout)
 		defer cancel()
 		if err := ac.kvStore.Delete(ctx, key); err != nil {
 			logging.Z().Info(fmt.Sprintf("storage access: kvstore delete failed for key %s: %v", key, err))
@@ -1118,7 +1110,7 @@ func (ac *Controller) loadFromKVStore() {
 	}
 
 	loadKV := func(prefix string, fn func(string)) {
-		ctx, cancel := context.WithTimeout(context.Background(), accessEtcdTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), ac.etcdTimeout)
 		defer cancel()
 		entries, err := kv.List(ctx, prefix)
 		if err != nil {

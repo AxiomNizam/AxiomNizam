@@ -276,3 +276,14 @@ func (c *Config) GetIAMURL() string {
 func (c *Config) GetValkeyAddr() string {
 	return fmt.Sprintf("%s:%s", c.Valkey.Host, c.Valkey.Port)
 }
+
+// LoadFromEnv is an alias for LoadConfig for pattern consistency.
+var LoadFromEnv = LoadConfig
+
+// Validate checks the configuration for invalid values.
+func (c *Config) Validate() error {
+	if c.API.Port == "" {
+		return fmt.Errorf("config: API port must not be empty")
+	}
+	return nil
+}

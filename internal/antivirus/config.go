@@ -129,6 +129,19 @@ type Config struct {
 	// EntropyEnabled enables the entropy analysis layer.
 	// Env: ANTIVIRUS_ENTROPY_ENABLED (default: true)
 	EntropyEnabled bool
+
+	// Engine settings
+	MaxThreatLogSize  int           // max threats kept in memory (default: 1000)
+	StatsLogInterval  time.Duration // how often to log engine stats (default: 5m)
+	ManualScanTimeout time.Duration // HTTP manual scan timeout (default: 2m)
+
+	// Entropy thresholds
+	EntropyWindowSize            int     // window size in bytes (default: 256)
+	EntropyWholeFileThreshold    float64 // whole-file high entropy threshold (default: 7.5)
+	EntropyWindowThreshold       float64 // per-window high entropy threshold (default: 6.5)
+	EntropyUniformRatio          float64 // ratio of high-entropy windows to flag as packed (default: 0.80)
+	EntropyLowStubMaxWindows     int     // max low-entropy windows for packing indicator (default: 3)
+	EntropyMinAnalysisSize       int     // skip entropy for files smaller than this (default: 512)
 }
 
 // LoadConfig reads antivirus configuration from environment variables,
@@ -152,6 +165,17 @@ func LoadConfig() *Config {
 		HeuristicEnabled: envBool("ANTIVIRUS_HEURISTIC_ENABLED", true),
 		YARAEnabled:      envBool("ANTIVIRUS_YARA_ENABLED", true),
 		EntropyEnabled:   envBool("ANTIVIRUS_ENTROPY_ENABLED", true),
+
+		MaxThreatLogSize:  envInt("ANTIVIRUS_MAX_THREAT_LOG", 1000),
+		StatsLogInterval:  envDuration("ANTIVIRUS_STATS_INTERVAL", 5*time.Minute),
+		ManualScanTimeout: envDuration("ANTIVIRUS_MANUAL_SCAN_TIMEOUT", 2*time.Minute),
+
+		EntropyWindowSize:         envInt("ANTIVIRUS_ENTROPY_WINDOW_SIZE", 256),
+		EntropyWholeFileThreshold: envFloat64("ANTIVIRUS_ENTROPY_WHOLE_FILE_THRESHOLD", 7.5),
+		EntropyWindowThreshold:    envFloat64("ANTIVIRUS_ENTROPY_WINDOW_THRESHOLD", 6.5),
+		EntropyUniformRatio:       envFloat64("ANTIVIRUS_ENTROPY_UNIFORM_RATIO", 0.80),
+		EntropyLowStubMaxWindows:  envInt("ANTIVIRUS_ENTROPY_LOW_STUB_MAX_WINDOWS", 3),
+		EntropyMinAnalysisSize:    envInt("ANTIVIRUS_ENTROPY_MIN_SIZE", 512),
 	}
 }
 
@@ -286,6 +310,19 @@ func envInt64(key string, fallback int64) int64 {
 	n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 	if err != nil {
 		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: invalid int64 for %s=%q: %v, using default: %d", key, v, err, fallback))
+		return fallback
+	}
+	return n
+}
+
+func envFloat64(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil {
+		logging.Z().Info(fmt.Sprintf("⚠️  antivirus: invalid float for %s=%q: %v, using default: %f", key, v, err, fallback))
 		return fallback
 	}
 	return n

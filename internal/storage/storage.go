@@ -5,8 +5,6 @@ import (
 	"example.com/axiomnizam/internal/logging"
 	"context"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	"example.com/axiomnizam/internal/antivirus"
@@ -28,6 +26,7 @@ import (
 	"example.com/axiomnizam/internal/scanner/mimetype"
 	nativeav "example.com/axiomnizam/internal/scanner/native"
 	"example.com/axiomnizam/internal/scanner/svg"
+	storageConfig "example.com/axiomnizam/internal/storage/config"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/admin"
 	"example.com/axiomnizam/internal/storage/controller"
@@ -96,29 +95,11 @@ func (s *System) SetKVStore(kv platformstore.KVStore) {
 	logging.Z().Info("✅ Storage: KVStore persistence configured (Raft mode)")
 }
 
-// Config holds configuration for the native object storage backend.
-type Config struct {
-	DataDir       string `json:"dataDir"`       // filesystem root for object data
-	BucketPrefix  string `json:"bucketPrefix"`  // e.g., "axiom-"
-	PresignSecret string `json:"presignSecret"` // HMAC key for presign tokens
-}
+// Config re-exports the storage config type from the config sub-package.
+type Config = storageConfig.Config
 
-// DefaultConfig returns configuration populated from environment variables
-// with sensible defaults for a local native storage backend.
-func DefaultConfig() Config {
-	return Config{
-		DataDir:       getEnv("STORAGE_DATA_DIR", "/data/storage"),
-		BucketPrefix:  getEnv("STORAGE_BUCKET_PREFIX", "axiom-"),
-		PresignSecret: getEnv("STORAGE_PRESIGN_SECRET", "axiom-native-storage-default-key"),
-	}
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
+// DefaultConfig re-exports the default config constructor.
+var DefaultConfig = storageConfig.DefaultConfig
 
 // NewSystem initialises the complete object storage system.
 // Uses the built-in native filesystem backend — no external service required.
@@ -134,11 +115,15 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	bucketStore := store.NewBucketStore()
 	bucketStore.ConfigurePersistence(etcdClient)
 	tenantMgr := tenant.NewManager(cfg.BucketPrefix, bucketStore)
-	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint)
+	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint, cfg.ControllerResyncInterval, cfg.ControllerDebug)
 	policyCtrl := policy.NewController()
 	metricsCollector := storageMetrics.NewCollector()
-	auditLog := events.NewAuditLog(10000)
-	accessCtrl := access.NewController(auditLog)
+	auditLog := events.NewAuditLog(cfg.MaxAuditEvents)
+	accessCtrl := access.NewController(auditLog, access.ControllerConfig{
+		DefaultReadRateLimit:  cfg.ObjectReadRateLimit,
+		DefaultWriteRateLimit: cfg.ObjectWriteRateLimit,
+		EtcdTimeout:           cfg.EtcdTimeout,
+	})
 	accessCtrl.SetBucketStore(bucketStore)
 	accessCtrl.ConfigurePersistence(etcdClient)
 	// ── Antivirus engine ────────────────────────────────────────────
@@ -190,7 +175,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 		mimetype.NewScanner(scannerCfg.AllowedMIMETypes),
 		svg.NewScanner(),
 		macro.NewScanner(),
-		archivescan.NewScanner(scannerCfg.ArchiveMaxDepth, scannerCfg.ArchiveMaxDecompressedSize),
+		archivescan.NewScannerWithLimits(scannerCfg.ArchiveMaxDepth, scannerCfg.ArchiveMaxDecompressedSize, scannerCfg.ArchiveCompressionRatioLimit, scannerCfg.ArchiveMaxFiles),
 		nativeav.NewScanner(avEngine),
 	)
 
@@ -220,13 +205,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 // When an IAM issuer is configured, the storage route group is wrapped with JWTAuth
 // middleware so that downstream handlers can extract iam_claims for access control.
 func (s *System) RegisterRoutes(rg *gin.RouterGroup) error {
-	presignedLimit := 0
-	if raw := os.Getenv("STORAGE_PRESIGN_RATE_LIMIT_PER_MINUTE"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			presignedLimit = parsed
-		}
-	}
-	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, presignedLimit)
+	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, s.Config.PresignRateLimitPerMinute)
 
 	// JWT auth is resolved at request time (not route-registration time)
 	// so that the IAM issuer can be set after routes are registered
