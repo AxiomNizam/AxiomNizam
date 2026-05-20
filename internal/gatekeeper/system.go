@@ -158,23 +158,6 @@ func NewSystemWithKVStore(db *sql.DB, kvStore platformstore.KVStore) (*System, e
 func (s *System) SetKVStore(kv platformstore.KVStore) {
 	s.kvStore = kv
 
-	// Configure persistence on repositories
-	if s.factorRepo != nil {
-		if pg, ok := s.factorRepo.(*pgstore.FactorRepository); ok {
-			pg.ConfigureKVPersistence(kv)
-		}
-	}
-	if s.challengeRepo != nil {
-		if pg, ok := s.challengeRepo.(*pgstore.ChallengeRepository); ok {
-			pg.ConfigureKVPersistence(kv)
-		}
-	}
-	if s.backupCodeRepo != nil {
-		if pg, ok := s.backupCodeRepo.(*pgstore.BackupCodeRepository); ok {
-			pg.ConfigureKVPersistence(kv)
-		}
-	}
-
 	// Configure persistence on metrics collector
 	if s.collector != nil {
 		s.collector.ConfigureKVPersistence(kv)
@@ -272,20 +255,7 @@ func (s *System) initialize() error {
 	s.backupCodeRepo = pgstore.NewBackupCodeRepository(s.db)
 	s.trustedDevRepo = pgstore.NewTrustedDeviceRepository(s.db)
 
-	// 2. Configure KVStore persistence on repositories if available
-	if s.kvStore != nil {
-		if pg, ok := s.factorRepo.(*pgstore.FactorRepository); ok {
-			pg.ConfigureKVPersistence(s.kvStore)
-		}
-		if pg, ok := s.challengeRepo.(*pgstore.ChallengeRepository); ok {
-			pg.ConfigureKVPersistence(s.kvStore)
-		}
-		if pg, ok := s.backupCodeRepo.(*pgstore.BackupCodeRepository); ok {
-			pg.ConfigureKVPersistence(s.kvStore)
-		}
-	}
-
-	// 3. Initialize cache
+	// 2. Initialize cache
 	s.cache = gkcache.NewInMemoryStore()
 
 	// 4. Initialize TOTP service

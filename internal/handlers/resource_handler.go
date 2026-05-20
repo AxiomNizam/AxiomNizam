@@ -97,7 +97,7 @@ func NewResourceHandler(etcd *clientv3.Client) *ResourceHandler {
 	h := &ResourceHandler{
 		resources: make(map[string]map[string]map[string]*GenericResource),
 		etcd:      etcd,
-		stateKey:  "axiomnizam:resources:state",
+		stateKey:  "handlers:resources:state",
 	}
 	h.loadState()
 	return h

@@ -228,7 +228,7 @@ func NewAPIBuilderHandler(ah *AnalyticsHandler, gh *GISHandler, db map[string]*g
 		csvData:             make(map[string][][]string),
 		db:                  db,
 		etcd:                etcd,
-		stateKey:            "axiomnizam:builder:custom_apis",
+		stateKey:            "builder:custom_apis:state",
 		scanOrch:            orchestrator,
 		analyticsHandler:    ah,
 		gisHandler:          gh,

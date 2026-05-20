@@ -936,7 +936,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 2. Swallowed errors | ✅ DONE | 2026-05-19 | 20 sites across 7 audit tasks |
 | 3. Unify logging | ✅ DONE | 2026-05-19 | 93 files migrated, zero `"log"` imports |
 | 4. Dead code repurpose | ✅ DONE | 2026-05-19 | 12 dirs restored, 4 wired (sqlfilter, keyring, evalbroker, periodic) |
-| 5. KV persistence gaps | 🔶 PARTIAL | — | storage, scanner, gatekeeper, audit done; workflows/vectorplus/reviewflow pending |
+| 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ⬜ TODO | — | Needs `contracts.Module` interface |
 | 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
 | 8. Standardize handlers | ⬜ TODO | — | Handlers still in monolith `internal/handlers/` |

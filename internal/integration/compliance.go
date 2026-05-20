@@ -50,7 +50,7 @@ func NewComplianceAuditor(maxRecords int) *ComplianceAuditor {
 		policyManager: policies.GlobalPolicyManager,
 		eventRecorder: events.GlobalEventRecorder,
 		etcd:          integrationEtcdClient(),
-		stateKey:      "axiomnizam:integration:compliance:state",
+		stateKey:      "integration:compliance:state",
 	}
 	ca.loadState()
 	return ca
@@ -60,7 +60,7 @@ func (ca *ComplianceAuditor) ConfigurePersistence(etcd *clientv3.Client) {
 	ca.mu.Lock()
 	ca.etcd = etcd
 	if ca.stateKey == "" {
-		ca.stateKey = "axiomnizam:integration:compliance:state"
+		ca.stateKey = "integration:compliance:state"
 	}
 	ca.mu.Unlock()
 	ca.loadState()

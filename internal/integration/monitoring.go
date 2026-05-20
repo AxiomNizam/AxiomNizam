@@ -68,7 +68,7 @@ func NewHealthMonitor() *HealthMonitor {
 		bankManager:     apibanks.GlobalAPIBankManager,
 		metrics:         metrics.GlobalMetrics,
 		etcd:            integrationEtcdClient(),
-		stateKey:        "axiomnizam:integration:healthmonitor:state",
+		stateKey:        "integration:healthmonitor:state",
 	}
 	hm.loadState()
 	return hm
@@ -78,7 +78,7 @@ func (hm *HealthMonitor) ConfigurePersistence(etcd *clientv3.Client) {
 	hm.mu.Lock()
 	hm.etcd = etcd
 	if hm.stateKey == "" {
-		hm.stateKey = "axiomnizam:integration:healthmonitor:state"
+		hm.stateKey = "integration:healthmonitor:state"
 	}
 	hm.mu.Unlock()
 	hm.loadState()
@@ -406,7 +406,7 @@ func NewAlertManager(maxAlerts int) *AlertManager {
 		healthMonitor:    NewHealthMonitor(),
 		metricsCollector: NewPlatformMetricsCollector(),
 		etcd:             integrationEtcdClient(),
-		stateKey:         "axiomnizam:integration:alerts:state",
+		stateKey:         "integration:alerts:state",
 	}
 	am.loadState()
 	return am
@@ -416,7 +416,7 @@ func (am *AlertManager) ConfigurePersistence(etcd *clientv3.Client) {
 	am.mu.Lock()
 	am.etcd = etcd
 	if am.stateKey == "" {
-		am.stateKey = "axiomnizam:integration:alerts:state"
+		am.stateKey = "integration:alerts:state"
 	}
 	if am.healthMonitor != nil {
 		am.healthMonitor.ConfigurePersistence(etcd)

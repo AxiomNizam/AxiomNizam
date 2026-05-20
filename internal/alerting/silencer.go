@@ -9,9 +9,15 @@ package alerting
 // =====================================================
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/logging"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 )
 
 // Silence represents a time-bound alert suppression rule.
@@ -46,9 +52,10 @@ type MaintenanceWindow struct {
 
 // Silencer manages alert suppression and maintenance windows.
 type Silencer struct {
-	mu                sync.RWMutex
-	silences          map[string]*Silence
+	mu                 sync.RWMutex
+	silences           map[string]*Silence
 	maintenanceWindows map[string]*MaintenanceWindow
+	kvStore            platformstore.KVStore
 }
 
 // NewSilencer creates a new alert silencer.
@@ -66,6 +73,7 @@ func (s *Silencer) AddSilence(silence *Silence) {
 	silence.Active = true
 	silence.CreatedAt = time.Now()
 	s.silences[silence.ID] = silence
+	go s.saveToKV()
 }
 
 // RemoveSilence deactivates a silence rule.
@@ -74,6 +82,7 @@ func (s *Silencer) RemoveSilence(id string) bool {
 	defer s.mu.Unlock()
 	if sil, ok := s.silences[id]; ok {
 		sil.Active = false
+		go s.saveToKV()
 		return true
 	}
 	return false
@@ -148,6 +157,7 @@ func (s *Silencer) AddMaintenanceWindow(mw *MaintenanceWindow) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.maintenanceWindows[mw.ID] = mw
+	go s.saveToKV()
 }
 
 // RemoveMaintenanceWindow removes a maintenance window.
@@ -156,6 +166,7 @@ func (s *Silencer) RemoveMaintenanceWindow(id string) bool {
 	defer s.mu.Unlock()
 	if _, ok := s.maintenanceWindows[id]; ok {
 		delete(s.maintenanceWindows, id)
+		go s.saveToKV()
 		return true
 	}
 	return false
@@ -228,4 +239,81 @@ func (s *Silencer) inMaintenanceWindow(mw *MaintenanceWindow, now time.Time, sou
 	}
 
 	return false
+}
+
+// --- KV Persistence ---
+
+const silencerKVKey = "alerting:silencer:state"
+
+type silencerState struct {
+	Silences           map[string]*Silence           `json:"silences"`
+	MaintenanceWindows map[string]*MaintenanceWindow  `json:"maintenance_windows"`
+}
+
+// ConfigureKVPersistence enables KVStore-backed persistence for silencer state.
+func (s *Silencer) ConfigureKVPersistence(kv platformstore.KVStore) {
+	s.mu.Lock()
+	s.kvStore = kv
+	s.mu.Unlock()
+	s.loadFromKV()
+}
+
+func (s *Silencer) loadFromKV() {
+	s.mu.RLock()
+	kv := s.kvStore
+	s.mu.RUnlock()
+	if kv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	val, err := kv.Get(ctx, silencerKVKey)
+	if err != nil {
+		return
+	}
+
+	var state silencerState
+	if err := json.Unmarshal([]byte(val), &state); err != nil {
+		logging.Z().Info(fmt.Sprintf("alerting silencer: failed to unmarshal state: %v", err))
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if state.Silences != nil {
+		s.silences = state.Silences
+	}
+	if state.MaintenanceWindows != nil {
+		s.maintenanceWindows = state.MaintenanceWindows
+	}
+	logging.Z().Info(fmt.Sprintf("✅ alerting silencer: loaded persistent state (silences=%d, windows=%d)",
+		len(s.silences), len(s.maintenanceWindows)))
+}
+
+func (s *Silencer) saveToKV() {
+	s.mu.RLock()
+	kv := s.kvStore
+	if kv == nil {
+		s.mu.RUnlock()
+		return
+	}
+	state := silencerState{
+		Silences:           s.silences,
+		MaintenanceWindows: s.maintenanceWindows,
+	}
+	s.mu.RUnlock()
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := kv.Put(ctx, silencerKVKey, string(data)); err != nil {
+		logging.Z().Info(fmt.Sprintf("alerting silencer: failed to persist state: %v", err))
+	}
 }

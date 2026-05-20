@@ -58,7 +58,7 @@ func NewDataSourceHandler(etcd ...*clientv3.Client) *DataSourceHandler {
 	h := &DataSourceHandler{
 		datasources: make(map[string]*DataSourceResource),
 		etcd:        etcdClient,
-		stateKey:    "axiomnizam:datasources:state",
+		stateKey:    "handlers:datasources:state",
 	}
 	h.loadState()
 	return h

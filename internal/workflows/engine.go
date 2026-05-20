@@ -2,6 +2,7 @@ package workflows
 
 import (
 	"example.com/axiomnizam/internal/logging"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -80,6 +81,7 @@ type WorkflowEngine struct {
 	executions map[string]*WorkflowExecution
 	handlers   map[string]StepHandler
 	etcd       *clientv3.Client
+	kvStore    platformstore.KVStore
 	stateKey   string
 }
 
@@ -103,31 +105,40 @@ func NewWorkflowEngine(etcd ...*clientv3.Client) *WorkflowEngine {
 		executions: make(map[string]*WorkflowExecution),
 		handlers:   make(map[string]StepHandler),
 		etcd:       etcdClient,
-		stateKey:   "axiomnizam:workflows:state",
+		stateKey:   "workflows:engine:state",
 	}
 	we.loadState()
 	return we
 }
 
 func (we *WorkflowEngine) loadState() {
-	if we.etcd == nil {
-		return
-	}
+	var data []byte
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := we.etcd.Get(ctx, we.stateKey)
-	if err != nil {
-		logging.Z().Info(fmt.Sprintf("workflows: failed to load persisted state from etcd: %v", err))
-		return
-	}
-	if len(resp.Kvs) == 0 {
+	if we.kvStore != nil {
+		val, err := we.kvStore.Get(ctx, we.stateKey)
+		if err != nil {
+			return
+		}
+		data = []byte(val)
+	} else if we.etcd != nil {
+		resp, err := we.etcd.Get(ctx, we.stateKey)
+		if err != nil {
+			logging.Z().Info(fmt.Sprintf("workflows: failed to load persisted state from etcd: %v", err))
+			return
+		}
+		if len(resp.Kvs) == 0 {
+			return
+		}
+		data = resp.Kvs[0].Value
+	} else {
 		return
 	}
 
 	var state workflowEngineState
-	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+	if err := json.Unmarshal(data, &state); err != nil {
 		logging.Z().Info(fmt.Sprintf("workflows: failed to decode persisted state: %v", err))
 		return
 	}
@@ -141,13 +152,10 @@ func (we *WorkflowEngine) loadState() {
 
 	we.workflows = state.Workflows
 	we.executions = state.Executions
+	logging.Z().Info(fmt.Sprintf("✅ workflows: loaded persistent state (workflows=%d, executions=%d)", len(we.workflows), len(we.executions)))
 }
 
 func (we *WorkflowEngine) persistStateLocked() {
-	if we.etcd == nil {
-		return
-	}
-
 	state := workflowEngineState{
 		Workflows:  we.workflows,
 		Executions: we.executions,
@@ -161,8 +169,14 @@ func (we *WorkflowEngine) persistStateLocked() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := we.etcd.Put(ctx, we.stateKey, string(payload)); err != nil {
-		logging.Z().Info(fmt.Sprintf("workflows: failed to persist state to etcd: %v", err))
+	if we.kvStore != nil {
+		if err := we.kvStore.Put(ctx, we.stateKey, string(payload)); err != nil {
+			logging.Z().Info(fmt.Sprintf("workflows: failed to persist state to KV: %v", err))
+		}
+	} else if we.etcd != nil {
+		if _, err := we.etcd.Put(ctx, we.stateKey, string(payload)); err != nil {
+			logging.Z().Info(fmt.Sprintf("workflows: failed to persist state to etcd: %v", err))
+		}
 	}
 }
 
@@ -170,7 +184,16 @@ func (we *WorkflowEngine) ConfigurePersistence(etcd *clientv3.Client) {
 	we.mu.Lock()
 	we.etcd = etcd
 	if we.stateKey == "" {
-		we.stateKey = "axiomnizam:workflows:state"
+		we.stateKey = "workflows:engine:state"
+	}
+}
+
+// ConfigureKVPersistence sets a KVStore for Raft-mode persistence.
+func (we *WorkflowEngine) ConfigureKVPersistence(kv platformstore.KVStore) {
+	we.mu.Lock()
+	we.kvStore = kv
+	if we.stateKey == "" {
+		we.stateKey = "workflows:engine:state"
 	}
 	we.mu.Unlock()
 	we.loadState()
@@ -392,6 +415,11 @@ var GlobalWorkflowEngine = NewWorkflowEngine()
 // ConfigureGlobalPersistence configures etcd persistence for the global workflow engine.
 func ConfigureGlobalPersistence(etcd *clientv3.Client) {
 	GlobalWorkflowEngine.ConfigurePersistence(etcd)
+}
+
+// ConfigureGlobalKVPersistence configures KVStore persistence for the global workflow engine.
+func ConfigureGlobalKVPersistence(kv platformstore.KVStore) {
+	GlobalWorkflowEngine.ConfigureKVPersistence(kv)
 }
 
 // Initialize builtin handlers

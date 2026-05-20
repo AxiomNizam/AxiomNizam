@@ -3,6 +3,7 @@ package reviewflow
 import (
 	"fmt"
 	"example.com/axiomnizam/internal/logging"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"context"
 	"encoding/json"
 	"sort"
@@ -39,6 +40,7 @@ type Pipeline struct {
 	mu       sync.RWMutex
 	items    map[string]ReviewItem
 	etcd     *clientv3.Client
+	kvStore  platformstore.KVStore
 	stateKey string
 }
 
@@ -49,7 +51,9 @@ type pipelineState struct {
 var (
 	globalEtcdMu     sync.RWMutex
 	globalEtcdClient *clientv3.Client
-	defaultStateKey  = "axiomnizam:reviewflow:pipeline:state"
+	globalKVMu       sync.RWMutex
+	globalKVStore    platformstore.KVStore
+	defaultStateKey  = "reviewflow:pipeline:state"
 )
 
 func NewPipeline(etcd ...*clientv3.Client) *Pipeline {
@@ -62,7 +66,11 @@ func NewPipeline(etcd ...*clientv3.Client) *Pipeline {
 		globalEtcdMu.RUnlock()
 	}
 
-	p := &Pipeline{items: make(map[string]ReviewItem), etcd: etcdClient, stateKey: defaultStateKey}
+	globalKVMu.RLock()
+	kv := globalKVStore
+	globalKVMu.RUnlock()
+
+	p := &Pipeline{items: make(map[string]ReviewItem), etcd: etcdClient, kvStore: kv, stateKey: defaultStateKey}
 	p.loadState()
 	return p
 }
@@ -73,31 +81,56 @@ func ConfigureGlobalPersistence(etcd *clientv3.Client) {
 	globalEtcdMu.Unlock()
 }
 
+// ConfigureGlobalKVPersistence configures KVStore persistence for the global reviewflow pipeline.
+func ConfigureGlobalKVPersistence(kv platformstore.KVStore) {
+	globalKVMu.Lock()
+	globalKVStore = kv
+	globalKVMu.Unlock()
+}
+
+// ConfigureKVPersistence sets a KVStore for Raft-mode persistence.
+func (p *Pipeline) ConfigureKVPersistence(kv platformstore.KVStore) {
+	p.mu.Lock()
+	p.kvStore = kv
+	p.mu.Unlock()
+	p.loadState()
+}
+
 func (p *Pipeline) loadState() {
-	etcdClient := p.etcd
-	if etcdClient == nil {
-		globalEtcdMu.RLock()
-		etcdClient = globalEtcdClient
-		globalEtcdMu.RUnlock()
-	}
-	if etcdClient == nil {
-		return
-	}
+	var data []byte
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := etcdClient.Get(ctx, p.stateKey)
-	if err != nil {
-		logging.Z().Info(fmt.Sprintf("reviewflow: failed to load persisted state from etcd: %v", err))
-		return
-	}
-	if len(resp.Kvs) == 0 {
-		return
+	if p.kvStore != nil {
+		val, err := p.kvStore.Get(ctx, p.stateKey)
+		if err != nil {
+			return
+		}
+		data = []byte(val)
+	} else {
+		etcdClient := p.etcd
+		if etcdClient == nil {
+			globalEtcdMu.RLock()
+			etcdClient = globalEtcdClient
+			globalEtcdMu.RUnlock()
+		}
+		if etcdClient == nil {
+			return
+		}
+		resp, err := etcdClient.Get(ctx, p.stateKey)
+		if err != nil {
+			logging.Z().Info(fmt.Sprintf("reviewflow: failed to load persisted state from etcd: %v", err))
+			return
+		}
+		if len(resp.Kvs) == 0 {
+			return
+		}
+		data = resp.Kvs[0].Value
 	}
 
 	var state pipelineState
-	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
+	if err := json.Unmarshal(data, &state); err != nil {
 		logging.Z().Info(fmt.Sprintf("reviewflow: failed to decode persisted state: %v", err))
 		return
 	}
@@ -107,19 +140,10 @@ func (p *Pipeline) loadState() {
 	if state.Items != nil {
 		p.items = state.Items
 	}
+	logging.Z().Info(fmt.Sprintf("✅ reviewflow: loaded persistent state (items=%d)", len(p.items)))
 }
 
 func (p *Pipeline) persistStateLocked() {
-	etcdClient := p.etcd
-	if etcdClient == nil {
-		globalEtcdMu.RLock()
-		etcdClient = globalEtcdClient
-		globalEtcdMu.RUnlock()
-	}
-	if etcdClient == nil {
-		return
-	}
-
 	state := pipelineState{Items: p.items}
 	payload, err := json.Marshal(state)
 	if err != nil {
@@ -130,8 +154,22 @@ func (p *Pipeline) persistStateLocked() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := etcdClient.Put(ctx, p.stateKey, string(payload)); err != nil {
-		logging.Z().Info(fmt.Sprintf("reviewflow: failed to persist state to etcd: %v", err))
+	if p.kvStore != nil {
+		if err := p.kvStore.Put(ctx, p.stateKey, string(payload)); err != nil {
+			logging.Z().Info(fmt.Sprintf("reviewflow: failed to persist state to KV: %v", err))
+		}
+	} else {
+		etcdClient := p.etcd
+		if etcdClient == nil {
+			globalEtcdMu.RLock()
+			etcdClient = globalEtcdClient
+			globalEtcdMu.RUnlock()
+		}
+		if etcdClient != nil {
+			if _, err := etcdClient.Put(ctx, p.stateKey, string(payload)); err != nil {
+				logging.Z().Info(fmt.Sprintf("reviewflow: failed to persist state to etcd: %v", err))
+			}
+		}
 	}
 }
 

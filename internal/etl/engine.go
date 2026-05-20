@@ -230,7 +230,7 @@ func NewEngine(etcd ...*clientv3.Client) *Engine {
 			LastUpdated:   time.Now(),
 		},
 		etcd:     etcdClient,
-		stateKey: "axiomnizam:etl:state",
+		stateKey: "etl:engine:state",
 	}
 	e.registerConnectors()
 	if !e.loadState() {

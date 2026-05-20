@@ -83,7 +83,7 @@ func NewJobHandler(etcd ...*clientv3.Client) *JobHandler {
 	h := &JobHandler{
 		jobs:        make(map[string]*JobResource),
 		etcd:        etcdClient,
-		stateKey:    "axiomnizam:jobs:state",
+		stateKey:    "handlers:jobs:state",
 		execQueue:   workqueue.NewSimpleQueue(nil),
 		execWorkers: 4,
 	}

@@ -151,7 +151,7 @@ func NewPipelineEngine(cdc *ChangeDataCapture, etcd ...*clientv3.Client) *Pipeli
 			LastUpdated:   time.Now(),
 		},
 		etcd:     etcdClient,
-		stateKey: "axiomnizam:cdc:pipelines:state",
+		stateKey: "cdc:pipelines:state",
 	}
 	pe.registerTypes()
 	if !pe.loadState() {

@@ -1818,6 +1818,14 @@ func main() {
 				log.Println("✅ Gatekeeper: Raft KV persistence wired (deferred)")
 			}
 
+			// Wire remaining modules to KV persistence in Raft mode.
+			workflows.ConfigureGlobalKVPersistence(backendMgr.KV())
+			modes.ConfigureGlobalKVPersistence(backendMgr.KV())
+			vectorplus.ConfigureGlobalKVPersistence(backendMgr.KV())
+			reviewflow.ConfigureGlobalKVPersistence(backendMgr.KV())
+			integration.ConfigureGlobalKVPersistence(backendMgr.KV())
+			log.Println("✅ Workflows/Modes/VectorPlus/ReviewFlow/Integration: Raft KV persistence wired")
+
 			log.Println("  ℹ️  Module persistence: Raft KV available via backendMgr.KV()")
 		}
 

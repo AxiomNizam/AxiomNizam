@@ -60,7 +60,7 @@ func NewPlatformUserHandler(etcd *clientv3.Client) *PlatformUserHandler {
 	h := &PlatformUserHandler{
 		users:    make(map[string]*PlatformUser),
 		etcd:     etcd,
-		stateKey: "axiomnizam:platform:users",
+		stateKey: "handlers:users:state",
 	}
 	h.loadState()
 	return h

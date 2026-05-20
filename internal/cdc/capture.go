@@ -120,7 +120,7 @@ func NewChangeDataCapture(etcd ...*clientv3.Client) *ChangeDataCapture {
 		bufferSize:      1000,
 		maxEvents:       100000,
 		etcd:            etcdClient,
-		stateKey:        "axiomnizam:cdc:core:state",
+		stateKey:        "cdc:core:state",
 	}
 	cdc.loadState()
 	return cdc
