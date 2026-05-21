@@ -1,4 +1,4 @@
-package handlers
+package transform
 
 import (
 	"net/http"
@@ -8,20 +8,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TransformationHandler handles data transformation requests
-type TransformationHandler struct {
+// Handler handles data transformation requests
+type Handler struct {
 	transformer *utils.DataTransformer
 }
 
-// NewTransformationHandler creates a new transformation handler
-func NewTransformationHandler() *TransformationHandler {
-	return &TransformationHandler{
+// NewHandler creates a new transformation handler
+func NewHandler() *Handler {
+	return &Handler{
 		transformer: utils.NewDataTransformer(),
 	}
 }
 
 // RegisterRule handles POST /api/transform/rules
-func (th *TransformationHandler) RegisterRule(c *gin.Context) {
+func (th *Handler) RegisterRule(c *gin.Context) {
 	var rule utils.TransformationRule
 
 	if err := c.ShouldBindJSON(&rule); err != nil {
@@ -50,7 +50,7 @@ func (th *TransformationHandler) RegisterRule(c *gin.Context) {
 }
 
 // GetRule handles GET /api/transform/rules/{name}
-func (th *TransformationHandler) GetRule(c *gin.Context) {
+func (th *Handler) GetRule(c *gin.Context) {
 	name := c.Param("name")
 
 	rule, err := th.transformer.GetRule(name)
@@ -70,7 +70,7 @@ func (th *TransformationHandler) GetRule(c *gin.Context) {
 }
 
 // ListRules handles GET /api/transform/rules
-func (th *TransformationHandler) ListRules(c *gin.Context) {
+func (th *Handler) ListRules(c *gin.Context) {
 	rules := th.transformer.ListRules()
 
 	c.JSON(http.StatusOK, models.Response{
@@ -84,7 +84,7 @@ func (th *TransformationHandler) ListRules(c *gin.Context) {
 }
 
 // DeleteRule handles DELETE /api/transform/rules/{name}
-func (th *TransformationHandler) DeleteRule(c *gin.Context) {
+func (th *Handler) DeleteRule(c *gin.Context) {
 	name := c.Param("name")
 
 	if err := th.transformer.DeleteRule(name); err != nil {
@@ -105,7 +105,7 @@ func (th *TransformationHandler) DeleteRule(c *gin.Context) {
 }
 
 // Transform handles POST /api/transform/apply
-func (th *TransformationHandler) Transform(c *gin.Context) {
+func (th *Handler) Transform(c *gin.Context) {
 	var request struct {
 		RuleName string      `json:"rule_name" binding:"required"`
 		Data     interface{} `json:"data" binding:"required"`
@@ -136,7 +136,7 @@ func (th *TransformationHandler) Transform(c *gin.Context) {
 }
 
 // TransformBatch handles POST /api/transform/batch
-func (th *TransformationHandler) TransformBatch(c *gin.Context) {
+func (th *Handler) TransformBatch(c *gin.Context) {
 	var request struct {
 		RuleName string        `json:"rule_name" binding:"required"`
 		Data     []interface{} `json:"data" binding:"required"`
@@ -172,7 +172,7 @@ func (th *TransformationHandler) TransformBatch(c *gin.Context) {
 }
 
 // PreviewTransformation handles POST /api/transform/preview
-func (th *TransformationHandler) PreviewTransformation(c *gin.Context) {
+func (th *Handler) PreviewTransformation(c *gin.Context) {
 	var request struct {
 		RuleName string      `json:"rule_name" binding:"required"`
 		Data     interface{} `json:"data" binding:"required"`
@@ -209,7 +209,7 @@ func (th *TransformationHandler) PreviewTransformation(c *gin.Context) {
 }
 
 // ExportRules handles GET /api/transform/rules/export
-func (th *TransformationHandler) ExportRules(c *gin.Context) {
+func (th *Handler) ExportRules(c *gin.Context) {
 	data, err := th.transformer.ExportRules()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -225,7 +225,7 @@ func (th *TransformationHandler) ExportRules(c *gin.Context) {
 }
 
 // ImportRules handles POST /api/transform/rules/import
-func (th *TransformationHandler) ImportRules(c *gin.Context) {
+func (th *Handler) ImportRules(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -270,7 +270,7 @@ func (th *TransformationHandler) ImportRules(c *gin.Context) {
 }
 
 // TestFieldRename handles POST /api/transform/test/rename
-func (th *TransformationHandler) TestFieldRename(c *gin.Context) {
+func (th *Handler) TestFieldRename(c *gin.Context) {
 	var request struct {
 		Data     map[string]interface{} `json:"data" binding:"required"`
 		Mappings map[string]string      `json:"mappings" binding:"required"`
@@ -298,7 +298,7 @@ func (th *TransformationHandler) TestFieldRename(c *gin.Context) {
 }
 
 // TestTypeConversion handles POST /api/transform/test/types
-func (th *TransformationHandler) TestTypeConversion(c *gin.Context) {
+func (th *Handler) TestTypeConversion(c *gin.Context) {
 	var request struct {
 		Data        map[string]interface{} `json:"data" binding:"required"`
 		Conversions map[string]string      `json:"conversions" binding:"required"`
@@ -327,7 +327,7 @@ func (th *TransformationHandler) TestTypeConversion(c *gin.Context) {
 }
 
 // TestFlattening handles POST /api/transform/test/flatten
-func (th *TransformationHandler) TestFlattening(c *gin.Context) {
+func (th *Handler) TestFlattening(c *gin.Context) {
 	var request struct {
 		Data   interface{}          `json:"data" binding:"required"`
 		Config *utils.FlattenConfig `json:"config,omitempty"`
@@ -374,21 +374,21 @@ func countSuccessful(results []*utils.TransformedData) int {
 }
 
 // Make applyFieldMappings public
-func (th *TransformationHandler) ApplyFieldMappings(data map[string]interface{}, mappings map[string]string) map[string]interface{} {
+func (th *Handler) ApplyFieldMappings(data map[string]interface{}, mappings map[string]string) map[string]interface{} {
 	return th.transformer.ApplyFieldMappings(data, mappings)
 }
 
 // Make applyTypeConversions public
-func (th *TransformationHandler) ApplyTypeConversions(data map[string]interface{}, conversions map[string]string) (map[string]interface{}, []string) {
+func (th *Handler) ApplyTypeConversions(data map[string]interface{}, conversions map[string]string) (map[string]interface{}, []string) {
 	return th.transformer.ApplyTypeConversions(data, conversions)
 }
 
 // Make flattenJSON public
-func (th *TransformationHandler) ApplyFlattenJSON(data interface{}, config *utils.FlattenConfig) (map[string]interface{}, []string) {
+func (th *Handler) ApplyFlattenJSON(data interface{}, config *utils.FlattenConfig) (map[string]interface{}, []string) {
 	return th.transformer.ApplyFlattenJSON(data, config)
 }
 
 // Make flattenJSON public
-func (th *TransformationHandler) FlattenJSON(data interface{}, config *utils.FlattenConfig) (map[string]interface{}, []string) {
+func (th *Handler) FlattenJSON(data interface{}, config *utils.FlattenConfig) (map[string]interface{}, []string) {
 	return th.transformer.ApplyFlattenJSON(data, config)
 }

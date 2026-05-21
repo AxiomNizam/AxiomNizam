@@ -1,4 +1,4 @@
-package handlers
+package gis
 
 // =====================================================
 // Phase 6 P2 — GIS resource-ification.
@@ -17,6 +17,72 @@ const (
 	GISResourceKind       = "GISResource"
 	GISResourceAPIVersion = "gis.axiomnizam.io/v1"
 )
+
+// --- GIS entity types (shared with handler) ---
+
+// GISLayer represents a map layer.
+type GISLayer struct {
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	Type      string      `json:"type"` // geojson, tile, marker, heatmap
+	Visible   bool        `json:"visible"`
+	Style     LayerStyle  `json:"style,omitempty"`
+	URL       string      `json:"url,omitempty"`
+	Data      interface{} `json:"data,omitempty"`
+	CreatedAt time.Time   `json:"createdAt"`
+}
+
+// LayerStyle defines visual properties for a layer.
+type LayerStyle struct {
+	Color       string  `json:"color,omitempty"`
+	Weight      float64 `json:"weight,omitempty"`
+	Opacity     float64 `json:"opacity,omitempty"`
+	FillColor   string  `json:"fillColor,omitempty"`
+	FillOpacity float64 `json:"fillOpacity,omitempty"`
+}
+
+// GISRegion represents a geographic region (division/district/upazila).
+type GISRegion struct {
+	ID         string                 `json:"id"`
+	Name       string                 `json:"name"`
+	Type       string                 `json:"type"` // division, district, upazila
+	ParentID   string                 `json:"parentId,omitempty"`
+	Center     [2]float64             `json:"center"`           // [lat, lng]
+	Bounds     [4]float64             `json:"bounds,omitempty"` // [minLat, minLng, maxLat, maxLng]
+	Properties map[string]interface{} `json:"properties,omitempty"`
+	GeoJSON    interface{}            `json:"geojson,omitempty"`
+}
+
+// GISMarker represents a point marker on the map.
+type GISMarker struct {
+	ID         string                 `json:"id"`
+	Name       string                 `json:"name"`
+	Lat        float64                `json:"lat"`
+	Lng        float64                `json:"lng"`
+	Category   string                 `json:"category"`
+	Icon       string                 `json:"icon,omitempty"`
+	Color      string                 `json:"color,omitempty"`
+	Properties map[string]interface{} `json:"properties,omitempty"`
+}
+
+// GISDataset represents a named data collection for choropleth/analysis.
+type GISDataset struct {
+	ID          string                   `json:"id"`
+	Name        string                   `json:"name"`
+	Description string                   `json:"description,omitempty"`
+	Unit        string                   `json:"unit,omitempty"`
+	Columns     []DatasetColumn          `json:"columns"`
+	Rows        []map[string]interface{} `json:"rows"`
+	CreatedAt   time.Time                `json:"createdAt"`
+	UpdatedAt   time.Time                `json:"updatedAt"`
+}
+
+// DatasetColumn defines a column in a dataset.
+type DatasetColumn struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Type  string `json:"type"` // string, number, date
+}
 
 // GISResourceSpec is the desired state of a GIS entity.
 type GISResourceSpec struct {

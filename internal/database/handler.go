@@ -1,4 +1,4 @@
-package handlers
+package database
 
 import (
 	"fmt"
@@ -42,8 +42,8 @@ func (DatabaseServerRecord) TableName() string {
 	return "database_servers"
 }
 
-// AdminHandler handles admin operations like database and table creation
-type AdminHandler struct {
+// Handler handles admin operations like database and table creation
+type Handler struct {
 	mu              sync.RWMutex
 	connections     map[string]*gorm.DB
 	connectionTypes map[string]string
@@ -51,9 +51,9 @@ type AdminHandler struct {
 	primaryDB       *gorm.DB // primary DB for persisting server configs
 }
 
-// NewAdminHandler creates a new admin handler. primaryDB is used to persist custom server connections (may be nil).
-func NewAdminHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *AdminHandler {
-	h := &AdminHandler{
+// NewHandler creates a new admin handler. primaryDB is used to persist custom server connections (may be nil).
+func NewHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *Handler {
+	h := &Handler{
 		connections:     connections,
 		connectionTypes: make(map[string]string, len(connections)),
 		serverMeta:      make(map[string]DatabaseServerInfo, len(connections)),
@@ -86,7 +86,7 @@ func NewAdminHandler(connections map[string]*gorm.DB, primaryDB *gorm.DB) *Admin
 }
 
 // restoreSavedServers reconnects previously persisted custom database servers.
-func (h *AdminHandler) restoreSavedServers() {
+func (h *Handler) restoreSavedServers() {
 	var records []DatabaseServerRecord
 	if err := h.primaryDB.Find(&records).Error; err != nil {
 		logging.Z().Warn("failed to load saved database servers", zap.Error(err))
@@ -194,7 +194,7 @@ type CreateTableRequest struct {
 }
 
 // CreateDatabase creates a new database on the specified DB type
-func (h *AdminHandler) CreateDatabase(c *gin.Context) {
+func (h *Handler) CreateDatabase(c *gin.Context) {
 	var req CreateDatabaseRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -295,7 +295,7 @@ func (h *AdminHandler) CreateDatabase(c *gin.Context) {
 }
 
 // ConnectDatabaseServer establishes a connection to a new database server and stores it for admin operations.
-func (h *AdminHandler) ConnectDatabaseServer(c *gin.Context) {
+func (h *Handler) ConnectDatabaseServer(c *gin.Context) {
 	var req ConnectDatabaseServerRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -430,7 +430,7 @@ func (h *AdminHandler) ConnectDatabaseServer(c *gin.Context) {
 }
 
 // ListDatabaseServers lists default and custom database server connections.
-func (h *AdminHandler) ListDatabaseServers(c *gin.Context) {
+func (h *Handler) ListDatabaseServers(c *gin.Context) {
 	h.mu.RLock()
 	servers := make([]DatabaseServerInfo, 0, len(h.serverMeta))
 	for key, info := range h.serverMeta {
@@ -456,7 +456,7 @@ func (h *AdminHandler) ListDatabaseServers(c *gin.Context) {
 }
 
 // CreateTable creates a new table on the specified database
-func (h *AdminHandler) CreateTable(c *gin.Context) {
+func (h *Handler) CreateTable(c *gin.Context) {
 	var req CreateTableRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -520,7 +520,7 @@ func (h *AdminHandler) CreateTable(c *gin.Context) {
 }
 
 // buildMySQLCreateTable builds MySQL CREATE TABLE statement
-func (h *AdminHandler) buildMySQLCreateTable(req CreateTableRequest) string {
+func (h *Handler) buildMySQLCreateTable(req CreateTableRequest) string {
 	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (\n", req.TableName)
 
 	for i, col := range req.Columns {
@@ -550,7 +550,7 @@ func (h *AdminHandler) buildMySQLCreateTable(req CreateTableRequest) string {
 }
 
 // buildPostgresCreateTable builds PostgreSQL CREATE TABLE statement
-func (h *AdminHandler) buildPostgresCreateTable(req CreateTableRequest) string {
+func (h *Handler) buildPostgresCreateTable(req CreateTableRequest) string {
 	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", req.TableName)
 
 	for i, col := range req.Columns {
@@ -580,7 +580,7 @@ func (h *AdminHandler) buildPostgresCreateTable(req CreateTableRequest) string {
 }
 
 // ListDatabases lists all databases on the specified DB type
-func (h *AdminHandler) ListDatabases(c *gin.Context) {
+func (h *Handler) ListDatabases(c *gin.Context) {
 	dbType := c.Query("db_type")
 	if dbType == "" {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -669,7 +669,7 @@ func (h *AdminHandler) ListDatabases(c *gin.Context) {
 }
 
 // ListTables lists all tables in the specified database
-func (h *AdminHandler) ListTables(c *gin.Context) {
+func (h *Handler) ListTables(c *gin.Context) {
 	dbType := c.Query("db_type")
 	if dbType == "" {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -775,7 +775,7 @@ func defaultPortForDBType(dbType string) int {
 }
 
 // UpdateDatabaseServer updates connection details for a custom database server, reconnects, and persists.
-func (h *AdminHandler) UpdateDatabaseServer(c *gin.Context) {
+func (h *Handler) UpdateDatabaseServer(c *gin.Context) {
 	serverKey := c.Param("key")
 	if serverKey == "" {
 		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server key is required"})
@@ -917,7 +917,7 @@ func (h *AdminHandler) UpdateDatabaseServer(c *gin.Context) {
 }
 
 // DeleteDatabaseServer removes a custom database server connection and deletes the persisted record.
-func (h *AdminHandler) DeleteDatabaseServer(c *gin.Context) {
+func (h *Handler) DeleteDatabaseServer(c *gin.Context) {
 	serverKey := c.Param("key")
 	if serverKey == "" {
 		c.JSON(http.StatusBadRequest, models.Response{Status: "error", Error: "server key is required"})

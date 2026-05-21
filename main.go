@@ -43,6 +43,7 @@ import (
 	"example.com/axiomnizam/internal/featurestore"
 	"example.com/axiomnizam/internal/gatekeeper"
 	analyticspkg "example.com/axiomnizam/internal/analytics"
+	gispkg "example.com/axiomnizam/internal/gis"
 	"example.com/axiomnizam/internal/governance"
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	"example.com/axiomnizam/internal/handlers"
@@ -75,6 +76,7 @@ import (
 	reconcilerpkg "example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
+	securitypkg "example.com/axiomnizam/internal/security"
 	"example.com/axiomnizam/internal/schemaregistry"
 	"example.com/axiomnizam/internal/serviceregistry"
 	"example.com/axiomnizam/internal/slo"
@@ -373,7 +375,7 @@ func main() {
 		"percona":  conns.Percona,
 		"oracle":   conns.Oracle,
 	}
-	adminHandler := handlers.NewAdminHandler(dbConnections, conns.PostgreSQL)
+	adminHandler := database.NewHandler(dbConnections, conns.PostgreSQL)
 
 	// User management handler
 	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)
@@ -725,7 +727,7 @@ func main() {
 	// DATA TRANSFORMATION ENDPOINTS (Auth Required)
 	// ====================================
 
-	transformHandler := handlers.NewTransformationHandler()
+	transformHandler := transformpkg.NewHandler()
 
 	// Rule Management endpoints
 	router.POST("/api/transform/rules", authMiddleware, transformHandler.RegisterRule)
@@ -750,7 +752,7 @@ func main() {
 	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
-	certificateHandler := handlers.NewCertificateHandler()
+	certificateHandler := securitypkg.NewHandler()
 
 	// Database management endpoints (admin only)
 	router.POST("/api/admin/database/create", adminOrSysMiddleware, adminHandler.CreateDatabase)
@@ -1170,7 +1172,7 @@ func main() {
 	// ====================================
 	// CDC & ETL DATA PLATFORM ENDPOINTS
 	// ====================================
-	cdcEtlHandler := handlers.NewCDCETLHandler(conns.Etcd)
+	cdcEtlHandler := cdc.NewHandler(conns.Etcd)
 
 	// ETL Pipeline Management
 	etlAPI := router.Group("/api/v1/etl", authMiddleware)
@@ -2130,9 +2132,9 @@ func main() {
 		// ====================================
 		// PHASE 6 P2: GIS resource controller
 		// ====================================
-		gisStore := platformstore.NewStore[*handlers.GISResource](backendMgr, "gis", func() *handlers.GISResource { return &handlers.GISResource{} })
+		gisStore := platformstore.NewStore[*gispkg.GISResource](backendMgr, "gis", func() *gispkg.GISResource { return &gispkg.GISResource{} })
 		gisReconciler := reconcilerpkg.NewInstrumented("gis",
-			handlers.NewGISReconciler(gisStore), reconcilerMetrics)
+			gispkg.NewGISReconciler(gisStore), reconcilerMetrics)
 		reconcilerMetrics.Register("gis")
 		go genericctrl.NewGenericController("gis", gisStore, gisReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ GIS controller started (Phase 6 P2)")

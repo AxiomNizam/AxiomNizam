@@ -1,4 +1,4 @@
-package handlers
+package gis
 
 // Phase 6 P2 — GIS reconciler.
 

@@ -1,4 +1,4 @@
-package handlers
+package security
 
 import (
 	"crypto/tls"
@@ -48,8 +48,8 @@ var defaultKubeadmManagedCerts = []string{
 	"etcd-healthcheck-client",
 }
 
-// CertificateHandler provides certificate expiry status and renewal actions.
-type CertificateHandler struct {
+// Handler provides certificate expiry status and renewal actions.
+type Handler struct {
 	mode                 string
 	monitorTargets       []string
 	pkiDir               string
@@ -83,8 +83,8 @@ type renewCertificateRequest struct {
 	DryRun bool   `json:"dry_run"`
 }
 
-// NewCertificateHandler creates a certificate lifecycle handler.
-func NewCertificateHandler() *CertificateHandler {
+// NewHandler creates a certificate lifecycle handler.
+func NewHandler() *Handler {
 	mode := normalizeCertificateMode(os.Getenv("CERT_MANAGER_MODE"))
 	threshold := parseIntEnv("CERT_RENEWAL_THRESHOLD_DAYS", 30)
 	if threshold < 0 {
@@ -102,7 +102,7 @@ func NewCertificateHandler() *CertificateHandler {
 		managedCerts = append([]string(nil), defaultKubeadmManagedCerts...)
 	}
 
-	return &CertificateHandler{
+	return &Handler{
 		mode:                 mode,
 		monitorTargets:       targets,
 		pkiDir:               pkiDir,
@@ -114,7 +114,7 @@ func NewCertificateHandler() *CertificateHandler {
 
 // GetCertificateStatus handles GET /api/admin/certificates/status.
 // Optional query parameter: target=host[:port]
-func (h *CertificateHandler) GetCertificateStatus(c *gin.Context) {
+func (h *Handler) GetCertificateStatus(c *gin.Context) {
 	if h.mode == certModeKubeadm {
 		h.getKubeadmCertificateStatus(c)
 		return
@@ -122,7 +122,7 @@ func (h *CertificateHandler) GetCertificateStatus(c *gin.Context) {
 	h.getTLSCertificateStatus(c)
 }
 
-func (h *CertificateHandler) getTLSCertificateStatus(c *gin.Context) {
+func (h *Handler) getTLSCertificateStatus(c *gin.Context) {
 	queryTarget := strings.TrimSpace(c.Query("target"))
 	targets := make([]string, 0)
 
@@ -160,7 +160,7 @@ func (h *CertificateHandler) getTLSCertificateStatus(c *gin.Context) {
 	})
 }
 
-func (h *CertificateHandler) getKubeadmCertificateStatus(c *gin.Context) {
+func (h *Handler) getKubeadmCertificateStatus(c *gin.Context) {
 	queryCert := strings.TrimSpace(c.Query("cert"))
 	certs, err := h.resolveKubeadmCertSelection(queryCert)
 	if err != nil {
@@ -192,7 +192,7 @@ func (h *CertificateHandler) getKubeadmCertificateStatus(c *gin.Context) {
 
 // RenewCertificate handles POST /api/admin/certificates/renew.
 // It executes CERT_RENEW_COMMAND and then returns refreshed cert status for the target.
-func (h *CertificateHandler) RenewCertificate(c *gin.Context) {
+func (h *Handler) RenewCertificate(c *gin.Context) {
 	if h.mode == certModeKubeadm {
 		h.renewKubeadmCertificate(c)
 		return
@@ -200,7 +200,7 @@ func (h *CertificateHandler) RenewCertificate(c *gin.Context) {
 	h.renewTLSCertificate(c)
 }
 
-func (h *CertificateHandler) renewTLSCertificate(c *gin.Context) {
+func (h *Handler) renewTLSCertificate(c *gin.Context) {
 	if h.renewCommand == "" {
 		c.JSON(http.StatusNotImplemented, gin.H{
 			"error":   "renew command not configured",
@@ -281,7 +281,7 @@ func (h *CertificateHandler) renewTLSCertificate(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (h *CertificateHandler) renewKubeadmCertificate(c *gin.Context) {
+func (h *Handler) renewKubeadmCertificate(c *gin.Context) {
 	var req renewCertificateRequest
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -354,7 +354,7 @@ func (h *CertificateHandler) renewKubeadmCertificate(c *gin.Context) {
 	})
 }
 
-func (h *CertificateHandler) inspectTarget(target string) CertificateStatus {
+func (h *Handler) inspectTarget(target string) CertificateStatus {
 	normalizedTarget, host, port, err := normalizeCertificateTarget(target)
 	if err != nil {
 		return CertificateStatus{Mode: h.mode, Target: strings.TrimSpace(target), Error: err.Error()}
@@ -408,7 +408,7 @@ func (h *CertificateHandler) inspectTarget(target string) CertificateStatus {
 	return status
 }
 
-func (h *CertificateHandler) inspectKubeadmCertificate(certName string) CertificateStatus {
+func (h *Handler) inspectKubeadmCertificate(certName string) CertificateStatus {
 	status := CertificateStatus{
 		Mode:     h.mode,
 		CertName: certName,
@@ -455,7 +455,7 @@ func (h *CertificateHandler) inspectKubeadmCertificate(certName string) Certific
 	return status
 }
 
-func (h *CertificateHandler) resolveKubeadmCertSelection(raw string) ([]string, error) {
+func (h *Handler) resolveKubeadmCertSelection(raw string) ([]string, error) {
 	v := strings.ToLower(strings.TrimSpace(raw))
 	if v == "" || v == "all" {
 		certs := append([]string(nil), h.managedCerts...)
@@ -490,7 +490,7 @@ func (h *CertificateHandler) resolveKubeadmCertSelection(raw string) ([]string, 
 	return selected, nil
 }
 
-func (h *CertificateHandler) buildKubeadmRenewCommand(certName string) ([]string, error) {
+func (h *Handler) buildKubeadmRenewCommand(certName string) ([]string, error) {
 	cert := strings.ToLower(strings.TrimSpace(certName))
 	if cert == "" {
 		cert = "all"

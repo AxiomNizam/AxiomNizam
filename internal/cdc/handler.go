@@ -1,10 +1,9 @@
-package handlers
+package cdc
 
 import (
 	"net/http"
 	"strings"
 
-	"example.com/axiomnizam/internal/cdc"
 	"example.com/axiomnizam/internal/etl"
 	"github.com/gin-gonic/gin"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -15,16 +14,16 @@ import (
 // Dynamic pipeline management with observability
 // ==============================================
 
-type CDCETLHandler struct {
+type Handler struct {
 	etlEngine *etl.Engine
-	cdcEngine *cdc.PipelineEngine
+	cdcEngine *PipelineEngine
 }
 
-func NewCDCETLHandler(etcd ...*clientv3.Client) *CDCETLHandler {
-	cdcCore := cdc.NewChangeDataCapture(etcd...)
-	return &CDCETLHandler{
+func NewHandler(etcd ...*clientv3.Client) *Handler {
+	cdcCore := NewChangeDataCapture(etcd...)
+	return &Handler{
 		etlEngine: etl.NewEngine(etcd...),
-		cdcEngine: cdc.NewPipelineEngine(cdcCore, etcd...),
+		cdcEngine: NewPipelineEngine(cdcCore, etcd...),
 	}
 }
 
@@ -33,7 +32,7 @@ func NewCDCETLHandler(etcd ...*clientv3.Client) *CDCETLHandler {
 // ================
 
 // ListETLPipelines GET /api/v1/etl/pipelines
-func (h *CDCETLHandler) ListETLPipelines(c *gin.Context) {
+func (h *Handler) ListETLPipelines(c *gin.Context) {
 	pipelines := h.etlEngine.ListPipelines()
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "success",
@@ -43,7 +42,7 @@ func (h *CDCETLHandler) ListETLPipelines(c *gin.Context) {
 }
 
 // GetETLPipeline GET /api/v1/etl/pipelines/:id
-func (h *CDCETLHandler) GetETLPipeline(c *gin.Context) {
+func (h *Handler) GetETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	p, ok := h.etlEngine.GetPipeline(id)
 	if !ok {
@@ -54,7 +53,7 @@ func (h *CDCETLHandler) GetETLPipeline(c *gin.Context) {
 }
 
 // CreateETLPipeline POST /api/v1/etl/pipelines
-func (h *CDCETLHandler) CreateETLPipeline(c *gin.Context) {
+func (h *Handler) CreateETLPipeline(c *gin.Context) {
 	var p etl.Pipeline
 	if err := c.ShouldBindJSON(&p); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
@@ -72,7 +71,7 @@ func (h *CDCETLHandler) CreateETLPipeline(c *gin.Context) {
 }
 
 // UpdateETLPipeline PUT /api/v1/etl/pipelines/:id
-func (h *CDCETLHandler) UpdateETLPipeline(c *gin.Context) {
+func (h *Handler) UpdateETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
@@ -88,7 +87,7 @@ func (h *CDCETLHandler) UpdateETLPipeline(c *gin.Context) {
 }
 
 // DeleteETLPipeline DELETE /api/v1/etl/pipelines/:id
-func (h *CDCETLHandler) DeleteETLPipeline(c *gin.Context) {
+func (h *Handler) DeleteETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.etlEngine.DeletePipeline(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
@@ -98,7 +97,7 @@ func (h *CDCETLHandler) DeleteETLPipeline(c *gin.Context) {
 }
 
 // RunETLPipeline POST /api/v1/etl/pipelines/:id/run
-func (h *CDCETLHandler) RunETLPipeline(c *gin.Context) {
+func (h *Handler) RunETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	run, err := h.etlEngine.RunPipeline(c.Request.Context(), id, "manual")
 	if err != nil {
@@ -109,14 +108,14 @@ func (h *CDCETLHandler) RunETLPipeline(c *gin.Context) {
 }
 
 // ListETLRuns GET /api/v1/etl/runs
-func (h *CDCETLHandler) ListETLRuns(c *gin.Context) {
+func (h *Handler) ListETLRuns(c *gin.Context) {
 	pipelineID := c.Query("pipeline_id")
 	runs := h.etlEngine.ListRuns(pipelineID)
 	c.JSON(http.StatusOK, gin.H{"status": "success", "runs": runs, "total": len(runs)})
 }
 
 // GetETLRun GET /api/v1/etl/runs/:id
-func (h *CDCETLHandler) GetETLRun(c *gin.Context) {
+func (h *Handler) GetETLRun(c *gin.Context) {
 	id := c.Param("id")
 	run, ok := h.etlEngine.GetRun(id)
 	if !ok {
@@ -127,7 +126,7 @@ func (h *CDCETLHandler) GetETLRun(c *gin.Context) {
 }
 
 // GetETLConnectors GET /api/v1/etl/connectors
-func (h *CDCETLHandler) GetETLConnectors(c *gin.Context) {
+func (h *Handler) GetETLConnectors(c *gin.Context) {
 	connectors := h.etlEngine.GetConnectors()
 	q := strings.TrimSpace(strings.ToLower(c.Query("q")))
 	category := strings.TrimSpace(strings.ToLower(c.Query("category")))
@@ -162,7 +161,7 @@ func (h *CDCETLHandler) GetETLConnectors(c *gin.Context) {
 }
 
 // CreateETLConnector POST /api/v1/etl/connectors
-func (h *CDCETLHandler) CreateETLConnector(c *gin.Context) {
+func (h *Handler) CreateETLConnector(c *gin.Context) {
 	var connector etl.ConnectorType
 	if err := c.ShouldBindJSON(&connector); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
@@ -178,7 +177,7 @@ func (h *CDCETLHandler) CreateETLConnector(c *gin.Context) {
 }
 
 // UpdateETLConnector PUT /api/v1/etl/connectors/:id
-func (h *CDCETLHandler) UpdateETLConnector(c *gin.Context) {
+func (h *Handler) UpdateETLConnector(c *gin.Context) {
 	var updates etl.ConnectorType
 	if err := c.ShouldBindJSON(&updates); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
@@ -193,7 +192,7 @@ func (h *CDCETLHandler) UpdateETLConnector(c *gin.Context) {
 }
 
 // DeleteETLConnector DELETE /api/v1/etl/connectors/:id
-func (h *CDCETLHandler) DeleteETLConnector(c *gin.Context) {
+func (h *Handler) DeleteETLConnector(c *gin.Context) {
 	if err := h.etlEngine.DeleteConnector(c.Param("id")); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -202,7 +201,7 @@ func (h *CDCETLHandler) DeleteETLConnector(c *gin.Context) {
 }
 
 // GetETLConnectorCatalog GET /api/v1/etl/connectors/catalog
-func (h *CDCETLHandler) GetETLConnectorCatalog(c *gin.Context) {
+func (h *Handler) GetETLConnectorCatalog(c *gin.Context) {
 	connectors := h.etlEngine.GetConnectors()
 	byCategory := map[string][]etl.ConnectorType{}
 	for _, connector := range connectors {
@@ -218,7 +217,7 @@ func (h *CDCETLHandler) GetETLConnectorCatalog(c *gin.Context) {
 }
 
 // GetETLOrchestrationCapabilities GET /api/v1/etl/orchestration/capabilities
-func (h *CDCETLHandler) GetETLOrchestrationCapabilities(c *gin.Context) {
+func (h *Handler) GetETLOrchestrationCapabilities(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":       "success",
 		"capabilities": h.etlEngine.GetOrchestrationCapabilities(),
@@ -226,7 +225,7 @@ func (h *CDCETLHandler) GetETLOrchestrationCapabilities(c *gin.Context) {
 }
 
 // GetETLBlueprints GET /api/v1/etl/blueprints
-func (h *CDCETLHandler) GetETLBlueprints(c *gin.Context) {
+func (h *Handler) GetETLBlueprints(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":     "success",
 		"blueprints": h.etlEngine.GetPipelineBlueprints(),
@@ -234,7 +233,7 @@ func (h *CDCETLHandler) GetETLBlueprints(c *gin.Context) {
 }
 
 // GetETLObservability GET /api/v1/etl/observability
-func (h *CDCETLHandler) GetETLObservability(c *gin.Context) {
+func (h *Handler) GetETLObservability(c *gin.Context) {
 	obs := h.etlEngine.GetObservability()
 	c.JSON(http.StatusOK, gin.H{"status": "success", "observability": obs})
 }
@@ -244,13 +243,13 @@ func (h *CDCETLHandler) GetETLObservability(c *gin.Context) {
 // ================
 
 // ListCDCPipelines GET /api/v1/cdc/pipelines
-func (h *CDCETLHandler) ListCDCPipelines(c *gin.Context) {
+func (h *Handler) ListCDCPipelines(c *gin.Context) {
 	pipelines := h.cdcEngine.ListPipelines()
 	c.JSON(http.StatusOK, gin.H{"status": "success", "pipelines": pipelines, "total": len(pipelines)})
 }
 
 // GetCDCPipeline GET /api/v1/cdc/pipelines/:id
-func (h *CDCETLHandler) GetCDCPipeline(c *gin.Context) {
+func (h *Handler) GetCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	p, ok := h.cdcEngine.GetPipeline(id)
 	if !ok {
@@ -261,8 +260,8 @@ func (h *CDCETLHandler) GetCDCPipeline(c *gin.Context) {
 }
 
 // CreateCDCPipeline POST /api/v1/cdc/pipelines
-func (h *CDCETLHandler) CreateCDCPipeline(c *gin.Context) {
-	var p cdc.CDCPipeline
+func (h *Handler) CreateCDCPipeline(c *gin.Context) {
+	var p CDCPipeline
 	if err := c.ShouldBindJSON(&p); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -279,7 +278,7 @@ func (h *CDCETLHandler) CreateCDCPipeline(c *gin.Context) {
 }
 
 // UpdateCDCPipeline PUT /api/v1/cdc/pipelines/:id
-func (h *CDCETLHandler) UpdateCDCPipeline(c *gin.Context) {
+func (h *Handler) UpdateCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
@@ -295,7 +294,7 @@ func (h *CDCETLHandler) UpdateCDCPipeline(c *gin.Context) {
 }
 
 // DeleteCDCPipeline DELETE /api/v1/cdc/pipelines/:id
-func (h *CDCETLHandler) DeleteCDCPipeline(c *gin.Context) {
+func (h *Handler) DeleteCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.DeletePipeline(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
@@ -305,7 +304,7 @@ func (h *CDCETLHandler) DeleteCDCPipeline(c *gin.Context) {
 }
 
 // StartCDCPipeline POST /api/v1/cdc/pipelines/:id/start
-func (h *CDCETLHandler) StartCDCPipeline(c *gin.Context) {
+func (h *Handler) StartCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.StartPipeline(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
@@ -316,7 +315,7 @@ func (h *CDCETLHandler) StartCDCPipeline(c *gin.Context) {
 }
 
 // PauseCDCPipeline POST /api/v1/cdc/pipelines/:id/pause
-func (h *CDCETLHandler) PauseCDCPipeline(c *gin.Context) {
+func (h *Handler) PauseCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.PausePipeline(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
@@ -327,7 +326,7 @@ func (h *CDCETLHandler) PauseCDCPipeline(c *gin.Context) {
 }
 
 // StopCDCPipeline POST /api/v1/cdc/pipelines/:id/stop
-func (h *CDCETLHandler) StopCDCPipeline(c *gin.Context) {
+func (h *Handler) StopCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.StopPipeline(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
@@ -338,17 +337,17 @@ func (h *CDCETLHandler) StopCDCPipeline(c *gin.Context) {
 }
 
 // GetCDCSourceTypes GET /api/v1/cdc/sources
-func (h *CDCETLHandler) GetCDCSourceTypes(c *gin.Context) {
+func (h *Handler) GetCDCSourceTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "sources": h.cdcEngine.GetSourceTypes()})
 }
 
 // GetCDCSinkTypes GET /api/v1/cdc/sinks
-func (h *CDCETLHandler) GetCDCSinkTypes(c *gin.Context) {
+func (h *Handler) GetCDCSinkTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "sinks": h.cdcEngine.GetSinkTypes()})
 }
 
 // GetCDCObservability GET /api/v1/cdc/observability
-func (h *CDCETLHandler) GetCDCObservability(c *gin.Context) {
+func (h *Handler) GetCDCObservability(c *gin.Context) {
 	obs := h.cdcEngine.GetObservability()
 	c.JSON(http.StatusOK, gin.H{"status": "success", "observability": obs})
 }
@@ -358,7 +357,7 @@ func (h *CDCETLHandler) GetCDCObservability(c *gin.Context) {
 // ================
 
 // GetPlatformOverview GET /api/v1/data-platform/overview
-func (h *CDCETLHandler) GetPlatformOverview(c *gin.Context) {
+func (h *Handler) GetPlatformOverview(c *gin.Context) {
 	etlObs := h.etlEngine.GetObservability()
 	cdcObs := h.cdcEngine.GetObservability()
 	etlPipelines := h.etlEngine.ListPipelines()
