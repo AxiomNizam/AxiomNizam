@@ -42,9 +42,13 @@ import (
 	"example.com/axiomnizam/internal/federation"
 	"example.com/axiomnizam/internal/featurestore"
 	"example.com/axiomnizam/internal/gatekeeper"
+	analyticspkg "example.com/axiomnizam/internal/analytics"
 	"example.com/axiomnizam/internal/governance"
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	"example.com/axiomnizam/internal/handlers"
+	netintelpkg "example.com/axiomnizam/internal/netintel"
+	notificationpkg "example.com/axiomnizam/internal/notification"
+	transformpkg "example.com/axiomnizam/internal/transform"
 	"example.com/axiomnizam/internal/heartbeat"
 	iampkg "example.com/axiomnizam/internal/iam"
 	iamstorage "example.com/axiomnizam/internal/iam/storage"
@@ -383,7 +387,7 @@ func main() {
 
 	// Notification handler
 	discordWebhookURL := cfg.Discord.WebhookURL
-	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
+	notificationHandler := notificationpkg.NewHandler(discordWebhookURL, dbConnections)
 
 	// GraphQL handler (prefer PostgreSQL for schema introspection; fallback to available SQL engines)
 	graphQLDB := conns.PostgreSQL
@@ -1267,7 +1271,7 @@ func main() {
 	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS
 	// ====================================
-	netIntelHandler := handlers.NewNetIntelHandler()
+	netIntelHandler := netintelpkg.NewHandler()
 	modeManager := modes.NewManager()
 
 	// ====================================
@@ -2134,33 +2138,33 @@ func main() {
 		log.Println("  ✅ GIS controller started (Phase 6 P2)")
 
 		// Analytics Dashboard controller
-		analyticsStore := platformstore.NewStore[*handlers.AnalyticsDashboardResource](backendMgr, "analytics-dashboards", func() *handlers.AnalyticsDashboardResource { return &handlers.AnalyticsDashboardResource{} })
+		analyticsStore := platformstore.NewStore[*analyticspkg.DashboardResource](backendMgr, "analytics-dashboards", func() *analyticspkg.DashboardResource { return &analyticspkg.DashboardResource{} })
 		analyticsReconciler := reconcilerpkg.NewInstrumented("analytics",
-			handlers.NewAnalyticsDashboardReconciler(analyticsStore), reconcilerMetrics)
+			analyticspkg.NewDashboardReconciler(analyticsStore), reconcilerMetrics)
 		reconcilerMetrics.Register("analytics")
 		go genericctrl.NewGenericController("analytics", analyticsStore, analyticsReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ Analytics Dashboard controller started (Phase 6 P2)")
 
 		// Transform Rule controller
-		transformStore := platformstore.NewStore[*handlers.TransformRuleResource](backendMgr, "transform-rules", func() *handlers.TransformRuleResource { return &handlers.TransformRuleResource{} })
+		transformStore := platformstore.NewStore[*transformpkg.RuleResource](backendMgr, "transform-rules", func() *transformpkg.RuleResource { return &transformpkg.RuleResource{} })
 		transformReconciler := reconcilerpkg.NewInstrumented("transform",
-			handlers.NewTransformRuleReconciler(transformStore), reconcilerMetrics)
+			transformpkg.NewRuleReconciler(transformStore), reconcilerMetrics)
 		reconcilerMetrics.Register("transform")
 		go genericctrl.NewGenericController("transform", transformStore, transformReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ Transform Rule controller started (Phase 6 P2)")
 
 		// Notification Channel controller
-		notificationStore := platformstore.NewStore[*handlers.NotificationChannelResource](backendMgr, "notification-channels", func() *handlers.NotificationChannelResource { return &handlers.NotificationChannelResource{} })
+		notificationStore := platformstore.NewStore[*notificationpkg.ChannelResource](backendMgr, "notification-channels", func() *notificationpkg.ChannelResource { return &notificationpkg.ChannelResource{} })
 		notificationReconciler := reconcilerpkg.NewInstrumented("notification",
-			handlers.NewNotificationChannelReconciler(notificationStore), reconcilerMetrics)
+			notificationpkg.NewChannelReconciler(notificationStore), reconcilerMetrics)
 		reconcilerMetrics.Register("notification")
 		go genericctrl.NewGenericController("notification", notificationStore, notificationReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ Notification Channel controller started (Phase 6 P2)")
 
 		// NetIntel Config controller
-		netintelStore := platformstore.NewStore[*handlers.NetIntelConfigResource](backendMgr, "netintel-configs", func() *handlers.NetIntelConfigResource { return &handlers.NetIntelConfigResource{} })
+		netintelStore := platformstore.NewStore[*netintelpkg.ConfigResource](backendMgr, "netintel-configs", func() *netintelpkg.ConfigResource { return &netintelpkg.ConfigResource{} })
 		netintelReconciler := reconcilerpkg.NewInstrumented("netintel",
-			handlers.NewNetIntelConfigReconciler(netintelStore), reconcilerMetrics)
+			netintelpkg.NewConfigReconciler(netintelStore), reconcilerMetrics)
 		reconcilerMetrics.Register("netintel")
 		go genericctrl.NewGenericController("netintel", netintelStore, netintelReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ NetIntel Config controller started (Phase 6 P2)")

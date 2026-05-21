@@ -1,4 +1,4 @@
-package handlers
+package notification
 
 import (
 	"bytes"
@@ -16,8 +16,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// NotificationHandler handles Discord notifications
-type NotificationHandler struct {
+// Handler handles Discord notifications
+type Handler struct {
 	discordWebhookURL string
 	connections       map[string]*gorm.DB
 }
@@ -59,16 +59,16 @@ type HealthStatusData struct {
 	Databases map[string]interface{} `json:"databases"`
 }
 
-// NewNotificationHandler creates a new notification handler
-func NewNotificationHandler(webhookURL string, connections map[string]*gorm.DB) *NotificationHandler {
-	return &NotificationHandler{
+// NewHandler creates a new notification handler
+func NewHandler(webhookURL string, connections map[string]*gorm.DB) *Handler {
+	return &Handler{
 		discordWebhookURL: webhookURL,
 		connections:       connections,
 	}
 }
 
 // SendNotification sends a notification to Discord
-func (h *NotificationHandler) SendNotification(c *gin.Context) {
+func (h *Handler) SendNotification(c *gin.Context) {
 	var req NotificationRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -156,7 +156,7 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 }
 
 // SendHealthNotification sends a health check notification
-func (h *NotificationHandler) SendHealthNotification(c *gin.Context) {
+func (h *Handler) SendHealthNotification(c *gin.Context) {
 	healthData := h.getHealthStatusData()
 
 	embed := DiscordEmbed{
@@ -213,7 +213,7 @@ func (h *NotificationHandler) SendHealthNotification(c *gin.Context) {
 }
 
 // SendStatusNotification sends a status notification
-func (h *NotificationHandler) SendStatusNotification(c *gin.Context) {
+func (h *Handler) SendStatusNotification(c *gin.Context) {
 	healthData := h.getHealthStatusData()
 
 	embed := DiscordEmbed{
@@ -270,7 +270,7 @@ func (h *NotificationHandler) SendStatusNotification(c *gin.Context) {
 }
 
 // GetNotificationStatus returns notification service status
-func (h *NotificationHandler) GetNotificationStatus(c *gin.Context) {
+func (h *Handler) GetNotificationStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":      "active",
 		"webhook_url": h.discordWebhookURL,
@@ -289,7 +289,7 @@ func (h *NotificationHandler) GetNotificationStatus(c *gin.Context) {
 }
 
 // sendToDiscord sends message to Discord webhook
-func (h *NotificationHandler) sendToDiscord(msg DiscordMessage) error {
+func (h *Handler) sendToDiscord(msg DiscordMessage) error {
 	if h.discordWebhookURL == "" {
 		return fmt.Errorf("Discord webhook URL is not configured")
 	}
@@ -313,7 +313,7 @@ func (h *NotificationHandler) sendToDiscord(msg DiscordMessage) error {
 }
 
 // getHealthStatusData retrieves current health and status data
-func (h *NotificationHandler) getHealthStatusData() HealthStatusData {
+func (h *Handler) getHealthStatusData() HealthStatusData {
 	data := HealthStatusData{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Status:    "healthy",

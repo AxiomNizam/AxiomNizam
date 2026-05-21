@@ -1,10 +1,10 @@
-package handlers
+package jobs
 
 // Store-backed Job handler (Phase 3/4).
 //
 // Thin-handler pattern — no etcd, no mutex, no in-memory map, no
 // private cron scheduler.  All persistence and watch fan-out is
-// delegated to `store.ResourceStore[*jobs.JobResource]`.  Dispatching,
+// delegated to `store.ResourceStore[*JobResource]`.  Dispatching,
 // retries and scheduling live in the job controller/reconciler
 // downstream of the workqueue.
 //
@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"time"
 
-	"example.com/axiomnizam/internal/jobs"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/resources"
 
@@ -29,20 +28,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// JobV1Handler is a thin Gin handler over a
-// ResourceStore[*jobs.JobResource].
-type JobV1Handler struct {
-	store store.ResourceStore[*jobs.JobResource]
+// V1Handler is a thin Gin handler over a ResourceStore[*JobResource].
+type V1Handler struct {
+	store store.ResourceStore[*JobResource]
 }
 
-// NewJobV1Handler builds the handler.  `store` must be non-nil.
-func NewJobV1Handler(s store.ResourceStore[*jobs.JobResource]) *JobV1Handler {
-	return &JobV1Handler{store: s}
+// NewV1Handler builds the handler.  `store` must be non-nil.
+func NewV1Handler(s store.ResourceStore[*JobResource]) *V1Handler {
+	return &V1Handler{store: s}
 }
 
-// RegisterRoutes attaches the v2 job routes onto the given router
-// group.
-func (h *JobV1Handler) RegisterRoutes(rg *gin.RouterGroup) {
+// RegisterRoutes attaches the v2 job routes onto the given router group.
+func (h *V1Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/jobs", h.Create)
 	rg.GET("/jobs", h.List)
 	rg.GET("/jobs/:name", h.Get)
@@ -50,8 +47,8 @@ func (h *JobV1Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.DELETE("/jobs/:name", h.Delete)
 }
 
-func (h *JobV1Handler) Create(c *gin.Context) {
-	var in jobs.JobResource
+func (h *V1Handler) Create(c *gin.Context) {
+	var in JobResource
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -62,8 +59,8 @@ func (h *JobV1Handler) Create(c *gin.Context) {
 	}
 
 	in.TypeMeta = resources.TypeMeta{
-		Kind:       jobs.JobKind,
-		APIVersion: jobs.JobAPIVersion,
+		Kind:       JobKind,
+		APIVersion: JobAPIVersion,
 	}
 	if in.UID == "" {
 		in.UID = uuid.New().String()
@@ -86,7 +83,7 @@ func (h *JobV1Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, &in)
 }
 
-func (h *JobV1Handler) List(c *gin.Context) {
+func (h *V1Handler) List(c *gin.Context) {
 	items, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -95,7 +92,7 @@ func (h *JobV1Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-func (h *JobV1Handler) Get(c *gin.Context) {
+func (h *V1Handler) Get(c *gin.Context) {
 	j, err := h.store.Get(c.Request.Context(), c.Param("name"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -108,7 +105,7 @@ func (h *JobV1Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, j)
 }
 
-func (h *JobV1Handler) Update(c *gin.Context) {
+func (h *V1Handler) Update(c *gin.Context) {
 	name := c.Param("name")
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
@@ -120,7 +117,7 @@ func (h *JobV1Handler) Update(c *gin.Context) {
 		return
 	}
 
-	var patch jobs.JobResource
+	var patch JobResource
 	if err := c.ShouldBindJSON(&patch); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -136,7 +133,7 @@ func (h *JobV1Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, existing)
 }
 
-func (h *JobV1Handler) Delete(c *gin.Context) {
+func (h *V1Handler) Delete(c *gin.Context) {
 	name := c.Param("name")
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

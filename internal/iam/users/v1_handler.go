@@ -1,11 +1,11 @@
-package handlers
+package users
 
 // Store-backed Platform User handler (Phase 3/4).
 //
 // Thin-handler pattern — no etcd, no mutex, no in-memory map.  All
 // persistence and watch fan-out is delegated to
-// `store.ResourceStore[*users.UserResource]`; reconciliation runs on
-// the shared workqueue via `users.UserReconciler`.
+// `store.ResourceStore[*UserResource]`; reconciliation runs on
+// the shared workqueue via `UserReconciler`.
 //
 // Routes (v2):
 //
@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"time"
 
-	"example.com/axiomnizam/internal/iam/users"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/resources"
 
@@ -29,21 +28,19 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// UserV1Handler is a thin Gin handler over a
-// ResourceStore[*users.UserResource].
-type UserV1Handler struct {
-	store store.ResourceStore[*users.UserResource]
+// V1Handler is a thin Gin handler over a ResourceStore[*UserResource].
+type V1Handler struct {
+	store store.ResourceStore[*UserResource]
 }
 
-// NewUserV1Handler builds the handler.  `store` must be non-nil.
-func NewUserV1Handler(s store.ResourceStore[*users.UserResource]) *UserV1Handler {
-	return &UserV1Handler{store: s}
+// NewV1Handler builds the handler.  `store` must be non-nil.
+func NewV1Handler(s store.ResourceStore[*UserResource]) *V1Handler {
+	return &V1Handler{store: s}
 }
 
-// RegisterRoutes attaches the v2 user routes onto the given router
-// group.  The group is expected to already carry platform-admin auth
-// middleware.
-func (h *UserV1Handler) RegisterRoutes(rg *gin.RouterGroup) {
+// RegisterRoutes attaches the v2 user routes onto the given router group.
+// The group is expected to already carry platform-admin auth middleware.
+func (h *V1Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/platform/users", h.Create)
 	rg.GET("/platform/users", h.List)
 	rg.GET("/platform/users/:name", h.Get)
@@ -51,9 +48,7 @@ func (h *UserV1Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.DELETE("/platform/users/:name", h.Delete)
 }
 
-// createUserV1Body is the JSON body accepted by Create.  The plaintext
-// password never persists — it is hashed before the resource is
-// handed to the store.
+// createUserV1Body is the JSON body accepted by Create.
 type createUserV1Body struct {
 	Username string `json:"username" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
@@ -61,7 +56,7 @@ type createUserV1Body struct {
 	Role     string `json:"role" binding:"required"`
 }
 
-func (h *UserV1Handler) Create(c *gin.Context) {
+func (h *V1Handler) Create(c *gin.Context) {
 	var in createUserV1Body
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -75,10 +70,10 @@ func (h *UserV1Handler) Create(c *gin.Context) {
 	}
 
 	now := time.Now()
-	u := &users.UserResource{
+	u := &UserResource{
 		TypeMeta: resources.TypeMeta{
-			Kind:       users.UserKind,
-			APIVersion: users.UserAPIVersion,
+			Kind:       UserKind,
+			APIVersion: UserAPIVersion,
 		},
 		ObjectMeta: resources.ObjectMeta{
 			Name:       in.Username,
@@ -87,7 +82,7 @@ func (h *UserV1Handler) Create(c *gin.Context) {
 			CreatedAt:  now,
 			UpdatedAt:  now,
 		},
-		Spec: users.UserSpec{
+		Spec: UserSpec{
 			Username:     in.Username,
 			Email:        in.Email,
 			PasswordHash: string(hashed),
@@ -108,7 +103,7 @@ func (h *UserV1Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, u)
 }
 
-func (h *UserV1Handler) List(c *gin.Context) {
+func (h *V1Handler) List(c *gin.Context) {
 	items, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -117,7 +112,7 @@ func (h *UserV1Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-func (h *UserV1Handler) Get(c *gin.Context) {
+func (h *V1Handler) Get(c *gin.Context) {
 	u, err := h.store.Get(c.Request.Context(), c.Param("name"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -130,9 +125,7 @@ func (h *UserV1Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, u)
 }
 
-// updateUserV1Body is the JSON body accepted by Update.  Any empty
-// field is treated as "leave unchanged".  Password is hashed before
-// persistence.
+// updateUserV1Body is the JSON body accepted by Update.
 type updateUserV1Body struct {
 	Email     string `json:"email,omitempty"`
 	Role      string `json:"role,omitempty"`
@@ -140,7 +133,7 @@ type updateUserV1Body struct {
 	Suspended *bool  `json:"suspended,omitempty"`
 }
 
-func (h *UserV1Handler) Update(c *gin.Context) {
+func (h *V1Handler) Update(c *gin.Context) {
 	name := c.Param("name")
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
@@ -185,7 +178,7 @@ func (h *UserV1Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, existing)
 }
 
-func (h *UserV1Handler) Delete(c *gin.Context) {
+func (h *V1Handler) Delete(c *gin.Context) {
 	name := c.Param("name")
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
