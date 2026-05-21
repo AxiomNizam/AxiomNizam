@@ -548,7 +548,7 @@ These bring all modules toward the gatekeeper reference architecture.
 |---|------|-----------|--------|
 | 8.0 | Wire gatekeeper DTOs/mappers into http.go (reference fix) | gatekeeper | DONE |
 | 8.1 | Add storage DTOs + mappers (`admin/dto.go`, `admin/mapper.go`) | storage | DONE |
-| 8.2 | Add IAM DTOs + mappers | iam | PENDING |
+| 8.2 | Add IAM DTOs + mappers | iam | DONE |
 | 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | PENDING (incremental) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
 | 8.5 | Add DTO structs + mappers to each module's handlers | All modules | PENDING |
@@ -560,6 +560,18 @@ These bring all modules toward the gatekeeper reference architecture.
 - `storage/admin/dto.go` — 15 request/response DTO structs: CreateBucketRequest, BucketResponse, ObjectResponse, PresignURLRequest/Response, AccessKeyRequest/Response, BucketShareRequest/Response, RateLimitRequest/Response, PolicyRequest, EventResponse
 - `storage/admin/mapper.go` — 9 mapper functions: BucketToResponse, BucketsToResponse, ObjectToResponse, ObjectsToResponse, AccessKeyToResponse, ShareToResponse, EventToResponse, EventsToResponse, TimePtr
 - Monolith `internal/handlers/` (42 files, 100+ handlers) identified for incremental extraction — too large for single pass
+
+**Key changes (2026-05-21):**
+- `iam/admin/dto.go` — 40+ request/response DTO structs covering all IAM domains:
+  - Auth: RefreshTokenRequest, LogoutRequest/Response, WhoAmIResponse
+  - Users: CreateUserRequest, UserResponse, ListUsersResponse, SetUserRolesRequest/Response
+  - Clients: RegisterClientRequest, ClientResponse, ClientCreatedResponse, UpdateClientRequest, RegenerateSecretResponse, ChangeClientIDRequest/Response, ListClientsResponse
+  - Roles: UpdateRoleRequest, ListRolesResponse
+  - Bindings: ListBindingsResponse
+  - Tokens: RevokeTokenRequest/Response, RevokeUserTokensResponse
+  - OAuth: AuthorizeResponse, ClientCredentialsResponse, ServiceAccessInfoResponse/Endpoints
+  - v2 (EnhancedHandler): CreateRealmRequest, CreateGroupRequest, GroupDetailResponse, GroupMemberRequest, CreateClientScopeRequest, CreateIdentityProviderRequest, PublicIdPResponse, ListPublicIdPsResponse, SetUserAttributeRequest, AddUserToGroupRequest, AddRequiredActionRequest, GetPGClientResponse, GetEffectiveRolesResponse, RealmDashboardResponse, RealmInfoResponse, RealmTokenSettings, RealmLoginSettings, RealmSecuritySettings
+- `iam/admin/mapper.go` — 20+ mapper functions: UserToResponse, UsersToResponse, ClientToResponse, ClientsToResponse, ClientToCreatedResponse, ClientToRegenerateSecretResponse, ClientToChangeIDResponse, RolesToListResponse, BindingsToListResponse, WhoAmIFromClaims, LogoutResponseFromState, ClientCredentialsToResponse, GroupToDetailResponse, IdPToPublicResponse, IdPsToPublicResponse, PGClientToGetResponse, EffectiveRolesToResponse, RealmDashboardToResponse, RealmInfoToResponse, MaskClientSecret
 
 ---
 
@@ -872,9 +884,8 @@ Tier 1 (Critical Fixes) — Independent, any order
 
 Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 6: Module lifecycle interface ✅
-├── Phase 7: Standardize config       ← YOU ARE HERE
-├── Phase 7: Standardize config       ← needs Phase 6
-├── Phase 8: Standardize handlers     ← needs Phase 6
+├── Phase 7: Standardize config       ✅ DONE
+├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3-8.5 pending)
 ├── Phase 9: Standardize models       ← needs Phase 6
 ├── Phase 10: Repository interfaces   ← needs Phase 9
 ├── Phase 11: Standardize metrics     ← needs Phase 6
@@ -947,7 +958,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6) — Phases 1-6 DONE, 8 phases PARTIAL, 11 phases TODO*
+*Last updated: 2026-05-21 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.2 DONE)*
 
 ---
 
@@ -962,7 +973,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
-| 8. Standardize handlers | ⬜ TODO | — | Handlers still in monolith `internal/handlers/` |
+| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE (gatekeeper, storage, IAM DTOs); 8.3-8.5 pending |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
@@ -1034,4 +1045,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-19 (UTC+6)*
+*Last updated: 2026-05-21 (UTC+6)*
