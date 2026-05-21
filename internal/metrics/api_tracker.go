@@ -1,4 +1,4 @@
-package handlers
+package metrics
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// APIMetric represents metrics for a single API endpoint
+// APIMetric represents metrics for a single API endpoint.
 type APIMetric struct {
 	Endpoint        string        `json:"endpoint"`
 	Method          string        `json:"method"`
@@ -26,14 +26,14 @@ type APIMetric struct {
 	StatusCodes     map[int]int64 `json:"status_codes"`
 }
 
-// APIMetricsTracker tracks API usage and call counts
+// APIMetricsTracker tracks API usage and call counts.
 type APIMetricsTracker struct {
 	redisClient  *redis.Client
 	localMetrics map[string]*APIMetric
 	mu           sync.RWMutex
 }
 
-// NewAPIMetricsTracker creates a new API metrics tracker
+// NewAPIMetricsTracker creates a new API metrics tracker.
 func NewAPIMetricsTracker(redisClient *redis.Client) *APIMetricsTracker {
 	return &APIMetricsTracker{
 		redisClient:  redisClient,
@@ -41,7 +41,7 @@ func NewAPIMetricsTracker(redisClient *redis.Client) *APIMetricsTracker {
 	}
 }
 
-// RecordAPICall records a call to an API endpoint
+// RecordAPICall records a call to an API endpoint.
 func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode int, duration time.Duration) {
 	if t == nil {
 		return
@@ -51,21 +51,14 @@ func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode in
 	durationMs := duration.Milliseconds()
 
 	if t.redisClient != nil {
-		// Use a short timeout so unreachable Redis doesn't block for minutes.
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 
-		// Increment total calls
 		t.redisClient.Incr(ctx, fmt.Sprintf("%s:calls", key))
-
-		// Track status code
 		t.redisClient.Incr(ctx, fmt.Sprintf("%s:status:%d", key, statusCode))
-
-		// Track duration
 		t.redisClient.Incr(ctx, fmt.Sprintf("%s:total_duration", key))
 		t.redisClient.Set(ctx, fmt.Sprintf("%s:duration", key), durationMs, 0)
 
-		// Update max duration
 		maxKey := fmt.Sprintf("%s:max_duration", key)
 		currentMax := t.redisClient.Get(ctx, maxKey).Val()
 		if currentMax == "" {
@@ -78,7 +71,6 @@ func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode in
 			}
 		}
 
-		// Update min duration
 		minKey := fmt.Sprintf("%s:min_duration", key)
 		currentMin := t.redisClient.Get(ctx, minKey).Val()
 		if currentMin == "" {
@@ -91,11 +83,9 @@ func (t *APIMetricsTracker) RecordAPICall(method, endpoint string, statusCode in
 			}
 		}
 
-		// Update last called timestamp
 		t.redisClient.Set(ctx, fmt.Sprintf("%s:last_called", key), time.Now().Format(time.RFC3339), 0)
 	}
 
-	// Track in local cache for quick access
 	t.mu.Lock()
 	if metric, exists := t.localMetrics[key]; exists {
 		metric.TotalCalls++
@@ -156,7 +146,7 @@ func (t *APIMetricsTracker) localMetricsSnapshot() []APIMetric {
 	return metrics
 }
 
-// GetAllMetrics retrieves all API metrics
+// GetAllMetrics retrieves all API metrics.
 func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 	if t == nil {
 		return []APIMetric{}, nil
@@ -166,7 +156,6 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 		return t.localMetricsSnapshot(), nil
 	}
 
-	// Get all API metric keys from Redis
 	ctx := context.Background()
 	keys, err := t.redisClient.Keys(ctx, "api_metric:*:calls").Result()
 	if err != nil {
@@ -179,10 +168,7 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 	metrics := make([]APIMetric, 0, len(keys))
 	metricMap := make(map[string]*APIMetric)
 
-	// Process each key
 	for _, key := range keys {
-		// Extract method and endpoint from key
-		// Format: api_metric:METHOD:endpoint:calls
 		var method, endpoint string
 		fmt.Sscanf(key, "api_metric:%s:%s:calls", &method, &endpoint)
 
@@ -190,14 +176,12 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 		metricKey := fmt.Sprintf("%s:%s", method, endpoint)
 
 		if _, exists := metricMap[metricKey]; !exists {
-			// Get total calls
 			totalCallsStr := t.redisClient.Get(ctx, fmt.Sprintf("%s:calls", baseKey)).Val()
 			var totalCalls int64
 			if totalCallsStr != "" {
 				fmt.Sscanf(totalCallsStr, "%d", &totalCalls)
 			}
 
-			// Get status codes
 			statusKeys, _ := t.redisClient.Keys(ctx, fmt.Sprintf("%s:status:*", baseKey)).Result()
 			statusCodes := make(map[int]int64)
 			var successCalls, errorCalls int64
@@ -219,7 +203,6 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 				}
 			}
 
-			// Get durations
 			maxDurationStr := t.redisClient.Get(ctx, fmt.Sprintf("%s:max_duration", baseKey)).Val()
 			minDurationStr := t.redisClient.Get(ctx, fmt.Sprintf("%s:min_duration", baseKey)).Val()
 			var maxDuration, minDuration int64
@@ -257,7 +240,6 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 		metrics = append(metrics, *m)
 	}
 
-	// Sort by endpoint name
 	sort.Slice(metrics, func(i, j int) bool {
 		if metrics[i].Endpoint == metrics[j].Endpoint {
 			return metrics[i].Method < metrics[j].Method
@@ -268,7 +250,7 @@ func (t *APIMetricsTracker) GetAllMetrics() ([]APIMetric, error) {
 	return metrics, nil
 }
 
-// GetMetricsByEndpoint retrieves metrics for a specific endpoint
+// GetMetricsByEndpoint retrieves metrics for a specific endpoint.
 func (t *APIMetricsTracker) GetMetricsByEndpoint(endpoint string) ([]APIMetric, error) {
 	metrics, err := t.GetAllMetrics()
 	if err != nil {
@@ -285,14 +267,13 @@ func (t *APIMetricsTracker) GetMetricsByEndpoint(endpoint string) ([]APIMetric, 
 	return filtered, nil
 }
 
-// GetAPICountValue returns the total count of unique API endpoints
+// GetAPICountValue returns the total count of unique API endpoints.
 func (t *APIMetricsTracker) GetAPICountValue() (int, error) {
 	metrics, err := t.GetAllMetrics()
 	if err != nil {
 		return 0, err
 	}
 
-	// Count unique endpoints
 	endpointMap := make(map[string]bool)
 	for _, m := range metrics {
 		endpointMap[m.Endpoint] = true
@@ -301,7 +282,7 @@ func (t *APIMetricsTracker) GetAPICountValue() (int, error) {
 	return len(endpointMap), nil
 }
 
-// GetEndpointUsage returns all endpoints with their usage count
+// GetEndpointUsage returns all endpoints with their usage count.
 func (t *APIMetricsTracker) GetEndpointUsage() (map[string]int64, error) {
 	metrics, err := t.GetAllMetrics()
 	if err != nil {
@@ -316,9 +297,7 @@ func (t *APIMetricsTracker) GetEndpointUsage() (map[string]int64, error) {
 	return usage, nil
 }
 
-// Handler methods for API endpoints
-
-// GetAllAPIMetrics returns all API metrics
+// GetAllAPIMetrics handles GET /api/admin/metrics/all
 func (t *APIMetricsTracker) GetAllAPIMetrics(c *gin.Context) {
 	metrics, err := t.GetAllMetrics()
 	if err != nil {
@@ -349,7 +328,7 @@ func (t *APIMetricsTracker) GetAllAPIMetrics(c *gin.Context) {
 	})
 }
 
-// GetAPICount returns the count of APIs and their usage
+// GetAPICount handles GET /api/admin/metrics/count
 func (t *APIMetricsTracker) GetAPICount(c *gin.Context) {
 	apiCount, err := t.GetAPICountValue()
 	if err != nil {
@@ -376,7 +355,7 @@ func (t *APIMetricsTracker) GetAPICount(c *gin.Context) {
 	})
 }
 
-// GetAPIStats returns detailed API statistics
+// GetAPIStats handles GET /api/admin/metrics/stats
 func (t *APIMetricsTracker) GetAPIStats(c *gin.Context) {
 	endpoint := c.Query("endpoint")
 	var metrics []APIMetric
@@ -396,7 +375,6 @@ func (t *APIMetricsTracker) GetAPIStats(c *gin.Context) {
 		return
 	}
 
-	// Calculate aggregates
 	var totalCalls, successCalls, errorCalls int64
 	var totalDuration, count int64
 	avgDuration := int64(0)
@@ -425,7 +403,7 @@ func (t *APIMetricsTracker) GetAPIStats(c *gin.Context) {
 	})
 }
 
-// MetricsMiddleware middleware to track API calls
+// MetricsMiddleware returns middleware to track API calls.
 func MetricsMiddleware(tracker *APIMetricsTracker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if tracker == nil {
@@ -434,16 +412,12 @@ func MetricsMiddleware(tracker *APIMetricsTracker) gin.HandlerFunc {
 		}
 
 		startTime := time.Now()
-
 		c.Next()
-
 		duration := time.Since(startTime)
 		method := c.Request.Method
 		endpoint := c.Request.URL.Path
 		statusCode := c.Writer.Status()
 
-		// Record the metric asynchronously so that slow/unreachable
-		// Redis connections do not block the HTTP response.
 		go tracker.RecordAPICall(method, endpoint, statusCode, duration)
 	}
 }

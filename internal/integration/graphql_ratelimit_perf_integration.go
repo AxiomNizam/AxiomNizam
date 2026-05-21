@@ -1,7 +1,7 @@
 package integration
 
 import (
-	"example.com/axiomnizam/internal/handlers"
+	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	"example.com/axiomnizam/internal/performance"
 	"example.com/axiomnizam/internal/ratelimit"
 	"github.com/gin-gonic/gin"
@@ -10,10 +10,10 @@ import (
 
 // Phase1Features integrates all Phase 1 features
 type Phase1Features struct {
-	GraphQLHandler      *handlers.GraphQLHandler
+	GraphQLHandler      *graphqlpkg.Handler
 	QuotaHandler        *ratelimit.QuotaHandler
 	RateLimitMiddleware *ratelimit.RateLimitMiddleware
-	PerformanceHandler  *handlers.PerformanceHandler
+	PerformanceHandler  *performance.Handler
 	QuotaManager        *ratelimit.QuotaManager
 	Analyzer            *performance.QueryPerformanceAnalyzer
 }
@@ -21,7 +21,7 @@ type Phase1Features struct {
 // NewPhase1Features initializes all Phase 1 features
 func NewPhase1Features(db *gorm.DB) *Phase1Features {
 	// Initialize GraphQL
-	graphqlHandler := handlers.NewGraphQLHandler(db)
+	graphqlHandler := graphqlpkg.NewHandler(db)
 
 	// Initialize Rate Limiting & Quotas
 	quotaManager := ratelimit.NewQuotaManager()
@@ -33,7 +33,7 @@ func NewPhase1Features(db *gorm.DB) *Phase1Features {
 
 	// Initialize Query Performance Analyzer
 	analyzer := performance.NewQueryPerformanceAnalyzer(100, 10000) // 100ms threshold
-	performanceHandler := handlers.NewPerformanceHandler()
+	performanceHandler := performance.NewHandler()
 
 	return &Phase1Features{
 		GraphQLHandler:      graphqlHandler,

@@ -1,32 +1,31 @@
-package handlers
+package docs
 
 import (
 	"net/http"
 
-	"example.com/axiomnizam/internal/docs"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 )
 
-// DocsHandler handles documentation endpoints
-type DocsHandler struct {
-	generator *docs.OpenAPIGenerator
+// Handler handles documentation endpoints.
+type Handler struct {
+	generator *OpenAPIGenerator
 }
 
-// NewDocsHandler creates a new docs handler
-func NewDocsHandler() *DocsHandler {
-	generator := docs.NewOpenAPIGenerator(docs.OpenAPIInfo{
+// NewHandler creates a new docs handler.
+func NewHandler() *Handler {
+	generator := NewOpenAPIGenerator(OpenAPIInfo{
 		Title:       "AxiomNizam API",
 		Version:     "1.0.0",
 		Description: "AxiomNizam Platform API",
 	})
-	return &DocsHandler{
+	return &Handler{
 		generator: generator,
 	}
 }
 
 // GetOpenAPISpec handles GET /api/docs/openapi.json
-func (dh *DocsHandler) GetOpenAPISpec(c *gin.Context) {
+func (h *Handler) GetOpenAPISpec(c *gin.Context) {
 	spec := map[string]interface{}{
 		"openapi": "3.0.0",
 		"info": map[string]string{
@@ -38,7 +37,7 @@ func (dh *DocsHandler) GetOpenAPISpec(c *gin.Context) {
 }
 
 // GetSwaggerUI handles GET /api/docs/swagger
-func (dh *DocsHandler) GetSwaggerUI(c *gin.Context) {
+func (h *Handler) GetSwaggerUI(c *gin.Context) {
 	html := `<!DOCTYPE html>
 <html>
 <head>
@@ -54,7 +53,7 @@ func (dh *DocsHandler) GetSwaggerUI(c *gin.Context) {
 }
 
 // GetReDocUI handles GET /api/docs/redoc
-func (dh *DocsHandler) GetReDocUI(c *gin.Context) {
+func (h *Handler) GetReDocUI(c *gin.Context) {
 	html := `<!DOCTYPE html>
 <html>
 <head>
@@ -70,14 +69,14 @@ func (dh *DocsHandler) GetReDocUI(c *gin.Context) {
 }
 
 // GetMarkdownDocs handles GET /api/docs/markdown
-func (dh *DocsHandler) GetMarkdownDocs(c *gin.Context) {
-	markdown := dh.generator.GetEndpointMarkdown()
+func (h *Handler) GetMarkdownDocs(c *gin.Context) {
+	markdown := h.generator.GetEndpointMarkdown()
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	c.String(http.StatusOK, markdown)
 }
 
 // ListEndpoints handles GET /api/docs/endpoints
-func (dh *DocsHandler) ListEndpoints(c *gin.Context) {
+func (h *Handler) ListEndpoints(c *gin.Context) {
 	endpoints := make([]map[string]interface{}, 0)
 
 	c.JSON(http.StatusOK, models.Response{
@@ -90,7 +89,7 @@ func (dh *DocsHandler) ListEndpoints(c *gin.Context) {
 }
 
 // GetEndpointDetails handles GET /api/docs/endpoints/:id
-func (dh *DocsHandler) GetEndpointDetails(c *gin.Context) {
+func (h *Handler) GetEndpointDetails(c *gin.Context) {
 	id := c.Param("id")
 
 	if id == "" || id == "0" {
@@ -101,9 +100,18 @@ func (dh *DocsHandler) GetEndpointDetails(c *gin.Context) {
 		return
 	}
 
-	// Return detailed spec for endpoint
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
-		Data:   dh.generator.BuildOpenAPI(),
+		Data:   h.generator.BuildOpenAPI(),
 	})
+}
+
+// RegisterRoutes registers docs routes on the given router group.
+func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.GET("/docs/openapi.json", h.GetOpenAPISpec)
+	rg.GET("/docs/swagger", h.GetSwaggerUI)
+	rg.GET("/docs/redoc", h.GetReDocUI)
+	rg.GET("/docs/markdown", h.GetMarkdownDocs)
+	rg.GET("/docs/endpoints", h.ListEndpoints)
+	rg.GET("/docs/endpoints/:id", h.GetEndpointDetails)
 }

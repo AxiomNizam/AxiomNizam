@@ -549,7 +549,7 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.0 | Wire gatekeeper DTOs/mappers into http.go (reference fix) | gatekeeper | DONE |
 | 8.1 | Add storage DTOs + mappers (`admin/dto.go`, `admin/mapper.go`) | storage | DONE |
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
-| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | PENDING (incremental) |
+| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | IN PROGRESS (4/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
 | 8.5 | Add DTO structs + mappers to each module's handlers | All modules | PENDING |
 
@@ -572,6 +572,17 @@ These bring all modules toward the gatekeeper reference architecture.
   - OAuth: AuthorizeResponse, ClientCredentialsResponse, ServiceAccessInfoResponse/Endpoints
   - v2 (EnhancedHandler): CreateRealmRequest, CreateGroupRequest, GroupDetailResponse, GroupMemberRequest, CreateClientScopeRequest, CreateIdentityProviderRequest, PublicIdPResponse, ListPublicIdPsResponse, SetUserAttributeRequest, AddUserToGroupRequest, AddRequiredActionRequest, GetPGClientResponse, GetEffectiveRolesResponse, RealmDashboardResponse, RealmInfoResponse, RealmTokenSettings, RealmLoginSettings, RealmSecuritySettings
 - `iam/admin/mapper.go` — 20+ mapper functions: UserToResponse, UsersToResponse, ClientToResponse, ClientsToResponse, ClientToCreatedResponse, ClientToRegenerateSecretResponse, ClientToChangeIDResponse, RolesToListResponse, BindingsToListResponse, WhoAmIFromClaims, LogoutResponseFromState, ClientCredentialsToResponse, GroupToDetailResponse, IdPToPublicResponse, IdPsToPublicResponse, PGClientToGetResponse, EffectiveRolesToResponse, RealmDashboardToResponse, RealmInfoToResponse, MaskClientSecret
+
+**Key changes (2026-05-21 — Phase 8.3 incremental):**
+- Extracted 4 standalone handlers from `internal/handlers/` into target modules:
+  - `internal/handlers/docs_handler.go` (109 lines) → `internal/docs/handler.go`
+  - `internal/handlers/graphql_handler.go` (116 lines) → `internal/graphql/handler.go`
+  - `internal/handlers/performance_handler.go` (152 lines) → `internal/performance/handler.go`
+  - `internal/handlers/api_metrics.go` (449 lines) → `internal/metrics/api_tracker.go`
+- Updated `main.go`: `graphqlpkg.NewHandler`, `metrics.NewAPIMetricsTracker`, `metrics.MetricsMiddleware`
+- Updated `internal/integration/graphql_ratelimit_perf_integration.go` to use new module types
+- All 4 old files deleted from monolith; build passes clean
+- Remaining 38 files need incremental extraction — many are coupled to shared helpers or have no clean target module
 
 ---
 
@@ -885,7 +896,7 @@ Tier 1 (Critical Fixes) — Independent, any order
 Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 6: Module lifecycle interface ✅
 ├── Phase 7: Standardize config       ✅ DONE
-├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3-8.5 pending)
+├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3 in progress)
 ├── Phase 9: Standardize models       ← needs Phase 6
 ├── Phase 10: Repository interfaces   ← needs Phase 9
 ├── Phase 11: Standardize metrics     ← needs Phase 6
@@ -973,7 +984,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
-| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE (gatekeeper, storage, IAM DTOs); 8.3-8.5 pending |
+| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE; 8.3 IN PROGRESS (4/42 extracted); 8.4-8.5 pending |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
@@ -1045,4 +1056,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-21 (UTC+6)*
+*Last updated: 2026-05-21 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.2 DONE, 8.3 incremental)*

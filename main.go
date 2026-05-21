@@ -43,6 +43,7 @@ import (
 	"example.com/axiomnizam/internal/featurestore"
 	"example.com/axiomnizam/internal/gatekeeper"
 	"example.com/axiomnizam/internal/governance"
+	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/heartbeat"
 	iampkg "example.com/axiomnizam/internal/iam"
@@ -346,8 +347,8 @@ func main() {
 
 	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware
-	apiMetricsTracker := handlers.NewAPIMetricsTracker(conns.Valkey)
-	router.Use(handlers.MetricsMiddleware(apiMetricsTracker))
+	apiMetricsTracker := metrics.NewAPIMetricsTracker(conns.Valkey)
+	router.Use(metrics.MetricsMiddleware(apiMetricsTracker))
 
 	// Initialize Rate Limiter
 	// Max calls and token validity from config (.env)
@@ -398,7 +399,7 @@ func main() {
 	if graphQLDB == nil {
 		graphQLDB = conns.Oracle
 	}
-	graphQLHandler := handlers.NewGraphQLHandler(graphQLDB)
+	graphQLHandler := graphqlpkg.NewHandler(graphQLDB)
 
 	// Context enrichment helper - populates database name and user info for logging
 	enrichRequestContext := func(c *gin.Context) {

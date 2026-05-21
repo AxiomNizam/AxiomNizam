@@ -1,42 +1,41 @@
-package handlers
+package graphql
 
 import (
 	"net/http"
 
-	"example.com/axiomnizam/internal/graphql"
 	"example.com/axiomnizam/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// GraphQLHandler handles GraphQL requests
-type GraphQLHandler struct {
-	resolver *graphql.QueryResolver
+// Handler handles GraphQL requests.
+type Handler struct {
+	resolver *QueryResolver
 }
 
-// NewGraphQLHandler creates a new GraphQL handler
-func NewGraphQLHandler(db *gorm.DB) *GraphQLHandler {
-	return &GraphQLHandler{
-		resolver: graphql.NewQueryResolver(db),
+// NewHandler creates a new GraphQL handler.
+func NewHandler(db *gorm.DB) *Handler {
+	return &Handler{
+		resolver: NewQueryResolver(db),
 	}
 }
 
-// GraphQLRequest represents a GraphQL request
-type GraphQLRequest struct {
+// Request represents a GraphQL request.
+type Request struct {
 	Query         string                 `json:"query"`
 	Variables     map[string]interface{} `json:"variables,omitempty"`
 	OperationName string                 `json:"operationName,omitempty"`
 }
 
-// GraphQLResponse represents a GraphQL response
-type GraphQLResponse struct {
+// Response represents a GraphQL response.
+type Response struct {
 	Data   interface{}   `json:"data,omitempty"`
 	Errors []interface{} `json:"errors,omitempty"`
 }
 
 // Query handles POST /api/graphql
-func (h *GraphQLHandler) Query(c *gin.Context) {
-	var req GraphQLRequest
+func (h *Handler) Query(c *gin.Context) {
+	var req Request
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -63,13 +62,13 @@ func (h *GraphQLHandler) Query(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, GraphQLResponse{
+	c.JSON(http.StatusOK, Response{
 		Data: data,
 	})
 }
 
 // GetSchema handles GET /api/graphql/schema
-func (h *GraphQLHandler) GetSchema(c *gin.Context) {
+func (h *Handler) GetSchema(c *gin.Context) {
 	_, err := h.resolver.BuildSchema()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -90,7 +89,7 @@ func (h *GraphQLHandler) GetSchema(c *gin.Context) {
 }
 
 // Playground handles GET /graphql (interactive playground)
-func (h *GraphQLHandler) Playground(c *gin.Context) {
+func (h *Handler) Playground(c *gin.Context) {
 	html := `
 	<!DOCTYPE html>
 	<html>
@@ -113,4 +112,11 @@ func (h *GraphQLHandler) Playground(c *gin.Context) {
 	`
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, html)
+}
+
+// RegisterRoutes registers GraphQL routes on the given router group.
+func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMiddleware ...gin.HandlerFunc) {
+	rg.POST("/graphql", append(authMiddleware, h.Query)...)
+	rg.GET("/graphql/schema", append(authMiddleware, h.GetSchema)...)
+	rg.GET("/graphql/playground", append(authMiddleware, h.Playground)...)
 }

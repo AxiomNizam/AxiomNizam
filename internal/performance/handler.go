@@ -1,27 +1,27 @@
-package handlers
+package performance
 
 import (
 	"net/http"
+	"strconv"
 
 	"example.com/axiomnizam/internal/models"
-	"example.com/axiomnizam/internal/performance"
 	"github.com/gin-gonic/gin"
 )
 
-// PerformanceHandler handles performance monitoring endpoints
-type PerformanceHandler struct {
-	analyzer *performance.QueryPerformanceAnalyzer
+// Handler handles performance monitoring endpoints.
+type Handler struct {
+	analyzer *QueryPerformanceAnalyzer
 }
 
-// NewPerformanceHandler creates a new performance handler
-func NewPerformanceHandler() *PerformanceHandler {
-	return &PerformanceHandler{
-		analyzer: performance.NewQueryPerformanceAnalyzer(1000, 10000),
+// NewHandler creates a new performance handler.
+func NewHandler() *Handler {
+	return &Handler{
+		analyzer: NewQueryPerformanceAnalyzer(1000, 10000),
 	}
 }
 
 // GetStats handles GET /api/v1/performance/stats
-func (ph *PerformanceHandler) GetStats(c *gin.Context) {
+func (h *Handler) GetStats(c *gin.Context) {
 	stats := map[string]interface{}{
 		"queries": 0,
 		"avgTime": 0,
@@ -33,8 +33,8 @@ func (ph *PerformanceHandler) GetStats(c *gin.Context) {
 }
 
 // GetSlowQueries handles GET /api/v1/performance/slow-queries
-func (ph *PerformanceHandler) GetSlowQueries(c *gin.Context) {
-	slowQueries := ph.analyzer.GetSlowQueries()
+func (h *Handler) GetSlowQueries(c *gin.Context) {
+	slowQueries := h.analyzer.GetSlowQueries()
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data: map[string]interface{}{
@@ -45,8 +45,8 @@ func (ph *PerformanceHandler) GetSlowQueries(c *gin.Context) {
 }
 
 // GetQueryTypeStats handles GET /api/v1/performance/query-types
-func (ph *PerformanceHandler) GetQueryTypeStats(c *gin.Context) {
-	stats := ph.analyzer.GetQueryTypeStats()
+func (h *Handler) GetQueryTypeStats(c *gin.Context) {
+	stats := h.analyzer.GetQueryTypeStats()
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data:   stats,
@@ -54,8 +54,8 @@ func (ph *PerformanceHandler) GetQueryTypeStats(c *gin.Context) {
 }
 
 // GetUserStats handles GET /api/v1/performance/user-stats
-func (ph *PerformanceHandler) GetUserStats(c *gin.Context) {
-	stats := ph.analyzer.GetUserStats()
+func (h *Handler) GetUserStats(c *gin.Context) {
+	stats := h.analyzer.GetUserStats()
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data:   stats,
@@ -63,8 +63,8 @@ func (ph *PerformanceHandler) GetUserStats(c *gin.Context) {
 }
 
 // GetRecommendations handles GET /api/v1/performance/recommendations
-func (ph *PerformanceHandler) GetRecommendations(c *gin.Context) {
-	recommendations := ph.analyzer.GetRecommendations()
+func (h *Handler) GetRecommendations(c *gin.Context) {
+	recommendations := h.analyzer.GetRecommendations()
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data: map[string]interface{}{
@@ -75,11 +75,10 @@ func (ph *PerformanceHandler) GetRecommendations(c *gin.Context) {
 }
 
 // GetPercentile handles GET /api/v1/performance/percentile/:value
-func (ph *PerformanceHandler) GetPercentile(c *gin.Context) {
+func (h *Handler) GetPercentile(c *gin.Context) {
 	percentileStr := c.Param("value")
 
-	var percentile float64
-	_, err := Parse(percentileStr, &percentile)
+	percentile, err := strconv.ParseFloat(percentileStr, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -88,7 +87,7 @@ func (ph *PerformanceHandler) GetPercentile(c *gin.Context) {
 		return
 	}
 
-	p99 := ph.analyzer.GetPercentile(percentile)
+	p99 := h.analyzer.GetPercentile(percentile)
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
 		Data: map[string]interface{}{
@@ -98,21 +97,9 @@ func (ph *PerformanceHandler) GetPercentile(c *gin.Context) {
 	})
 }
 
-// Helper function to parse string to float64
-func Parse(s string, v interface{}) (interface{}, error) {
-	var f float64
-	_, err := parse(s, &f)
-	return f, err
-}
-
-func parse(s string, v interface{}) (interface{}, error) {
-	// Simple parse implementation
-	return 0, nil
-}
-
 // RecordQuery handles POST /api/v1/performance/record
-func (ph *PerformanceHandler) RecordQuery(c *gin.Context) {
-	var qp performance.QueryPerformance
+func (h *Handler) RecordQuery(c *gin.Context) {
+	var qp QueryPerformance
 
 	if err := c.ShouldBindJSON(&qp); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -122,7 +109,7 @@ func (ph *PerformanceHandler) RecordQuery(c *gin.Context) {
 		return
 	}
 
-	ph.analyzer.RecordQuery(qp)
+	h.analyzer.RecordQuery(qp)
 
 	c.JSON(http.StatusCreated, models.Response{
 		Status:  "ok",
@@ -131,11 +118,11 @@ func (ph *PerformanceHandler) RecordQuery(c *gin.Context) {
 }
 
 // GetDashboard handles GET /api/v1/performance/dashboard
-func (ph *PerformanceHandler) GetDashboard(c *gin.Context) {
-	stats := ph.analyzer.GetQueryStats()
-	typeStats := ph.analyzer.GetQueryTypeStats()
-	userStats := ph.analyzer.GetUserStats()
-	recommendations := ph.analyzer.GetRecommendations()
+func (h *Handler) GetDashboard(c *gin.Context) {
+	stats := h.analyzer.GetQueryStats()
+	typeStats := h.analyzer.GetQueryTypeStats()
+	userStats := h.analyzer.GetUserStats()
+	recommendations := h.analyzer.GetRecommendations()
 
 	c.JSON(http.StatusOK, models.Response{
 		Status: "ok",
@@ -144,9 +131,21 @@ func (ph *PerformanceHandler) GetDashboard(c *gin.Context) {
 			"query_type_stats": typeStats,
 			"user_stats":       userStats,
 			"recommendations":  recommendations,
-			"p50_duration":     ph.analyzer.GetPercentile(50),
-			"p95_duration":     ph.analyzer.GetPercentile(95),
-			"p99_duration":     ph.analyzer.GetPercentile(99),
+			"p50_duration":     h.analyzer.GetPercentile(50),
+			"p95_duration":     h.analyzer.GetPercentile(95),
+			"p99_duration":     h.analyzer.GetPercentile(99),
 		},
 	})
+}
+
+// RegisterRoutes registers performance routes on the given router group.
+func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.GET("/performance/stats", h.GetStats)
+	rg.GET("/performance/slow-queries", h.GetSlowQueries)
+	rg.GET("/performance/query-types", h.GetQueryTypeStats)
+	rg.GET("/performance/user-stats", h.GetUserStats)
+	rg.GET("/performance/recommendations", h.GetRecommendations)
+	rg.GET("/performance/percentile/:value", h.GetPercentile)
+	rg.POST("/performance/record", h.RecordQuery)
+	rg.GET("/performance/dashboard", h.GetDashboard)
 }
