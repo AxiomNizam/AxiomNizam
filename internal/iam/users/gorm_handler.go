@@ -1,4 +1,4 @@
-package handlers
+package users
 
 import (
 	"net/http"
@@ -8,22 +8,22 @@ import (
 	"gorm.io/gorm"
 )
 
-// OracleHandler handles Oracle Database CRUD operations
-type OracleHandler struct {
+// GORMHandler handles legacy user CRUD operations via GORM directly.
+type GORMHandler struct {
 	db *gorm.DB
 }
 
-// NewOracleHandler creates a new Oracle handler
-func NewOracleHandler(db *gorm.DB) *OracleHandler {
-	return &OracleHandler{db: db}
+// NewGORMHandler creates a new legacy user handler.
+func NewGORMHandler(db *gorm.DB) *GORMHandler {
+	return &GORMHandler{db: db}
 }
 
-// CreateUser handles POST /users for Oracle
-func (h *OracleHandler) CreateUser(c *gin.Context) {
+// CreateUser handles POST /users
+func (h *GORMHandler) CreateUser(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
-			Error:  "Oracle database not connected",
+			Error:  "Database not connected",
 		})
 		return
 	}
@@ -37,7 +37,8 @@ func (h *OracleHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	if result := h.db.Create(&user); result.Error != nil {
+	result := h.db.Create(&user)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  result.Error.Error(),
@@ -47,23 +48,24 @@ func (h *OracleHandler) CreateUser(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, models.Response{
 		Status:  "ok",
-		Message: "User created successfully in Oracle",
+		Message: "User created successfully",
 		Data:    user,
 	})
 }
 
-// GetAllUsers handles GET /users for Oracle
-func (h *OracleHandler) GetAllUsers(c *gin.Context) {
+// GetAllUsers handles GET /users
+func (h *GORMHandler) GetAllUsers(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
-			Error:  "Oracle database not connected",
+			Error:  "Database not connected",
 		})
 		return
 	}
 
 	var users []models.User
-	if result := h.db.Find(&users); result.Error != nil {
+	result := h.db.Find(&users)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  result.Error.Error(),
@@ -73,25 +75,25 @@ func (h *OracleHandler) GetAllUsers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
-		Message: "Users retrieved successfully from Oracle",
+		Message: "Users retrieved successfully",
 		Data:    users,
 	})
 }
 
-// GetUserByID handles GET /users/:id for Oracle
-func (h *OracleHandler) GetUserByID(c *gin.Context) {
+// GetUserByID handles GET /users/:id
+func (h *GORMHandler) GetUserByID(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
-			Error:  "Oracle database not connected",
+			Error:  "Database not connected",
 		})
 		return
 	}
 
 	id := c.Param("id")
 	var user models.User
-
-	if result := h.db.First(&user, "id = ?", id); result.Error != nil {
+	result := h.db.First(&user, id)
+	if result.Error != nil {
 		c.JSON(http.StatusNotFound, models.Response{
 			Status: "error",
 			Error:  "User not found",
@@ -101,24 +103,23 @@ func (h *OracleHandler) GetUserByID(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
-		Message: "User retrieved successfully from Oracle",
+		Message: "User retrieved successfully",
 		Data:    user,
 	})
 }
 
-// UpdateUser handles PUT /users/:id for Oracle
-func (h *OracleHandler) UpdateUser(c *gin.Context) {
+// UpdateUser handles PUT /users/:id
+func (h *GORMHandler) UpdateUser(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
-			Error:  "Oracle database not connected",
+			Error:  "Database not connected",
 		})
 		return
 	}
 
 	id := c.Param("id")
 	var user models.User
-
 	if err := c.BindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -127,7 +128,8 @@ func (h *OracleHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if result := h.db.Model(&models.User{}).Where("id = ?", id).Updates(&user); result.Error != nil {
+	result := h.db.Where("id = ?", id).Updates(&user)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  result.Error.Error(),
@@ -137,24 +139,24 @@ func (h *OracleHandler) UpdateUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
-		Message: "User updated successfully in Oracle",
+		Message: "User updated successfully",
 		Data:    user,
 	})
 }
 
-// DeleteUser handles DELETE /users/:id for Oracle
-func (h *OracleHandler) DeleteUser(c *gin.Context) {
+// DeleteUser handles DELETE /users/:id
+func (h *GORMHandler) DeleteUser(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
-			Error:  "Oracle database not connected",
+			Error:  "Database not connected",
 		})
 		return
 	}
 
 	id := c.Param("id")
-
-	if result := h.db.Delete(&models.User{}, "id = ?", id); result.Error != nil {
+	result := h.db.Delete(&models.User{}, id)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
 			Error:  result.Error.Error(),
@@ -164,6 +166,6 @@ func (h *OracleHandler) DeleteUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.Response{
 		Status:  "ok",
-		Message: "User deleted successfully from Oracle",
+		Message: "User deleted successfully",
 	})
 }

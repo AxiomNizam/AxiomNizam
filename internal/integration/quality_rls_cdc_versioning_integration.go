@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 
 	"example.com/axiomnizam/internal/cdc"
-	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/quality"
 	"example.com/axiomnizam/internal/security"
 	"example.com/axiomnizam/internal/versioning"
@@ -25,10 +24,10 @@ type Phase2Features struct {
 	rowLevelSecurityMgr *security.RowLevelSecurityManager
 	changeDataCapture   *cdc.ChangeDataCapture
 	apiVersionManager   *versioning.APIVersionManager
-	qualityHandler      *handlers.QualityHandler
-	securityHandler     *handlers.SecurityHandler
-	cdcHandler          *handlers.CDCHandler
-	versioningHandler   *handlers.VersioningHandler
+	qualityHandler      *quality.Handler
+	securityHandler     *security.RLSHandler
+	cdcHandler          *cdc.StreamHandler
+	versioningHandler   *versioning.Handler
 	isInitialized       bool
 }
 
@@ -54,10 +53,10 @@ func NewPhase2Features(db *gorm.DB, logger *zap.Logger) *Phase2Features {
 
 // initialize initializes all Phase 2 features
 func (p2 *Phase2Features) initialize() {
-	p2.qualityHandler = handlers.NewQualityHandler(p2.logger)
-	p2.securityHandler = handlers.NewSecurityHandler(p2.logger)
-	p2.cdcHandler = handlers.NewCDCHandler(p2.logger)
-	p2.versioningHandler = handlers.NewVersioningHandler(p2.logger)
+	p2.qualityHandler = quality.NewHandler(p2.logger)
+	p2.securityHandler = security.NewRLSHandler(p2.logger)
+	p2.cdcHandler = cdc.NewStreamHandler(p2.logger)
+	p2.versioningHandler = versioning.NewHandler(p2.logger)
 
 	p2.isInitialized = true
 	p2.logger.Info("Phase 2 features initialized",

@@ -549,7 +549,7 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.0 | Wire gatekeeper DTOs/mappers into http.go (reference fix) | gatekeeper | DONE |
 | 8.1 | Add storage DTOs + mappers (`admin/dto.go`, `admin/mapper.go`) | storage | DONE |
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
-| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | IN PROGRESS (21/42 extracted) |
+| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | IN PROGRESS (26/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
 | 8.5 | Add DTO structs + mappers to each module's handlers | All modules | PENDING |
 
@@ -631,6 +631,24 @@ These bring all modules toward the gatekeeper reference architecture.
 - Updated main.go: `transformpkg.NewHandler`
 - Analytics handler stays in monolith — deeply coupled to api_builder_handler.go (direct field access to unexported `mu`, `dashboards`)
 - Total extracted: 21/42 files; 21 remaining in monolith
+
+**Key changes (2026-05-21 — Phase 8.3 continued):**
+- Extracted 4 files:
+  - `handlers/firebase.go` (110 lines) → `internal/integration/firebase_handler.go`
+  - `handlers/oracle.go` (169 lines) → `internal/integration/oracle_handler.go`
+  - `handlers/mongodb.go` (181 lines) → `internal/integration/mongodb_handler.go`
+  - `handlers/handlers.go` (373 lines) → split: `internal/health/handler.go` (HealthHandler) + `internal/iam/users/gorm_handler.go` (UserHandler)
+- Updated main.go: `healthpkg.NewHandler`
+- Total extracted: 25/42 files; 17 remaining in monolith
+
+**Key changes (2026-05-21 — Phase 8.3 continued):**
+- Split composite handler `quality_rls_cdc_versioning_handlers.go` (314 lines) across 4 modules:
+  - QualityHandler → `internal/quality/handler.go`
+  - SecurityHandler → `internal/security/rls_handler.go`
+  - CDCHandler → `internal/cdc/stream_handler.go`
+  - VersioningHandler → `internal/versioning/handler.go`
+- Updated `internal/integration/quality_rls_cdc_versioning_integration.go` to use new module types
+- Total extracted: 26/42 files; 16 remaining in monolith
 
 ---
 
@@ -944,7 +962,7 @@ Tier 1 (Critical Fixes) — Independent, any order
 Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 6: Module lifecycle interface ✅
 ├── Phase 7: Standardize config       ✅ DONE
-├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3: 21/42 extracted)
+├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3: 26/42 extracted)
 ├── Phase 9: Standardize models       ← needs Phase 6
 ├── Phase 10: Repository interfaces   ← needs Phase 9
 ├── Phase 11: Standardize metrics     ← needs Phase 6
@@ -1032,7 +1050,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
-| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE; 8.3 IN PROGRESS (21/42 extracted); 8.4-8.5 pending |
+| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE; 8.3 IN PROGRESS (26/42 extracted); 8.4-8.5 pending |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |

@@ -46,6 +46,7 @@ import (
 	gispkg "example.com/axiomnizam/internal/gis"
 	"example.com/axiomnizam/internal/governance"
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
+	healthpkg "example.com/axiomnizam/internal/health"
 	"example.com/axiomnizam/internal/handlers"
 	netintelpkg "example.com/axiomnizam/internal/netintel"
 	notificationpkg "example.com/axiomnizam/internal/notification"
@@ -364,7 +365,7 @@ func main() {
 	queryLogger := handlers.NewQueryLogger(conns.Valkey, "/data/query_logs")
 
 	// Initialize all handlers
-	healthHandler := handlers.NewHealthHandler(conns)
+	healthHandler := healthpkg.NewHandler(conns)
 
 	// Admin handler for database and table creation
 	// Only include SQL databases (MongoDB and Firebase don't support SQL DDL operations)
