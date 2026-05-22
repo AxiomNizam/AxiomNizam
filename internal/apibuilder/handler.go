@@ -1,26 +1,12 @@
 package apibuilder
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/csv"
 	"encoding/json"
-	"fmt"
-	"io"
-	"math"
-	"net/http"
-	"os"
-	"path/filepath"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"example.com/axiomnizam/internal/antivirus"
-	"example.com/axiomnizam/internal/apiscanner"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/scanner"
 	"example.com/axiomnizam/internal/scanner/archivescan"
@@ -29,11 +15,7 @@ import (
 	"example.com/axiomnizam/internal/scanner/mimetype"
 	"example.com/axiomnizam/internal/scanner/native"
 	"example.com/axiomnizam/internal/scanner/svg"
-	"example.com/axiomnizam/internal/sqlfilter"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/xuri/excelize/v2"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
