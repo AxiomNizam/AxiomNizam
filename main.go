@@ -47,7 +47,7 @@ import (
 	"example.com/axiomnizam/internal/governance"
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	healthpkg "example.com/axiomnizam/internal/health"
-	"example.com/axiomnizam/internal/handlers"
+	apibuilder "example.com/axiomnizam/internal/apibuilder"
 	authn "example.com/axiomnizam/internal/iam/authn"
 	netintelpkg "example.com/axiomnizam/internal/netintel"
 	notificationpkg "example.com/axiomnizam/internal/notification"
@@ -1120,7 +1120,7 @@ func main() {
 	// ====================================
 	// GIS DASHBOARD ENDPOINTS
 	// ====================================
-	gisHandler := handlers.NewGISHandler()
+	gisHandler := apibuilder.NewGISHandler()
 	gisAPI := router.Group("/api/v1/gis", authMiddleware)
 	{
 		gisAPI.GET("/summary", gisHandler.GetSummary)
@@ -1162,7 +1162,7 @@ func main() {
 	// the API Builder using DataSource resources.
 
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
-	analyticsHandler := handlers.NewAnalyticsHandler()
+	analyticsHandler := apibuilder.NewAnalyticsHandler()
 	analyticsAPI := router.Group("/api/v1/analytics", authMiddleware)
 	{
 		analyticsAPI.GET("/dashboards", analyticsHandler.ListDashboards)
@@ -1221,7 +1221,7 @@ func main() {
 	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
-	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
+	apiBuilderHandler := apibuilder.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
 
 	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{

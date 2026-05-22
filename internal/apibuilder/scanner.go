@@ -1,3 +1,23 @@
+package apibuilder
+
+import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"net/http"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"example.com/axiomnizam/internal/apiscanner"
+	"example.com/axiomnizam/internal/scanner"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
 func (h *APIBuilderHandler) ScanFile(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
