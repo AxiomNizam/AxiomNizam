@@ -926,7 +926,7 @@ func main() {
 	})
 
 	// DataSource endpoints
-	dsHandler := handlers.NewDataSourceHandler(conns.Etcd)
+	dsHandler := datasourceresource.NewDataSourceHandler(conns.Etcd)
 	router.POST("/api/v1/datasources", adminOrSysMiddleware, dsHandler.Create)
 	router.GET("/api/v1/datasources", authMiddleware, dsHandler.List)
 	router.GET("/api/v1/datasources/:name", authMiddleware, dsHandler.Get)
@@ -935,7 +935,7 @@ func main() {
 	router.POST("/api/v1/datasources/:name/test", adminOrSysMiddleware, dsHandler.Test)
 
 	// Job endpoints
-	jobHandler := handlers.NewJobHandler(conns.Etcd)
+	jobHandler := jobs.NewLegacyJobHandler(conns.Etcd)
 	router.POST("/api/v1/jobs", adminOrSysMiddleware, jobHandler.Create)
 	router.GET("/api/v1/jobs", authMiddleware, jobHandler.List)
 	router.GET("/api/v1/jobs/schedules", authMiddleware, jobHandler.ListSchedules)

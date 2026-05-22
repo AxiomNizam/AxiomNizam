@@ -1,4 +1,4 @@
-package handlers
+package jobs
 
 import (
 	"context"
@@ -21,35 +21,35 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// JobResource represents a job resource on the server
-type JobResource struct {
-	APIVersion string                 `json:"apiVersion"`
-	Kind       string                 `json:"kind"`
-	Metadata   JobMetadata            `json:"metadata"`
+// LegacyJobResource represents a job resource on the server (legacy handler format)
+type LegacyJobResource struct {
+	APIVersion string            `json:"apiVersion"`
+	Kind       string            `json:"kind"`
+	Metadata   LegacyJobMetadata `json:"metadata"`
 	Spec       map[string]interface{} `json:"spec,omitempty"`
-	Status     JobStatus              `json:"status,omitempty"`
-	Schedule   *JobSchedule           `json:"schedule,omitempty"`
-	Logs       []string               `json:"logs,omitempty"`
+	Status     LegacyJobStatus   `json:"status,omitempty"`
+	Schedule   *LegacyJobSchedule `json:"schedule,omitempty"`
+	Logs       []string          `json:"logs,omitempty"`
 }
 
-// JobSchedule holds scheduling metadata for recurring jobs.
-type JobSchedule struct {
+// LegacyJobSchedule holds scheduling metadata for recurring jobs.
+type LegacyJobSchedule struct {
 	Expression string `json:"expression"`
 	Enabled    bool   `json:"enabled"`
 	LastRun    string `json:"lastRun,omitempty"`
 	NextRun    string `json:"nextRun,omitempty"`
 }
 
-// JobMetadata holds job metadata
-type JobMetadata struct {
+// LegacyJobMetadata holds job metadata
+type LegacyJobMetadata struct {
 	ID                string `json:"id"`
 	Name              string `json:"name"`
 	Namespace         string `json:"namespace,omitempty"`
 	CreationTimestamp string `json:"creationTimestamp,omitempty"`
 }
 
-// JobStatus holds job execution status
-type JobStatus struct {
+// LegacyJobStatus holds job execution status
+type LegacyJobStatus struct {
 	Phase     string `json:"phase"`
 	Progress  int    `json:"progress"`
 	LastRun   string `json:"lastRun,omitempty"`
@@ -57,10 +57,10 @@ type JobStatus struct {
 	LastError string `json:"lastError,omitempty"`
 }
 
-// JobHandler manages job resources
-type JobHandler struct {
+// LegacyJobHandler manages job resources (legacy format with scheduler)
+type LegacyJobHandler struct {
 	mu              sync.RWMutex
-	jobs            map[string]*JobResource // job ID -> job
+	jobs            map[string]*LegacyJobResource // job ID -> job
 	etcd            *clientv3.Client
 	stateKey        string
 	schedulerCtx    context.Context
@@ -73,15 +73,15 @@ type JobHandler struct {
 	execWorkers int
 }
 
-// NewJobHandler creates a new job handler
-func NewJobHandler(etcd ...*clientv3.Client) *JobHandler {
+// NewLegacyJobHandler creates a new legacy job handler
+func NewLegacyJobHandler(etcd ...*clientv3.Client) *LegacyJobHandler {
 	var etcdClient *clientv3.Client
 	if len(etcd) > 0 {
 		etcdClient = etcd[0]
 	}
 
-	h := &JobHandler{
-		jobs:        make(map[string]*JobResource),
+	h := &LegacyJobHandler{
+		jobs:        make(map[string]*LegacyJobResource),
 		etcd:        etcdClient,
 		stateKey:    "handlers:jobs:state",
 		execQueue:   workqueue.NewSimpleQueue(nil),
@@ -93,7 +93,7 @@ func NewJobHandler(etcd ...*clientv3.Client) *JobHandler {
 }
 
 // Close stops the background scheduler loop.
-func (h *JobHandler) Close() {
+func (h *LegacyJobHandler) Close() {
 	h.mu.Lock()
 	cancel := h.schedulerCancel
 	h.schedulerCancel = nil
@@ -110,7 +110,7 @@ func (h *JobHandler) Close() {
 	h.schedulerWG.Wait()
 }
 
-func (h *JobHandler) startScheduler() {
+func (h *LegacyJobHandler) startScheduler() {
 	h.mu.Lock()
 	if h.schedulerCancel != nil {
 		h.mu.Unlock()
@@ -200,7 +200,7 @@ func calculateNextRun(expression string, from time.Time) (time.Time, error) {
 	return nextRun, nil
 }
 
-func normalizeScheduleFromSpec(job *JobResource, now time.Time) error {
+func normalizeScheduleFromSpec(job *LegacyJobResource, now time.Time) error {
 	if job == nil {
 		return nil
 	}
@@ -218,7 +218,7 @@ func normalizeScheduleFromSpec(job *JobResource, now time.Time) error {
 		return err
 	}
 
-	job.Schedule = &JobSchedule{
+	job.Schedule = &LegacyJobSchedule{
 		Expression: expression,
 		Enabled:    true,
 		NextRun:    nextRun.UTC().Format(time.RFC3339),
@@ -227,7 +227,7 @@ func normalizeScheduleFromSpec(job *JobResource, now time.Time) error {
 	return nil
 }
 
-func (h *JobHandler) processScheduledJobs() {
+func (h *LegacyJobHandler) processScheduledJobs() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -260,7 +260,7 @@ func (h *JobHandler) processScheduledJobs() {
 	}
 }
 
-func (h *JobHandler) startJobExecutionLocked(job *JobResource, trigger string) {
+func (h *LegacyJobHandler) startJobExecutionLocked(job *LegacyJobResource, trigger string) {
 	now := time.Now().UTC()
 	job.Status.Phase = "Running"
 	job.Status.Progress = 0
@@ -279,7 +279,7 @@ func (h *JobHandler) startJobExecutionLocked(job *JobResource, trigger string) {
 	}
 }
 
-func (h *JobHandler) executeJob(jobID string) {
+func (h *LegacyJobHandler) executeJob(jobID string) {
 	for i := 1; i <= 10; i++ {
 		time.Sleep(200 * time.Millisecond)
 		h.mu.Lock()
@@ -329,7 +329,7 @@ func (h *JobHandler) executeJob(jobID string) {
 	h.persistStateLocked()
 }
 
-func (h *JobHandler) loadState() {
+func (h *LegacyJobHandler) loadState() {
 	if h.etcd == nil {
 		return
 	}
@@ -346,18 +346,18 @@ func (h *JobHandler) loadState() {
 		return
 	}
 
-	var jobs map[string]*JobResource
+	var jobs map[string]*LegacyJobResource
 	if err := json.Unmarshal(resp.Kvs[0].Value, &jobs); err != nil {
 		logging.Z().Warn("jobs: failed to decode persisted state", zap.Error(err))
 		return
 	}
 	if jobs == nil {
-		jobs = make(map[string]*JobResource)
+		jobs = make(map[string]*LegacyJobResource)
 	}
 	h.jobs = jobs
 }
 
-func (h *JobHandler) persistStateLocked() {
+func (h *LegacyJobHandler) persistStateLocked() {
 	if h.etcd == nil {
 		return
 	}
@@ -377,8 +377,8 @@ func (h *JobHandler) persistStateLocked() {
 }
 
 // Create creates a new job
-func (h *JobHandler) Create(c *gin.Context) {
-	var job JobResource
+func (h *LegacyJobHandler) Create(c *gin.Context) {
+	var job LegacyJobResource
 	if err := c.ShouldBindJSON(&job); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -392,7 +392,7 @@ func (h *JobHandler) Create(c *gin.Context) {
 	job.Kind = "Job"
 	job.APIVersion = "axiom-nizam.io/v1"
 	job.Metadata.CreationTimestamp = time.Now().UTC().Format(time.RFC3339)
-	job.Status = JobStatus{
+	job.Status = LegacyJobStatus{
 		Phase:    "Pending",
 		Progress: 0,
 	}
@@ -413,11 +413,11 @@ func (h *JobHandler) Create(c *gin.Context) {
 }
 
 // List lists all jobs
-func (h *JobHandler) List(c *gin.Context) {
+func (h *LegacyJobHandler) List(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	items := make([]*JobResource, 0, len(h.jobs))
+	items := make([]*LegacyJobResource, 0, len(h.jobs))
 	for _, j := range h.jobs {
 		items = append(items, j)
 	}
@@ -426,7 +426,7 @@ func (h *JobHandler) List(c *gin.Context) {
 }
 
 // ListSchedules lists all job schedules.
-func (h *JobHandler) ListSchedules(c *gin.Context) {
+func (h *LegacyJobHandler) ListSchedules(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -450,7 +450,7 @@ func (h *JobHandler) ListSchedules(c *gin.Context) {
 }
 
 // Get returns a job by ID
-func (h *JobHandler) Get(c *gin.Context) {
+func (h *LegacyJobHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
 	h.mu.RLock()
@@ -467,7 +467,7 @@ func (h *JobHandler) Get(c *gin.Context) {
 }
 
 // Run runs a job
-func (h *JobHandler) Run(c *gin.Context) {
+func (h *LegacyJobHandler) Run(c *gin.Context) {
 	id := c.Param("id")
 
 	h.mu.Lock()
@@ -491,7 +491,7 @@ func (h *JobHandler) Run(c *gin.Context) {
 }
 
 // SetSchedule creates or updates a job schedule.
-func (h *JobHandler) SetSchedule(c *gin.Context) {
+func (h *LegacyJobHandler) SetSchedule(c *gin.Context) {
 	id := c.Param("id")
 	var req struct {
 		Schedule   string `json:"schedule"`
@@ -537,7 +537,7 @@ func (h *JobHandler) SetSchedule(c *gin.Context) {
 	job.Spec["schedule"] = expression
 
 	if job.Schedule == nil {
-		job.Schedule = &JobSchedule{}
+		job.Schedule = &LegacyJobSchedule{}
 	}
 	job.Schedule.Expression = expression
 	job.Schedule.Enabled = true
@@ -550,7 +550,7 @@ func (h *JobHandler) SetSchedule(c *gin.Context) {
 }
 
 // RemoveSchedule removes a job schedule.
-func (h *JobHandler) RemoveSchedule(c *gin.Context) {
+func (h *LegacyJobHandler) RemoveSchedule(c *gin.Context) {
 	id := c.Param("id")
 
 	h.mu.Lock()
@@ -578,7 +578,7 @@ func (h *JobHandler) RemoveSchedule(c *gin.Context) {
 }
 
 // GetLogs returns logs for a job
-func (h *JobHandler) GetLogs(c *gin.Context) {
+func (h *LegacyJobHandler) GetLogs(c *gin.Context) {
 	id := c.Param("id")
 
 	h.mu.RLock()
@@ -598,7 +598,7 @@ func (h *JobHandler) GetLogs(c *gin.Context) {
 }
 
 // Cancel cancels a running job
-func (h *JobHandler) Cancel(c *gin.Context) {
+func (h *LegacyJobHandler) Cancel(c *gin.Context) {
 	id := c.Param("id")
 
 	h.mu.Lock()
@@ -618,7 +618,7 @@ func (h *JobHandler) Cancel(c *gin.Context) {
 }
 
 // Delete removes a job
-func (h *JobHandler) Delete(c *gin.Context) {
+func (h *LegacyJobHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
 	h.mu.Lock()
@@ -644,7 +644,7 @@ func (h *JobHandler) Delete(c *gin.Context) {
 }
 
 // findJob finds a job by ID or name
-func (h *JobHandler) findJob(idOrName string) *JobResource {
+func (h *LegacyJobHandler) findJob(idOrName string) *LegacyJobResource {
 	if j, ok := h.jobs[idOrName]; ok {
 		return j
 	}
