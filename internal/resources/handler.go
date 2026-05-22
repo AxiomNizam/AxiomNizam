@@ -1,4 +1,4 @@
-package handlers
+package resources
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 // GenericResource is the wire-format DTO served by the /api/v1/resources
 // endpoints. It is intentionally JSON-stable (clients rely on this shape via
 // the Postman collections) and acts as a thin projection of the canonical
-// resources.BaseResource used elsewhere in the control plane.
+// BaseResource used elsewhere in the control plane.
 //
 // Invariants (P0.3):
 //   - This type DOES NOT drive reconciliation. Status transitions must be
@@ -31,9 +31,9 @@ import (
 type GenericResource struct {
 	APIVersion string                 `json:"apiVersion"`
 	Kind       string                 `json:"kind"`
-	Metadata   ResourceMetadata       `json:"metadata"`
+	Metadata   GenericResourceMetadata `json:"metadata"`
 	Spec       map[string]interface{} `json:"spec,omitempty"`
-	Status     ResourceStatus         `json:"status,omitempty"`
+	Status     GenericResourceStatus  `json:"status,omitempty"`
 }
 
 // GetKey implements reconciler.Resource. Returns "namespace/name".
@@ -63,9 +63,9 @@ func (g *GenericResource) GetObservedGeneration() int64 {
 	return g.Status.ObservedGeneration
 }
 
-// ResourceMetadata holds resource metadata. The field set and JSON tags are
+// GenericResourceMetadata holds resource metadata. The field set and JSON tags are
 // kept backward-compatible with pre-P0 clients.
-type ResourceMetadata struct {
+type GenericResourceMetadata struct {
 	Name              string            `json:"name"`
 	Namespace         string            `json:"namespace,omitempty"`
 	UID               string            `json:"uid,omitempty"`
@@ -75,26 +75,26 @@ type ResourceMetadata struct {
 	Annotations       map[string]string `json:"annotations,omitempty"`
 }
 
-// ResourceStatus holds resource status. ObservedGeneration was added in P0.1
+// GenericResourceStatus holds resource status. ObservedGeneration was added in P0.1
 // so the HTTP-surface DTO participates in generation-based reconciliation.
-type ResourceStatus struct {
+type GenericResourceStatus struct {
 	Phase              string                   `json:"phase,omitempty"`
 	Conditions         []map[string]interface{} `json:"conditions,omitempty"`
 	Message            string                   `json:"message,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 }
 
-// ResourceHandler manages generic Kubernetes-style resources
-type ResourceHandler struct {
+// GenericResourceHandler manages generic Kubernetes-style resources
+type GenericResourceHandler struct {
 	mu        sync.RWMutex
 	resources map[string]map[string]map[string]*GenericResource // kind -> namespace -> name -> resource
 	etcd      *clientv3.Client
 	stateKey  string
 }
 
-// NewResourceHandler creates a new resource handler
-func NewResourceHandler(etcd *clientv3.Client) *ResourceHandler {
-	h := &ResourceHandler{
+// NewGenericResourceHandler creates a new resource handler
+func NewGenericResourceHandler(etcd *clientv3.Client) *GenericResourceHandler {
+	h := &GenericResourceHandler{
 		resources: make(map[string]map[string]map[string]*GenericResource),
 		etcd:      etcd,
 		stateKey:  "handlers:resources:state",
@@ -103,7 +103,7 @@ func NewResourceHandler(etcd *clientv3.Client) *ResourceHandler {
 	return h
 }
 
-func (h *ResourceHandler) loadState() {
+func (h *GenericResourceHandler) loadState() {
 	if h.etcd == nil {
 		return
 	}
@@ -131,7 +131,7 @@ func (h *ResourceHandler) loadState() {
 	h.resources = resourcesState
 }
 
-func (h *ResourceHandler) persistStateLocked() {
+func (h *GenericResourceHandler) persistStateLocked() {
 	if h.etcd == nil {
 		return
 	}
@@ -150,13 +150,13 @@ func (h *ResourceHandler) persistStateLocked() {
 	}
 }
 
-func (h *ResourceHandler) ensureKind(kind string) {
+func (h *GenericResourceHandler) ensureKind(kind string) {
 	if h.resources[kind] == nil {
 		h.resources[kind] = make(map[string]map[string]*GenericResource)
 	}
 }
 
-func (h *ResourceHandler) ensureNamespace(kind, ns string) {
+func (h *GenericResourceHandler) ensureNamespace(kind, ns string) {
 	h.ensureKind(kind)
 	if h.resources[kind][ns] == nil {
 		h.resources[kind][ns] = make(map[string]*GenericResource)
@@ -164,8 +164,8 @@ func (h *ResourceHandler) ensureNamespace(kind, ns string) {
 }
 
 // CreateOrUpdate creates or updates a resource (POST)
-func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) CreateOrUpdate(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 	if ns == "" {
 		ns = "default"
@@ -184,7 +184,6 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 
 	name := resource.Metadata.Name
 	if name == "" {
-		// Try to extract from metadata
 		c.JSON(http.StatusBadRequest, gin.H{"error": "metadata.name is required"})
 		return
 	}
@@ -193,7 +192,6 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	if existing != nil {
-		// Update
 		resource.Metadata.UID = existing.Metadata.UID
 		resource.Metadata.CreationTimestamp = existing.Metadata.CreationTimestamp
 		resource.Metadata.Generation = existing.Metadata.Generation + 1
@@ -203,7 +201,6 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		h.persistStateLocked()
 		c.JSON(http.StatusOK, &resource)
 	} else {
-		// Create
 		resource.Metadata.UID = uuid.New().String()
 		resource.Metadata.CreationTimestamp = now
 		resource.Metadata.Generation = 1
@@ -213,15 +210,11 @@ func (h *ResourceHandler) CreateOrUpdate(c *gin.Context) {
 		h.persistStateLocked()
 		c.JSON(http.StatusCreated, &resource)
 	}
-
-	// Real status transitions (Pending -> Reconciling -> Ready) are performed
-	// by the controller that owns this Kind, not by the HTTP handler. See
-	// P0.3 in ARCHITECTURE.md.
 }
 
 // Get retrieves a resource by namespace/kind/name
-func (h *ResourceHandler) Get(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) Get(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 	name := c.Param("name")
 
@@ -241,8 +234,8 @@ func (h *ResourceHandler) Get(c *gin.Context) {
 }
 
 // List returns all resources of a kind in a namespace
-func (h *ResourceHandler) List(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) List(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 
 	if ns == "" {
@@ -266,8 +259,8 @@ func (h *ResourceHandler) List(c *gin.Context) {
 }
 
 // Update updates a resource (PUT)
-func (h *ResourceHandler) Update(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) Update(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 	name := c.Param("name")
 
@@ -291,7 +284,6 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Merge updates into spec
 	if existing.Spec == nil {
 		existing.Spec = make(map[string]interface{})
 	}
@@ -303,13 +295,11 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 	h.persistStateLocked()
 
 	c.JSON(http.StatusOK, existing)
-
-	// Status transitions are owned by the controller for this Kind (P0.3).
 }
 
 // Delete removes a resource
-func (h *ResourceHandler) Delete(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) Delete(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 	name := c.Param("name")
 
@@ -331,8 +321,8 @@ func (h *ResourceHandler) Delete(c *gin.Context) {
 }
 
 // GetStatus returns the status subresource
-func (h *ResourceHandler) GetStatus(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) GetStatus(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 	name := c.Param("name")
 
@@ -352,8 +342,8 @@ func (h *ResourceHandler) GetStatus(c *gin.Context) {
 }
 
 // ListAll returns all resources of a kind across all namespaces (for non-namespaced queries)
-func (h *ResourceHandler) ListAll(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) ListAll(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -372,8 +362,8 @@ func (h *ResourceHandler) ListAll(c *gin.Context) {
 }
 
 // Events returns events for a resource
-func (h *ResourceHandler) Events(c *gin.Context) {
-	kind := normalizeKind(c.Param("kind"))
+func (h *GenericResourceHandler) Events(c *gin.Context) {
+	kind := NormalizeKind(c.Param("kind"))
 	ns := c.Param("namespace")
 	name := c.Param("name")
 
@@ -410,8 +400,8 @@ func (h *ResourceHandler) Events(c *gin.Context) {
 
 // FindResourceByKindAndName finds the first matching resource across namespaces.
 // It returns a defensive copy to avoid callers mutating internal handler state.
-func (h *ResourceHandler) FindResourceByKindAndName(kind, name string) (*GenericResource, bool) {
-	normalizedKind := normalizeKind(kind)
+func (h *GenericResourceHandler) FindResourceByKindAndName(kind, name string) (*GenericResource, bool) {
+	normalizedKind := NormalizeKind(kind)
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -431,7 +421,7 @@ func (h *ResourceHandler) FindResourceByKindAndName(kind, name string) (*Generic
 					}
 				}
 
-				return cloneGenericResource(res), true
+				return CloneGenericResource(res), true
 			}
 		}
 	}
@@ -439,27 +429,29 @@ func (h *ResourceHandler) FindResourceByKindAndName(kind, name string) (*Generic
 	return nil, false
 }
 
-func cloneGenericResource(in *GenericResource) *GenericResource {
+// CloneGenericResource creates a deep copy of a GenericResource.
+func CloneGenericResource(in *GenericResource) *GenericResource {
 	if in == nil {
 		return nil
 	}
 
 	out := *in
-	out.Metadata.Labels = cloneStringMap(in.Metadata.Labels)
-	out.Metadata.Annotations = cloneStringMap(in.Metadata.Annotations)
-	out.Spec = cloneAnyMap(in.Spec)
+	out.Metadata.Labels = CloneStringMap(in.Metadata.Labels)
+	out.Metadata.Annotations = CloneStringMap(in.Metadata.Annotations)
+	out.Spec = CloneAnyMap(in.Spec)
 
 	if len(in.Status.Conditions) > 0 {
 		out.Status.Conditions = make([]map[string]interface{}, len(in.Status.Conditions))
 		for i := range in.Status.Conditions {
-			out.Status.Conditions[i] = cloneAnyMap(in.Status.Conditions[i])
+			out.Status.Conditions[i] = CloneAnyMap(in.Status.Conditions[i])
 		}
 	}
 
 	return &out
 }
 
-func cloneStringMap(in map[string]string) map[string]string {
+// CloneStringMap creates a copy of a string map.
+func CloneStringMap(in map[string]string) map[string]string {
 	if in == nil {
 		return nil
 	}
@@ -471,7 +463,8 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-func cloneAnyMap(in map[string]interface{}) map[string]interface{} {
+// CloneAnyMap creates a copy of an interface{} map.
+func CloneAnyMap(in map[string]interface{}) map[string]interface{} {
 	if in == nil {
 		return nil
 	}
@@ -483,10 +476,9 @@ func cloneAnyMap(in map[string]interface{}) map[string]interface{} {
 	return out
 }
 
-// normalizeKind normalizes resource kind names for consistent storage
-func normalizeKind(kind string) string {
+// NormalizeKind normalizes resource kind names for consistent storage
+func NormalizeKind(kind string) string {
 	kind = strings.ToLower(kind)
-	// Map plural to singular for consistency
 	switch kind {
 	case "apis", "api":
 		return "apis"

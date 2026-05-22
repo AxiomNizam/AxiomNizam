@@ -48,6 +48,7 @@ import (
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	healthpkg "example.com/axiomnizam/internal/health"
 	"example.com/axiomnizam/internal/handlers"
+	authn "example.com/axiomnizam/internal/iam/authn"
 	netintelpkg "example.com/axiomnizam/internal/netintel"
 	notificationpkg "example.com/axiomnizam/internal/notification"
 	transformpkg "example.com/axiomnizam/internal/transform"
@@ -69,6 +70,8 @@ import (
 	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/platform"
 	genericctrl "example.com/axiomnizam/internal/platform/controller"
+	querypkg "example.com/axiomnizam/internal/query"
+	resourcespkg "example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/platform/featureflags"
 	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/policies"
@@ -362,7 +365,7 @@ func main() {
 	rateLimiter := auth.NewRateLimiter(cfg.RateLimiting.MaxCallsPerToken, cfg.RateLimiting.TokenValidityMinutes)
 
 	// Initialize Query Logger with Valkey/Redis
-	queryLogger := handlers.NewQueryLogger(conns.Valkey, "/data/query_logs")
+	queryLogger := querypkg.NewQueryLogger(conns.Valkey, "/data/query_logs")
 
 	// Initialize all handlers
 	healthHandler := healthpkg.NewHandler(conns)
@@ -379,14 +382,14 @@ func main() {
 	adminHandler := database.NewHandler(dbConnections, conns.PostgreSQL)
 
 	// User management handler
-	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)
+	platformUserHandler := iamusers.NewPlatformUserHandler(conns.Etcd)
 
 	// Dynamic Query handlers for each database
-	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL, queryLogger)
-	mariadbDynamicHandler := handlers.NewDynamicQueryHandler(conns.MariaDB, queryLogger)
-	postgresDynamicHandler := handlers.NewDynamicQueryHandler(conns.PostgreSQL, queryLogger)
-	perconaDynamicHandler := handlers.NewDynamicQueryHandler(conns.Percona, queryLogger)
-	oracleDynamicHandler := handlers.NewDynamicQueryHandler(conns.Oracle, queryLogger)
+	mysqlDynamicHandler := querypkg.NewHandler(conns.MySQL, queryLogger)
+	mariadbDynamicHandler := querypkg.NewHandler(conns.MariaDB, queryLogger)
+	postgresDynamicHandler := querypkg.NewHandler(conns.PostgreSQL, queryLogger)
+	perconaDynamicHandler := querypkg.NewHandler(conns.Percona, queryLogger)
+	oracleDynamicHandler := querypkg.NewHandler(conns.Oracle, queryLogger)
 
 	// Notification handler
 	discordWebhookURL := cfg.Discord.WebhookURL
@@ -589,7 +592,7 @@ func main() {
 	})
 
 	// Authentication endpoints (no auth required for login/refresh)
-	authHandler := handlers.NewAuthHandler()
+	authHandler := authn.NewAuthHandler()
 	authHandler.SetRateLimiter(rateLimiter)
 	authHandler.SetPlatformUserHandler(platformUserHandler)
 	if iamSystem != nil && iamSystem.PGStore != nil {
@@ -804,7 +807,7 @@ func main() {
 	// ====================================
 	// CLI AUTHENTICATION ENDPOINTS
 	// ====================================
-	cliAuth := handlers.NewCLIAuthHandler()
+	cliAuth := authn.NewCLIAuthHandler()
 	router.POST("/api/v1/auth/login", cliAuth.Login)
 	router.POST("/api/v1/auth/logout", authHandler.Logout)
 	router.GET("/api/v1/auth/verify", cliAuth.Verify)
@@ -813,7 +816,7 @@ func main() {
 	// ====================================
 	// KUBERNETES-STYLE RESOURCE ENDPOINTS
 	// ====================================
-	resourceHandler := handlers.NewResourceHandler(conns.Etcd)
+	resourceHandler := resourcespkg.NewGenericResourceHandler(conns.Etcd)
 
 	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
 	nsAPI := router.Group("/api/v1/namespaces")
@@ -3075,7 +3078,7 @@ func applySecurityGuardrails(cfg *config.Config) {
 	log.Printf("⚠️  Security guardrails detected %d blocking issue(s) but startup continues (env=%s, mode=%s)", len(blocking), env, mode)
 }
 
-func ensureWorkflowRegistered(ctx context.Context, resourceHandler *handlers.ResourceHandler, workflowName string) error {
+func ensureWorkflowRegistered(ctx context.Context, resourceHandler *resourcespkg.GenericResourceHandler, workflowName string) error {
 	if resourceHandler == nil {
 		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
 			return nil
@@ -3099,7 +3102,7 @@ func ensureWorkflowRegistered(ctx context.Context, resourceHandler *handlers.Res
 	return workflows.AddWorkflow(ctx, workflowDef)
 }
 
-func workflowFromResource(resource *handlers.GenericResource) (*workflows.Workflow, error) {
+func workflowFromResource(resource *resourcespkg.GenericResource) (*workflows.Workflow, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("workflow definition is nil")
 	}

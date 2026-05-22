@@ -549,7 +549,7 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.0 | Wire gatekeeper DTOs/mappers into http.go (reference fix) | gatekeeper | DONE |
 | 8.1 | Add storage DTOs + mappers (`admin/dto.go`, `admin/mapper.go`) | storage | DONE |
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
-| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | IN PROGRESS (26/42 extracted) |
+| 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | IN PROGRESS (36/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
 | 8.5 | Add DTO structs + mappers to each module's handlers | All modules | PENDING |
 
@@ -649,6 +649,25 @@ These bring all modules toward the gatekeeper reference architecture.
   - VersioningHandler → `internal/versioning/handler.go`
 - Updated `internal/integration/quality_rls_cdc_versioning_integration.go` to use new module types
 - Total extracted: 26/42 files; 16 remaining in monolith
+
+**Key changes (2026-05-22 — Phase 8.3 continued):**
+- Extracted 10 files from `internal/handlers/` into per-module packages:
+  - `handlers/auth_handler.go` (1924 lines) → `internal/iam/authn/handler.go` (AuthHandler + OAuth, login, token validation)
+  - `handlers/cli_auth_handler.go` (214 lines) → `internal/iam/authn/cli_handler.go` (CLIAuthHandler)
+  - `handlers/login_identifier.go` (30 lines) → `internal/iam/authn/login_identifier.go`
+  - `handlers/user_handler.go` (445 lines) → `internal/iam/users/platform_handler.go` (PlatformUserHandler)
+  - `handlers/resource_handler.go` (505 lines) → `internal/resources/handler.go` (GenericResourceHandler)
+  - `handlers/dynamic_query_handler.go` (487 lines) → `internal/query/handler.go` (DynamicQueryHandler)
+  - `handlers/query_logger.go` (474 lines) → `internal/query/logger.go` (QueryLogger)
+  - `handlers/query_logger_handlers.go` (287 lines) → `internal/query/logger_endpoints.go`
+  - `handlers/query_builder_handler.go` (567 lines) → `internal/query/builder_endpoints.go`
+  - `handlers/encryption_lineage_audit_workflow_handlers.go` (650 lines) → `internal/encryption/phase3_handler.go` (Phase3Handlers)
+- Created 2 new modules: `internal/query/` (4 files), extended `internal/iam/authn/` (3 files)
+- Added interfaces to break import cycles: `PlatformUserStore`, `IdentityProviderStore`, `IAMRoleResolver`
+- Extended `UserRepository` interface with `Create`/`Update` methods
+- Updated main.go and integration test imports
+- Remaining 6 files in monolith: `api_builder_handler.go`, `datasource_handler.go`, `job_handler.go` (complex logic), `gis_handler.go`, `gis_specialized_handler.go`, `analytics_handler.go` (coupled to api_builder)
+- Total extracted: 36/42 files; 6 remaining in monolith
 
 ---
 
@@ -962,7 +981,7 @@ Tier 1 (Critical Fixes) — Independent, any order
 Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 6: Module lifecycle interface ✅
 ├── Phase 7: Standardize config       ✅ DONE
-├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3: 26/42 extracted)
+├── Phase 8: Standardize handlers     ← YOU ARE HERE (8.0-8.2 DONE, 8.3: 36/42 extracted)
 ├── Phase 9: Standardize models       ← needs Phase 6
 ├── Phase 10: Repository interfaces   ← needs Phase 9
 ├── Phase 11: Standardize metrics     ← needs Phase 6
@@ -1035,7 +1054,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-21 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.2 DONE)*
+*Last updated: 2026-05-22 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.2 DONE, 8.3: 36/42 extracted)*
 
 ---
 
@@ -1050,7 +1069,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ⬜ TODO | — | Only gatekeeper has `config/` package |
-| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE; 8.3 IN PROGRESS (26/42 extracted); 8.4-8.5 pending |
+| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.2 DONE; 8.3 IN PROGRESS (36/42 extracted); 8.4-8.5 pending |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
@@ -1122,4 +1141,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-21 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.2 DONE, 8.3 incremental)*
+*Last updated: 2026-05-22 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.2 DONE, 8.3: 36/42 extracted)*

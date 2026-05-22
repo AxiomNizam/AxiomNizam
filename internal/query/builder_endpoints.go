@@ -1,4 +1,4 @@
-package handlers
+package query
 
 import (
 	"net/http"
@@ -58,7 +58,7 @@ type AggregationRequest struct {
 }
 
 // BuilderQuery handles query builder endpoint
-func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
+func (h *Handler) BuilderQuery(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -76,7 +76,6 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 		return
 	}
 
-	// Validate table name
 	if req.Table == "" {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -87,21 +86,17 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 
 	startTime := time.Now()
 
-	// Create query builder
 	qb := utils.NewQueryBuilder(h.db)
 	qb.From(req.Table)
 
-	// Apply select columns
 	if len(req.Select) > 0 {
 		qb.Select(req.Select...)
 	}
 
-	// Apply distinct
 	if req.Distinct {
 		qb.Distinct()
 	}
 
-	// Apply filters
 	for _, filter := range req.Filters {
 		filterRule := utils.NewFilterRule().
 			SetColumn(filter.Column).
@@ -123,7 +118,6 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 		qb.AddFilter(filterRule)
 	}
 
-	// Apply joins
 	for _, join := range req.Joins {
 		joinType := strings.ToUpper(join.Type)
 		switch joinType {
@@ -136,23 +130,19 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 		}
 	}
 
-	// Apply group by
 	if len(req.GroupBy) > 0 {
 		qb.GroupBy(req.GroupBy...)
 	}
 
-	// Apply aggregations
 	for _, agg := range req.Aggregations {
 		aggObj := utils.NewAggregation(agg.Function, agg.Column, agg.Alias)
 		qb.AddAggregation(aggObj)
 	}
 
-	// Apply order by
 	for _, orderBy := range req.OrderBy {
 		qb.OrderBy(orderBy.Column, orderBy.Direction)
 	}
 
-	// Apply pagination or limit/offset
 	if req.Page > 0 && req.PageSize > 0 {
 		qb.Paginate(req.Page, req.PageSize)
 	} else if req.Limit > 0 {
@@ -162,12 +152,10 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 		}
 	}
 
-	// Apply CTEs
 	for name, cteQuery := range req.CTE {
 		qb.WithCTE(name, cteQuery)
 	}
 
-	// Build and log query
 	query, params, err := qb.Build()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -181,7 +169,7 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 		duration := time.Since(startTime).Milliseconds()
 		h.logger.LogQuery(QueryLog{
 			Query:    query,
-			Params:   convertParamsToStrings(params),
+			Params:   ConvertParamsToStrings(params),
 			Database: c.GetString("database"),
 			User:     c.GetString("user_id"),
 			Status:   "success",
@@ -189,7 +177,6 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 		})
 	}
 
-	// Execute query
 	results, err := qb.Execute()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -211,7 +198,7 @@ func (h *DynamicQueryHandler) BuilderQuery(c *gin.Context) {
 }
 
 // BuilderQueryWithPagination handles paginated query builder requests
-func (h *DynamicQueryHandler) BuilderQueryWithPagination(c *gin.Context) {
+func (h *Handler) BuilderQueryWithPagination(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -237,7 +224,6 @@ func (h *DynamicQueryHandler) BuilderQueryWithPagination(c *gin.Context) {
 		return
 	}
 
-	// Default pagination values
 	if req.Page < 1 {
 		req.Page = 1
 	}
@@ -247,11 +233,9 @@ func (h *DynamicQueryHandler) BuilderQueryWithPagination(c *gin.Context) {
 
 	startTime := time.Now()
 
-	// Create query builder
 	qb := utils.NewQueryBuilder(h.db)
 	qb.From(req.Table)
 
-	// Apply all conditions (same as BuilderQuery)
 	if len(req.Select) > 0 {
 		qb.Select(req.Select...)
 	}
@@ -306,7 +290,6 @@ func (h *DynamicQueryHandler) BuilderQueryWithPagination(c *gin.Context) {
 		qb.OrderBy(orderBy.Column, orderBy.Direction)
 	}
 
-	// Execute with pagination
 	result, err := qb.ExecuteWithPagination(req.Page, req.PageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -321,7 +304,7 @@ func (h *DynamicQueryHandler) BuilderQueryWithPagination(c *gin.Context) {
 		query, params, _ := qb.Build()
 		h.logger.LogQuery(QueryLog{
 			Query:    query,
-			Params:   convertParamsToStrings(params),
+			Params:   ConvertParamsToStrings(params),
 			Database: c.GetString("database"),
 			User:     c.GetString("user_id"),
 			Status:   "success",
@@ -342,7 +325,7 @@ type TableSchemaRequest struct {
 }
 
 // GetTableSchema handles schema introspection requests
-func (h *DynamicQueryHandler) GetTableSchema(c *gin.Context) {
+func (h *Handler) GetTableSchema(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -353,7 +336,6 @@ func (h *DynamicQueryHandler) GetTableSchema(c *gin.Context) {
 
 	var req TableSchemaRequest
 	if err := c.BindJSON(&req); err != nil {
-		// Try to get from query param
 		tableName := c.Query("table")
 		if tableName == "" {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -365,7 +347,6 @@ func (h *DynamicQueryHandler) GetTableSchema(c *gin.Context) {
 		req.Table = tableName
 	}
 
-	// Scan table schema
 	qb := utils.NewQueryBuilder(h.db)
 	schema, err := qb.ScanTableSchema(req.Table)
 	if err != nil {
@@ -405,7 +386,7 @@ type FilterRuleJSON struct {
 }
 
 // ApplyAdvancedFilter applies advanced filtering to query
-func (h *DynamicQueryHandler) ApplyAdvancedFilter(c *gin.Context) {
+func (h *Handler) ApplyAdvancedFilter(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -431,11 +412,9 @@ func (h *DynamicQueryHandler) ApplyAdvancedFilter(c *gin.Context) {
 		return
 	}
 
-	// Create query builder
 	qb := utils.NewQueryBuilder(h.db)
 	qb.From(req.Table)
 
-	// Apply filters
 	for _, f := range req.Filters {
 		filterRule := utils.NewFilterRule().
 			SetColumn(f.Column).
@@ -458,19 +437,16 @@ func (h *DynamicQueryHandler) ApplyAdvancedFilter(c *gin.Context) {
 		qb.AddFilter(filterRule)
 	}
 
-	// Apply ordering
 	for _, order := range req.OrderBy {
 		qb.OrderBy(order.Column, order.Direction)
 	}
 
-	// Apply pagination
 	if req.Page > 0 && req.PageSize > 0 {
 		qb.Paginate(req.Page, req.PageSize)
 	}
 
 	startTime := time.Now()
 
-	// Execute
 	var result interface{}
 	var err error
 
@@ -501,7 +477,7 @@ func (h *DynamicQueryHandler) ApplyAdvancedFilter(c *gin.Context) {
 		query, params, _ := qb.Build()
 		h.logger.LogQuery(QueryLog{
 			Query:    query,
-			Params:   convertParamsToStrings(params),
+			Params:   ConvertParamsToStrings(params),
 			Database: c.GetString("database"),
 			User:     c.GetString("user_id"),
 			Status:   "success",
@@ -523,7 +499,7 @@ type ScanIfNotPresentRequest struct {
 }
 
 // ScanIfNotPresent checks if table exists, creates with provided query if not
-func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
+func (h *Handler) ScanIfNotPresent(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -541,12 +517,10 @@ func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
 		return
 	}
 
-	// Check if table exists
 	qb := utils.NewQueryBuilder(h.db)
 	schema, err := qb.ScanTableSchema(req.TableName)
 
 	if err == nil && schema != nil && len(schema.Columns) > 0 {
-		// Table exists
 		c.JSON(http.StatusOK, models.Response{
 			Status:  "ok",
 			Message: "Table already exists",
@@ -558,7 +532,6 @@ func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
 		return
 	}
 
-	// Table doesn't exist, create it if query provided
 	if req.CreateQuery == "" {
 		c.JSON(http.StatusNotFound, models.Response{
 			Status: "error",
@@ -567,7 +540,6 @@ func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
 		return
 	}
 
-	// Validate and execute create query
 	upperQuery := strings.ToUpper(strings.TrimSpace(req.CreateQuery))
 	if !strings.HasPrefix(upperQuery, "CREATE TABLE") {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -577,7 +549,6 @@ func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
 		return
 	}
 
-	// Execute create table
 	if result := h.db.Exec(req.CreateQuery); result.Error != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Status: "error",
@@ -586,7 +557,6 @@ func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
 		return
 	}
 
-	// Scan and return new schema
 	schema, err = qb.ScanTableSchema(req.TableName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -607,7 +577,7 @@ func (h *DynamicQueryHandler) ScanIfNotPresent(c *gin.Context) {
 }
 
 // GetSampleQuery returns example query builder request
-func (h *DynamicQueryHandler) GetSampleQuery(c *gin.Context) {
+func (h *Handler) GetSampleQuery(c *gin.Context) {
 	sampleRequest := QueryBuilderRequest{
 		Table:    "users",
 		Select:   []string{"id", "name", "email"},

@@ -59,6 +59,8 @@ type UserRepository interface {
 	GetByLoginIdentifier(identifier string) (*identity.User, error)
 	GetByEmail(email string) (*identity.User, error)
 	GetByID(id string) (*identity.User, error)
+	Create(user *identity.User) error
+	Update(user *identity.User) error
 }
 
 // SessionRepository persists sessions.

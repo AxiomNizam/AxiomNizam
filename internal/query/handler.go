@@ -1,4 +1,4 @@
-package handlers
+package query
 
 // SECURITY (P0.5):
 //
@@ -7,13 +7,6 @@ package handlers
 // query is passed through utils.SQLInjectionProtection.ValidateSQLInput
 // before execution, and every non-SELECT statement additionally requires an
 // authenticated caller with an admin-equivalent role.
-//
-// The target architecture (Phase 1) is to model each caller-supplied query as
-// a `SQLQuery` Kind — a reconciled Resource with Spec{datasource, query,
-// params, policy} and Status{phase, rowsReturned, error} so admission and
-// RBAC are enforced by the control plane rather than by ad-hoc checks in the
-// HTTP handler. Until that lands, the guards below are the minimum defence
-// and MUST NOT be removed.
 
 import (
 	"fmt"
@@ -28,9 +21,7 @@ import (
 )
 
 // adminishRoles lists role names considered privileged enough to run
-// mutating SQL through the DynamicQuery endpoints. Kept conservative: regular
-// users cannot execute INSERT/UPDATE/DELETE/DDL even if the query parser
-// classifies the statement as "allowed".
+// mutating SQL through the DynamicQuery endpoints.
 var adminishRoles = map[string]struct{}{
 	"admin":          {},
 	"superadmin":     {},
@@ -38,16 +29,16 @@ var adminishRoles = map[string]struct{}{
 	"dba":            {},
 }
 
-// DynamicQueryHandler handles dynamic SQL queries
-type DynamicQueryHandler struct {
+// Handler handles dynamic SQL queries
+type Handler struct {
 	db            *gorm.DB
 	logger        *QueryLogger
 	sqlProtection *utils.SQLInjectionProtection
 }
 
-// NewDynamicQueryHandler creates a new dynamic query handler
-func NewDynamicQueryHandler(db *gorm.DB, logger *QueryLogger) *DynamicQueryHandler {
-	return &DynamicQueryHandler{
+// NewHandler creates a new dynamic query handler
+func NewHandler(db *gorm.DB, logger *QueryLogger) *Handler {
+	return &Handler{
 		db:            db,
 		logger:        logger,
 		sqlProtection: utils.NewSQLInjectionProtection(),
@@ -55,10 +46,8 @@ func NewDynamicQueryHandler(db *gorm.DB, logger *QueryLogger) *DynamicQueryHandl
 }
 
 // validateIncomingQuery runs the caller-supplied SQL text through the
-// injection-protection engine before it is ever handed to the database. This
-// is the single chokepoint for all P0.5 safety checks and must be called from
-// every entry point that executes free-form SQL.
-func (h *DynamicQueryHandler) validateIncomingQuery(query string) error {
+// injection-protection engine before it is ever handed to the database.
+func (h *Handler) validateIncomingQuery(query string) error {
 	if h.sqlProtection == nil {
 		h.sqlProtection = utils.NewSQLInjectionProtection()
 	}
@@ -66,9 +55,7 @@ func (h *DynamicQueryHandler) validateIncomingQuery(query string) error {
 }
 
 // requireAdminForMutation rejects the request unless the authenticated
-// caller carries an admin-equivalent role. It is a belt-and-braces check on
-// top of the SELECT-only filter and must be invoked before any non-SELECT
-// statement reaches gorm.DB.Exec.
+// caller carries an admin-equivalent role.
 func requireAdminForMutation(c *gin.Context) bool {
 	rolesVal, ok := c.Get("roles")
 	if !ok {
@@ -98,9 +85,7 @@ type QueryRequest struct {
 }
 
 // DynamicQuery handles GET requests with dynamic SQL queries
-// Query should be passed as URL parameter: /api/{db}/query?q=SELECT * FROM users WHERE id = ?&params=1
-// Or with body: POST /api/{db}/query with JSON body
-func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
+func (h *Handler) DynamicQuery(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -112,10 +97,8 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 	var query string
 	var params []interface{}
 
-	// Try to get query from URL parameters (for GET requests)
 	query = c.Query("q")
 	if query == "" {
-		// Try to get from body (for POST requests)
 		var req QueryRequest
 		if err := c.BindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -127,10 +110,8 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		query = req.Query
 		params = req.Params
 	} else {
-		// Parse params from URL if provided
 		paramStr := c.Query("params")
 		if paramStr != "" {
-			// Split params by comma and convert to interface{}
 			paramParts := strings.Split(paramStr, ",")
 			for _, p := range paramParts {
 				params = append(params, strings.TrimSpace(p))
@@ -138,7 +119,6 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		}
 	}
 
-	// Validate query - only allow SELECT, WITH (CTE), SHOW, DESCRIBE
 	upperQuery := strings.ToUpper(strings.TrimSpace(query))
 	if !isSelectQuery(upperQuery) {
 		c.JSON(http.StatusForbidden, models.Response{
@@ -148,7 +128,6 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		return
 	}
 
-	// P0.5: injection-protection filter on the GET SELECT path too.
 	if err := h.validateIncomingQuery(query); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -157,14 +136,13 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		return
 	}
 
-	// Log the query
 	startTime := time.Now()
 	defer func() {
 		if h.logger != nil {
 			duration := time.Since(startTime).Milliseconds()
 			h.logger.LogQuery(QueryLog{
 				Query:    query,
-				Params:   convertParamsToStrings(params),
+				Params:   ConvertParamsToStrings(params),
 				Database: c.GetString("database"),
 				User:     c.GetString("user_id"),
 				Status:   "success",
@@ -173,7 +151,6 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 		}
 	}()
 
-	// Execute the query
 	var results []map[string]interface{}
 	rows, err := h.db.Raw(query, params...).Rows()
 	if err != nil {
@@ -231,24 +208,8 @@ func (h *DynamicQueryHandler) DynamicQuery(c *gin.Context) {
 	})
 }
 
-// DynamicQueryWithBody handles POST requests with dynamic SQL queries (supports all query types)
-func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
-	startTime := time.Now()
-	defer func() {
-		if h.logger != nil {
-			duration := time.Since(startTime).Milliseconds()
-			var logStatus string
-			if c.Writer.Status() >= 400 {
-				logStatus = "error"
-			} else {
-				logStatus = "success"
-			}
-			// Query will be logged within the method after parsing
-			_ = duration
-			_ = logStatus
-		}
-	}()
-
+// DynamicQueryWithBody handles POST requests with dynamic SQL queries
+func (h *Handler) DynamicQueryWithBody(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -274,7 +235,6 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 		return
 	}
 
-	// For POST, allow SELECT/INSERT/UPDATE/DELETE/CREATE
 	upperQuery := strings.ToUpper(strings.TrimSpace(req.Query))
 	if !isWriteOrSelectQuery(upperQuery) {
 		c.JSON(http.StatusForbidden, models.Response{
@@ -284,10 +244,6 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 		return
 	}
 
-	// P0.5: run the raw SQL through the injection-protection engine before
-	// anything else. This rejects obvious SQLi payloads (UNION-based,
-	// comment-terminated, stacked statements, forbidden keywords) even for
-	// authenticated callers.
 	if err := h.validateIncomingQuery(req.Query); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -296,9 +252,7 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 		return
 	}
 
-	// Check if it's a SELECT query
 	if isSelectQuery(upperQuery) {
-		// Execute SELECT query
 		var results []map[string]interface{}
 		rows, err := h.db.Raw(req.Query, req.Params...).Rows()
 		if err != nil {
@@ -355,8 +309,6 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 			Data:    results,
 		})
 	} else {
-		// Execute non-SELECT query (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER)
-		// P0.5: admin role gate for every mutating statement.
 		if !requireAdminForMutation(c) {
 			return
 		}
@@ -380,7 +332,7 @@ func (h *DynamicQueryHandler) DynamicQueryWithBody(c *gin.Context) {
 }
 
 // BatchQueries handles batch queries via POST
-func (h *DynamicQueryHandler) BatchQueries(c *gin.Context) {
+func (h *Handler) BatchQueries(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -417,8 +369,6 @@ func (h *DynamicQueryHandler) BatchQueries(c *gin.Context) {
 			return
 		}
 
-		// P0.5: per-statement injection validation before anything touches
-		// the database.
 		if err := h.validateIncomingQuery(req.Query); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
 				Status: "error",
@@ -462,7 +412,6 @@ func (h *DynamicQueryHandler) BatchQueries(c *gin.Context) {
 				results = append(results, entry)
 			}
 		} else {
-			// P0.5: admin role gate for every mutating statement in the batch.
 			if !requireAdminForMutation(c) {
 				return
 			}
@@ -485,7 +434,7 @@ func (h *DynamicQueryHandler) BatchQueries(c *gin.Context) {
 }
 
 // TableSchema returns the schema of a table
-func (h *DynamicQueryHandler) TableSchema(c *gin.Context) {
+func (h *Handler) TableSchema(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -503,7 +452,6 @@ func (h *DynamicQueryHandler) TableSchema(c *gin.Context) {
 		return
 	}
 
-	// Get table columns
 	type Column struct {
 		Field   string
 		Type    string
@@ -514,10 +462,6 @@ func (h *DynamicQueryHandler) TableSchema(c *gin.Context) {
 	}
 
 	var columns []Column
-	// This works for MySQL, MariaDB, Percona
-	// For PostgreSQL, you would need different query
-	// For Oracle, you would need different query
-
 	dbType := h.db.Dialector.Name()
 	var query string
 
@@ -526,7 +470,6 @@ func (h *DynamicQueryHandler) TableSchema(c *gin.Context) {
 		query = "SELECT COLUMN_NAME as Field, COLUMN_TYPE as Type, IS_NULLABLE as Null, COLUMN_KEY as Key, COLUMN_DEFAULT as Default, EXTRA as Extra FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION"
 		h.db.Raw(query, tableName).Scan(&columns)
 	case "postgres":
-		// PostgreSQL query
 		query = "SELECT column_name as Field, data_type as Type, is_nullable as Null FROM information_schema.columns WHERE table_name = $1"
 		h.db.Raw(query, tableName).Scan(&columns)
 	default:
@@ -552,7 +495,7 @@ func (h *DynamicQueryHandler) TableSchema(c *gin.Context) {
 	})
 }
 
-// Helper function to check if query is a SELECT query
+// isSelectQuery checks if query is a SELECT query
 func isSelectQuery(upperQuery string) bool {
 	return strings.HasPrefix(upperQuery, "SELECT") ||
 		strings.HasPrefix(upperQuery, "WITH") ||
@@ -562,7 +505,7 @@ func isSelectQuery(upperQuery string) bool {
 		strings.HasPrefix(upperQuery, "EXPLAIN")
 }
 
-// Helper function to check if query is allowed (SELECT or write operations)
+// isWriteOrSelectQuery checks if query is allowed (SELECT or write operations)
 func isWriteOrSelectQuery(upperQuery string) bool {
 	allowedPrefixes := []string{
 		"SELECT", "WITH", "SHOW", "DESCRIBE", "DESC", "EXPLAIN",
@@ -577,9 +520,8 @@ func isWriteOrSelectQuery(upperQuery string) bool {
 	return false
 }
 
-// QueryValidator validates SQL query safety
+// ValidateQuerySafety validates SQL query safety
 func ValidateQuerySafety(query string) bool {
-	// Basic validation - in production, use more sophisticated SQL parser
 	dangerousKeywords := []string{
 		"DROP DATABASE",
 		"DROP SCHEMA",
@@ -593,8 +535,8 @@ func ValidateQuerySafety(query string) bool {
 	return true
 }
 
-// convertParamsToStrings converts interface{} params to strings for logging
-func convertParamsToStrings(params []interface{}) []string {
+// ConvertParamsToStrings converts interface{} params to strings for logging
+func ConvertParamsToStrings(params []interface{}) []string {
 	var result []string
 	for _, p := range params {
 		result = append(result, fmt.Sprintf("%v", p))
@@ -603,7 +545,7 @@ func convertParamsToStrings(params []interface{}) []string {
 }
 
 // GetQueryLogs handles GET /api/{db}/logs endpoint
-func (h *DynamicQueryHandler) GetQueryLogs(c *gin.Context) {
+func (h *Handler) GetQueryLogs(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -623,7 +565,7 @@ func (h *DynamicQueryHandler) GetQueryLogs(c *gin.Context) {
 		fmt.Sscanf(limitStr, "%d", &limit)
 	}
 	if limit > 1000 {
-		limit = 1000 // Max limit
+		limit = 1000
 	}
 
 	logs, err := h.logger.GetQueryLogs(database, limit)
@@ -643,7 +585,7 @@ func (h *DynamicQueryHandler) GetQueryLogs(c *gin.Context) {
 }
 
 // GetQueryStats handles GET /api/{db}/stats endpoint
-func (h *DynamicQueryHandler) GetQueryStats(c *gin.Context) {
+func (h *Handler) GetQueryStats(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",

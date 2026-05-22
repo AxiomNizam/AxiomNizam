@@ -1,4 +1,4 @@
-package handlers
+package query
 
 import (
 	"net/http"
@@ -9,7 +9,7 @@ import (
 )
 
 // GetEnterpriseQueryStats handles GET /api/query/stats/enterprise endpoint
-func (h *DynamicQueryHandler) GetEnterpriseQueryStats(c *gin.Context) {
+func (h *Handler) GetEnterpriseQueryStats(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -23,7 +23,6 @@ func (h *DynamicQueryHandler) GetEnterpriseQueryStats(c *gin.Context) {
 		database = "all"
 	}
 
-	// Get comprehensive metrics
 	metrics := h.logger.GetMetrics()
 
 	c.JSON(http.StatusOK, models.Response{
@@ -45,7 +44,7 @@ func (h *DynamicQueryHandler) GetEnterpriseQueryStats(c *gin.Context) {
 }
 
 // GetSlowQueries handles GET /api/query/slow endpoint
-func (h *DynamicQueryHandler) GetSlowQueries(c *gin.Context) {
+func (h *Handler) GetSlowQueries(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -60,7 +59,7 @@ func (h *DynamicQueryHandler) GetSlowQueries(c *gin.Context) {
 	}
 
 	thresholdStr := c.Query("threshold")
-	threshold := int64(1000) // Default 1 second
+	threshold := int64(1000)
 	if thresholdStr != "" {
 		if t, err := strconv.ParseInt(thresholdStr, 10, 64); err == nil {
 			threshold = t
@@ -99,7 +98,7 @@ func (h *DynamicQueryHandler) GetSlowQueries(c *gin.Context) {
 }
 
 // GetErroredQueries handles GET /api/query/errors endpoint
-func (h *DynamicQueryHandler) GetErroredQueries(c *gin.Context) {
+func (h *Handler) GetErroredQueries(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -144,7 +143,7 @@ func (h *DynamicQueryHandler) GetErroredQueries(c *gin.Context) {
 }
 
 // GetUserMetrics handles GET /api/query/user/:user endpoint
-func (h *DynamicQueryHandler) GetUserMetrics(c *gin.Context) {
+func (h *Handler) GetUserMetrics(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -188,7 +187,7 @@ func (h *DynamicQueryHandler) GetUserMetrics(c *gin.Context) {
 }
 
 // GetDatabaseMetrics handles GET /api/query/database/:db endpoint
-func (h *DynamicQueryHandler) GetDatabaseMetrics(c *gin.Context) {
+func (h *Handler) GetDatabaseMetrics(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -231,7 +230,7 @@ func (h *DynamicQueryHandler) GetDatabaseMetrics(c *gin.Context) {
 }
 
 // GetQueryTypeMetrics handles GET /api/query/type/:type endpoint
-func (h *DynamicQueryHandler) GetQueryTypeMetrics(c *gin.Context) {
+func (h *Handler) GetQueryTypeMetrics(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -274,7 +273,7 @@ func (h *DynamicQueryHandler) GetQueryTypeMetrics(c *gin.Context) {
 }
 
 // GetUserQueries handles GET /api/query/user/:user/queries endpoint
-func (h *DynamicQueryHandler) GetUserQueries(c *gin.Context) {
+func (h *Handler) GetUserQueries(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -324,7 +323,7 @@ func (h *DynamicQueryHandler) GetUserQueries(c *gin.Context) {
 }
 
 // GetMetricsReport handles GET /api/query/report endpoint
-func (h *DynamicQueryHandler) GetMetricsReport(c *gin.Context) {
+func (h *Handler) GetMetricsReport(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -343,7 +342,7 @@ func (h *DynamicQueryHandler) GetMetricsReport(c *gin.Context) {
 }
 
 // DeleteOldLogs handles DELETE /api/query/logs/old endpoint
-func (h *DynamicQueryHandler) DeleteOldLogs(c *gin.Context) {
+func (h *Handler) DeleteOldLogs(c *gin.Context) {
 	if h.logger == nil {
 		c.JSON(http.StatusServiceUnavailable, models.Response{
 			Status: "error",
@@ -358,7 +357,7 @@ func (h *DynamicQueryHandler) DeleteOldLogs(c *gin.Context) {
 	}
 
 	daysStr := c.Query("days")
-	days := 30 // Default 30 days
+	days := 30
 	if daysStr != "" {
 		if d, err := strconv.Atoi(daysStr); err == nil {
 			days = d

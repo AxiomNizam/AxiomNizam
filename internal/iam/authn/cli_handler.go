@@ -1,10 +1,9 @@
-package handlers
+package authn
 
 import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -19,9 +18,9 @@ type CLIAuthHandler struct {
 
 // NewCLIAuthHandler creates a CLI auth adapter backed by IAM endpoints.
 func NewCLIAuthHandler() *CLIAuthHandler {
-	baseURL := strings.TrimSpace(os.Getenv("IAM_INTERNAL_BASE_URL"))
+	baseURL := strings.TrimSpace(getEnv("IAM_INTERNAL_BASE_URL", ""))
 	if baseURL == "" {
-		baseURL = strings.TrimSpace(os.Getenv("IAM_ISSUER_URL"))
+		baseURL = strings.TrimSpace(getEnv("IAM_ISSUER_URL", ""))
 	}
 	if baseURL == "" {
 		baseURL = defaultIAMInternalBaseURL()

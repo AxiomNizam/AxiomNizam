@@ -1,4 +1,4 @@
-package handlers
+package query
 
 import (
 	"context"
@@ -89,9 +89,8 @@ func NewQueryLogger(redisClient *redis.Client, storageDir string) *QueryLogger {
 		storageDir = "/data/logs"
 	}
 
-	// Create storage directory if it doesn't exist
 	if err := os.MkdirAll(storageDir, 0755); err != nil {
-		fmt.Printf("⚠️  Warning: Could not create storage directory: %v\n", err)
+		fmt.Printf("Warning: Could not create storage directory: %v\n", err)
 	}
 
 	logFile := filepath.Join(storageDir, "query_logs.jsonl")
@@ -110,39 +109,32 @@ func NewQueryLogger(redisClient *redis.Client, storageDir string) *QueryLogger {
 
 // LogQuery logs a query to both disk and Redis with metrics tracking
 func (ql *QueryLogger) LogQuery(log QueryLog) error {
-	// Get hostname
 	hostname, _ := os.Hostname()
 	log.Hostname = hostname
 
-	// Set ID if not set
 	if log.ID == "" {
 		log.ID = fmt.Sprintf("%s-%d-%d", hostname, time.Now().Unix(), time.Now().Nanosecond())
 	}
 
-	// Set timestamp if not set
 	if log.Timestamp.IsZero() {
 		log.Timestamp = time.Now()
 	}
 
-	// Log to disk (append to file)
 	if err := ql.logToDisk(log); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to log to disk: %v\n", err)
+		fmt.Printf("Warning: Failed to log to disk: %v\n", err)
 	}
 
-	// Log to Redis (for distributed access and quick retrieval)
 	if ql.redisClient != nil {
 		if err := ql.logToRedis(log); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to log to Redis: %v\n", err)
+			fmt.Printf("Warning: Failed to log to Redis: %v\n", err)
 		}
 	}
 
-	// Update metrics
 	ql.UpdateMetrics(log)
 
 	return nil
 }
 
-// logToDisk writes query log to disk file
 func (ql *QueryLogger) logToDisk(log QueryLog) error {
 	file, err := os.OpenFile(ql.logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -155,7 +147,6 @@ func (ql *QueryLogger) logToDisk(log QueryLog) error {
 		return fmt.Errorf("failed to marshal log: %w", err)
 	}
 
-	// Write as JSONL (JSON Lines format - one JSON per line)
 	if _, err := file.Write(append(data, '\n')); err != nil {
 		return fmt.Errorf("failed to write to log file: %w", err)
 	}
@@ -163,7 +154,6 @@ func (ql *QueryLogger) logToDisk(log QueryLog) error {
 	return nil
 }
 
-// logToRedis stores query log in Redis for distributed access
 func (ql *QueryLogger) logToRedis(log QueryLog) error {
 	if ql.redisClient == nil {
 		return nil
@@ -177,16 +167,11 @@ func (ql *QueryLogger) logToRedis(log QueryLog) error {
 		return fmt.Errorf("failed to marshal log: %w", err)
 	}
 
-	// Store in Redis with key pattern: query_logs:{database}:{timestamp}:{id}
 	key := fmt.Sprintf("query_logs:%s:%d:%s", log.Database, log.Timestamp.Unix(), log.ID)
-
-	// Set with expiration (keep for 30 days)
 	if err := ql.redisClient.Set(ctx, key, string(data), 30*24*time.Hour).Err(); err != nil {
 		return fmt.Errorf("failed to write to Redis: %w", err)
 	}
 
-	// Also add to a sorted set for easy retrieval by time
-	// Key format: query_logs_by_time:{database}
 	sortedSetKey := fmt.Sprintf("query_logs_by_time:%s", log.Database)
 	if err := ql.redisClient.ZAdd(ctx, sortedSetKey, redis.Z{
 		Score:  float64(log.Timestamp.Unix()),
@@ -195,9 +180,8 @@ func (ql *QueryLogger) logToRedis(log QueryLog) error {
 		return fmt.Errorf("failed to add to sorted set: %w", err)
 	}
 
-	// Keep the sorted set to 100k entries max (trim old ones)
 	if err := ql.redisClient.ZRemRangeByRank(ctx, sortedSetKey, 0, -100001).Err(); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to trim sorted set: %v\n", err)
+		fmt.Printf("Warning: Failed to trim sorted set: %v\n", err)
 	}
 
 	return nil
@@ -208,23 +192,19 @@ func (ql *QueryLogger) GetQueryLogs(database string, limit int) ([]QueryLog, err
 	var logs []QueryLog
 
 	if ql.redisClient == nil {
-		// Fall back to reading from disk
 		return ql.getLogsFromDisk(limit)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Get latest logs from Redis sorted set
 	sortedSetKey := fmt.Sprintf("query_logs_by_time:%s", database)
 	ids, err := ql.redisClient.ZRevRange(ctx, sortedSetKey, 0, int64(limit-1)).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
 
-	// Get the full logs from Redis
 	for _, id := range ids {
-		// We need to use pattern matching, but we'll retrieve the most recent one
 		pattern := fmt.Sprintf("query_logs:%s:*:%s", database, id)
 		keys, err := ql.redisClient.Keys(ctx, pattern).Result()
 		if err != nil {
@@ -245,20 +225,16 @@ func (ql *QueryLogger) GetQueryLogs(database string, limit int) ([]QueryLog, err
 	return logs, nil
 }
 
-// getLogsFromDisk reads logs from disk file
 func (ql *QueryLogger) getLogsFromDisk(limit int) ([]QueryLog, error) {
 	var logs []QueryLog
 
 	_, err := os.ReadFile(ql.logFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return logs, nil // File doesn't exist yet
+			return logs, nil
 		}
 		return nil, err
 	}
-
-	// Parse JSONL format (one JSON per line, in reverse order for latest first)
-	// TODO: Implement parsing of JSONL format from disk
 
 	return logs, nil
 }
@@ -274,14 +250,12 @@ func (ql *QueryLogger) GetQueryStats(database string) (map[string]interface{}, e
 
 	stats := map[string]interface{}{}
 
-	// Get total count
 	sortedSetKey := fmt.Sprintf("query_logs_by_time:%s", database)
 	count, err := ql.redisClient.ZCard(ctx, sortedSetKey).Result()
 	if err == nil {
 		stats["total_queries"] = count
 	}
 
-	// Get latest queries
 	latestIDs, err := ql.redisClient.ZRevRange(ctx, sortedSetKey, 0, 9).Result()
 	if err == nil && len(latestIDs) > 0 {
 		stats["latest_query_count"] = len(latestIDs)
@@ -296,7 +270,6 @@ func (ql *QueryLogger) UpdateMetrics(log QueryLog) {
 		return
 	}
 
-	// Update total metrics
 	ql.metrics.TotalQueries++
 	ql.metrics.TotalDuration += log.Duration
 	ql.metrics.AvgDuration = float64(ql.metrics.TotalDuration) / float64(ql.metrics.TotalQueries)
@@ -308,7 +281,6 @@ func (ql *QueryLogger) UpdateMetrics(log QueryLog) {
 		ql.metrics.ErrorCount++
 	}
 
-	// Update database metrics
 	if log.Database != "" {
 		dbMetrics, exists := ql.metrics.ByDatabase[log.Database]
 		if !exists {
@@ -327,7 +299,6 @@ func (ql *QueryLogger) UpdateMetrics(log QueryLog) {
 		}
 	}
 
-	// Update user metrics
 	if log.User != "" {
 		userMetrics, exists := ql.metrics.ByUser[log.User]
 		if !exists {
@@ -340,7 +311,7 @@ func (ql *QueryLogger) UpdateMetrics(log QueryLog) {
 		}
 
 		userMetrics.TotalQueries++
-		userMetrics.Role = log.Role // Update role in case it changed
+		userMetrics.Role = log.Role
 		userMetrics.LastQueryTime = log.Timestamp
 		userMetrics.AvgDuration = (userMetrics.AvgDuration*float64(userMetrics.TotalQueries-1) + float64(log.Duration)) / float64(userMetrics.TotalQueries)
 
@@ -351,7 +322,6 @@ func (ql *QueryLogger) UpdateMetrics(log QueryLog) {
 		}
 	}
 
-	// Update query type metrics
 	queryType := log.QueryType
 	if queryType == "" {
 		queryType = "UNKNOWN"
@@ -505,7 +475,6 @@ func (ql *QueryLogger) GetQuerysByUser(user string, limit int) ([]QueryLog, erro
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Scan all query logs for matching user
 	pattern := fmt.Sprintf("query_logs:*:*:*")
 	keys, err := ql.redisClient.Keys(ctx, pattern).Result()
 	if err != nil {
@@ -531,10 +500,8 @@ func (ql *QueryLogger) GetQuerysByUser(user string, limit int) ([]QueryLog, erro
 	return logs, nil
 }
 
-// GetSlowQueriesFromDisk reads slow queries from disk file
 func (ql *QueryLogger) getSlowQueriesFromDisk(thresholdMs int64, limit int) ([]QueryLog, error) {
 	var logs []QueryLog
-	// TODO: Implement parsing of JSONL format from disk for slow queries
 	return logs, nil
 }
 
@@ -544,7 +511,6 @@ func (ql *QueryLogger) GetMetricsReport() map[string]interface{} {
 		return map[string]interface{}{}
 	}
 
-	// Top users by query count
 	var topUsers []map[string]interface{}
 	for _, user := range ql.metrics.ByUser {
 		topUsers = append(topUsers, map[string]interface{}{
@@ -558,7 +524,6 @@ func (ql *QueryLogger) GetMetricsReport() map[string]interface{} {
 		})
 	}
 
-	// Database statistics
 	var dbStats []map[string]interface{}
 	for _, db := range ql.metrics.ByDatabase {
 		dbStats = append(dbStats, map[string]interface{}{
@@ -571,7 +536,6 @@ func (ql *QueryLogger) GetMetricsReport() map[string]interface{} {
 		})
 	}
 
-	// Query type statistics
 	var typeStats []map[string]interface{}
 	for _, qt := range ql.metrics.ByQueryType {
 		typeStats = append(typeStats, map[string]interface{}{
@@ -599,11 +563,6 @@ func (ql *QueryLogger) GetMetricsReport() map[string]interface{} {
 }
 
 // DeleteOldLogs deletes query logs older than specified days
-// Parameters:
-//   - database: Database name or "all" for all databases
-//   - days: Delete logs older than N days
-//
-// Returns: error if operation fails
 func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 	cutoffTime := time.Now().AddDate(0, 0, -days)
 	logFile := ql.logFile
@@ -612,7 +571,6 @@ func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 		return fmt.Errorf("log file path not configured")
 	}
 
-	// Read existing logs from file
 	logs := []QueryLog{}
 	if _, err := os.Stat(logFile); err == nil {
 		content, err := os.ReadFile(logFile)
@@ -620,7 +578,6 @@ func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 			return fmt.Errorf("failed to read log file: %w", err)
 		}
 
-		// Parse JSONL format
 		lines := strings.Split(strings.TrimSpace(string(content)), "\n")
 		for _, line := range lines {
 			if line != "" {
@@ -632,25 +589,18 @@ func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 		}
 	}
 
-	// Filter logs to keep only those newer than cutoff
 	keptLogs := []QueryLog{}
-	deletedCount := 0
-
 	for _, log := range logs {
-		// Skip logs that match database filter and are older than cutoff
 		if (database == "all" || log.Database == database) && log.Timestamp.Before(cutoffTime) {
-			deletedCount++
 			continue
 		}
 		keptLogs = append(keptLogs, log)
 	}
 
-	// Write filtered logs back to file
 	if err := os.Remove(logFile); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove old log file: %w", err)
 	}
 
-	// Create new log file with kept logs
 	for _, log := range keptLogs {
 		data, err := json.Marshal(log)
 		if err != nil {
@@ -666,7 +616,6 @@ func (ql *QueryLogger) DeleteOldLogs(database string, days int) error {
 		_ = f.Close()
 	}
 
-	// Also clear Redis entries for deleted logs
 	ctx := context.Background()
 	pattern := "query_logs:*"
 	if database != "all" {

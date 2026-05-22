@@ -1,4 +1,4 @@
-package handlers
+package authn
 
 import "strings"
 

@@ -1,4 +1,4 @@
-package handlers
+package authn
 
 import (
 	"crypto/hmac"
@@ -16,11 +16,8 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/auth"
-	iamauthz "example.com/axiomnizam/internal/iam/authz"
 	iamidentity "example.com/axiomnizam/internal/iam/identity"
 	iammodels "example.com/axiomnizam/internal/iam/models"
-	"example.com/axiomnizam/internal/iam/pgstore"
-	iamstorage "example.com/axiomnizam/internal/iam/storage"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/models"
 
@@ -29,14 +26,40 @@ import (
 	gojwt "github.com/golang-jwt/jwt/v5"
 )
 
+// PlatformUserStore is the interface AuthHandler needs from the platform user
+// handler. It avoids a circular import between authn and users packages.
+type PlatformUserStore interface {
+	ValidateCredentials(username, password string) (*PlatformUser, bool)
+	EnsureFederatedUser(username, email, defaultRole string) (*PlatformUser, error)
+}
+
+// PlatformUser is a minimal projection of the platform user type needed by
+// AuthHandler. The full type lives in the users package.
+type PlatformUser struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	Status   string `json:"status"`
+}
+
+// IdentityProviderStore is the interface for looking up configured identity providers.
+type IdentityProviderStore interface {
+	ListIdentityProviders(realmID string) ([]iammodels.IdentityProvider, error)
+}
+
+// IAMRoleResolver resolves role names for a given user ID.
+type IAMRoleResolver interface {
+	GetUserRoleNames(userID string) ([]string, error)
+}
+
 // AuthHandler handles authentication requests
 type AuthHandler struct {
 	iamBaseURL    string
 	rateLimiter   *auth.RateLimiter
-	platformUsers *PlatformUserHandler
-	idpStore      *pgstore.Store
-	iamUsers      *iamstorage.PostgresUserRepository
-	iamAuthorizer *iamauthz.Authorizer
+	platformUsers PlatformUserStore
+	idpStore      IdentityProviderStore
+	iamUsers      UserRepository
+	iamAuthorizer IAMRoleResolver
 	httpClient    *http.Client
 }
 
@@ -74,22 +97,22 @@ func (h *AuthHandler) SetRateLimiter(limiter *auth.RateLimiter) {
 
 // SetPlatformUserHandler wires the platform user store into the auth handler
 // so that users created via the sysadmin UI can log in.
-func (h *AuthHandler) SetPlatformUserHandler(puh *PlatformUserHandler) {
+func (h *AuthHandler) SetPlatformUserHandler(puh PlatformUserStore) {
 	h.platformUsers = puh
 }
 
 // SetIdentityProviderStore wires IAM identity provider persistence into auth flows.
-func (h *AuthHandler) SetIdentityProviderStore(store *pgstore.Store) {
+func (h *AuthHandler) SetIdentityProviderStore(store IdentityProviderStore) {
 	h.idpStore = store
 }
 
 // SetIAMUserRepository wires IAM user repository into OAuth provisioning flow.
-func (h *AuthHandler) SetIAMUserRepository(repo *iamstorage.PostgresUserRepository) {
+func (h *AuthHandler) SetIAMUserRepository(repo UserRepository) {
 	h.iamUsers = repo
 }
 
 // SetIAMAuthorizer wires IAM role resolver into OAuth provisioning flow.
-func (h *AuthHandler) SetIAMAuthorizer(authorizer *iamauthz.Authorizer) {
+func (h *AuthHandler) SetIAMAuthorizer(authorizer IAMRoleResolver) {
 	h.iamAuthorizer = authorizer
 }
 
@@ -1016,17 +1039,14 @@ func (h *AuthHandler) resolveIAMFederatedRole(username, email string) string {
 	return resolved
 }
 
-// LoginRequest is the request payload for login
-type LoginRequest struct {
+// AuthProxyLoginRequest is the request payload for the auth proxy login endpoint.
+// This is distinct from the LoginRequest in authn.go which uses email-based auth.
+type AuthProxyLoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
-// demoAccounts maps username → {password, role} for local dev fallback
-// admin   / admin    → /admin        (full admin access)
-// sysadmin/ sysadmin → /system-manager (user management, system ops)
-// manager / manager  → /manager      (view+edit APIs/dashboards, no delete/create)
-// user    / user     → /             (view only)
+// demoAccounts maps username -> {password, role} for local dev fallback
 var demoAccounts = map[string]struct {
 	password string
 	role     string
@@ -1357,10 +1377,8 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 }
 
 // Login handles POST /auth/login
-// This endpoint proxies authentication to built-in IAM endpoints.
-// so the client secret never leaves the backend
 func (h *AuthHandler) Login(c *gin.Context) {
-	var req LoginRequest
+	var req AuthProxyLoginRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
 			Status: "error",
@@ -1592,9 +1610,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 // RefreshToken handles POST /auth/refresh
-// This endpoint refreshes an expired token by proxying to IAM and
-// registering the new access token in the rate limiter so subsequent
-// API calls are accepted without requiring a full re-login.
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`
@@ -1729,7 +1744,6 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 }
 
 // Logout handles POST /auth/logout
-// This endpoint proxies logout to IAM and revokes the active access/session/refresh state.
 func (h *AuthHandler) Logout(c *gin.Context) {
 	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 	if authHeader == "" {
@@ -1822,7 +1836,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 // ValidateToken handles GET /auth/validate
-// This endpoint validates if a token is still valid
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 	if authHeader == "" {
@@ -1857,7 +1870,6 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 }
 
 // GetTokenStatus handles GET /auth/token-status
-// Returns the current rate limit status and token validity information
 func (h *AuthHandler) GetTokenStatus(c *gin.Context) {
 	if h.rateLimiter == nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -1904,7 +1916,6 @@ func (h *AuthHandler) GetTokenStatus(c *gin.Context) {
 }
 
 // GetAllTokensStatus handles GET /auth/admin/tokens-status (admin only)
-// Returns stats for all active tokens
 func (h *AuthHandler) GetAllTokensStatus(c *gin.Context) {
 	if h.rateLimiter == nil {
 		c.JSON(http.StatusInternalServerError, models.Response{

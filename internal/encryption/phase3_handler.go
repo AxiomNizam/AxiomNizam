@@ -1,4 +1,4 @@
-package handlers
+package encryption
 
 import (
 	"fmt"
@@ -6,16 +6,15 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/audit"
-	"example.com/axiomnizam/internal/encryption"
 	"example.com/axiomnizam/internal/lineage"
 	"example.com/axiomnizam/internal/workflows"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Phase3Handlers manages all Phase 3 endpoints
+// Phase3Handlers manages all Phase 3 endpoints (encryption, lineage, audit, workflows).
 type Phase3Handlers struct {
-	encryptionMgr *encryption.FieldLevelEncryption
+	encryptionMgr *FieldLevelEncryption
 	lineageMgr    *lineage.DataLineageTracker
 	auditMgr      *audit.AuditComplianceManager
 	workflowMgr   *workflows.MultiVersionWorkflowManager
@@ -23,7 +22,7 @@ type Phase3Handlers struct {
 
 // NewPhase3Handlers creates Phase3Handlers
 func NewPhase3Handlers(
-	encMgr *encryption.FieldLevelEncryption,
+	encMgr *FieldLevelEncryption,
 	linMgr *lineage.DataLineageTracker,
 	audMgr *audit.AuditComplianceManager,
 	wfMgr *workflows.MultiVersionWorkflowManager,
@@ -44,7 +43,7 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 		KeyID       string    `json:"key_id" binding:"required"`
 		Key         string    `json:"key" binding:"required"`
 		ExpiresAt   time.Time `json:"expires_at"`
-		EncryptType string    `json:"encrypt_type"` // deterministic or searchable
+		EncryptType string    `json:"encrypt_type"`
 	}
 
 	var req Request
@@ -53,14 +52,14 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 		return
 	}
 
-	encKey := &encryption.EncryptionKey{
+	encKey := &EncryptionKey{
 		Name:        req.KeyID,
-		KeyType:     encryption.KeyTypeDEK,
-		Algorithm:   req.EncryptType, // deterministic or searchable
+		KeyType:     KeyTypeDEK,
+		Algorithm:   req.EncryptType,
 		KeyMaterial: req.Key,
 		CreatedAt:   time.Now(),
 		ExpiresAt:   req.ExpiresAt,
-		Status:      encryption.KeyStatusActive,
+		Status:      KeyStatusActive,
 	}
 
 	if err := h.encryptionMgr.RegisterKey(encKey); err != nil {
@@ -89,12 +88,12 @@ func (h *Phase3Handlers) AddEncryptionPolicy(c *gin.Context) {
 		return
 	}
 
-	policy := &encryption.FieldEncryptionPolicy{
+	policy := &FieldEncryptionPolicy{
 		Name:         req.ColumnName,
 		ResourceType: req.TableName,
 		KeyID:        req.KeyID,
 		Enabled:      true,
-		FieldRules: []encryption.FieldRule{
+		FieldRules: []FieldRule{
 			{
 				FieldName: req.ColumnName,
 				Encrypt:   true,
@@ -158,7 +157,7 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 		return
 	}
 
-	encField := &encryption.EncryptedField{
+	encField := &EncryptedField{
 		FieldName:      req.ColumnName,
 		EncryptedValue: req.EncryptedData,
 		IV:             req.IV,
@@ -186,11 +185,11 @@ func (h *Phase3Handlers) RotateEncryptionKey(c *gin.Context) {
 		return
 	}
 
-	newKey := &encryption.EncryptionKey{
+	newKey := &EncryptionKey{
 		Name:        "rotated-" + keyID,
-		KeyType:     encryption.KeyTypeDEK,
+		KeyType:     KeyTypeDEK,
 		KeyMaterial: newKeyData,
-		Status:      encryption.KeyStatusActive,
+		Status:      KeyStatusActive,
 	}
 
 	if _, err := h.encryptionMgr.RotateKey(keyID, newKey); err != nil {
@@ -229,7 +228,7 @@ func (h *Phase3Handlers) RegisterDataNode(c *gin.Context) {
 	type Request struct {
 		NodeID   string `json:"node_id" binding:"required"`
 		NodeName string `json:"node_name" binding:"required"`
-		NodeType string `json:"node_type" binding:"required"` // table, column, view
+		NodeType string `json:"node_type" binding:"required"`
 		Schema   string `json:"schema"`
 	}
 
@@ -262,7 +261,7 @@ func (h *Phase3Handlers) CreateLineageEdge(c *gin.Context) {
 	type Request struct {
 		SourceNodeID string `json:"source_node_id" binding:"required"`
 		TargetNodeID string `json:"target_node_id" binding:"required"`
-		RelationType string `json:"relation_type" binding:"required"` // reads, writes, transforms
+		RelationType string `json:"relation_type" binding:"required"`
 	}
 
 	var req Request
@@ -294,10 +293,10 @@ func (h *Phase3Handlers) GetUpstreamLineage(c *gin.Context) {
 		return
 	}
 
-	lineage := h.lineageMgr.GetUpstreamLineage(nodeID)
+	lineageData := h.lineageMgr.GetUpstreamLineage(nodeID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"upstream_lineage": lineage,
+		"upstream_lineage": lineageData,
 	})
 }
 
@@ -309,10 +308,10 @@ func (h *Phase3Handlers) GetDownstreamLineage(c *gin.Context) {
 		return
 	}
 
-	lineage := h.lineageMgr.GetDownstreamLineage(nodeID)
+	lineageData := h.lineageMgr.GetDownstreamLineage(nodeID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"downstream_lineage": lineage,
+		"downstream_lineage": lineageData,
 	})
 }
 
@@ -373,7 +372,6 @@ func (h *Phase3Handlers) LogAuditEvent(c *gin.Context) {
 		return
 	}
 
-	// Convert Changes map to audit.Change slice
 	changes := make([]audit.Change, 0)
 	for field, value := range req.Changes {
 		changes = append(changes, audit.Change{
@@ -407,9 +405,9 @@ func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 	type Request struct {
 		RuleID      string `json:"rule_id" binding:"required"`
 		RuleName    string `json:"rule_name" binding:"required"`
-		Framework   string `json:"framework" binding:"required"` // GDPR, HIPAA, SOC2, PCI-DSS
+		Framework   string `json:"framework" binding:"required"`
 		Description string `json:"description"`
-		Severity    string `json:"severity"` // low, medium, high
+		Severity    string `json:"severity"`
 	}
 
 	var req Request
@@ -483,7 +481,7 @@ func (h *Phase3Handlers) RecordViolation(c *gin.Context) {
 	type Request struct {
 		RuleID      string `json:"rule_id" binding:"required"`
 		Description string `json:"description"`
-		Severity    string `json:"severity"` // low, medium, high, critical
+		Severity    string `json:"severity"`
 	}
 
 	var req Request
