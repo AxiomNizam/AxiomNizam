@@ -1,4 +1,4 @@
-package handlers
+package gis
 
 import (
 	"net/http"
@@ -8,26 +8,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Deprecated: GISSpecializedHandler is an in-memory map guarded by
-// sync.RWMutex and does NOT follow the platform's control-plane architecture.
-// All specialized dashboards are seeded at startup and lost on restart.
+// GISSpecializedHandler serves category-specific GIS dashboard data.
+// Categories: agriculture, industries, medical (domestic Bangladesh),
+// satellite, airplane, ship (international).
 //
-// MIGRATION TARGET: Each dashboard type (agriculture, industries, medical,
-// satellite, airplane, ship, train) should be modelled as a GISDashboard
-// resource persisted via ResourceStore -> etcd and projected by a
-// reconciler. Do NOT add new dashboard types here — author them through the
-// API Builder instead. See docs/architecture/handler-migration.md.
-//
-// GISSpecializedHandler serves category-specific GIS dashboard data
-// Categories: agriculture, industries, medical (domestic Bangladesh)
-//
-//	satellite, airplane, ship (international)
+// Deprecated: This is an in-memory map guarded by sync.RWMutex and does NOT
+// follow the platform's control-plane architecture. All specialized dashboards
+// are seeded at startup and lost on restart. New dashboard types should be
+// authored through the API Builder instead.
 type GISSpecializedHandler struct {
 	mu         sync.RWMutex
 	dashboards map[string]*GISDashboardData
 }
 
-// GISDashboardData bundles all data for one specialized dashboard
+// GISDashboardData bundles all data for one specialized dashboard.
 type GISDashboardData struct {
 	Type        string                 `json:"type"`
 	Title       string                 `json:"title"`
@@ -42,6 +36,7 @@ type GISDashboardData struct {
 	Config      map[string]interface{} `json:"config"`
 }
 
+// NewGISSpecializedHandler creates and seeds the specialized GIS handler.
 func NewGISSpecializedHandler() *GISSpecializedHandler {
 	h := &GISSpecializedHandler{
 		dashboards: make(map[string]*GISDashboardData),
@@ -56,7 +51,7 @@ func NewGISSpecializedHandler() *GISSpecializedHandler {
 	return h
 }
 
-// ListDashboardTypes returns available dashboard categories
+// ListDashboardTypes returns available dashboard categories.
 func (h *GISSpecializedHandler) ListDashboardTypes(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -77,7 +72,7 @@ func (h *GISSpecializedHandler) ListDashboardTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, types)
 }
 
-// GetDashboard returns all data for one dashboard type
+// GetDashboard returns all data for one dashboard type.
 func (h *GISSpecializedHandler) GetDashboard(c *gin.Context) {
 	dashType := c.Param("type")
 	h.mu.RLock()
@@ -91,7 +86,7 @@ func (h *GISSpecializedHandler) GetDashboard(c *gin.Context) {
 	c.JSON(http.StatusOK, dash)
 }
 
-// GetDashboardSummary returns summary stats for one dashboard type
+// GetDashboardSummary returns summary stats for one dashboard type.
 func (h *GISSpecializedHandler) GetDashboardSummary(c *gin.Context) {
 	dashType := c.Param("type")
 	h.mu.RLock()
@@ -138,9 +133,7 @@ func dashboardKeys(m map[string]*GISDashboardData) []string {
 	return keys
 }
 
-// ============================================================
-// DOMESTIC DASHBOARDS (Bangladesh)
-// ============================================================
+// --- Seed methods ---
 
 func (h *GISSpecializedHandler) seedAgriculture() {
 	now := time.Now()
@@ -408,10 +401,6 @@ func (h *GISSpecializedHandler) seedMedical() {
 	h.dashboards["medical"] = d
 }
 
-// ============================================================
-// INTERNATIONAL DASHBOARDS
-// ============================================================
-
 func (h *GISSpecializedHandler) seedSatellite() {
 	now := time.Now()
 	d := &GISDashboardData{
@@ -534,7 +523,6 @@ func (h *GISSpecializedHandler) seedAirplane() {
 			{ID: "ap-m10", Name: "Sydney Kingsford Smith (SYD)", Lat: -33.9461, Lng: 151.1772, Category: "airport", Color: "#607d8b", Properties: map[string]interface{}{"iata": "SYD", "passengers": 42600000, "rank": 25, "country": "Australia"}},
 			{ID: "ap-m11", Name: "Indira Gandhi Intl (DEL)", Lat: 28.5562, Lng: 77.1000, Category: "airport", Color: "#ff9800", Properties: map[string]interface{}{"iata": "DEL", "passengers": 72200000, "rank": 6, "country": "India"}},
 			{ID: "ap-m12", Name: "Sao Paulo Guarulhos (GRU)", Lat: -23.4356, Lng: -46.4731, Category: "airport", Color: "#8bc34a", Properties: map[string]interface{}{"iata": "GRU", "passengers": 35700000, "rank": 35, "country": "Brazil"}},
-			// Simulated aircraft
 			{ID: "ac-1", Name: "BA-217 London→Delhi", Lat: 38.5, Lng: 42.0, Category: "aircraft", Color: "#2196f3", Properties: map[string]interface{}{"flight": "BA-217", "airline": "British Airways", "aircraft": "Boeing 787-9", "altitude_ft": 38000, "speed_kts": 480, "route": "LHR→DEL"}},
 			{ID: "ac-2", Name: "EK-584 Dubai→Dhaka", Lat: 22.8, Lng: 78.5, Category: "aircraft", Color: "#ff9800", Properties: map[string]interface{}{"flight": "EK-584", "airline": "Emirates", "aircraft": "Boeing 777-300ER", "altitude_ft": 36000, "speed_kts": 510, "route": "DXB→DAC"}},
 			{ID: "ac-3", Name: "SQ-322 Singapore→London", Lat: 25.0, Lng: 68.0, Category: "aircraft", Color: "#00bcd4", Properties: map[string]interface{}{"flight": "SQ-322", "airline": "Singapore Airlines", "aircraft": "A350-900ULR", "altitude_ft": 41000, "speed_kts": 490, "route": "SIN→LHR"}},
@@ -627,7 +615,6 @@ func (h *GISSpecializedHandler) seedShip() {
 			{ID: "sh-m8", Name: "Strait of Malacca", Lat: 2.5, Lng: 101.5, Category: "strait", Color: "#ff5722", Properties: map[string]interface{}{"type": "Strategic Chokepoint", "vessels_daily": 94, "world_trade_pct": 25}},
 			{ID: "sh-m9", Name: "Port of Mongla", Lat: 22.4700, Lng: 89.6000, Category: "port", Color: "#4caf50", Properties: map[string]interface{}{"throughput_teu": 450000, "country": "Bangladesh", "type": "Secondary Port"}},
 			{ID: "sh-m10", Name: "Panama Canal", Lat: 9.08, Lng: -79.68, Category: "canal", Color: "#ff5722", Properties: map[string]interface{}{"type": "Strategic Chokepoint", "vessels_daily": 36, "annual_tonnage_mt": 500000000}},
-			// Simulated vessels
 			{ID: "vs-1", Name: "MV Ever Given (Container)", Lat: 8.5, Lng: 78.0, Category: "vessel", Color: "#0277bd", Properties: map[string]interface{}{"imo": "9811000", "type": "Container Ship", "teu_capacity": 20124, "speed_kts": 14.5, "route": "Shanghai→Rotterdam"}},
 			{ID: "vs-2", Name: "MV Pacific Star (Tanker)", Lat: 22.0, Lng: 66.0, Category: "vessel", Color: "#558b2f", Properties: map[string]interface{}{"type": "Oil Tanker", "dwt": 320000, "speed_kts": 12.0, "route": "Jeddah→Mumbai", "cargo": "Crude Oil"}},
 			{ID: "vs-3", Name: "MV Banglar Shourabh", Lat: 21.5, Lng: 90.5, Category: "vessel", Color: "#ff9800", Properties: map[string]interface{}{"type": "Bulk Carrier", "dwt": 45000, "speed_kts": 11.0, "flag": "Bangladesh", "route": "Chattogram→Singapore"}},
@@ -677,8 +664,6 @@ func (h *GISSpecializedHandler) seedShip() {
 	h.dashboards["ship"] = d
 }
 
-// seedTrainPlaceholder adds a train dashboard metadata entry.
-// Actual data is served from PostgreSQL via GISTrainHandler.
 func (h *GISSpecializedHandler) seedTrainPlaceholder() {
 	h.dashboards["train"] = &GISDashboardData{
 		Type:        "train",

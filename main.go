@@ -1148,7 +1148,7 @@ func main() {
 	}
 
 	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
-	gisSpecHandler := handlers.NewGISSpecializedHandler()
+	gisSpecHandler := gispkg.NewGISSpecializedHandler()
 	gisSpecAPI := router.Group("/api/v1/gis/dashboards", authMiddleware)
 	{
 		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)

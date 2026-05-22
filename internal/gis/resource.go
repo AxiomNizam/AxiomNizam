@@ -84,6 +84,17 @@ type DatasetColumn struct {
 	Type  string `json:"type"` // string, number, date
 }
 
+// GISSummary is returned for the overview endpoint.
+type GISSummary struct {
+	TotalLayers   int            `json:"totalLayers"`
+	TotalRegions  int            `json:"totalRegions"`
+	TotalMarkers  int            `json:"totalMarkers"`
+	TotalDatasets int            `json:"totalDatasets"`
+	RegionsByType map[string]int `json:"regionsByType"`
+	MapCenter     [2]float64     `json:"mapCenter"`
+	DefaultZoom   int            `json:"defaultZoom"`
+}
+
 // GISResourceSpec is the desired state of a GIS entity.
 type GISResourceSpec struct {
 	// GISKind discriminates: "Layer", "Region", "Marker", "Dataset"
