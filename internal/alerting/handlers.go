@@ -77,7 +77,7 @@ func (h *AlertHandlers) ListRules(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListRules"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -114,7 +114,7 @@ func (h *AlertHandlers) GetRule(c *gin.Context) {
 func (h *AlertHandlers) CreateRule(c *gin.Context) {
 	var rule AlertRuleResource
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -157,7 +157,7 @@ func (h *AlertHandlers) UpdateRule(c *gin.Context) {
 
 	if err := h.ruleStore.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateRule"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -211,7 +211,7 @@ func (h *AlertHandlers) SilenceRule(c *gin.Context) {
 
 	if err := h.ruleStore.Update(c.Request.Context(), rule); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "SilenceRule"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *AlertHandlers) UnsilenceRule(c *gin.Context) {
 
 	if err := h.ruleStore.Update(c.Request.Context(), rule); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UnsilenceRule"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *AlertHandlers) ListIncidents(c *gin.Context) {
 	incidents, err := h.incidentStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListIncidents"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -306,7 +306,7 @@ func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
 
 	if err := h.incidentStore.Update(c.Request.Context(), incident); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "AcknowledgeIncident"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -332,7 +332,7 @@ func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
 
 	if err := h.incidentStore.Update(c.Request.Context(), incident); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ResolveIncident"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -346,7 +346,7 @@ func (h *AlertHandlers) ListChannels(c *gin.Context) {
 	channels, err := h.channelStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListChannels"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -415,7 +415,7 @@ func (h *AlertHandlers) UpdateChannel(c *gin.Context) {
 
 	if err := h.channelStore.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateChannel"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

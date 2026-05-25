@@ -21,12 +21,12 @@ func NewHandler(logger *zap.Logger) *Handler {
 
 // ListVersions lists API versions.
 func (h *Handler) ListVersions(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"versions":        []string{"v1", "v2", "v3"},
-		"current_version": "v3",
-		"default_version": "v1",
-		"count":           3,
-		"timestamp":       time.Now(),
+	c.JSON(http.StatusOK, VersionListResponse{
+		Versions:       []string{"v1", "v2", "v3"},
+		CurrentVersion: "v3",
+		DefaultVersion: "v1",
+		Count:          3,
+		Timestamp:      time.Now(),
 	})
 }
 
@@ -34,13 +34,13 @@ func (h *Handler) ListVersions(c *gin.Context) {
 func (h *Handler) GetVersionInfo(c *gin.Context) {
 	version := c.Param("version")
 
-	c.JSON(http.StatusOK, gin.H{
-		"version":              version,
-		"title":                fmt.Sprintf("API Version %s", version),
-		"status":               "active",
-		"endpoint_count":       50,
-		"deprecation_warnings": []string{},
-		"timestamp":            time.Now(),
+	c.JSON(http.StatusOK, VersionInfoResponse{
+		Version:             version,
+		Title:               fmt.Sprintf("API Version %s", version),
+		Status:              "active",
+		EndpointCount:       50,
+		DeprecationWarnings: []string{},
+		Timestamp:           time.Now(),
 	})
 }
 
@@ -48,11 +48,11 @@ func (h *Handler) GetVersionInfo(c *gin.Context) {
 func (h *Handler) GetDeprecationWarnings(c *gin.Context) {
 	version := c.Param("version")
 
-	c.JSON(http.StatusOK, gin.H{
-		"version":   version,
-		"warnings":  []string{},
-		"count":     0,
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, DeprecationWarningsResponse{
+		Version:   version,
+		Warnings:  []string{},
+		Count:     0,
+		Timestamp: time.Now(),
 	})
 }
 
@@ -61,29 +61,25 @@ func (h *Handler) GetMigrationGuide(c *gin.Context) {
 	fromVersion := c.Param("from")
 	toVersion := c.Param("to")
 
-	c.JSON(http.StatusOK, gin.H{
-		"from_version": fromVersion,
-		"to_version":   toVersion,
-		"steps": []map[string]interface{}{
+	c.JSON(http.StatusOK, MigrationGuideResponse{
+		FromVersion: fromVersion,
+		ToVersion:   toVersion,
+		Steps: []map[string]interface{}{
 			{
 				"step":        1,
 				"description": "Update field names",
 			},
 		},
-		"timestamp": time.Now(),
+		Timestamp: time.Now(),
 	})
 }
 
 // GetVersionUsage gets version usage statistics.
 func (h *Handler) GetVersionUsage(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"usage": map[string]interface{}{
-			"v1": 1000,
-			"v2": 5000,
-			"v3": 2000,
-		},
-		"total_requests": 8000,
-		"timestamp":      time.Now(),
+	c.JSON(http.StatusOK, VersionUsageResponse{
+		Usage:         map[string]int{"v1": 1000, "v2": 5000, "v3": 2000},
+		TotalRequests: 8000,
+		Timestamp:     time.Now(),
 	})
 }
 
@@ -94,15 +90,15 @@ func (h *Handler) TransformRequest(c *gin.Context) {
 
 	var data interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"original":     data,
-		"from_version": fromVersion,
-		"to_version":   toVersion,
-		"transformed":  data,
-		"timestamp":    time.Now(),
+	c.JSON(http.StatusOK, TransformResponse{
+		Original:    data,
+		FromVersion: fromVersion,
+		ToVersion:   toVersion,
+		Transformed: data,
+		Timestamp:   time.Now(),
 	})
 }
