@@ -183,7 +183,7 @@ func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"message": "audit triggered", "policy": name})
+	c.JSON(http.StatusAccepted, MessageResponse{Message: "audit triggered", Name: name})
 }
 
 // --- Retention Policy Handlers ---
@@ -340,7 +340,7 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"approved": true, "request": name, "expiresAt": req.Status.ExpiresAt})
+	c.JSON(http.StatusOK, MessageResponse{Message: "approved"})
 }
 
 func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
@@ -375,7 +375,7 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"denied": true, "request": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: "denied"})
 }
 
 func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
@@ -409,7 +409,7 @@ func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"revoked": true, "request": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: "revoked"})
 }
 
 // --- Summary ---

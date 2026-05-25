@@ -82,7 +82,7 @@ func (h *HTTPJobHandler) ListJobs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
+	c.JSON(http.StatusOK, JobListResponse{Jobs: jobs, Count: len(jobs)})
 }
 
 // CancelJob handles DELETE /api/v1/jobs/:id
@@ -105,10 +105,10 @@ func (h *HTTPJobHandler) GetJobProgress(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":     job.ID,
-		"status": job.Status,
-		"data":   job.Data,
+	c.JSON(http.StatusOK, JobProgressResponse{
+		ID:     job.ID,
+		Status: job.Status,
+		Data:   job.Data,
 	})
 }
 
@@ -133,7 +133,7 @@ func (h *HTTPJobHandler) GetJobLogs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"logs": logs})
+	c.JSON(http.StatusOK, JobLogsResponse{Logs: logs})
 }
 
 // RegisterJobRoutes registers all job routes

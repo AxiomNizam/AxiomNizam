@@ -80,7 +80,7 @@ func (h *TracingHandler) IngestTrace(c *gin.Context) {
 			Message:      err.Error(),
 			DurationMs:   time.Since(started).Milliseconds(),
 		})
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *TracingHandler) IngestTrace(c *gin.Context) {
 				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"status": "Pending", "traceId": req.ID, "message": "trace config resource created"})
+		c.JSON(http.StatusAccepted, MessageResponse{Status: "Pending", Message: "trace config resource created", Name: req.ID})
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *TracingHandler) IngestTrace(c *gin.Context) {
 			Message:      err.Error(),
 			DurationMs:   time.Since(started).Milliseconds(),
 		})
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *TracingHandler) IngestSpan(c *gin.Context) {
 			Message:      err.Error(),
 			DurationMs:   time.Since(started).Milliseconds(),
 		})
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *TracingHandler) IngestSpan(c *gin.Context) {
 			Message:      err.Error(),
 			DurationMs:   time.Since(started).Milliseconds(),
 		})
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -178,7 +178,7 @@ func (h *TracingHandler) ListIngestionAudits(c *gin.Context) {
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: "limit must be a positive integer"})
 			return
 		}
 		limit = parsed
@@ -194,7 +194,7 @@ func (h *TracingHandler) ListIngestionAudits(c *gin.Context) {
 
 	logs, err := h.manager.ListIngestionAudits(filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *TracingHandler) GetTrace(c *gin.Context) {
 	traceID := c.Param("traceId")
 	trace, err := h.manager.GetTrace(traceID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "trace not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "trace not found"})
 		return
 	}
 
@@ -217,13 +217,13 @@ func (h *TracingHandler) GetTrace(c *gin.Context) {
 func (h *TracingHandler) SearchTraces(c *gin.Context) {
 	var req TraceSearchRequest
 	if err := c.BindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	results, err := h.manager.SearchTraces(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -235,7 +235,7 @@ func (h *TracingHandler) GetSpan(c *gin.Context) {
 	spanID := c.Param("spanId")
 	span, err := h.manager.GetSpan(spanID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "span not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "span not found"})
 		return
 	}
 
@@ -247,7 +247,7 @@ func (h *TracingHandler) GetServiceMap(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	serviceMap, err := h.manager.GetServiceMap(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -259,7 +259,7 @@ func (h *TracingHandler) GetServiceMetrics(c *gin.Context) {
 	service := c.Param("service")
 	metrics, err := h.manager.GetServiceMetrics(service)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -273,7 +273,7 @@ func (h *TracingHandler) GetOperationMetrics(c *gin.Context) {
 
 	metrics, err := h.manager.GetOperationMetrics(service, operation)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -285,7 +285,7 @@ func (h *TracingHandler) ListServices(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	services, err := h.manager.ListServices(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -299,7 +299,7 @@ func (h *TracingHandler) GetErrorAnalysis(c *gin.Context) {
 
 	analysis, err := h.manager.GetErrorAnalysis(tenantID, service)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

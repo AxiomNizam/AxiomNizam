@@ -90,10 +90,7 @@ func (h *AlertHandlers) ListRules(c *gin.Context) {
 		filtered = append(filtered, rule)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"rules": filtered,
-		"count": len(filtered),
-	})
+	c.JSON(http.StatusOK, RuleListResponse{Rules: filtered, Count: len(filtered)})
 }
 
 // GetRule returns a single alert rule.
@@ -104,7 +101,7 @@ func (h *AlertHandlers) GetRule(c *gin.Context) {
 	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, rule)
@@ -126,7 +123,7 @@ func (h *AlertHandlers) CreateRule(c *gin.Context) {
 	rule.Status.Phase = "Pending"
 
 	if err := h.ruleStore.Create(c.Request.Context(), &rule); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -141,13 +138,13 @@ func (h *AlertHandlers) UpdateRule(c *gin.Context) {
 	}
 	existing, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 
 	var updated AlertRuleResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -171,10 +168,10 @@ func (h *AlertHandlers) DeleteRule(c *gin.Context) {
 		return
 	}
 	if err := h.ruleStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // SilenceRule silences an alert rule for a specified duration.
@@ -185,7 +182,7 @@ func (h *AlertHandlers) SilenceRule(c *gin.Context) {
 	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 
@@ -194,13 +191,13 @@ func (h *AlertHandlers) SilenceRule(c *gin.Context) {
 		Reason   string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	duration, err := time.ParseDuration(req.Duration)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid duration: " + req.Duration})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid duration: " + req.Duration})
 		return
 	}
 
@@ -215,11 +212,7 @@ func (h *AlertHandlers) SilenceRule(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"silenced":     true,
-		"silenceUntil": silenceUntil,
-		"reason":       req.Reason,
-	})
+	c.JSON(http.StatusOK, SilenceResponse{Silenced: true, SilenceUntil: &silenceUntil, Reason: req.Reason})
 }
 
 // UnsilenceRule removes silence from an alert rule.
@@ -230,7 +223,7 @@ func (h *AlertHandlers) UnsilenceRule(c *gin.Context) {
 	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 
@@ -244,7 +237,7 @@ func (h *AlertHandlers) UnsilenceRule(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"silenced": false})
+	c.JSON(http.StatusOK, UnsilenceResponse{Silenced: false})
 }
 
 // --- Incident Handlers ---
@@ -267,10 +260,7 @@ func (h *AlertHandlers) ListIncidents(c *gin.Context) {
 		filtered = append(filtered, incident)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"incidents": filtered,
-		"count":     len(filtered),
-	})
+	c.JSON(http.StatusOK, IncidentListResponse{Incidents: filtered, Count: len(filtered)})
 }
 
 // GetIncident returns a single incident.
@@ -281,7 +271,7 @@ func (h *AlertHandlers) GetIncident(c *gin.Context) {
 	}
 	incident, err := h.incidentStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "incident not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, incident)
@@ -295,7 +285,7 @@ func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
 	}
 	incident, err := h.incidentStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "incident not found", Name: name})
 		return
 	}
 
@@ -310,7 +300,7 @@ func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"acknowledged": true, "incident": name})
+	c.JSON(http.StatusOK, AcknowledgeResponse{Acknowledged: true, Incident: name})
 }
 
 // ResolveIncident manually resolves an incident.
@@ -321,7 +311,7 @@ func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
 	}
 	incident, err := h.incidentStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "incident not found", Name: name})
 		return
 	}
 
@@ -336,7 +326,7 @@ func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"resolved": true, "incident": name})
+	c.JSON(http.StatusOK, ResolveResponse{Resolved: true, Incident: name})
 }
 
 // --- Channel Handlers ---
@@ -349,10 +339,7 @@ func (h *AlertHandlers) ListChannels(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"channels": channels,
-		"count":    len(channels),
-	})
+	c.JSON(http.StatusOK, ChannelListResponse{Channels: channels, Count: len(channels)})
 }
 
 // GetChannel returns a single notification channel.
@@ -363,7 +350,7 @@ func (h *AlertHandlers) GetChannel(c *gin.Context) {
 	}
 	channel, err := h.channelStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "channel not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, channel)
@@ -373,7 +360,7 @@ func (h *AlertHandlers) GetChannel(c *gin.Context) {
 func (h *AlertHandlers) CreateChannel(c *gin.Context) {
 	var channel NotificationChannelResource
 	if err := c.ShouldBindJSON(&channel); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -385,7 +372,7 @@ func (h *AlertHandlers) CreateChannel(c *gin.Context) {
 	channel.Status.Phase = "Active"
 
 	if err := h.channelStore.Create(c.Request.Context(), &channel); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -400,13 +387,13 @@ func (h *AlertHandlers) UpdateChannel(c *gin.Context) {
 	}
 	existing, err := h.channelStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "channel not found", Name: name})
 		return
 	}
 
 	var updated NotificationChannelResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -429,10 +416,10 @@ func (h *AlertHandlers) DeleteChannel(c *gin.Context) {
 		return
 	}
 	if err := h.channelStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "channel not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // TestChannel sends a test notification through a channel.
@@ -443,16 +430,16 @@ func (h *AlertHandlers) TestChannel(c *gin.Context) {
 	}
 	channel, err := h.channelStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "channel not found", Name: name})
 		return
 	}
 
 	// In production, this would actually send a test message.
-	c.JSON(http.StatusOK, gin.H{
-		"tested":  true,
-		"channel": name,
-		"type":    channel.Spec.Type,
-		"message": "test notification sent successfully",
+	c.JSON(http.StatusOK, TestChannelResponse{
+		Success: true,
+		Channel: name,
+		Type:    string(channel.Spec.Type),
+		Message: "test notification sent successfully",
 	})
 }
 
@@ -484,12 +471,12 @@ func (h *AlertHandlers) GetSummary(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"totalRules":            totalRules,
-		"silencedRules":         silencedRules,
-		"firingIncidents":       firingIncidents,
-		"acknowledgedIncidents": acknowledgedIncidents,
-		"resolvedIncidents":     resolvedIncidents,
-		"totalIncidents":        len(incidents),
+	c.JSON(http.StatusOK, SummaryResponse{
+		TotalRules:            totalRules,
+		SilencedRules:         silencedRules,
+		FiringIncidents:       firingIncidents,
+		AcknowledgedIncidents: acknowledgedIncidents,
+		ResolvedIncidents:     resolvedIncidents,
+		TotalIncidents:        len(incidents),
 	})
 }

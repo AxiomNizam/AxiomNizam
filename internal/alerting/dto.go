@@ -33,9 +33,15 @@ type UnsilenceResponse struct {
 	Silenced bool `json:"silenced"`
 }
 
-// ActionResponse is the API response for acknowledge/resolve actions.
-type ActionResponse struct {
-	Action   bool   `json:"action"`
+// AcknowledgeResponse is the API response for acknowledging an incident.
+type AcknowledgeResponse struct {
+	Acknowledged bool   `json:"acknowledged"`
+	Incident     string `json:"incident"`
+}
+
+// ResolveResponse is the API response for resolving an incident.
+type ResolveResponse struct {
+	Resolved bool   `json:"resolved"`
 	Incident string `json:"incident"`
 }
 

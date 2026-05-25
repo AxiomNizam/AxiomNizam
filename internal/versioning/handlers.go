@@ -1,6 +1,7 @@
 package versioning
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -19,6 +20,21 @@ func NewVersionHandler(manager VersionManager) *VersionHandler {
 	return &VersionHandler{manager: manager}
 }
 
+// ResourceVersionListResponse is the API response for listing resource versions.
+type ResourceVersionListResponse struct {
+	Versions []*ResourceVersion `json:"versions"`
+	Count    int                `json:"count"`
+}
+
+// SnapshotCreatedResponse is the accepted response for snapshot creation.
+type SnapshotCreatedResponse struct {
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Message      string `json:"message"`
+	ResourceType string `json:"resourceType"`
+	ResourceID   string `json:"resourceId"`
+}
+
 // GetVersion handles GET /api/v1/versions/:resourceType/:resourceId/:version
 func (h *VersionHandler) GetVersion(c *gin.Context) {
 	resourceType := c.Param("resourceType")
@@ -28,7 +44,7 @@ func (h *VersionHandler) GetVersion(c *gin.Context) {
 	version, _ := strconv.ParseInt(versionStr, 10, 64)
 	rv, err := h.manager.GetVersion(resourceType, resourceID, version)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "version not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "version not found"})
 		return
 	}
 
@@ -42,11 +58,11 @@ func (h *VersionHandler) ListVersions(c *gin.Context) {
 
 	versions, err := h.manager.ListVersions(resourceType, resourceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"versions": versions, "count": len(versions)})
+	c.JSON(http.StatusOK, ResourceVersionListResponse{Versions: versions, Count: len(versions)})
 }
 
 // GetHistory handles GET /api/v1/history/:resourceType/:resourceId
@@ -56,7 +72,7 @@ func (h *VersionHandler) GetHistory(c *gin.Context) {
 
 	history, err := h.manager.GetHistory(resourceType, resourceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -75,7 +91,7 @@ func (h *VersionHandler) GetDiff(c *gin.Context) {
 
 	diff, err := h.manager.GetDiff(resourceType, resourceID, from, to)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -94,7 +110,7 @@ func (h *VersionHandler) CreateSnapshot(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -105,17 +121,17 @@ func (h *VersionHandler) CreateSnapshot(c *gin.Context) {
 			if err := h.dualWriteStore.Create(c.Request.Context(), resource); err != nil {
 				// Fallback: try update if already exists
 				if updateErr := h.dualWriteStore.Update(c.Request.Context(), resource); updateErr != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": updateErr.Error()})
+					c.JSON(http.StatusInternalServerError, MessageResponse{Error: updateErr.Error()})
 					return
 				}
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{
-			"name":         resource.Name,
-			"status":       "Pending",
-			"message":      "snapshot resource created — reconciler will process",
-			"resourceType": resourceType,
-			"resourceId":   resourceID,
+		c.JSON(http.StatusAccepted, SnapshotCreatedResponse{
+			Name:         resource.Name,
+			Status:       "Pending",
+			Message:      fmt.Sprintf("snapshot resource created — reconciler will process"),
+			ResourceType: resourceType,
+			ResourceID:   resourceID,
 		})
 		return
 	}
@@ -132,7 +148,7 @@ func (h *VersionHandler) CreateSnapshot(c *gin.Context) {
 
 	created, err := h.manager.CreateSnapshot(snapshot)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -153,13 +169,13 @@ func (h *VersionHandler) Rollback(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	result, err := h.manager.Rollback(resourceType, resourceID, req.TargetVersion, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

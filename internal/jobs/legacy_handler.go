@@ -430,23 +430,23 @@ func (h *LegacyJobHandler) ListSchedules(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	items := make([]gin.H, 0)
+	items := make([]ScheduleItem, 0)
 	for _, job := range h.jobs {
 		if job.Schedule == nil {
 			continue
 		}
-		items = append(items, gin.H{
-			"id":         job.Metadata.ID,
-			"name":       job.Metadata.Name,
-			"expression": job.Schedule.Expression,
-			"enabled":    job.Schedule.Enabled,
-			"lastRun":    job.Schedule.LastRun,
-			"nextRun":    job.Schedule.NextRun,
-			"phase":      job.Status.Phase,
+		items = append(items, ScheduleItem{
+			ID:         job.Metadata.ID,
+			Name:       job.Metadata.Name,
+			Expression: job.Schedule.Expression,
+			Enabled:    job.Schedule.Enabled,
+			LastRun:    job.Schedule.LastRun,
+			NextRun:    job.Schedule.NextRun,
+			Phase:      job.Status.Phase,
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"schedules": items, "count": len(items)})
+	c.JSON(http.StatusOK, ScheduleListResponse{Schedules: items, Count: len(items)})
 }
 
 // Get returns a job by ID
@@ -487,7 +487,7 @@ func (h *LegacyJobHandler) Run(c *gin.Context) {
 	h.startJobExecutionLocked(job, "manual")
 	h.mu.Unlock()
 
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("job '%s' started", id), "status": "Running"})
+	c.JSON(http.StatusOK, MessageResponse{Message: fmt.Sprintf("job '%s' started", id), Status: "Running"})
 }
 
 // SetSchedule creates or updates a job schedule.
@@ -546,7 +546,7 @@ func (h *LegacyJobHandler) SetSchedule(c *gin.Context) {
 	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Schedule set to '%s'", time.Now().UTC().Format(time.RFC3339), expression))
 	h.persistStateLocked()
 
-	c.JSON(http.StatusOK, gin.H{"message": "schedule updated", "job": job})
+	c.JSON(http.StatusOK, MessageResponse{Message: "schedule updated"})
 }
 
 // RemoveSchedule removes a job schedule.
@@ -574,7 +574,7 @@ func (h *LegacyJobHandler) RemoveSchedule(c *gin.Context) {
 	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Schedule removed", time.Now().UTC().Format(time.RFC3339)))
 	h.persistStateLocked()
 
-	c.JSON(http.StatusOK, gin.H{"message": "schedule removed", "job": job})
+	c.JSON(http.StatusOK, MessageResponse{Message: "schedule removed"})
 }
 
 // GetLogs returns logs for a job
@@ -590,10 +590,10 @@ func (h *LegacyJobHandler) GetLogs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"jobId": job.Metadata.ID,
-		"name":  job.Metadata.Name,
-		"logs":  job.Logs,
+	c.JSON(http.StatusOK, LegacyJobLogsResponse{
+		JobID: job.Metadata.ID,
+		Name:  job.Metadata.Name,
+		Logs:  job.Logs,
 	})
 }
 
@@ -614,7 +614,7 @@ func (h *LegacyJobHandler) Cancel(c *gin.Context) {
 	job.Logs = append(job.Logs, fmt.Sprintf("[%s] Job cancelled", time.Now().UTC().Format(time.RFC3339)))
 	h.persistStateLocked()
 
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("job '%s' cancelled", id)})
+	c.JSON(http.StatusOK, MessageResponse{Message: fmt.Sprintf("job '%s' cancelled", id)})
 }
 
 // Delete removes a job
@@ -640,7 +640,7 @@ func (h *LegacyJobHandler) Delete(c *gin.Context) {
 
 	delete(h.jobs, found)
 	h.persistStateLocked()
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("job '%s' deleted", id)})
+	c.JSON(http.StatusOK, MessageResponse{Message: fmt.Sprintf("job '%s' deleted", id)})
 }
 
 // findJob finds a job by ID or name

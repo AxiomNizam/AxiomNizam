@@ -36,7 +36,7 @@ func (h *StreamAnalyticsHandlers) ListJobs(c *gin.Context) {
 	jobs, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListJobs"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"streamJobs": jobs, "count": len(jobs)})
@@ -49,7 +49,7 @@ func (h *StreamAnalyticsHandlers) GetJob(c *gin.Context) {
 	}
 	job, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "stream job not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, job)
@@ -58,7 +58,7 @@ func (h *StreamAnalyticsHandlers) GetJob(c *gin.Context) {
 func (h *StreamAnalyticsHandlers) CreateJob(c *gin.Context) {
 	var job StreamJobResource
 	if err := c.ShouldBindJSON(&job); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	job.Kind = StreamJobKind
@@ -69,7 +69,7 @@ func (h *StreamAnalyticsHandlers) CreateJob(c *gin.Context) {
 	job.Status.Phase = "Pending"
 	job.Status.JobStatus = "pending"
 	if err := h.store.Create(c.Request.Context(), &job); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, job)
@@ -82,12 +82,12 @@ func (h *StreamAnalyticsHandlers) UpdateJob(c *gin.Context) {
 	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "stream job not found", Name: name})
 		return
 	}
 	var updated StreamJobResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	updated.ObjectMeta = existing.ObjectMeta
@@ -95,7 +95,7 @@ func (h *StreamAnalyticsHandlers) UpdateJob(c *gin.Context) {
 	updated.Status = existing.Status
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateJob"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -107,10 +107,10 @@ func (h *StreamAnalyticsHandlers) DeleteJob(c *gin.Context) {
 		return
 	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "stream job not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 func (h *StreamAnalyticsHandlers) StartJob(c *gin.Context) {
@@ -120,13 +120,13 @@ func (h *StreamAnalyticsHandlers) StartJob(c *gin.Context) {
 	}
 	job, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "stream job not found", Name: name})
 		return
 	}
 	job.Spec.Enabled = true
 	job.Generation++
 	_ = h.store.Update(c.Request.Context(), job)
-	c.JSON(http.StatusAccepted, gin.H{"message": "job start triggered", "job": name})
+	c.JSON(http.StatusAccepted, MessageResponse{Message: "job start triggered", Name: name})
 }
 
 func (h *StreamAnalyticsHandlers) StopJob(c *gin.Context) {
@@ -136,11 +136,11 @@ func (h *StreamAnalyticsHandlers) StopJob(c *gin.Context) {
 	}
 	job, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "stream job not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "stream job not found", Name: name})
 		return
 	}
 	job.Spec.Enabled = false
 	job.Generation++
 	_ = h.store.Update(c.Request.Context(), job)
-	c.JSON(http.StatusAccepted, gin.H{"message": "job stop triggered", "job": name})
+	c.JSON(http.StatusAccepted, MessageResponse{Message: "job stop triggered", Name: name})
 }
