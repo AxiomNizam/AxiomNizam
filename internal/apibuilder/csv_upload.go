@@ -13,13 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/scanner"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
-	"go.uber.org/zap"
 )
 
 func (h *APIBuilderHandler) UploadCSV(c *gin.Context) {
