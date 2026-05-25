@@ -334,12 +334,12 @@ Directories never imported from any `main.go` (may be used transitively):
 |--------|--------|----------|--------|-------|---------|-------|---------|-----------|-------|
 | `gatekeeper` | Y | Y | Y | Y | Y | Y | Y | partial | **8/8** |
 | `storage` | inline | Y | Y | Y | Y | Y | Y | partial | **7/8** |
-| `iam` | inline | Y | Y | Y | Y | N | via ctor | partial | **6/8** |
+| `iam` | inline | Y | Y | Y | Y | Y | via ctor | partial | **7/8** |
 | `scanner` | Y | N/A | Y | N | Y | N | Y | N/A | **4/8** |
 | `conductor` | Y | Y | Y | N | Y | N | N | N | **4/8** |
 | `platform` | N | N | Y | N | shared | N | N | N | **1/8** |
-| `jobs` | N | N | Y | Y | Y | N | N | N | **3/8** |
-| `antivirus` | N | N | Y | N | Y | N | N | N | **2/8** |
+| `jobs` | N | N | Y | Y | Y | Y | N | N | **4/8** |
+| `antivirus` | N | N | Y | N | Y | Y | N | N | **3/8** |
 | ~20 resource modules | N | inline | Y | N | N | N | N | N | **1/8** |
 | ~60 other modules | N | N | varies | N | N | N | N | N | **0-1/8** |
 
@@ -763,19 +763,33 @@ All 39 modules now have dto.go files. All 18 modules from batch 2 fully wired wi
 
 ---
 
-#### Phase 12: Standardize Audit Pattern
+#### Phase 12: Standardize Audit Pattern — **DONE**
 
 **Goal:** Security-sensitive modules have `audit/` logging with KV persistence.
 
-| # | Task | Module(s) |
-|---|------|-----------|
-| 12.1 | Create `iam/audit/` — login attempts, permission changes, token operations | iam |
-| 12.2 | Create `storage/audit/` — rename existing `events/` to `audit/` for consistency | storage |
-| 12.3 | Create `antivirus/audit/` — scan results, detection events | antivirus |
-| 12.4 | Create `jobs/audit/` — job creation, modification, execution | jobs |
-| 12.5 | Wire all audit logs to `ConfigureKVPersistence()` | All audit modules |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 12.1 | Create `iam/audit/` — login attempts, permission changes, token operations | DONE | Logger + Event + 8 Log* methods + ConfigureKVPersistence + event_types.go |
+| 12.2 | Create `storage/audit/` — rename existing `events/` to `audit/` for consistency | DONE | Moved to audit/; old events/ kept as re-export wrapper |
+| 12.3 | Create `antivirus/audit/` — scan results, detection events | DONE | Logger + Event + 4 Log* methods + ConfigureKVPersistence + event_types.go |
+| 12.4 | Create `jobs/audit/` — job creation, modification, execution | DONE | Logger + Event + 7 Log* methods + ConfigureKVPersistence + event_types.go |
+| 12.5 | Wire all audit logs to `ConfigureKVPersistence()` | DONE | All 4 loggers have ConfigureKVPersistence(kv) following gatekeeper pattern |
 
-**Scope:** 4 modules | **Effort:** 2 days | **Impact:** MEDIUM | **Risk:** LOW
+**Files created:**
+- `internal/iam/audit/{logger,event_types}.go` — 8 Log methods (Auth, TokenIssued, TokenRevoked, PermissionCheck, UserCreated, SessionCreated, SessionRevoked, RoleAssigned)
+- `internal/storage/audit/{audit,event_types}.go` — AuditLog with Record, List, ListByBucket, Count
+- `internal/antivirus/audit/{logger,event_types}.go` — 4 Log methods (ScanResult, ThreatDetected, EngineEvent, SignatureReload)
+- `internal/jobs/audit/{logger,event_types}.go` — 7 Log methods (JobCreated, JobStarted, JobCompleted, JobFailed, JobCancelled, JobRetried, DLQEvent)
+
+**Files updated:**
+- `internal/storage/storage.go` — import changed from events → audit
+- `internal/storage/admin/admin.go` — import changed, all events.* refs → audit.*
+- `internal/storage/access/access.go` — import changed
+- `internal/storage/events/events.go` — converted to re-export wrapper
+
+**Build verified:** `go build .` passes clean.
+
+**Scope:** 4 modules | **Effort:** 1 day | **Impact:** MEDIUM | **Risk:** LOW
 
 ---
 
@@ -1029,7 +1043,7 @@ Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 9: Standardize models       ✅ DONE (37/37 models/ created)
 ├── Phase 10: Repository interfaces   ✅ DONE
 ├── Phase 11: Standardize metrics     ✅ DONE
-└── Phase 12: Standardize audit       ← needs Phase 6
+└── Phase 12: Standardize audit       ✅ DONE
 
 Tier 3 (Anti-Pattern Elimination) — Depends on Tier 2
 ├── Phase 13: Kill singletons         ← needs Phase 6 (DI framework)
@@ -1098,7 +1112,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-11 DONE (37 models/ dirs, 3 repos/ dirs, 4 metrics/ dirs with Prometheus collectors)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-12 DONE (37 models/ dirs, 3 repos/ dirs, 4 metrics/ dirs, 4 audit/ dirs with KV persistence)*
 
 ---
 
@@ -1117,7 +1131,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 9. Standardize models | ✅ DONE | 2026-05-26 | 9.1-9.4 DONE (37/37 models/ dirs, DeepCopy on all Resource types, type aliases for backward compat) |
 | 10. Repository interfaces | ✅ DONE | 2026-05-26 | storage, iam, jobs have `repositories/` with compile-time checks |
 | 11. Standardize metrics | ✅ DONE | 2026-05-26 | gatekeeper, iam, jobs, antivirus, conductor have `metrics/` with Prometheus; GlobalMetrics consumers deferred to Phase 13 |
-| 12. Standardize audit | 🔶 PARTIAL | — | gatekeeper + storage have audit; others don't |
+| 12. Standardize audit | ✅ DONE | 2026-05-26 | gatekeeper, storage, iam, jobs, antivirus have `audit/` with KV persistence |
 | 13. Eliminate global singletons | ⬜ TODO | — | 19+ singletons across 8 packages |
 | 14. Extract monolith handlers | ✅ DONE | 2026-05-25 | 42/42 files extracted to per-module packages; `internal/handlers/` deleted |
 | 15. system.go bootstrap | ⬜ TODO | — | Only 3/88 modules have it |
@@ -1185,4 +1199,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-11 DONE (37 models/ dirs, 3 repos/ dirs, 4 metrics/ dirs with Prometheus collectors)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-12 DONE (37 models/ dirs, 3 repos/ dirs, 4 metrics/ dirs, 4 audit/ dirs with KV persistence)*

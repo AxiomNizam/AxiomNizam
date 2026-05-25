@@ -18,7 +18,7 @@ import (
 	"example.com/axiomnizam/internal/scanner"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/controller"
-	"example.com/axiomnizam/internal/storage/events"
+	"example.com/axiomnizam/internal/storage/audit"
 	storageMetrics "example.com/axiomnizam/internal/storage/metrics"
 	"example.com/axiomnizam/internal/storage/models"
 	"example.com/axiomnizam/internal/storage/store"
@@ -35,7 +35,7 @@ type Handler struct {
 	access     *access.Controller
 	presign    PresignSigner
 	metrics    *storageMetrics.Collector
-	audit      *events.AuditLog
+	audit      *audit.AuditLog
 	endpoint   string
 
 	// Antivirus.
@@ -61,7 +61,7 @@ func NewHandler(
 	ac *access.Controller,
 	ps PresignSigner,
 	m *storageMetrics.Collector,
-	a *events.AuditLog,
+	a *audit.AuditLog,
 	endpoint string,
 	avEngine *antivirus.Engine,
 	avCache *avcache.Cache,
@@ -1101,7 +1101,7 @@ func (h *Handler) PutObject(c *gin.Context) {
 
 	// Record audit event for upload and trigger immediate stats update.
 	h.audit.Record(models.StorageEvent{
-		Type:     events.EventObjectUploaded,
+		Type:     audit.EventObjectUploaded,
 		TenantID: tenantID,
 		UserID:   userID,
 		Bucket:   bucket,
@@ -2096,7 +2096,7 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 				threatDescs = append(threatDescs, fmt.Sprintf("%s:%s", f.Scanner, f.Description))
 			}
 			h.audit.Record(models.StorageEvent{
-				Type:     events.EventObjectThreatDetected,
+				Type:     audit.EventObjectThreatDetected,
 				TenantID: tenantID,
 				UserID:   userID,
 				Bucket:   bucket,
@@ -2108,7 +2108,7 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 				bucket, key, strings.Join(threatDescs, "; "), scanResult.DurationMs))
 		} else {
 			h.audit.Record(models.StorageEvent{
-				Type:     events.EventObjectScanClean,
+				Type:     audit.EventObjectScanClean,
 				TenantID: tenantID,
 				UserID:   userID,
 				Bucket:   bucket,
@@ -2139,7 +2139,7 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 			threatNames = append(threatNames, t.Name)
 		}
 		h.audit.Record(models.StorageEvent{
-			Type:     events.EventObjectThreatDetected,
+			Type:     audit.EventObjectThreatDetected,
 			TenantID: tenantID,
 			UserID:   userID,
 			Bucket:   bucket,
@@ -2151,7 +2151,7 @@ func (h *Handler) scanObjectAsync(bucket, key, tenantID, userID string, size int
 			bucket, key, strings.Join(threatNames, ", "), avResult.Verdict))
 	} else {
 		h.audit.Record(models.StorageEvent{
-			Type:     events.EventObjectScanClean,
+			Type:     audit.EventObjectScanClean,
 			TenantID: tenantID,
 			UserID:   userID,
 			Bucket:   bucket,

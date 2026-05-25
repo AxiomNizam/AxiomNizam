@@ -30,7 +30,7 @@ import (
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/admin"
 	"example.com/axiomnizam/internal/storage/controller"
-	"example.com/axiomnizam/internal/storage/events"
+	"example.com/axiomnizam/internal/storage/audit"
 	storageMetrics "example.com/axiomnizam/internal/storage/metrics"
 	"example.com/axiomnizam/internal/storage/models"
 	"example.com/axiomnizam/internal/storage/native"
@@ -52,7 +52,7 @@ type System struct {
 	Access     *access.Controller
 	Handler    *admin.Handler
 	Metrics    *storageMetrics.Collector
-	AuditLog   *events.AuditLog
+	AuditLog   *audit.AuditLog
 	Config     Config
 
 	// Antivirus engine for malware scanning on uploads.
@@ -118,7 +118,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint, cfg.ControllerResyncInterval, cfg.ControllerDebug)
 	policyCtrl := policy.NewController()
 	metricsCollector := storageMetrics.NewCollector()
-	auditLog := events.NewAuditLog(cfg.MaxAuditEvents)
+	auditLog := audit.NewAuditLog(cfg.MaxAuditEvents)
 	accessCtrl := access.NewController(auditLog, access.ControllerConfig{
 		DefaultReadRateLimit:  cfg.ObjectReadRateLimit,
 		DefaultWriteRateLimit: cfg.ObjectWriteRateLimit,

@@ -16,7 +16,7 @@ import (
 
 	"example.com/axiomnizam/internal/iam/token"
 	platformstore "example.com/axiomnizam/internal/platform/store"
-	"example.com/axiomnizam/internal/storage/events"
+	"example.com/axiomnizam/internal/storage/audit"
 	"example.com/axiomnizam/internal/storage/models"
 	"example.com/axiomnizam/internal/storage/store"
 	"github.com/gin-gonic/gin"
@@ -30,7 +30,7 @@ type Controller struct {
 	policies   map[string]*models.TenantPolicy // key = tenantID/userID/bucket
 	accessKeys map[string]*models.AccessKey    // key = accessKeyID
 	shares     map[string]*models.BucketShare  // key = shareID
-	auditLog   *events.AuditLog
+	auditLog   *audit.AuditLog
 	etcd       *clientv3.Client
 	kvStore    platformstore.KVStore // Raft-compatible KV persistence (used when etcd is nil).
 	etcdTimeout time.Duration
@@ -63,7 +63,7 @@ type objectRateState struct {
 }
 
 // NewController creates an access controller.
-func NewController(auditLog *events.AuditLog, cfg ControllerConfig) *Controller {
+func NewController(auditLog *audit.AuditLog, cfg ControllerConfig) *Controller {
 	etcdTimeout := cfg.EtcdTimeout
 	if etcdTimeout <= 0 {
 		etcdTimeout = 3 * time.Second

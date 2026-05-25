@@ -183,6 +183,19 @@ Key results:
 - **Jobs metrics:** labels.go + doc.go re-exports existing MetricsCollector
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Audit Pattern (Phase 12)
+
+**Phase 12 ✅** (completed 2026-05-26) — Standardize audit logging with KV persistence across security-sensitive modules.
+
+Key results:
+- **4 modules** with new `audit/` packages: `iam`, `storage`, `antivirus`, `jobs`
+- **Storage:** renamed `events/` → `audit/` (old events/ kept as re-export wrapper)
+- **IAM audit:** 8 Log methods (Auth, TokenIssued, TokenRevoked, PermissionCheck, UserCreated, SessionCreated, SessionRevoked, RoleAssigned)
+- **Antivirus audit:** 4 Log methods (ScanResult, ThreatDetected, EngineEvent, SignatureReload)
+- **Jobs audit:** 7 Log methods (JobCreated, JobStarted, JobCompleted, JobFailed, JobCancelled, JobRetried, DLQEvent)
+- **All loggers** have `ConfigureKVPersistence(kv)` following the gatekeeper pattern
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
