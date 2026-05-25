@@ -34,7 +34,7 @@ func (h *ExportHandler) SubmitExport(c *gin.Context) {
 				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "export job resource created"})
+		c.JSON(http.StatusAccepted, ExportJobResponse{ID: resource.Name, Status: "Pending"})
 		return
 	}
 
@@ -55,12 +55,15 @@ func (h *ExportHandler) SubmitExport(c *gin.Context) {
 
 	created, err := h.manager.SubmitExport(job)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	h.dualWriteExport(created)
-	c.JSON(http.StatusAccepted, created)
+	c.JSON(http.StatusAccepted, ExportJobResponse{
+		ID:     created.ID,
+		Status: created.Status,
+	})
 }
 
 // GetExport handles GET /api/v1/exports/:id
@@ -68,7 +71,7 @@ func (h *ExportHandler) GetExport(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetExport(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "export not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "export not found"})
 		return
 	}
 
@@ -83,22 +86,22 @@ func (h *ExportHandler) ListExports(c *gin.Context) {
 
 	exports, err := h.manager.ListExports(tenantID, status, format)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"exports": exports, "count": len(exports)})
+	c.JSON(http.StatusOK, ExportJobListResponse{Exports: exports, Count: len(exports)})
 }
 
 // CancelExport handles DELETE /api/v1/exports/:id
 func (h *ExportHandler) CancelExport(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.CancelExport(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "export cancelled"})
+	c.JSON(http.StatusOK, MessageResponse{Error: ""})
 }
 
 // GetExportProgress handles GET /api/v1/exports/:id/progress
@@ -106,18 +109,18 @@ func (h *ExportHandler) GetExportProgress(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetExport(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "export not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "export not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":        job.ID,
-		"status":    job.Status,
-		"progress":  job.Progress,
-		"processed": job.ProcessedRows,
-		"total":     job.RecordCount,
-		"skipped":   job.SkippedRows,
-		"errors":    job.ErrorRows,
+	c.JSON(http.StatusOK, ProgressResponse{
+		ID:        job.ID,
+		Status:    job.Status,
+		Progress:  job.Progress,
+		Processed: job.ProcessedRows,
+		Total:     job.RecordCount,
+		Skipped:   job.SkippedRows,
+		Errors:    job.ErrorRows,
 	})
 }
 
@@ -126,20 +129,19 @@ func (h *ExportHandler) DownloadExport(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetExport(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "export not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "export not found"})
 		return
 	}
 
 	if job.Status != "Completed" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "export not ready"})
+		c.JSON(http.StatusForbidden, MessageResponse{Error: "export not ready"})
 		return
 	}
 
-	// Return download URL or file
-	c.JSON(http.StatusOK, gin.H{
-		"downloadUrl": "/files/" + job.ID,
-		"fileSize":    job.FileSize,
-		"contentType": "application/" + string(job.Format),
+	c.JSON(http.StatusOK, DownloadResponse{
+		DownloadURL: "/files/" + job.ID,
+		FileSize:    job.FileSize,
+		ContentType: "application/" + string(job.Format),
 	})
 }
 
@@ -153,7 +155,7 @@ func (h *ExportHandler) CreateTemplate(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -167,7 +169,7 @@ func (h *ExportHandler) CreateTemplate(c *gin.Context) {
 
 	created, err := h.manager.CreateTemplate(template)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -179,11 +181,11 @@ func (h *ExportHandler) ListTemplates(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	templates, err := h.manager.ListTemplates(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"templates": templates, "count": len(templates)})
+	c.JSON(http.StatusOK, TemplateListResponse{Templates: templates, Count: len(templates)})
 }
 
 // RegisterExportRoutes registers all export routes

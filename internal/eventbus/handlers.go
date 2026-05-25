@@ -22,7 +22,7 @@ func NewEventBusHandler(manager EventBusManager) *EventBusHandler {
 func (h *EventBusHandler) PublishEvent(c *gin.Context) {
 	var req EventPublishRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -40,7 +40,7 @@ func (h *EventBusHandler) PublishEvent(c *gin.Context) {
 
 	resp, err := h.manager.PublishEvent(event)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -55,11 +55,11 @@ func (h *EventBusHandler) ListEvents(c *gin.Context) {
 
 	events, err := h.manager.ListEvents(tenantID, eventType, processed)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
+	c.JSON(http.StatusOK, EventListResponse{Events: events, Count: len(events)})
 }
 
 // CreateTopic handles POST /api/v1/topics
@@ -70,7 +70,7 @@ func (h *EventBusHandler) CreateTopic(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *EventBusHandler) CreateTopic(c *gin.Context) {
 				_ = h.topicDualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "topic resource created"})
+		c.JSON(http.StatusAccepted, ResourceCreatedResponse{Name: resource.Name, Status: "Pending", Message: "topic resource created"})
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *EventBusHandler) CreateTopic(c *gin.Context) {
 
 	created, err := h.manager.CreateTopic(topic)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -108,11 +108,11 @@ func (h *EventBusHandler) CreateTopic(c *gin.Context) {
 func (h *EventBusHandler) ListTopics(c *gin.Context) {
 	topics, err := h.manager.ListTopics()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"topics": topics, "count": len(topics)})
+	c.JSON(http.StatusOK, TopicListResponse{Topics: topics, Count: len(topics)})
 }
 
 // CreateSubscription handles POST /api/v1/subscriptions
@@ -126,7 +126,7 @@ func (h *EventBusHandler) CreateSubscription(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *EventBusHandler) CreateSubscription(c *gin.Context) {
 
 	created, err := h.manager.CreateSubscription(sub)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *EventBusHandler) GetSubscription(c *gin.Context) {
 	id := c.Param("id")
 	sub, err := h.manager.GetSubscription(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "subscription not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "subscription not found"})
 		return
 	}
 
@@ -166,11 +166,11 @@ func (h *EventBusHandler) ListSubscriptions(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	subs, err := h.manager.ListSubscriptions(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"subscriptions": subs, "count": len(subs)})
+	c.JSON(http.StatusOK, SubscriptionListResponse{Subscriptions: subs, Count: len(subs)})
 }
 
 // ListDLQ handles GET /api/v1/dlq
@@ -178,18 +178,18 @@ func (h *EventBusHandler) ListDLQ(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	events, err := h.manager.ListDLQEvents(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"events": events, "count": len(events)})
+	c.JSON(http.StatusOK, DLQListResponse{Events: events, Count: len(events)})
 }
 
 // AckEvent handles POST /api/v1/events/:id/ack
 func (h *EventBusHandler) AckEvent(c *gin.Context) {
 	eventID := strings.TrimSpace(c.Param("id"))
 	if eventID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "event id is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "event id is required"})
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *EventBusHandler) AckEvent(c *gin.Context) {
 
 	if c.Request != nil && c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 			return
 		}
 	}
@@ -209,21 +209,21 @@ func (h *EventBusHandler) AckEvent(c *gin.Context) {
 	event, err := h.manager.AckEvent(eventID, strings.TrimSpace(req.SubscriptionID), strings.TrimSpace(req.AcknowledgedBy), strings.TrimSpace(req.Message))
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "event acknowledged", "event": event})
+	c.JSON(http.StatusOK, AckResponse{Message: "event acknowledged", Event: event})
 }
 
 // ReplayDLQEvent handles POST /api/v1/dlq/:id/replay
 func (h *EventBusHandler) ReplayDLQEvent(c *gin.Context) {
 	dlqID := strings.TrimSpace(c.Param("id"))
 	if dlqID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "dlq id is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "dlq id is required"})
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *EventBusHandler) ReplayDLQEvent(c *gin.Context) {
 
 	if c.Request != nil && c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 			return
 		}
 	}
@@ -242,14 +242,14 @@ func (h *EventBusHandler) ReplayDLQEvent(c *gin.Context) {
 	resp, err := h.manager.ReplayDLQEvent(dlqID, strings.TrimSpace(req.ReplayToTopic), strings.TrimSpace(req.ReplayedBy))
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "dlq event replayed", "replay": resp})
+	c.JSON(http.StatusOK, ReplayResponse{Message: "dlq event replayed", Replay: resp})
 }
 
 // RegisterEventBusRoutes registers all event bus routes

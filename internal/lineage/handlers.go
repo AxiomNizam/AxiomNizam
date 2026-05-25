@@ -22,7 +22,7 @@ func (h *LineageHandler) GetNode(c *gin.Context) {
 	id := c.Param("id")
 	node, err := h.manager.GetNode(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "node not found"})
 		return
 	}
 
@@ -36,11 +36,11 @@ func (h *LineageHandler) ListNodes(c *gin.Context) {
 
 	nodes, err := h.manager.ListNodes(tenantID, resourceType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"nodes": nodes, "count": len(nodes)})
+	c.JSON(http.StatusOK, NodeListResponse{Nodes: nodes, Count: len(nodes)})
 }
 
 // GetLineageGraph handles GET /api/v1/lineage/:resourceType/:resourceId
@@ -50,7 +50,7 @@ func (h *LineageHandler) GetLineageGraph(c *gin.Context) {
 
 	graph, err := h.manager.GetLineageGraph(resourceType, resourceID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "lineage not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "lineage not found"})
 		return
 	}
 
@@ -64,11 +64,11 @@ func (h *LineageHandler) GetUpstreamLineage(c *gin.Context) {
 
 	paths, err := h.manager.GetUpstreamLineage(resourceType, resourceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"paths": paths, "count": len(paths)})
+	c.JSON(http.StatusOK, PathListResponse{Paths: paths, Count: len(paths)})
 }
 
 // GetDownstreamLineage handles GET /api/v1/lineage/downstream/:resourceType/:resourceId
@@ -78,11 +78,11 @@ func (h *LineageHandler) GetDownstreamLineage(c *gin.Context) {
 
 	paths, err := h.manager.GetDownstreamLineage(resourceType, resourceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"paths": paths, "count": len(paths)})
+	c.JSON(http.StatusOK, PathListResponse{Paths: paths, Count: len(paths)})
 }
 
 // GetImpactAnalysis handles GET /api/v1/lineage/impact/:resourceType/:resourceId
@@ -92,7 +92,7 @@ func (h *LineageHandler) GetImpactAnalysis(c *gin.Context) {
 
 	impact, err := h.manager.GetImpactAnalysis(resourceType, resourceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *LineageHandler) GetColumnLineage(c *gin.Context) {
 
 	lineage, err := h.manager.GetColumnLineage(sourceCol, targetCol)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "lineage not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "lineage not found"})
 		return
 	}
 
@@ -120,7 +120,7 @@ func (h *LineageHandler) TraceDataFlow(c *gin.Context) {
 
 	path, err := h.manager.TraceDataFlow(sourceID, targetID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "no data flow path found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "no data flow path found"})
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *LineageHandler) GetStatistics(c *gin.Context) {
 
 	stats, err := h.manager.GetStatistics(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

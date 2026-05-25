@@ -46,7 +46,7 @@ func (h *MLPipelineHandlers) ListPipelines(c *gin.Context) {
 	pipelines, err := h.pipelineStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListPipelines"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"pipelines": pipelines, "count": len(pipelines)})

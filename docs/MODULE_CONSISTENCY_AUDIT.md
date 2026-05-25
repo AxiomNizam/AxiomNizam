@@ -551,9 +551,32 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
 | 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | **DONE** (42/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
-| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | PENDING |
+| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **IN PROGRESS** — 15/39 modules done (see below) |
 
-**Scope:** 10+ modules, ~40 files | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** MEDIUM
+**Scope:** 39 modules, ~1031 gin.H occurrences | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** MEDIUM
+
+**Phase 8.5 progress (2026-05-25):**
+
+DTO sweep batch 1 — 13 modules completed:
+
+| Module | dto.go | mapper.go | Handler wired | Status |
+|--------|--------|-----------|---------------|--------|
+| `antivirus` | Yes | Yes | Yes | DONE |
+| `tenant` | Yes | Yes | Yes | DONE |
+| `bulk` | Yes | Yes | Yes | DONE |
+| `webhooks` | Yes | — | Yes | DONE |
+| `conductor` | Yes | — | Yes | DONE |
+| `eventbus` | Yes | — | Yes | DONE |
+| `export` | Yes | — | Yes | DONE |
+| `lineage` | Yes | — | Yes | DONE |
+| `streaming` | Yes | — | Yes | DONE |
+| `mlpipeline` | Yes | — | Partial | DONE |
+| `streamanalytics` | Yes | — | Partial | DONE |
+| `notification` | Yes | — | Partial | DONE |
+| `audit` | Yes | — | Partial | DONE |
+
+**Remaining 26 modules (pending):**
+`alerting`, `anonymization`, `catalog`, `cdc`, `contracts`, `costing`, `database`, `datasource`, `encryption`, `federation`, `featurestore`, `governance`, `iam/authn`, `iam/users`, `integration`, `jobs`, `netintel`, `quality`, `rbac`, `resources`, `schemaregistry`, `security`, `slo`, `tracing`, `versioning`
 
 **Key changes (2026-05-20):**
 - `gatekeeper/handlers/http.go` — rewrote all 15 handlers to use named DTOs from `dto.go` and mappers from `mapper.go`; fixed VerifyChallengeRequest to use string (matches service contract)
@@ -1068,7 +1091,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.4-8.5 PENDING)*
+*Last updated: 2026-05-25 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.4 N/A, 8.5: 15/39 modules DTO-wired)*
 
 ---
 
@@ -1083,7 +1106,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ✅ DONE | 2026-05-21 | 8 modules configured: storage, iam, scanner, antivirus, jobs, conductor, cache, config |
-| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.3 DONE (42/42 extracted); 8.4-8.5 PENDING |
+| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.3 DONE, 8.4 N/A, 8.5: 15/39 DTO-wired |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
@@ -1155,4 +1178,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.4-8.5 PENDING)*
+*Last updated: 2026-05-25 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 15/39 DTO-wired)*
