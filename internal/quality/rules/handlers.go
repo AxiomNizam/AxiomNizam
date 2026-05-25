@@ -69,7 +69,7 @@ func (h *QualityRulesHandlers) ListRules(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListRules"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *QualityRulesHandlers) GetRule(c *gin.Context) {
 	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, rule)
@@ -121,7 +121,7 @@ func (h *QualityRulesHandlers) GetRule(c *gin.Context) {
 func (h *QualityRulesHandlers) CreateRule(c *gin.Context) {
 	var rule QualityRuleResource
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *QualityRulesHandlers) CreateRule(c *gin.Context) {
 	rule.Status.Phase = "Pending"
 
 	if err := h.ruleStore.Create(c.Request.Context(), &rule); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -155,13 +155,13 @@ func (h *QualityRulesHandlers) UpdateRule(c *gin.Context) {
 	}
 	existing, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 
 	var updated QualityRuleResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -172,7 +172,7 @@ func (h *QualityRulesHandlers) UpdateRule(c *gin.Context) {
 
 	if err := h.ruleStore.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateRule"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -186,10 +186,10 @@ func (h *QualityRulesHandlers) DeleteRule(c *gin.Context) {
 		return
 	}
 	if err := h.ruleStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // RunRule manually triggers a quality rule evaluation.
@@ -200,19 +200,19 @@ func (h *QualityRulesHandlers) RunRule(c *gin.Context) {
 	}
 	rule, err := h.ruleStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "rule not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "rule not found", Name: name})
 		return
 	}
 
 	if h.engine == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quality engine not available"})
+		c.JSON(http.StatusServiceUnavailable, MessageResponse{Error: "quality engine not available"})
 		return
 	}
 
 	output, err := h.engine.Evaluate(c.Request.Context(), rule)
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "RunRule"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -227,7 +227,7 @@ func (h *QualityRulesHandlers) ListChecks(c *gin.Context) {
 	checks, err := h.checkStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListChecks"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -260,7 +260,7 @@ func (h *QualityRulesHandlers) GetCheck(c *gin.Context) {
 	}
 	check, err := h.checkStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "check not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "check not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, check)
@@ -276,7 +276,7 @@ func (h *QualityRulesHandlers) GetAssetScore(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetAssetScore"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -320,7 +320,7 @@ func (h *QualityRulesHandlers) GetSummary(c *gin.Context) {
 	rules, err := h.ruleStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetSummary"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

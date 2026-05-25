@@ -67,7 +67,7 @@ func (h *FederationHandlers) ListVirtualTables(c *gin.Context) {
 	tables, err := h.vtStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListVirtualTables"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"virtualTables": tables, "count": len(tables)})
@@ -80,7 +80,7 @@ func (h *FederationHandlers) GetVirtualTable(c *gin.Context) {
 	}
 	vt, err := h.vtStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "virtual table not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "virtual table not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, vt)
@@ -89,7 +89,7 @@ func (h *FederationHandlers) GetVirtualTable(c *gin.Context) {
 func (h *FederationHandlers) CreateVirtualTable(c *gin.Context) {
 	var vt VirtualTableResource
 	if err := c.ShouldBindJSON(&vt); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -101,7 +101,7 @@ func (h *FederationHandlers) CreateVirtualTable(c *gin.Context) {
 	vt.Status.Phase = "Pending"
 
 	if err := h.vtStore.Create(c.Request.Context(), &vt); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, vt)
@@ -114,13 +114,13 @@ func (h *FederationHandlers) UpdateVirtualTable(c *gin.Context) {
 	}
 	existing, err := h.vtStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "virtual table not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "virtual table not found", Name: name})
 		return
 	}
 
 	var updated VirtualTableResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *FederationHandlers) UpdateVirtualTable(c *gin.Context) {
 
 	if err := h.vtStore.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateVirtualTable"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -142,10 +142,10 @@ func (h *FederationHandlers) DeleteVirtualTable(c *gin.Context) {
 		return
 	}
 	if err := h.vtStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "virtual table not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "virtual table not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // --- Query Handlers ---
@@ -153,12 +153,12 @@ func (h *FederationHandlers) DeleteVirtualTable(c *gin.Context) {
 func (h *FederationHandlers) ExecuteQuery(c *gin.Context) {
 	var req FederatedQuerySpec
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	if req.SQL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sql is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "sql is required"})
 		return
 	}
 	if req.Format == "" {
@@ -229,23 +229,23 @@ func (h *FederationHandlers) ExplainQuery(c *gin.Context) {
 		Analyze bool   `json:"analyze"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	if req.SQL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sql is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "sql is required"})
 		return
 	}
 
 	if h.planner == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "query planner not available"})
+		c.JSON(http.StatusServiceUnavailable, MessageResponse{Error: "query planner not available"})
 		return
 	}
 
 	plan, sources, err := h.planner.Plan(ctx(c), req.SQL)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -259,7 +259,7 @@ func (h *FederationHandlers) ListQueries(c *gin.Context) {
 	queries, err := h.queryStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListQueries"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"queries": queries, "count": len(queries)})
@@ -272,7 +272,7 @@ func (h *FederationHandlers) GetQuery(c *gin.Context) {
 	}
 	query, err := h.queryStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "query not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "query not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, query)

@@ -75,7 +75,7 @@ func (h *GovernanceHandlers) ListPolicies(c *gin.Context) {
 	policies, err := h.policyStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListPolicies"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *GovernanceHandlers) GetPolicy(c *gin.Context) {
 	}
 	policy, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, policy)
@@ -107,7 +107,7 @@ func (h *GovernanceHandlers) GetPolicy(c *gin.Context) {
 func (h *GovernanceHandlers) CreatePolicy(c *gin.Context) {
 	var policy CompliancePolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *GovernanceHandlers) CreatePolicy(c *gin.Context) {
 	policy.Status.Phase = "Pending"
 
 	if err := h.policyStore.Create(c.Request.Context(), &policy); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, policy)
@@ -132,13 +132,13 @@ func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
 	}
 	existing, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 
 	var updated CompliancePolicyResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -148,7 +148,7 @@ func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
 
 	if err := h.policyStore.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdatePolicy"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -160,10 +160,10 @@ func (h *GovernanceHandlers) DeletePolicy(c *gin.Context) {
 		return
 	}
 	if err := h.policyStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
@@ -173,14 +173,14 @@ func (h *GovernanceHandlers) TriggerAudit(c *gin.Context) {
 	}
 	policy, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 
 	policy.Generation++
 	if err := h.policyStore.Update(c.Request.Context(), policy); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "TriggerAudit"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"message": "audit triggered", "policy": name})
@@ -192,7 +192,7 @@ func (h *GovernanceHandlers) ListRetentionPolicies(c *gin.Context) {
 	policies, err := h.retentionStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListRetentionPolicies"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"retentionPolicies": policies, "count": len(policies)})
@@ -205,7 +205,7 @@ func (h *GovernanceHandlers) GetRetentionPolicy(c *gin.Context) {
 	}
 	policy, err := h.retentionStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "retention policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "retention policy not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, policy)
@@ -214,7 +214,7 @@ func (h *GovernanceHandlers) GetRetentionPolicy(c *gin.Context) {
 func (h *GovernanceHandlers) CreateRetentionPolicy(c *gin.Context) {
 	var policy RetentionPolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -226,7 +226,7 @@ func (h *GovernanceHandlers) CreateRetentionPolicy(c *gin.Context) {
 	policy.Status.Phase = "Pending"
 
 	if err := h.retentionStore.Create(c.Request.Context(), &policy); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, policy)
@@ -238,10 +238,10 @@ func (h *GovernanceHandlers) DeleteRetentionPolicy(c *gin.Context) {
 		return
 	}
 	if err := h.retentionStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "retention policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "retention policy not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // --- Access Request Handlers ---
@@ -250,7 +250,7 @@ func (h *GovernanceHandlers) ListAccessRequests(c *gin.Context) {
 	requests, err := h.accessStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListAccessRequests"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -273,7 +273,7 @@ func (h *GovernanceHandlers) GetAccessRequest(c *gin.Context) {
 	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "access request not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, req)
@@ -282,7 +282,7 @@ func (h *GovernanceHandlers) GetAccessRequest(c *gin.Context) {
 func (h *GovernanceHandlers) CreateAccessRequest(c *gin.Context) {
 	var req AccessRequestResource
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -295,7 +295,7 @@ func (h *GovernanceHandlers) CreateAccessRequest(c *gin.Context) {
 	req.Status.ApprovalStatus = "pending"
 
 	if err := h.accessStore.Create(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, req)
@@ -308,7 +308,7 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "access request not found", Name: name})
 		return
 	}
 
@@ -316,7 +316,7 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 		ApprovedBy string `json:"approvedBy"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -337,7 +337,7 @@ func (h *GovernanceHandlers) ApproveAccessRequest(c *gin.Context) {
 
 	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ApproveAccessRequest"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"approved": true, "request": name, "expiresAt": req.Status.ExpiresAt})
@@ -350,7 +350,7 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "access request not found", Name: name})
 		return
 	}
 
@@ -359,7 +359,7 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 		Reason   string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -372,7 +372,7 @@ func (h *GovernanceHandlers) DenyAccessRequest(c *gin.Context) {
 
 	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "DenyAccessRequest"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"denied": true, "request": name})
@@ -385,7 +385,7 @@ func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
 	}
 	req, err := h.accessStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "access request not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "access request not found", Name: name})
 		return
 	}
 
@@ -393,7 +393,7 @@ func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
 		Reason string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -406,7 +406,7 @@ func (h *GovernanceHandlers) RevokeAccessRequest(c *gin.Context) {
 
 	if err := h.accessStore.Update(c.Request.Context(), req); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "RevokeAccessRequest"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"revoked": true, "request": name})

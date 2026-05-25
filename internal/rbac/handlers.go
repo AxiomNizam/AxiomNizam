@@ -27,7 +27,7 @@ func (h *RBACHandler) CreateRole(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -57,7 +57,7 @@ func (h *RBACHandler) CreateRole(c *gin.Context) {
 
 	created, err := h.manager.CreateRole(role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *RBACHandler) GetRole(c *gin.Context) {
 	id := c.Param("id")
 	role, err := h.manager.GetRole(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "role not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "role not found"})
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *RBACHandler) ListRoles(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	roles, err := h.manager.ListRoles(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -95,20 +95,20 @@ func (h *RBACHandler) UpdateRole(c *gin.Context) {
 	var req map[string]interface{}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	role, err := h.manager.GetRole(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "role not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "role not found"})
 		return
 	}
 
 	role.UpdatedAt = time.Now()
 	updated, err := h.manager.UpdateRole(role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -119,11 +119,11 @@ func (h *RBACHandler) UpdateRole(c *gin.Context) {
 func (h *RBACHandler) DeleteRole(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.DeleteRole(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "role deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "role deleted"})
 }
 
 // BindRole handles POST /api/v1/role-bindings
@@ -137,7 +137,7 @@ func (h *RBACHandler) BindRole(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *RBACHandler) BindRole(c *gin.Context) {
 
 	created, err := h.manager.CreateRoleBinding(binding)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *RBACHandler) ListBindings(c *gin.Context) {
 
 	bindings, err := h.manager.ListRoleBindings(tenantID, principalID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -178,24 +178,24 @@ func (h *RBACHandler) ListBindings(c *gin.Context) {
 func (h *RBACHandler) DeleteBinding(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.DeleteRoleBinding(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "binding deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "binding deleted"})
 }
 
 // CheckPermission handles POST /api/v1/permissions/check
 func (h *RBACHandler) CheckPermission(c *gin.Context) {
 	var req PermissionCheck
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	result, err := h.manager.CheckPermission(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -209,7 +209,7 @@ func (h *RBACHandler) ListPermissions(c *gin.Context) {
 
 	permissions, err := h.manager.ListPermissions(tenantID, resource)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -229,7 +229,7 @@ func (h *RBACHandler) CreateAccessRequest(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -255,7 +255,7 @@ func (h *RBACHandler) CreateAccessRequest(c *gin.Context) {
 
 	created, err := h.manager.CreateAccessRequest(accessReq)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -270,7 +270,7 @@ func (h *RBACHandler) ListAccessRequests(c *gin.Context) {
 
 	requests, err := h.manager.ListAccessRequests(tenantID, principalID, status)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -285,13 +285,13 @@ func (h *RBACHandler) ApproveAccessRequest(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	approved, err := h.manager.ApproveAccessRequest(id, req.ApprovedBy)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -307,13 +307,13 @@ func (h *RBACHandler) RejectAccessRequest(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	rejected, err := h.manager.RejectAccessRequest(id, req.RejectedBy, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

@@ -71,7 +71,7 @@ func (h *Handler) GetParser(c *gin.Context) {
 	id := c.Param("id")
 	p, ok := h.parser.GetParser(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "parser not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "parser not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "parser": p})
@@ -81,15 +81,15 @@ func (h *Handler) GetParser(c *gin.Context) {
 func (h *Handler) CreateParser(c *gin.Context) {
 	var p ParserConfig
 	if err := c.ShouldBindJSON(&p); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if p.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "name is required"})
 		return
 	}
 	if err := h.parser.CreateParser(&p); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "parser": p})
@@ -100,11 +100,11 @@ func (h *Handler) UpdateParser(c *gin.Context) {
 	id := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if err := h.parser.UpdateParser(id, updates); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	p, _ := h.parser.GetParser(id)
@@ -115,10 +115,10 @@ func (h *Handler) UpdateParser(c *gin.Context) {
 func (h *Handler) DeleteParser(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.parser.DeleteParser(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "parser deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "parser deleted"})
 }
 
 // ========================
@@ -143,14 +143,14 @@ func (h *Handler) ListEntries(c *gin.Context) {
 func (h *Handler) IngestLog(c *gin.Context) {
 	var entry ParsedEntry
 	if err := c.ShouldBindJSON(&entry); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if err := h.parser.IngestLog(entry); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"status": "success", "message": "log ingested"})
+	c.JSON(http.StatusCreated, MessageResponse{Message: "log ingested"})
 }
 
 // GetEntryStats GET /api/v1/netintel/logs/stats
@@ -174,7 +174,7 @@ func (h *Handler) GetTopologyNode(c *gin.Context) {
 	id := c.Param("id")
 	node, ok := h.topology.GetNode(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "node not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "node not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "node": node})
@@ -187,14 +187,14 @@ func (h *Handler) UpdateTopologyNode(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if err := h.topology.UpdateNodeStatus(id, body.Status); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "node updated"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "node updated"})
 }
 
 // ========================
@@ -250,7 +250,7 @@ func (h *Handler) GetTrack(c *gin.Context) {
 	mac := c.Param("mac")
 	track, ok := h.parser.GetTrack(mac)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "track not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "track not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "track": track})
@@ -272,20 +272,20 @@ func (h *Handler) ListAnomalies(c *gin.Context) {
 func (h *Handler) AcknowledgeAnomaly(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.AcknowledgeAnomaly(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "anomaly acknowledged"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "anomaly acknowledged"})
 }
 
 // ResolveAnomaly POST /api/v1/netintel/anomalies/:id/resolve
 func (h *Handler) ResolveAnomaly(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.ResolveAnomaly(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "anomaly resolved"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "anomaly resolved"})
 }
 
 // ========================
@@ -303,20 +303,20 @@ func (h *Handler) ListAlerts(c *gin.Context) {
 func (h *Handler) AcknowledgeAlert(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.AcknowledgeAlert(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "alert acknowledged"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "alert acknowledged"})
 }
 
 // ResolveAlert POST /api/v1/netintel/alerts/:id/resolve
 func (h *Handler) ResolveAlert(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.ResolveAlert(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "alert resolved"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "alert resolved"})
 }
 
 // ========================
@@ -334,7 +334,7 @@ func (h *Handler) GetForecast(c *gin.Context) {
 	metric := c.Param("metric")
 	forecast, ok := h.analytics.GetForecast(metric)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "forecast not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "forecast not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "forecast": forecast})

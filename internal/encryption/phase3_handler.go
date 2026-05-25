@@ -48,7 +48,7 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 	}
 
 	if err := h.encryptionMgr.RegisterKey(encKey); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *Phase3Handlers) AddEncryptionPolicy(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *Phase3Handlers) AddEncryptionPolicy(c *gin.Context) {
 	}
 
 	if err := h.encryptionMgr.AddEncryptionPolicy(policy); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -124,13 +124,13 @@ func (h *Phase3Handlers) EncryptFieldValue(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	encrypted, err := h.encryptionMgr.EncryptField(req.TableName+"."+req.ColumnName, req.Value, "default")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -166,7 +166,7 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 
 	decrypted, err := h.encryptionMgr.DecryptField(encField)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -181,7 +181,7 @@ func (h *Phase3Handlers) RotateEncryptionKey(c *gin.Context) {
 
 	newKeyData := c.PostForm("new_key")
 	if newKeyData == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "new_key required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "new_key required"})
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *Phase3Handlers) RotateEncryptionKey(c *gin.Context) {
 	}
 
 	if _, err := h.encryptionMgr.RotateKey(keyID, newKey); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *Phase3Handlers) RegisterDataNode(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -246,7 +246,7 @@ func (h *Phase3Handlers) RegisterDataNode(c *gin.Context) {
 	}
 
 	if err := h.lineageMgr.RegisterDataNode(node); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -266,13 +266,13 @@ func (h *Phase3Handlers) CreateLineageEdge(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	edge, err := h.lineageMgr.CreateLineageEdge(req.SourceNodeID, req.TargetNodeID, req.RelationType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -289,7 +289,7 @@ func (h *Phase3Handlers) CreateLineageEdge(c *gin.Context) {
 func (h *Phase3Handlers) GetUpstreamLineage(c *gin.Context) {
 	nodeID := c.Query("node_id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "node_id required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "node_id required"})
 		return
 	}
 
@@ -304,7 +304,7 @@ func (h *Phase3Handlers) GetUpstreamLineage(c *gin.Context) {
 func (h *Phase3Handlers) GetDownstreamLineage(c *gin.Context) {
 	nodeID := c.Query("node_id")
 	if nodeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "node_id required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "node_id required"})
 		return
 	}
 
@@ -323,7 +323,7 @@ func (h *Phase3Handlers) AnalyzeImpact(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -368,7 +368,7 @@ func (h *Phase3Handlers) LogAuditEvent(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -391,7 +391,7 @@ func (h *Phase3Handlers) LogAuditEvent(c *gin.Context) {
 	}
 
 	if err := h.auditMgr.LogAuditEvent(auditLog); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -412,7 +412,7 @@ func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -426,7 +426,7 @@ func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 	}
 
 	if err := h.auditMgr.RegisterComplianceRule(rule); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -440,13 +440,13 @@ func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 func (h *Phase3Handlers) GenerateComplianceReport(c *gin.Context) {
 	framework := c.Query("framework")
 	if framework == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "framework required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "framework required"})
 		return
 	}
 
 	report, err := h.auditMgr.GenerateComplianceReport(framework, time.Now().AddDate(-1, 0, 0), time.Now())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -486,7 +486,7 @@ func (h *Phase3Handlers) RecordViolation(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -501,7 +501,7 @@ func (h *Phase3Handlers) RecordViolation(c *gin.Context) {
 	}
 
 	if err := h.auditMgr.RecordViolation(violation); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -523,7 +523,7 @@ func (h *Phase3Handlers) CreateWorkflow(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -536,7 +536,7 @@ func (h *Phase3Handlers) CreateWorkflow(c *gin.Context) {
 
 	version, err := h.workflowMgr.CreateWorkflow(wfDef)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -558,7 +558,7 @@ func (h *Phase3Handlers) PublishWorkflowVersion(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -569,7 +569,7 @@ func (h *Phase3Handlers) PublishWorkflowVersion(c *gin.Context) {
 
 	version, err := h.workflowMgr.PublishWorkflowVersion(req.WorkflowID, newDef)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -589,13 +589,13 @@ func (h *Phase3Handlers) StartWorkflowInstance(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	instance, err := h.workflowMgr.StartWorkflowInstance(req.WorkflowID, req.Version, req.ContextData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -610,7 +610,7 @@ func (h *Phase3Handlers) StartWorkflowInstance(c *gin.Context) {
 func (h *Phase3Handlers) GetWorkflowMetrics(c *gin.Context) {
 	workflowID := c.Query("workflow_id")
 	if workflowID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workflow_id required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "workflow_id required"})
 		return
 	}
 
@@ -634,7 +634,7 @@ func (h *Phase3Handlers) GetWorkflowStatus(c *gin.Context) {
 func (h *Phase3Handlers) GetInstanceHistory(c *gin.Context) {
 	workflowID := c.Query("workflow_id")
 	if workflowID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workflow_id required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "workflow_id required"})
 		return
 	}
 

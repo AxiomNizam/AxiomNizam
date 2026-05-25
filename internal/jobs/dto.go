@@ -4,4 +4,5 @@ package jobs
 type MessageResponse struct {
 	Error   string `json:"error,omitempty"`
 	Message string `json:"message,omitempty"`
+	Name    string `json:"name,omitempty"`
 }

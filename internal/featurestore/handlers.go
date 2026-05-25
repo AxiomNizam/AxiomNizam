@@ -36,7 +36,7 @@ func (h *FeatureStoreHandlers) ListGroups(c *gin.Context) {
 	groups, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListGroups"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"featureGroups": groups, "count": len(groups)})
@@ -49,7 +49,7 @@ func (h *FeatureStoreHandlers) GetGroup(c *gin.Context) {
 	}
 	group, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "feature group not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, group)
@@ -58,7 +58,7 @@ func (h *FeatureStoreHandlers) GetGroup(c *gin.Context) {
 func (h *FeatureStoreHandlers) CreateGroup(c *gin.Context) {
 	var group FeatureGroupResource
 	if err := c.ShouldBindJSON(&group); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	group.Kind = FeatureGroupKind
@@ -68,7 +68,7 @@ func (h *FeatureStoreHandlers) CreateGroup(c *gin.Context) {
 	group.Generation = 1
 	group.Status.Phase = "Pending"
 	if err := h.store.Create(c.Request.Context(), &group); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, group)
@@ -81,12 +81,12 @@ func (h *FeatureStoreHandlers) UpdateGroup(c *gin.Context) {
 	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "feature group not found", Name: name})
 		return
 	}
 	var updated FeatureGroupResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	updated.ObjectMeta = existing.ObjectMeta
@@ -94,7 +94,7 @@ func (h *FeatureStoreHandlers) UpdateGroup(c *gin.Context) {
 	updated.Status = existing.Status
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateGroup"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -106,10 +106,10 @@ func (h *FeatureStoreHandlers) DeleteGroup(c *gin.Context) {
 		return
 	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "feature group not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 func (h *FeatureStoreHandlers) TriggerMaterialize(c *gin.Context) {
@@ -119,12 +119,12 @@ func (h *FeatureStoreHandlers) TriggerMaterialize(c *gin.Context) {
 	}
 	group, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "feature group not found", Name: name})
 		return
 	}
 	group.Generation++
 	_ = h.store.Update(c.Request.Context(), group)
-	c.JSON(http.StatusAccepted, gin.H{"message": "materialization triggered", "group": name})
+	c.JSON(http.StatusAccepted, MessageResponse{Message: "materialization triggered", Name: name})
 }
 
 // ServeOnline handles online feature serving requests.
@@ -135,13 +135,13 @@ func (h *FeatureStoreHandlers) ServeOnline(c *gin.Context) {
 		Features     []string            `json:"features,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	group, err := h.store.Get(c.Request.Context(), req.FeatureGroup)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "feature group not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "feature group not found"})
 		return
 	}
 

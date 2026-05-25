@@ -380,7 +380,7 @@ func (h *LegacyJobHandler) persistStateLocked() {
 func (h *LegacyJobHandler) Create(c *gin.Context) {
 	var job LegacyJobResource
 	if err := c.ShouldBindJSON(&job); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -402,7 +402,7 @@ func (h *LegacyJobHandler) Create(c *gin.Context) {
 	}
 
 	if err := normalizeScheduleFromSpec(&job, time.Now().UTC()); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -459,7 +459,7 @@ func (h *LegacyJobHandler) Get(c *gin.Context) {
 	// Search by ID or name
 	job := h.findJob(id)
 	if job == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 
@@ -475,12 +475,12 @@ func (h *LegacyJobHandler) Run(c *gin.Context) {
 	job := h.findJob(id)
 	if job == nil {
 		h.mu.Unlock()
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 	if strings.EqualFold(job.Status.Phase, "Running") {
 		h.mu.Unlock()
-		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("job '%s' is already running", id)})
+		c.JSON(http.StatusConflict, MessageResponse{Error: fmt.Sprintf("job '%s' is already running", id)})
 		return
 	}
 
@@ -500,7 +500,7 @@ func (h *LegacyJobHandler) SetSchedule(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -512,13 +512,13 @@ func (h *LegacyJobHandler) SetSchedule(c *gin.Context) {
 		expression = strings.TrimSpace(req.Interval)
 	}
 	if expression == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "schedule expression is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "schedule expression is required"})
 		return
 	}
 
 	nextRun, err := calculateNextRun(expression, time.Now().UTC())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -527,7 +527,7 @@ func (h *LegacyJobHandler) SetSchedule(c *gin.Context) {
 
 	job := h.findJob(id)
 	if job == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 
@@ -558,11 +558,11 @@ func (h *LegacyJobHandler) RemoveSchedule(c *gin.Context) {
 
 	job := h.findJob(id)
 	if job == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 	if job.Schedule == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' has no schedule", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' has no schedule", id)})
 		return
 	}
 
@@ -586,7 +586,7 @@ func (h *LegacyJobHandler) GetLogs(c *gin.Context) {
 
 	job := h.findJob(id)
 	if job == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 
@@ -606,7 +606,7 @@ func (h *LegacyJobHandler) Cancel(c *gin.Context) {
 
 	job := h.findJob(id)
 	if job == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 
@@ -634,7 +634,7 @@ func (h *LegacyJobHandler) Delete(c *gin.Context) {
 	}
 
 	if found == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("job '%s' not found", id)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("job '%s' not found", id)})
 		return
 	}
 

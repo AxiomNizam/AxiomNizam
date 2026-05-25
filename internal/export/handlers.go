@@ -21,7 +21,7 @@ func NewExportHandler(manager ExportManager) *ExportHandler {
 func (h *ExportHandler) SubmitExport(c *gin.Context) {
 	var req ExportCreateRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 

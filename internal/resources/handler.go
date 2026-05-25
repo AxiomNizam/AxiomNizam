@@ -173,7 +173,7 @@ func (h *GenericResourceHandler) CreateOrUpdate(c *gin.Context) {
 
 	var resource GenericResource
 	if err := c.ShouldBindJSON(&resource); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -184,7 +184,7 @@ func (h *GenericResourceHandler) CreateOrUpdate(c *gin.Context) {
 
 	name := resource.Metadata.Name
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "metadata.name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "metadata.name is required"})
 		return
 	}
 
@@ -226,7 +226,7 @@ func (h *GenericResourceHandler) Get(c *gin.Context) {
 	defer h.mu.RUnlock()
 
 	if h.resources[kind] == nil || h.resources[kind][ns] == nil || h.resources[kind][ns][name] == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resource not found: %s/%s/%s", kind, ns, name)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("resource not found: %s/%s/%s", kind, ns, name)})
 		return
 	}
 
@@ -272,7 +272,7 @@ func (h *GenericResourceHandler) Update(c *gin.Context) {
 	defer h.mu.Unlock()
 
 	if h.resources[kind] == nil || h.resources[kind][ns] == nil || h.resources[kind][ns][name] == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resource not found: %s/%s/%s", kind, ns, name)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("resource not found: %s/%s/%s", kind, ns, name)})
 		return
 	}
 
@@ -280,7 +280,7 @@ func (h *GenericResourceHandler) Update(c *gin.Context) {
 
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -311,13 +311,13 @@ func (h *GenericResourceHandler) Delete(c *gin.Context) {
 	defer h.mu.Unlock()
 
 	if h.resources[kind] == nil || h.resources[kind][ns] == nil || h.resources[kind][ns][name] == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("resource not found: %s/%s/%s", kind, ns, name)})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: fmt.Sprintf("resource not found: %s/%s/%s", kind, ns, name)})
 		return
 	}
 
 	delete(h.resources[kind][ns], name)
 	h.persistStateLocked()
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s '%s' deleted", kind, name)})
+	c.JSON(http.StatusOK, MessageResponse{Message: fmt.Sprintf("%s '%s' deleted", kind, name)})
 }
 
 // GetStatus returns the status subresource
@@ -334,7 +334,7 @@ func (h *GenericResourceHandler) GetStatus(c *gin.Context) {
 	defer h.mu.RUnlock()
 
 	if h.resources[kind] == nil || h.resources[kind][ns] == nil || h.resources[kind][ns][name] == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "resource not found"})
 		return
 	}
 

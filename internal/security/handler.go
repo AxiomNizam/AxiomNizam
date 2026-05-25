@@ -164,7 +164,7 @@ func (h *Handler) getKubeadmCertificateStatus(c *gin.Context) {
 	queryCert := strings.TrimSpace(c.Query("cert"))
 	certs, err := h.resolveKubeadmCertSelection(queryCert)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *Handler) renewTLSCertificate(c *gin.Context) {
 	var req renewCertificateRequest
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request: %v", err)})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: fmt.Sprintf("invalid request: %v", err)})
 			return
 		}
 	}
@@ -231,13 +231,13 @@ func (h *Handler) renewTLSCertificate(c *gin.Context) {
 
 	normalizedTarget, _, _, err := normalizeCertificateTarget(target)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	commandParts, err := buildRenewCommand(h.renewCommand, normalizedTarget)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -285,7 +285,7 @@ func (h *Handler) renewKubeadmCertificate(c *gin.Context) {
 	var req renewCertificateRequest
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid request: %v", err)})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: fmt.Sprintf("invalid request: %v", err)})
 			return
 		}
 	}
@@ -301,7 +301,7 @@ func (h *Handler) renewKubeadmCertificate(c *gin.Context) {
 
 	commandParts, err := h.buildKubeadmRenewCommand(certName)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 

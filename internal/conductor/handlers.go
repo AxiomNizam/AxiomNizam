@@ -277,7 +277,7 @@ func (h *Handler) ConnectBackend(c *gin.Context) {
 		c.JSON(status, MessageResponse{Message: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": req.Type + " connected successfully", "connection": conn})
+	c.JSON(http.StatusOK, MessageResponse{Message: req.Type + " connected successfully"})
 }
 
 // DisconnectBackend DELETE /api/v1/conductor/connections/:type

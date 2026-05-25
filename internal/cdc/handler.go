@@ -46,7 +46,7 @@ func (h *Handler) GetETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	p, ok := h.etlEngine.GetPipeline(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "pipeline not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "pipeline not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "pipeline": p})
@@ -56,15 +56,15 @@ func (h *Handler) GetETLPipeline(c *gin.Context) {
 func (h *Handler) CreateETLPipeline(c *gin.Context) {
 	var p etl.Pipeline
 	if err := c.ShouldBindJSON(&p); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if p.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "name is required"})
 		return
 	}
 	if err := h.etlEngine.CreatePipeline(&p); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "pipeline": p})
@@ -75,11 +75,11 @@ func (h *Handler) UpdateETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if err := h.etlEngine.UpdatePipeline(id, updates); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	p, _ := h.etlEngine.GetPipeline(id)
@@ -90,10 +90,10 @@ func (h *Handler) UpdateETLPipeline(c *gin.Context) {
 func (h *Handler) DeleteETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.etlEngine.DeletePipeline(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "pipeline deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "pipeline deleted"})
 }
 
 // RunETLPipeline POST /api/v1/etl/pipelines/:id/run
@@ -101,7 +101,7 @@ func (h *Handler) RunETLPipeline(c *gin.Context) {
 	id := c.Param("id")
 	run, err := h.etlEngine.RunPipeline(c.Request.Context(), id, "manual")
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "run": run})
@@ -119,7 +119,7 @@ func (h *Handler) GetETLRun(c *gin.Context) {
 	id := c.Param("id")
 	run, ok := h.etlEngine.GetRun(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "run not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "run not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "run": run})
@@ -164,12 +164,12 @@ func (h *Handler) GetETLConnectors(c *gin.Context) {
 func (h *Handler) CreateETLConnector(c *gin.Context) {
 	var connector etl.ConnectorType
 	if err := c.ShouldBindJSON(&connector); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	if err := h.etlEngine.AddConnector(connector); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -180,12 +180,12 @@ func (h *Handler) CreateETLConnector(c *gin.Context) {
 func (h *Handler) UpdateETLConnector(c *gin.Context) {
 	var updates etl.ConnectorType
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	updated, err := h.etlEngine.UpdateConnector(c.Param("id"), updates)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "connector": updated})
@@ -194,10 +194,10 @@ func (h *Handler) UpdateETLConnector(c *gin.Context) {
 // DeleteETLConnector DELETE /api/v1/etl/connectors/:id
 func (h *Handler) DeleteETLConnector(c *gin.Context) {
 	if err := h.etlEngine.DeleteConnector(c.Param("id")); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "connector deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "connector deleted"})
 }
 
 // GetETLConnectorCatalog GET /api/v1/etl/connectors/catalog
@@ -253,7 +253,7 @@ func (h *Handler) GetCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	p, ok := h.cdcEngine.GetPipeline(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "pipeline not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "pipeline not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "pipeline": p})
@@ -263,15 +263,15 @@ func (h *Handler) GetCDCPipeline(c *gin.Context) {
 func (h *Handler) CreateCDCPipeline(c *gin.Context) {
 	var p CDCPipeline
 	if err := c.ShouldBindJSON(&p); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if p.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "name is required"})
 		return
 	}
 	if err := h.cdcEngine.CreatePipeline(&p); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "pipeline": p})
@@ -282,11 +282,11 @@ func (h *Handler) UpdateCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if err := h.cdcEngine.UpdatePipeline(id, updates); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
@@ -297,17 +297,17 @@ func (h *Handler) UpdateCDCPipeline(c *gin.Context) {
 func (h *Handler) DeleteCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.DeletePipeline(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "pipeline deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "pipeline deleted"})
 }
 
 // StartCDCPipeline POST /api/v1/cdc/pipelines/:id/start
 func (h *Handler) StartCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.StartPipeline(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
@@ -318,7 +318,7 @@ func (h *Handler) StartCDCPipeline(c *gin.Context) {
 func (h *Handler) PauseCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.PausePipeline(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
@@ -329,7 +329,7 @@ func (h *Handler) PauseCDCPipeline(c *gin.Context) {
 func (h *Handler) StopCDCPipeline(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.cdcEngine.StopPipeline(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)

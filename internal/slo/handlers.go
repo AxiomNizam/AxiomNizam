@@ -46,7 +46,7 @@ func (h *SLOHandlers) ListSLOs(c *gin.Context) {
 	slos, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListSLOs"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *SLOHandlers) ListSLOs(c *gin.Context) {
 		filtered = append(filtered, s)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"slos": filtered, "count": len(filtered)})
+	c.JSON(http.StatusOK, SLOListResponse{SLOs: filtered, Count: len(filtered)})
 }
 
 // GetSLO returns a single SLO.
@@ -70,7 +70,7 @@ func (h *SLOHandlers) GetSLO(c *gin.Context) {
 	}
 	s, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "SLO not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, s)
@@ -80,7 +80,7 @@ func (h *SLOHandlers) GetSLO(c *gin.Context) {
 func (h *SLOHandlers) CreateSLO(c *gin.Context) {
 	var s SLOResource
 	if err := c.ShouldBindJSON(&s); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *SLOHandlers) CreateSLO(c *gin.Context) {
 	s.Status.Phase = "Pending"
 
 	if err := h.store.Create(c.Request.Context(), &s); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -107,13 +107,13 @@ func (h *SLOHandlers) UpdateSLO(c *gin.Context) {
 	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "SLO not found", Name: name})
 		return
 	}
 
 	var updated SLOResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *SLOHandlers) UpdateSLO(c *gin.Context) {
 
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateSLO"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -137,10 +137,10 @@ func (h *SLOHandlers) DeleteSLO(c *gin.Context) {
 		return
 	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "SLO not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // GetBudget returns the error budget details for an SLO.
@@ -151,22 +151,22 @@ func (h *SLOHandlers) GetBudget(c *gin.Context) {
 	}
 	s, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SLO not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "SLO not found", Name: name})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"name":           name,
-		"target":         s.Spec.Target,
-		"currentSli":     s.Status.CurrentSLI,
-		"errorBudget":    s.Status.ErrorBudget,
-		"budgetConsumed": s.Status.BudgetConsumed,
-		"burnRate":       s.Status.BurnRate,
-		"isBreaching":    s.Status.IsBreaching,
-		"timeToExhaust":  s.Status.TimeToExhaust,
-		"goodEvents":     s.Status.GoodEvents,
-		"totalEvents":    s.Status.TotalEvents,
-		"window":         s.Spec.Window,
+	c.JSON(http.StatusOK, BudgetResponse{
+		Name:           name,
+		Target:         s.Spec.Target,
+		CurrentSLI:     s.Status.CurrentSLI,
+		ErrorBudget:    s.Status.ErrorBudget,
+		BudgetConsumed: s.Status.BudgetConsumed,
+		BurnRate:       s.Status.BurnRate,
+		IsBreaching:    s.Status.IsBreaching,
+		TimeToExhaust:  s.Status.TimeToExhaust,
+		GoodEvents:     s.Status.GoodEvents,
+		TotalEvents:    s.Status.TotalEvents,
+		Window:         s.Spec.Window,
 	})
 }
 
@@ -175,7 +175,7 @@ func (h *SLOHandlers) GetAllStatus(c *gin.Context) {
 	slos, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetAllStatus"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -191,10 +191,10 @@ func (h *SLOHandlers) GetAllStatus(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"total":     len(slos),
-		"healthy":   healthy,
-		"atRisk":    atRisk,
-		"breaching": breaching,
+	c.JSON(http.StatusOK, AllStatusResponse{
+		Total:     len(slos),
+		Healthy:   healthy,
+		AtRisk:    atRisk,
+		Breaching: breaching,
 	})
 }

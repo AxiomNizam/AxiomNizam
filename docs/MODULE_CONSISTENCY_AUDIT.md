@@ -551,7 +551,7 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
 | 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | **DONE** (42/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
-| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **DONE** — 39/39 dto.go files created; 17/39 fully wired; 18 partially wired (error DTOs); 4 N/A |
+| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **IN PROGRESS** — 39/39 dto.go files created; 1031→200 gin.H (81% reduction); error/ack patterns fully wired; success response data DTOs remaining in 19 modules |
 
 **Scope:** 39 modules, ~1031 gin.H occurrences | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** MEDIUM
 
@@ -1098,7 +1098,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ✅ DONE | 2026-05-21 | 8 modules configured: storage, iam, scanner, antivirus, jobs, conductor, cache, config |
-| 8. Standardize handlers | ✅ DONE | — | 8.0-8.3 DONE, 8.4 N/A, 8.5: 39/39 DTO files created, 17 fully wired |
+| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.3 DONE, 8.4 N/A, 8.5 IN PROGRESS (dto.go created, error patterns done, success DTOs remaining) |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
@@ -1170,4 +1170,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phase 8 DONE, Phase 9 PENDING*
+*Last updated: 2026-05-25 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 39/39 dto.go, 1031→200 gin.H, error patterns done, success DTOs remaining)*

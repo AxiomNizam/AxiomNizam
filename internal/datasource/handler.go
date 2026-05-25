@@ -103,12 +103,12 @@ func (h *DataSourceHandler) saveState() {
 func (h *DataSourceHandler) Create(c *gin.Context) {
 	var ds DataSourceResource
 	if err := c.BindJSON(&ds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "Invalid request: " + err.Error()})
 		return
 	}
 
 	if ds.Metadata.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "datasource name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "datasource name is required"})
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *DataSourceHandler) Create(c *gin.Context) {
 
 	name := strings.ToLower(strings.TrimSpace(ds.Metadata.Name))
 	if _, exists := h.datasources[name]; exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "Datasource already exists"})
+		c.JSON(http.StatusConflict, MessageResponse{Error: "Datasource already exists"})
 		return
 	}
 
@@ -164,7 +164,7 @@ func (h *DataSourceHandler) Get(c *gin.Context) {
 
 	ds, exists := h.datasources[name]
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "Datasource not found"})
 		return
 	}
 
@@ -180,7 +180,7 @@ func (h *DataSourceHandler) Update(c *gin.Context) {
 
 	var ds DataSourceResource
 	if err := c.BindJSON(&ds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "Invalid request: " + err.Error()})
 		return
 	}
 
@@ -189,7 +189,7 @@ func (h *DataSourceHandler) Update(c *gin.Context) {
 
 	existing, exists := h.datasources[name]
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "Datasource not found"})
 		return
 	}
 
@@ -219,7 +219,7 @@ func (h *DataSourceHandler) Delete(c *gin.Context) {
 	defer h.mu.Unlock()
 
 	if _, exists := h.datasources[name]; !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "Datasource not found"})
 		return
 	}
 
@@ -246,7 +246,7 @@ func (h *DataSourceHandler) Test(c *gin.Context) {
 	h.mu.RUnlock()
 
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Datasource not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "Datasource not found"})
 		return
 	}
 
@@ -256,7 +256,7 @@ func (h *DataSourceHandler) Test(c *gin.Context) {
 	port, _ := ds.Spec["port"].(string)
 
 	if driver == "" || host == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Datasource missing driver or host configuration"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "Datasource missing driver or host configuration"})
 		return
 	}
 

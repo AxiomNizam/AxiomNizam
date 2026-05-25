@@ -50,11 +50,11 @@ func (h *V1Handler) RegisterRoutes(rg *gin.RouterGroup) {
 func (h *V1Handler) Create(c *gin.Context) {
 	var in JobResource
 	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	if in.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "metadata.name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "metadata.name is required"})
 		return
 	}
 
@@ -74,10 +74,10 @@ func (h *V1Handler) Create(c *gin.Context) {
 
 	if err := h.store.Create(c.Request.Context(), &in); err != nil {
 		if errors.Is(err, store.ErrConflict) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, &in)
@@ -86,7 +86,7 @@ func (h *V1Handler) Create(c *gin.Context) {
 func (h *V1Handler) List(c *gin.Context) {
 	items, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -96,10 +96,10 @@ func (h *V1Handler) Get(c *gin.Context) {
 	j, err := h.store.Get(c.Request.Context(), c.Param("name"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, j)
@@ -110,16 +110,16 @@ func (h *V1Handler) Update(c *gin.Context) {
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	var patch JobResource
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	existing.Spec = patch.Spec
@@ -127,7 +127,7 @@ func (h *V1Handler) Update(c *gin.Context) {
 	existing.Generation++
 
 	if err := h.store.Update(c.Request.Context(), existing); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, existing)
@@ -137,10 +137,10 @@ func (h *V1Handler) Delete(c *gin.Context) {
 	name := c.Param("name")
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "job '" + name + "' deleted"})
