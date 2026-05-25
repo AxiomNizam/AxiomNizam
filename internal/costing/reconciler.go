@@ -7,7 +7,7 @@ package costing
 // and triggers cost alerts when thresholds are exceeded.
 //
 // Behavior:
-//   1. Observe: Read CostPolicyResource from etcd
+//   1. Observe: Read models.CostPolicyResource from etcd
 //   2. Diff: Check if aggregation is due
 //   3. Act: Sum usage records for current period, check quotas
 //   4. Update Status: Record totals, fire alerts if over threshold
@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/costing/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
@@ -29,14 +30,14 @@ import (
 
 // CostReconciler reconciles cost policies.
 type CostReconciler struct {
-	policyStore store.ResourceStore[*CostPolicyResource]
-	usageStore  store.ResourceStore[*UsageRecordResource]
+	policyStore store.ResourceStore[*models.CostPolicyResource]
+	usageStore  store.ResourceStore[*models.UsageRecordResource]
 }
 
 // NewCostReconciler creates a new reconciler.
 func NewCostReconciler(
-	policyStore store.ResourceStore[*CostPolicyResource],
-	usageStore store.ResourceStore[*UsageRecordResource],
+	policyStore store.ResourceStore[*models.CostPolicyResource],
+	usageStore store.ResourceStore[*models.UsageRecordResource],
 ) *CostReconciler {
 	return &CostReconciler{
 		policyStore: policyStore,
@@ -46,9 +47,9 @@ func NewCostReconciler(
 
 // Reconcile implements reconciler.Reconciler.
 func (r *CostReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
-	policy, ok := obj.(*CostPolicyResource)
+	policy, ok := obj.(*models.CostPolicyResource)
 	if !ok {
-		return reconciler.ReconcileResult{Error: fmt.Errorf("costing: reconciler received non-CostPolicyResource")}
+		return reconciler.ReconcileResult{Error: fmt.Errorf("costing: reconciler received non-models.CostPolicyResource")}
 	}
 	logging.Z().Debug("reconciling resource", zap.String("name", policy.GetKey()), zap.String("kind", policy.GetTypeMeta().Kind))
 

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/alerting/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
@@ -20,16 +21,16 @@ import (
 
 // AlertHandlers provides REST API handlers for alerting.
 type AlertHandlers struct {
-	ruleStore    store.ResourceStore[*AlertRuleResource]
-	incidentStore store.ResourceStore[*AlertIncidentResource]
-	channelStore store.ResourceStore[*NotificationChannelResource]
+	ruleStore    store.ResourceStore[*models.AlertRuleResource]
+	incidentStore store.ResourceStore[*models.AlertIncidentResource]
+	channelStore store.ResourceStore[*models.NotificationChannelResource]
 }
 
 // NewAlertHandlers creates new handlers.
 func NewAlertHandlers(
-	ruleStore store.ResourceStore[*AlertRuleResource],
-	incidentStore store.ResourceStore[*AlertIncidentResource],
-	channelStore store.ResourceStore[*NotificationChannelResource],
+	ruleStore store.ResourceStore[*models.AlertRuleResource],
+	incidentStore store.ResourceStore[*models.AlertIncidentResource],
+	channelStore store.ResourceStore[*models.NotificationChannelResource],
 ) *AlertHandlers {
 	return &AlertHandlers{
 		ruleStore:     ruleStore,
@@ -82,7 +83,7 @@ func (h *AlertHandlers) ListRules(c *gin.Context) {
 	}
 
 	severityFilter := c.Query("severity")
-	var filtered []*AlertRuleResource
+	var filtered []*models.AlertRuleResource
 	for _, rule := range rules {
 		if severityFilter != "" && string(rule.Spec.Severity) != severityFilter {
 			continue
@@ -109,14 +110,14 @@ func (h *AlertHandlers) GetRule(c *gin.Context) {
 
 // CreateRule creates a new alert rule.
 func (h *AlertHandlers) CreateRule(c *gin.Context) {
-	var rule AlertRuleResource
+	var rule models.AlertRuleResource
 	if err := c.ShouldBindJSON(&rule); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	rule.Kind = AlertRuleKind
-	rule.APIVersion = AlertRuleAPIVersion
+	rule.Kind = models.AlertRuleKind
+	rule.APIVersion = models.AlertRuleAPIVersion
 	now := time.Now()
 	rule.CreatedAt = now
 	rule.Generation = 1
@@ -142,7 +143,7 @@ func (h *AlertHandlers) UpdateRule(c *gin.Context) {
 		return
 	}
 
-	var updated AlertRuleResource
+	var updated models.AlertRuleResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
@@ -252,7 +253,7 @@ func (h *AlertHandlers) ListIncidents(c *gin.Context) {
 	}
 
 	statusFilter := c.Query("status")
-	var filtered []*AlertIncidentResource
+	var filtered []*models.AlertIncidentResource
 	for _, incident := range incidents {
 		if statusFilter != "" && string(incident.Status.IncidentStatus) != statusFilter {
 			continue
@@ -290,7 +291,7 @@ func (h *AlertHandlers) AcknowledgeIncident(c *gin.Context) {
 	}
 
 	now := time.Now()
-	incident.Status.IncidentStatus = IncidentAcknowledged
+	incident.Status.IncidentStatus = models.IncidentAcknowledged
 	incident.Status.AcknowledgedAt = &now
 	incident.Status.LastTransitionTime = now
 
@@ -316,7 +317,7 @@ func (h *AlertHandlers) ResolveIncident(c *gin.Context) {
 	}
 
 	now := time.Now()
-	incident.Status.IncidentStatus = IncidentResolved
+	incident.Status.IncidentStatus = models.IncidentResolved
 	incident.Status.ResolvedAt = &now
 	incident.Status.LastTransitionTime = now
 
@@ -358,14 +359,14 @@ func (h *AlertHandlers) GetChannel(c *gin.Context) {
 
 // CreateChannel creates a new notification channel.
 func (h *AlertHandlers) CreateChannel(c *gin.Context) {
-	var channel NotificationChannelResource
+	var channel models.NotificationChannelResource
 	if err := c.ShouldBindJSON(&channel); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	channel.Kind = NotificationChannelKind
-	channel.APIVersion = NotificationChannelAPIVersion
+	channel.Kind = models.NotificationChannelKind
+	channel.APIVersion = models.NotificationChannelAPIVersion
 	now := time.Now()
 	channel.CreatedAt = now
 	channel.Generation = 1
@@ -391,7 +392,7 @@ func (h *AlertHandlers) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var updated NotificationChannelResource
+	var updated models.NotificationChannelResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
@@ -462,11 +463,11 @@ func (h *AlertHandlers) GetSummary(c *gin.Context) {
 
 	for _, incident := range incidents {
 		switch incident.Status.IncidentStatus {
-		case IncidentFiring:
+		case models.IncidentFiring:
 			firingIncidents++
-		case IncidentResolved:
+		case models.IncidentResolved:
 			resolvedIncidents++
-		case IncidentAcknowledged:
+		case models.IncidentAcknowledged:
 			acknowledgedIncidents++
 		}
 	}

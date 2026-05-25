@@ -2,6 +2,8 @@ package encryption
 
 import (
 	"time"
+
+	"example.com/axiomnizam/internal/encryption/models"
 )
 
 // EncryptedField represents an encrypted data field
@@ -53,58 +55,24 @@ type EncryptionKey struct {
 	Tags           []string          `json:"tags"`
 }
 
-// KeyType represents type of encryption key
-type KeyType string
+// Type aliases (canonical definitions in models/)
+type KeyType = models.KeyType
+type KeyStatus = models.KeyStatus
+type RotationPolicy = models.RotationPolicy
+type ACLEntry = models.ACLEntry
+type KeyUsageStats = models.KeyUsageStats
 
 const (
-	KeyTypeDEK    KeyType = "DEK"    // Data Encryption Key
-	KeyTypeKEK    KeyType = "KEK"    // Key Encryption Key
-	KeyTypeMaster KeyType = "MASTER" // Master Key
+	KeyTypeDEK    = models.KeyTypeDEK
+	KeyTypeKEK    = models.KeyTypeKEK
+	KeyTypeMaster = models.KeyTypeMaster
+
+	KeyStatusActive   = models.KeyStatusActive
+	KeyStatusInactive = models.KeyStatusInactive
+	KeyStatusRotating = models.KeyStatusRotating
+	KeyStatusExpired  = models.KeyStatusExpired
+	KeyStatusRevoked  = models.KeyStatusRevoked
 )
-
-// KeyStatus represents key state
-type KeyStatus string
-
-const (
-	KeyStatusActive   KeyStatus = "ACTIVE"
-	KeyStatusInactive KeyStatus = "INACTIVE"
-	KeyStatusRotating KeyStatus = "ROTATING"
-	KeyStatusExpired  KeyStatus = "EXPIRED"
-	KeyStatusRevoked  KeyStatus = "REVOKED"
-)
-
-// RotationPolicy defines key rotation
-type RotationPolicy struct {
-	Enabled          bool
-	RotationInterval int // Days
-	AutoRotate       bool
-	RotationDay      int    // Day of month
-	RotationTime     string // HH:MM
-	OnRotation       string // "retire", "archive", "keep"
-	MinimumKeyAge    int    // Days before rotation allowed
-	MaximumKeyAge    int    // Force rotation after this many days
-}
-
-// ACLEntry for key access control
-type ACLEntry struct {
-	Principal     string                 `json:"principal"`     // User ID or role
-	PrincipalType string                 `json:"principalType"` // "user", "role", "service"
-	Permissions   []string               `json:"permissions"`   // "encrypt", "decrypt", "rotate", "export"
-	Conditions    map[string]interface{} `json:"conditions"`
-	GrantedAt     time.Time              `json:"grantedAt"`
-	ExpiresAt     time.Time              `json:"expiresAt,omitempty"`
-}
-
-// KeyUsageStats tracks key usage
-type KeyUsageStats struct {
-	EncryptionCount    int64     `json:"encryptionCount"`
-	DecryptionCount    int64     `json:"decryptionCount"`
-	FailureCount       int64     `json:"failureCount"`
-	LastUsedAt         time.Time `json:"lastUsedAt"`
-	FirstUsedAt        time.Time `json:"firstUsedAt"`
-	AverageLatency     float64   `json:"averageLatency"`     // Milliseconds
-	TotalDataEncrypted int64     `json:"totalDataEncrypted"` // Bytes
-}
 
 // KeyProvider represents external key management
 type KeyProvider struct {
@@ -156,19 +124,8 @@ type FieldEncryptionPolicy struct {
 	CreatedBy       string      `json:"createdBy"`
 }
 
-// FieldRule defines encryption for specific fields
-type FieldRule struct {
-	FieldName      string   `json:"fieldName"`
-	Pattern        string   `json:"pattern"`        // Regex pattern
-	Classification string   `json:"classification"` // PII, Sensitive
-	Encrypt        bool     `json:"encrypt"`
-	KeyID          string   `json:"keyId"` // Override default
-	Algorithm      string   `json:"algorithm,omitempty"`
-	Hashable       bool     `json:"hashable"`
-	Searchable     bool     `json:"searchable"`
-	MaskPattern    string   `json:"maskPattern,omitempty"` // For display
-	Conditions     []string `json:"conditions,omitempty"`  // When to apply
-}
+// Type alias (canonical definition in models/)
+type FieldRule = models.FieldRule
 
 // EncryptionRequest encrypts data
 type EncryptionRequest struct {

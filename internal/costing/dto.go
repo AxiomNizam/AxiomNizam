@@ -1,5 +1,7 @@
 package costing
 
+import "example.com/axiomnizam/internal/costing/models"
+
 // MessageResponse is a generic error/ack response.
 type MessageResponse struct {
 	Error   string `json:"error,omitempty"`
@@ -9,7 +11,7 @@ type MessageResponse struct {
 
 // PolicyListResponse is the API response for listing cost policies.
 type PolicyListResponse struct {
-	Policies []*CostPolicyResource `json:"policies"`
+	Policies []*models.CostPolicyResource `json:"policies"`
 	Count    int                   `json:"count"`
 }
 

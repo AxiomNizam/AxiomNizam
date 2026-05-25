@@ -1,6 +1,10 @@
 package alerting
 
-import "time"
+import (
+	"time"
+
+	"example.com/axiomnizam/internal/alerting/models"
+)
 
 // MessageResponse is a generic error/ack response.
 type MessageResponse struct {
@@ -11,14 +15,14 @@ type MessageResponse struct {
 
 // RuleListResponse is the API response for listing alert rules.
 type RuleListResponse struct {
-	Rules []*AlertRuleResource `json:"rules"`
-	Count int                  `json:"count"`
+	Rules []*models.AlertRuleResource `json:"rules"`
+	Count int                         `json:"count"`
 }
 
 // IncidentListResponse is the API response for listing incidents.
 type IncidentListResponse struct {
-	Incidents []*AlertIncidentResource `json:"incidents"`
-	Count     int                      `json:"count"`
+	Incidents []*models.AlertIncidentResource `json:"incidents"`
+	Count     int                             `json:"count"`
 }
 
 // SilenceResponse is the API response for silencing a rule.
@@ -47,8 +51,8 @@ type ResolveResponse struct {
 
 // ChannelListResponse is the API response for listing channels.
 type ChannelListResponse struct {
-	Channels []*NotificationChannelResource `json:"channels"`
-	Count    int                            `json:"count"`
+	Channels []*models.NotificationChannelResource `json:"channels"`
+	Count    int                                   `json:"count"`
 }
 
 // TestChannelResponse is the API response for testing a channel.

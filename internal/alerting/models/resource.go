@@ -1,4 +1,4 @@
-package alerting
+package models
 
 // =====================================================
 // WS-4.1 — Alerting Engine as declarative resources

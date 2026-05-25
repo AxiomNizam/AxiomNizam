@@ -5,7 +5,7 @@ package costing
 //
 // Gin middleware that intercepts API requests and records
 // usage metrics (request count, bandwidth, latency) as
-// UsageRecordResources for cost attribution.
+// models.UsageRecordResources for cost attribution.
 // =====================================================
 
 import (
@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"example.com/axiomnizam/internal/costing/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"github.com/gin-gonic/gin"
@@ -23,15 +24,15 @@ import (
 
 // UsageTracker records API usage for cost attribution.
 type UsageTracker struct {
-	store     store.ResourceStore[*UsageRecordResource]
+	store     store.ResourceStore[*models.UsageRecordResource]
 	mu        sync.Mutex
-	buffer    []UsageRecordSpec
+	buffer    []models.UsageRecordSpec
 	batchSize int
 	flushInterval time.Duration
 }
 
 // NewUsageTracker creates a new tracker.
-func NewUsageTracker(s store.ResourceStore[*UsageRecordResource], batchSize int) *UsageTracker {
+func NewUsageTracker(s store.ResourceStore[*models.UsageRecordResource], batchSize int) *UsageTracker {
 	if batchSize <= 0 {
 		batchSize = 100
 	}
@@ -57,9 +58,9 @@ func (t *UsageTracker) Middleware() gin.HandlerFunc {
 			tenantID = "default"
 		}
 
-		record := UsageRecordSpec{
+		record := models.UsageRecordSpec{
 			TenantID:  tenantID,
-			Dimension: DimensionAPI,
+			Dimension: models.DimensionAPI,
 			Quantity:  1,
 			Credits:   0.001, // Default: 0.001 credits per API call
 			Source:    fmt.Sprintf("%s %s", c.Request.Method, c.FullPath()),
@@ -79,9 +80,9 @@ func (t *UsageTracker) Middleware() gin.HandlerFunc {
 
 // TrackQuery records a query execution for cost attribution.
 func (t *UsageTracker) TrackQuery(tenantID, queryID string, rowsScanned int64, duration time.Duration) {
-	t.record(UsageRecordSpec{
+	t.record(models.UsageRecordSpec{
 		TenantID:  tenantID,
-		Dimension: DimensionQuery,
+		Dimension: models.DimensionQuery,
 		Quantity:  float64(rowsScanned),
 		Credits:   float64(rowsScanned) * 0.000001, // 1 credit per million rows
 		Source:    queryID,
@@ -95,9 +96,9 @@ func (t *UsageTracker) TrackQuery(tenantID, queryID string, rowsScanned int64, d
 
 // TrackPipeline records a pipeline execution for cost attribution.
 func (t *UsageTracker) TrackPipeline(tenantID, pipelineName string, recordsProcessed int64, duration time.Duration) {
-	t.record(UsageRecordSpec{
+	t.record(models.UsageRecordSpec{
 		TenantID:  tenantID,
-		Dimension: DimensionPipeline,
+		Dimension: models.DimensionPipeline,
 		Quantity:  float64(recordsProcessed),
 		Credits:   float64(recordsProcessed) * 0.00001, // 1 credit per 100K records
 		Source:    pipelineName,
@@ -112,9 +113,9 @@ func (t *UsageTracker) TrackPipeline(tenantID, pipelineName string, recordsProce
 // TrackStorage records storage usage for cost attribution.
 func (t *UsageTracker) TrackStorage(tenantID, bucketName string, bytesStored int64) {
 	gbStored := float64(bytesStored) / (1024 * 1024 * 1024)
-	t.record(UsageRecordSpec{
+	t.record(models.UsageRecordSpec{
 		TenantID:  tenantID,
-		Dimension: DimensionStorage,
+		Dimension: models.DimensionStorage,
 		Quantity:  gbStored,
 		Credits:   gbStored * 0.023, // ~$0.023 per GB/month (S3-like pricing)
 		Source:    bucketName,
@@ -126,7 +127,7 @@ func (t *UsageTracker) TrackStorage(tenantID, bucketName string, bytesStored int
 }
 
 // record buffers a usage record and flushes when batch is full.
-func (t *UsageTracker) record(spec UsageRecordSpec) {
+func (t *UsageTracker) record(spec models.UsageRecordSpec) {
 	t.mu.Lock()
 	t.buffer = append(t.buffer, spec)
 	shouldFlush := len(t.buffer) >= t.batchSize
@@ -160,11 +161,11 @@ func (t *UsageTracker) Flush(ctx context.Context) {
 		default:
 		}
 
-		record := &UsageRecordResource{
+		record := &models.UsageRecordResource{
 			Spec: spec,
 		}
-		record.Kind = UsageRecordKind
-		record.APIVersion = UsageRecordAPIVersion
+		record.Kind = models.UsageRecordKind
+		record.APIVersion = models.UsageRecordAPIVersion
 		record.Name = fmt.Sprintf("usage-%s-%d-%d", spec.TenantID, spec.Timestamp.UnixNano(), i)
 		record.CreatedAt = spec.Timestamp
 		record.Generation = 1

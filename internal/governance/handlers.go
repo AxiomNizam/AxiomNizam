@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/governance/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
@@ -20,16 +21,16 @@ import (
 
 // GovernanceHandlers provides REST API handlers for governance.
 type GovernanceHandlers struct {
-	policyStore    store.ResourceStore[*CompliancePolicyResource]
-	retentionStore store.ResourceStore[*RetentionPolicyResource]
-	accessStore    store.ResourceStore[*AccessRequestResource]
+	policyStore    store.ResourceStore[*models.CompliancePolicyResource]
+	retentionStore store.ResourceStore[*models.RetentionPolicyResource]
+	accessStore    store.ResourceStore[*models.AccessRequestResource]
 }
 
 // NewGovernanceHandlers creates new handlers.
 func NewGovernanceHandlers(
-	policyStore store.ResourceStore[*CompliancePolicyResource],
-	retentionStore store.ResourceStore[*RetentionPolicyResource],
-	accessStore store.ResourceStore[*AccessRequestResource],
+	policyStore store.ResourceStore[*models.CompliancePolicyResource],
+	retentionStore store.ResourceStore[*models.RetentionPolicyResource],
+	accessStore store.ResourceStore[*models.AccessRequestResource],
 ) *GovernanceHandlers {
 	return &GovernanceHandlers{
 		policyStore:    policyStore,
@@ -80,7 +81,7 @@ func (h *GovernanceHandlers) ListPolicies(c *gin.Context) {
 	}
 
 	frameworkFilter := c.Query("framework")
-	var filtered []*CompliancePolicyResource
+	var filtered []*models.CompliancePolicyResource
 	for _, p := range policies {
 		if frameworkFilter != "" && string(p.Spec.Framework) != frameworkFilter {
 			continue
@@ -105,14 +106,14 @@ func (h *GovernanceHandlers) GetPolicy(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) CreatePolicy(c *gin.Context) {
-	var policy CompliancePolicyResource
+	var policy models.CompliancePolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	policy.Kind = CompliancePolicyKind
-	policy.APIVersion = CompliancePolicyAPIVersion
+	policy.Kind = models.CompliancePolicyKind
+	policy.APIVersion = models.CompliancePolicyAPIVersion
 	now := time.Now()
 	policy.CreatedAt = now
 	policy.Generation = 1
@@ -136,7 +137,7 @@ func (h *GovernanceHandlers) UpdatePolicy(c *gin.Context) {
 		return
 	}
 
-	var updated CompliancePolicyResource
+	var updated models.CompliancePolicyResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
@@ -212,14 +213,14 @@ func (h *GovernanceHandlers) GetRetentionPolicy(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) CreateRetentionPolicy(c *gin.Context) {
-	var policy RetentionPolicyResource
+	var policy models.RetentionPolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	policy.Kind = RetentionPolicyKind
-	policy.APIVersion = RetentionPolicyAPIVersion
+	policy.Kind = models.RetentionPolicyKind
+	policy.APIVersion = models.RetentionPolicyAPIVersion
 	now := time.Now()
 	policy.CreatedAt = now
 	policy.Generation = 1
@@ -255,7 +256,7 @@ func (h *GovernanceHandlers) ListAccessRequests(c *gin.Context) {
 	}
 
 	statusFilter := c.Query("status")
-	var filtered []*AccessRequestResource
+	var filtered []*models.AccessRequestResource
 	for _, req := range requests {
 		if statusFilter != "" && req.Status.ApprovalStatus != statusFilter {
 			continue
@@ -280,14 +281,14 @@ func (h *GovernanceHandlers) GetAccessRequest(c *gin.Context) {
 }
 
 func (h *GovernanceHandlers) CreateAccessRequest(c *gin.Context) {
-	var req AccessRequestResource
+	var req models.AccessRequestResource
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	req.Kind = AccessRequestKind
-	req.APIVersion = AccessRequestAPIVersion
+	req.Kind = models.AccessRequestKind
+	req.APIVersion = models.AccessRequestAPIVersion
 	now := time.Now()
 	req.CreatedAt = now
 	req.Generation = 1

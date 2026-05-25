@@ -9,18 +9,20 @@ package governance
 // =====================================================
 
 import (
-	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/governance/models"
+	"example.com/axiomnizam/internal/logging"
 )
 
 // EnforcementDecision represents the outcome of a policy check.
 type EnforcementDecision struct {
 	Allowed     bool                  `json:"allowed"`
-	Mode        EnforcementMode       `json:"mode"`
+	Mode        models.EnforcementMode       `json:"mode"`
 	Violations  []EnforcementViolation `json:"violations,omitempty"`
 	Message     string                `json:"message"`
 	EvaluatedAt time.Time             `json:"evaluatedAt"`
@@ -49,7 +51,7 @@ type AccessContext struct {
 
 // PolicyProvider abstracts retrieval of active compliance policies.
 type PolicyProvider interface {
-	ListActivePolicies(ctx context.Context) ([]*CompliancePolicyResource, error)
+	ListActivePolicies(ctx context.Context) ([]*models.CompliancePolicyResource, error)
 }
 
 // EnforcementLogger abstracts audit logging for enforcement decisions.
@@ -64,7 +66,7 @@ type Enforcer struct {
 	logger   EnforcementLogger
 
 	// Cached policies (refreshed periodically).
-	policies    []*CompliancePolicyResource
+	policies    []*models.CompliancePolicyResource
 	lastRefresh time.Time
 	cacheTTL    time.Duration
 }
@@ -87,7 +89,7 @@ func (e *Enforcer) Enforce(ctx context.Context, access AccessContext) (*Enforcem
 
 	decision := &EnforcementDecision{
 		Allowed:     true,
-		Mode:        EnforcementAudit,
+		Mode:        models.EnforcementAudit,
 		EvaluatedAt: time.Now(),
 	}
 
@@ -117,10 +119,10 @@ func (e *Enforcer) Enforce(ctx context.Context, access AccessContext) (*Enforcem
 
 	if len(decision.Violations) > 0 {
 		switch decision.Mode {
-		case EnforcementBlock:
+		case models.EnforcementBlock:
 			decision.Allowed = false
 			decision.Message = fmt.Sprintf("access blocked: %d policy violation(s)", len(decision.Violations))
-		case EnforcementWarn:
+		case models.EnforcementWarn:
 			decision.Allowed = true
 			decision.Message = fmt.Sprintf("access allowed with warning: %d policy violation(s)", len(decision.Violations))
 		default: // audit
@@ -143,7 +145,7 @@ func (e *Enforcer) Enforce(ctx context.Context, access AccessContext) (*Enforcem
 
 // --- Internal ---
 
-func (e *Enforcer) getActivePolicies(ctx context.Context) ([]*CompliancePolicyResource, error) {
+func (e *Enforcer) getActivePolicies(ctx context.Context) ([]*models.CompliancePolicyResource, error) {
 	e.mu.RLock()
 	if time.Since(e.lastRefresh) < e.cacheTTL && e.policies != nil {
 		policies := e.policies
@@ -170,7 +172,7 @@ func (e *Enforcer) getActivePolicies(ctx context.Context) ([]*CompliancePolicyRe
 	return policies, nil
 }
 
-func (e *Enforcer) policyApplies(policy *CompliancePolicyResource, access AccessContext) bool {
+func (e *Enforcer) policyApplies(policy *models.CompliancePolicyResource, access AccessContext) bool {
 	scope := policy.Spec.Scope
 
 	if scope.AllAssets {
@@ -216,7 +218,7 @@ func (e *Enforcer) policyApplies(policy *CompliancePolicyResource, access Access
 	return false
 }
 
-func (e *Enforcer) evaluateRule(rule ComplianceRule, access AccessContext) *EnforcementViolation {
+func (e *Enforcer) evaluateRule(rule models.ComplianceRule, access AccessContext) *EnforcementViolation {
 	switch rule.Type {
 	case "access":
 		return e.enforceAccessRule(rule, access)
@@ -229,7 +231,7 @@ func (e *Enforcer) evaluateRule(rule ComplianceRule, access AccessContext) *Enfo
 	}
 }
 
-func (e *Enforcer) enforceAccessRule(rule ComplianceRule, access AccessContext) *EnforcementViolation {
+func (e *Enforcer) enforceAccessRule(rule models.ComplianceRule, access AccessContext) *EnforcementViolation {
 	if rule.Access == nil {
 		return nil
 	}
@@ -263,7 +265,7 @@ func (e *Enforcer) enforceAccessRule(rule ComplianceRule, access AccessContext) 
 	return nil
 }
 
-func (e *Enforcer) enforceEncryptionRule(rule ComplianceRule, access AccessContext) *EnforcementViolation {
+func (e *Enforcer) enforceEncryptionRule(rule models.ComplianceRule, access AccessContext) *EnforcementViolation {
 	if rule.Encryption == nil {
 		return nil
 	}
@@ -280,7 +282,7 @@ func (e *Enforcer) enforceEncryptionRule(rule ComplianceRule, access AccessConte
 	return nil
 }
 
-func (e *Enforcer) enforceMaskingRule(rule ComplianceRule, access AccessContext) *EnforcementViolation {
+func (e *Enforcer) enforceMaskingRule(rule models.ComplianceRule, access AccessContext) *EnforcementViolation {
 	if rule.Masking == nil {
 		return nil
 	}
@@ -313,8 +315,8 @@ func (e *Enforcer) enforceMaskingRule(rule ComplianceRule, access AccessContext)
 
 // --- Helpers ---
 
-func isStricterMode(a, b EnforcementMode) bool {
-	order := map[EnforcementMode]int{EnforcementAudit: 0, EnforcementWarn: 1, EnforcementBlock: 2}
+func isStricterMode(a, b models.EnforcementMode) bool {
+	order := map[models.EnforcementMode]int{models.EnforcementAudit: 0, models.EnforcementWarn: 1, models.EnforcementBlock: 2}
 	return order[a] > order[b]
 }
 

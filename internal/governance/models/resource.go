@@ -1,4 +1,4 @@
-package governance
+package models
 
 // =====================================================
 // WS-6.1 — Governance and Compliance as declarative resources

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/alerting/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
@@ -27,29 +28,29 @@ import (
 // ConditionEvaluator evaluates alert conditions.
 type ConditionEvaluator interface {
 	// Evaluate returns true if the condition is currently met.
-	Evaluate(ctx context.Context, condition AlertCondition) (bool, string, error)
+	Evaluate(ctx context.Context, condition models.AlertCondition) (bool, string, error)
 }
 
 // Notifier dispatches notifications to channels.
 type Notifier interface {
 	// Notify sends a notification to the specified channel.
-	Notify(ctx context.Context, channel *NotificationChannelResource, incident *AlertIncidentResource) error
+	Notify(ctx context.Context, channel *models.NotificationChannelResource, incident *models.AlertIncidentResource) error
 }
 
 // AlertRuleReconciler reconciles alert rules.
 type AlertRuleReconciler struct {
-	ruleStore     store.ResourceStore[*AlertRuleResource]
-	incidentStore store.ResourceStore[*AlertIncidentResource]
-	channelStore  store.ResourceStore[*NotificationChannelResource]
+	ruleStore     store.ResourceStore[*models.AlertRuleResource]
+	incidentStore store.ResourceStore[*models.AlertIncidentResource]
+	channelStore  store.ResourceStore[*models.NotificationChannelResource]
 	evaluator     ConditionEvaluator
 	notifier      Notifier
 }
 
 // NewAlertRuleReconciler creates a new reconciler.
 func NewAlertRuleReconciler(
-	ruleStore store.ResourceStore[*AlertRuleResource],
-	incidentStore store.ResourceStore[*AlertIncidentResource],
-	channelStore store.ResourceStore[*NotificationChannelResource],
+	ruleStore store.ResourceStore[*models.AlertRuleResource],
+	incidentStore store.ResourceStore[*models.AlertIncidentResource],
+	channelStore store.ResourceStore[*models.NotificationChannelResource],
 	evaluator ConditionEvaluator,
 	notifier Notifier,
 ) *AlertRuleReconciler {
@@ -64,7 +65,7 @@ func NewAlertRuleReconciler(
 
 // Reconcile implements reconciler.Reconciler.
 func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
-	rule, ok := obj.(*AlertRuleResource)
+	rule, ok := obj.(*models.AlertRuleResource)
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("alerting: received non-AlertRuleResource")}
 	}
@@ -186,7 +187,7 @@ func (r *AlertRuleReconciler) Reconcile(ctx context.Context, obj reconciler.Reso
 }
 
 // fireAlert transitions the rule to firing state and creates an incident.
-func (r *AlertRuleReconciler) fireAlert(ctx context.Context, rule *AlertRuleResource, status *AlertRuleResourceStatus, now time.Time, message string) {
+func (r *AlertRuleReconciler) fireAlert(ctx context.Context, rule *models.AlertRuleResource, status *models.AlertRuleResourceStatus, now time.Time, message string) {
 	status.RuleState = "firing"
 	status.LastFiredAt = &now
 	status.TotalFirings++
@@ -194,10 +195,10 @@ func (r *AlertRuleReconciler) fireAlert(ctx context.Context, rule *AlertRuleReso
 
 	// Create incident resource.
 	if r.incidentStore != nil {
-		incident := &AlertIncidentResource{
+		incident := &models.AlertIncidentResource{
 			TypeMeta: resources.TypeMeta{
-				APIVersion: AlertIncidentAPIVersion,
-				Kind:       AlertIncidentKind,
+				APIVersion: models.AlertIncidentAPIVersion,
+				Kind:       models.AlertIncidentKind,
 			},
 			ObjectMeta: resources.ObjectMeta{
 				Name:       fmt.Sprintf("%s-%d", rule.Name, now.Unix()),
@@ -206,20 +207,20 @@ func (r *AlertRuleReconciler) fireAlert(ctx context.Context, rule *AlertRuleReso
 				CreatedAt:  now,
 				UpdatedAt:  now,
 			},
-			Spec: AlertIncidentSpec{
+			Spec: models.AlertIncidentSpec{
 				RuleRef:     rule.Name,
 				Severity:    rule.Spec.Severity,
 				Summary:     rule.Spec.DisplayName,
 				Description: message,
 				Labels:      rule.Spec.Labels,
 			},
-			Status: AlertIncidentResourceStatus{
+			Status: models.AlertIncidentResourceStatus{
 				ObjectStatus: resources.ObjectStatus{
 					Phase:              "Firing",
 					LastTransitionTime: now,
 					ObservedGeneration: 1,
 				},
-				IncidentStatus: IncidentFiring,
+				IncidentStatus: models.IncidentFiring,
 				FiredAt:        &now,
 			},
 		}
@@ -233,14 +234,14 @@ func (r *AlertRuleReconciler) fireAlert(ctx context.Context, rule *AlertRuleReso
 }
 
 // resolveAlert resolves the active incident.
-func (r *AlertRuleReconciler) resolveAlert(ctx context.Context, rule *AlertRuleResource, status *AlertRuleResourceStatus, now time.Time) {
+func (r *AlertRuleReconciler) resolveAlert(ctx context.Context, rule *models.AlertRuleResource, status *models.AlertRuleResourceStatus, now time.Time) {
 	status.RuleState = "resolved"
 	status.LastResolvedAt = &now
 
 	if status.ActiveIncident != "" && r.incidentStore != nil {
 		incident, err := r.incidentStore.Get(ctx, status.ActiveIncident)
 		if err == nil {
-			incident.Status.IncidentStatus = IncidentResolved
+			incident.Status.IncidentStatus = models.IncidentResolved
 			incident.Status.ResolvedAt = &now
 			incident.Status.Phase = "Resolved"
 			incident.Status.LastTransitionTime = now
@@ -251,7 +252,7 @@ func (r *AlertRuleReconciler) resolveAlert(ctx context.Context, rule *AlertRuleR
 }
 
 // checkEscalation checks if the alert needs to be escalated.
-func (r *AlertRuleReconciler) checkEscalation(ctx context.Context, rule *AlertRuleResource, status *AlertRuleResourceStatus, now time.Time) {
+func (r *AlertRuleReconciler) checkEscalation(ctx context.Context, rule *models.AlertRuleResource, status *models.AlertRuleResourceStatus, now time.Time) {
 	if rule.Spec.Escalation == nil || len(rule.Spec.Escalation.Levels) == 0 {
 		return
 	}
@@ -266,7 +267,7 @@ func (r *AlertRuleReconciler) checkEscalation(ctx context.Context, rule *AlertRu
 	}
 
 	// Check if acknowledged — no escalation needed.
-	if incident.Status.IncidentStatus == IncidentAcknowledged {
+	if incident.Status.IncidentStatus == models.IncidentAcknowledged {
 		return
 	}
 
@@ -298,7 +299,7 @@ func (r *AlertRuleReconciler) checkEscalation(ctx context.Context, rule *AlertRu
 }
 
 // dispatchNotifications sends notifications to all configured channels.
-func (r *AlertRuleReconciler) dispatchNotifications(ctx context.Context, rule *AlertRuleResource, incident *AlertIncidentResource) {
+func (r *AlertRuleReconciler) dispatchNotifications(ctx context.Context, rule *models.AlertRuleResource, incident *models.AlertIncidentResource) {
 	if r.notifier == nil || r.channelStore == nil {
 		return
 	}

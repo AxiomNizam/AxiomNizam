@@ -1,11 +1,13 @@
 package conductor
 
 import (
-	"example.com/axiomnizam/internal/logging"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/conductor/models"
+	"example.com/axiomnizam/internal/logging"
 
 	"github.com/IBM/sarama"
 )
@@ -118,7 +120,7 @@ func (k *KafkaBackend) Publish(p *Producer, msg *Message) error {
 type consumerGroupHandler struct {
 	consumerID string
 	handler    func(*Message) error
-	cfg        ConsumerConfig
+	cfg        models.ConsumerConfig
 }
 
 func (h *consumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error   { return nil }

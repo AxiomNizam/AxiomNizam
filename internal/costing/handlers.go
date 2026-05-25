@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/costing/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
@@ -19,14 +20,14 @@ import (
 
 // CostHandlers provides REST API handlers for cost attribution.
 type CostHandlers struct {
-	policyStore store.ResourceStore[*CostPolicyResource]
-	usageStore  store.ResourceStore[*UsageRecordResource]
+	policyStore store.ResourceStore[*models.CostPolicyResource]
+	usageStore  store.ResourceStore[*models.UsageRecordResource]
 }
 
 // NewCostHandlers creates new handlers.
 func NewCostHandlers(
-	policyStore store.ResourceStore[*CostPolicyResource],
-	usageStore store.ResourceStore[*UsageRecordResource],
+	policyStore store.ResourceStore[*models.CostPolicyResource],
+	usageStore store.ResourceStore[*models.UsageRecordResource],
 ) *CostHandlers {
 	return &CostHandlers{
 		policyStore: policyStore,
@@ -76,14 +77,14 @@ func (h *CostHandlers) GetPolicy(c *gin.Context) {
 
 // CreatePolicy creates a new cost policy.
 func (h *CostHandlers) CreatePolicy(c *gin.Context) {
-	var policy CostPolicyResource
+	var policy models.CostPolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	policy.Kind = CostPolicyKind
-	policy.APIVersion = CostPolicyAPIVersion
+	policy.Kind = models.CostPolicyKind
+	policy.APIVersion = models.CostPolicyAPIVersion
 	now := time.Now()
 	policy.CreatedAt = now
 	policy.Generation = 1
@@ -109,7 +110,7 @@ func (h *CostHandlers) UpdatePolicy(c *gin.Context) {
 		return
 	}
 
-	var updated CostPolicyResource
+	var updated models.CostPolicyResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return

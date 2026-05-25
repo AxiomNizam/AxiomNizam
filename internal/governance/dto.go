@@ -1,5 +1,7 @@
 package governance
 
+import "example.com/axiomnizam/internal/governance/models"
+
 // MessageResponse is a generic error/ack response.
 type MessageResponse struct {
 	Error   string `json:"error,omitempty"`
@@ -9,19 +11,19 @@ type MessageResponse struct {
 
 // PolicyListResponse is the response for ListPolicies.
 type PolicyListResponse struct {
-	Policies []*CompliancePolicyResource `json:"policies"`
+	Policies []*models.CompliancePolicyResource `json:"policies"`
 	Count    int                         `json:"count"`
 }
 
 // RetentionPolicyListResponse is the response for ListRetentionPolicies.
 type RetentionPolicyListResponse struct {
-	RetentionPolicies []*RetentionPolicyResource `json:"retentionPolicies"`
+	RetentionPolicies []*models.RetentionPolicyResource `json:"retentionPolicies"`
 	Count             int                        `json:"count"`
 }
 
 // AccessRequestListResponse is the response for ListAccessRequests.
 type AccessRequestListResponse struct {
-	AccessRequests []*AccessRequestResource `json:"accessRequests"`
+	AccessRequests []*models.AccessRequestResource `json:"accessRequests"`
 	Count          int                      `json:"count"`
 }
 

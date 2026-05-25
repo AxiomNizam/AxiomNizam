@@ -1,16 +1,62 @@
-package rbac
+package models
 
-// =====================================================
-// P2 resource-ification — RBAC Role & RoleBinding.
+// Domain types for the RBAC resource layer.
 //
-// RoleResource and RoleBindingResource wrap the imperative Role and
-// RoleBinding structs so a controller can reconcile RBAC primitives
-// as first-class platform resources.
-// =====================================================
+// RoleType, Permission, Condition and PrincipalType are the shared
+// primitives that the Resource wrappers depend on.  The parent rbac
+// package re-exports them via type aliases for backward compatibility.
 
 import (
+	"time"
+
 	"example.com/axiomnizam/internal/resources"
 )
+
+// ── Shared primitives ────────────────────────────────────────────
+
+// RoleType represents role classification
+type RoleType string
+
+const (
+	RoleTypeSystem RoleType = "SYSTEM" // Built-in
+	RoleTypeCustom RoleType = "CUSTOM" // User-defined
+	RoleTypeTenant RoleType = "TENANT" // Tenant-scoped
+)
+
+// Condition represents when permission applies
+type Condition struct {
+	Type     string      `json:"type"`     // "field", "attribute", "time", "ip", "mfa"
+	Key      string      `json:"key"`      // Field name
+	Value    interface{} `json:"value"`    // Condition value
+	Operator string      `json:"operator"` // "eq", "ne", "lt", "gt", "in", "matches"
+}
+
+// Permission represents capability/action
+type Permission struct {
+	ID           string                 `json:"id"`
+	TenantID     string                 `json:"tenantId,omitempty"` // Empty = system permission
+	Name         string                 `json:"name"`               // e.g., "resources.create"
+	Description  string                 `json:"description"`
+	Resource     string                 `json:"resource"`             // What it applies to
+	Action       string                 `json:"action"`               // create, read, update, delete, execute
+	Scope        string                 `json:"scope"`                // "global", "tenant", "own"
+	Conditions   []Condition            `json:"conditions,omitempty"` // When permission applies
+	CreatedAt    time.Time              `json:"createdAt"`
+	IsDeprecated bool                   `json:"isDeprecated"`
+	Metadata     map[string]interface{} `json:"metadata"`
+}
+
+// PrincipalType represents type of principal
+type PrincipalType string
+
+const (
+	PrincipalTypeUser    PrincipalType = "USER"
+	PrincipalTypeService PrincipalType = "SERVICE"
+	PrincipalTypeTeam    PrincipalType = "TEAM"
+	PrincipalTypeRole    PrincipalType = "ROLE"
+)
+
+// ── Kind / APIVersion constants ──────────────────────────────────
 
 const (
 	RoleKind              = "Role"
@@ -19,7 +65,7 @@ const (
 	RoleBindingAPIVersion = "rbac.axiomnizam.io/v1"
 )
 
-// --- RoleResource ---
+// ── RoleResource ─────────────────────────────────────────────────
 
 // RoleSpec is the desired state of an RBAC role.
 type RoleSpec struct {
@@ -78,7 +124,7 @@ func (r *RoleResource) GetKey() string {
 func (r *RoleResource) GetGeneration() int64         { return r.Generation }
 func (r *RoleResource) GetObservedGeneration() int64 { return r.Status.ObservedGeneration }
 
-// --- RoleBindingResource ---
+// ── RoleBindingResource ──────────────────────────────────────────
 
 // RoleBindingSpec is the desired state of an RBAC role binding.
 type RoleBindingSpec struct {

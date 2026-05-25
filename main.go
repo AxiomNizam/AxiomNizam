@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/alerting"
+	alertingmodels "example.com/axiomnizam/internal/alerting/models"
 	"example.com/axiomnizam/internal/anonymization"
 	"example.com/axiomnizam/internal/antivirus"
 	"example.com/axiomnizam/internal/apibanks"
@@ -45,6 +46,7 @@ import (
 	analyticspkg "example.com/axiomnizam/internal/analytics"
 	gispkg "example.com/axiomnizam/internal/gis"
 	"example.com/axiomnizam/internal/governance"
+	governancemodels "example.com/axiomnizam/internal/governance/models"
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
 	healthpkg "example.com/axiomnizam/internal/health"
 	apibuilder "example.com/axiomnizam/internal/apibuilder"
@@ -2592,17 +2594,17 @@ func main() {
 	// ====================================
 	if backendMgr != nil {
 		// Alerting
-		alertRuleStore := platformstore.NewStore[*alerting.AlertRuleResource](backendMgr, "alert-rules", func() *alerting.AlertRuleResource { return &alerting.AlertRuleResource{} })
-		alertIncidentStore := platformstore.NewStore[*alerting.AlertIncidentResource](backendMgr, "alert-incidents", func() *alerting.AlertIncidentResource { return &alerting.AlertIncidentResource{} })
-		alertChannelStore := platformstore.NewStore[*alerting.NotificationChannelResource](backendMgr, "alert-channels", func() *alerting.NotificationChannelResource { return &alerting.NotificationChannelResource{} })
+		alertRuleStore := platformstore.NewStore[*alertingmodels.AlertRuleResource](backendMgr, "alert-rules", func() *alertingmodels.AlertRuleResource { return &alertingmodels.AlertRuleResource{} })
+		alertIncidentStore := platformstore.NewStore[*alertingmodels.AlertIncidentResource](backendMgr, "alert-incidents", func() *alertingmodels.AlertIncidentResource { return &alertingmodels.AlertIncidentResource{} })
+		alertChannelStore := platformstore.NewStore[*alertingmodels.NotificationChannelResource](backendMgr, "alert-channels", func() *alertingmodels.NotificationChannelResource { return &alertingmodels.NotificationChannelResource{} })
 		alertHandlers := alerting.NewAlertHandlers(alertRuleStore, alertIncidentStore, alertChannelStore)
 		alertHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
 		log.Println("✅ Alerting module started")
 
 		// Governance
-		complianceStore := platformstore.NewStore[*governance.CompliancePolicyResource](backendMgr, "compliance-policies", func() *governance.CompliancePolicyResource { return &governance.CompliancePolicyResource{} })
-		retentionStore := platformstore.NewStore[*governance.RetentionPolicyResource](backendMgr, "retention-policies", func() *governance.RetentionPolicyResource { return &governance.RetentionPolicyResource{} })
-		accessReqStore := platformstore.NewStore[*governance.AccessRequestResource](backendMgr, "access-requests", func() *governance.AccessRequestResource { return &governance.AccessRequestResource{} })
+		complianceStore := platformstore.NewStore[*governancemodels.CompliancePolicyResource](backendMgr, "compliance-policies", func() *governancemodels.CompliancePolicyResource { return &governancemodels.CompliancePolicyResource{} })
+		retentionStore := platformstore.NewStore[*governancemodels.RetentionPolicyResource](backendMgr, "retention-policies", func() *governancemodels.RetentionPolicyResource { return &governancemodels.RetentionPolicyResource{} })
+		accessReqStore := platformstore.NewStore[*governancemodels.AccessRequestResource](backendMgr, "access-requests", func() *governancemodels.AccessRequestResource { return &governancemodels.AccessRequestResource{} })
 		govHandlers := governance.NewGovernanceHandlers(complianceStore, retentionStore, accessReqStore)
 		govHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
 		log.Println("✅ Governance module started")
