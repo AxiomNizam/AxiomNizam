@@ -90,6 +90,7 @@ func TestAPIBankIntegration(t *testing.T) {
 // TestComplianceIntegration tests compliance integration
 func TestComplianceIntegration(t *testing.T) {
 	ctx := context.Background()
+	auditor := NewComplianceAuditor(10000)
 
 	// Record operations
 	op := Operation{
@@ -101,12 +102,12 @@ func TestComplianceIntegration(t *testing.T) {
 		Status:       "success",
 	}
 
-	if err := GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+	if err := auditor.RecordOperation(ctx, op); err != nil {
 		t.Fatalf("Failed to record operation: %v", err)
 	}
 
 	// Generate report
-	report := GlobalComplianceAuditor.GenerateReport(AuditFilter{})
+	report := auditor.GenerateReport(AuditFilter{})
 
 	if report.TotalOperations == 0 {
 		t.Fatal("Expected operations in report")
@@ -306,7 +307,7 @@ func TestFullIntegration(t *testing.T) {
 			Action:       "read",
 			Status:       "success",
 		}
-		if err := GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+		if err := NewComplianceAuditor(10000).RecordOperation(ctx, op); err != nil {
 			t.Fatalf("Failed to record operation: %v", err)
 		}
 	}
@@ -316,7 +317,7 @@ func TestFullIntegration(t *testing.T) {
 	health := GlobalHealthMonitor.CheckHealth(ctx)
 	t.Logf("✅ Health check: %s", health.Status)
 
-	complianceReport := GlobalComplianceAuditor.GenerateReport(AuditFilter{})
+	complianceReport := NewComplianceAuditor(10000).GenerateReport(AuditFilter{})
 	t.Logf("✅ Compliance report: %d operations, %.1f%% success",
 		complianceReport.TotalOperations,
 		float64(complianceReport.SuccessfulOps)*100/float64(complianceReport.TotalOperations))
@@ -354,7 +355,7 @@ func BenchmarkComplianceRecording(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = GlobalComplianceAuditor.RecordOperation(ctx, op)
+		_ = NewComplianceAuditor(10000).RecordOperation(ctx, op)
 	}
 	b.ReportAllocs()
 }
@@ -397,7 +398,7 @@ func TestConcurrentOperations(t *testing.T) {
 				Action:       "concurrent",
 				Status:       "success",
 			}
-			errChan <- GlobalComplianceAuditor.RecordOperation(ctx, op)
+			errChan <- NewComplianceAuditor(10000).RecordOperation(ctx, op)
 		}(i)
 	}
 
@@ -438,7 +439,7 @@ func TestSystemStability(t *testing.T) {
 			Status:       "success",
 		}
 
-		if err := GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+		if err := NewComplianceAuditor(10000).RecordOperation(ctx, op); err != nil {
 			errors++
 		}
 		operations++

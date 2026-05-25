@@ -35,15 +35,8 @@ func ConfigureGlobalPersistence(etcd *clientv3.Client) {
 	globalPersistenceEtcd = etcd
 	persistenceMu.Unlock()
 
-	if GlobalComplianceAuditor != nil {
-		GlobalComplianceAuditor.ConfigurePersistence(etcd)
-	}
-	if GlobalHealthMonitor != nil {
-		GlobalHealthMonitor.ConfigurePersistence(etcd)
-	}
-	if GlobalAlertManager != nil {
-		GlobalAlertManager.ConfigurePersistence(etcd)
-	}
+	// Phase 13: Global singletons removed.
+	// Consumers should call ConfigurePersistence on their own instances.
 }
 
 // ConfigureGlobalKVPersistence configures KVStore persistence for all integration sub-modules.

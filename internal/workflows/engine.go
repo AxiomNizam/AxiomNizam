@@ -478,5 +478,5 @@ func (wtm *WorkflowTriggerManager) GetTriggeredWorkflows(policyName string) []st
 	return wtm.connections[policyName]
 }
 
-// GlobalWorkflowTriggerManager is the package-level trigger manager
-var GlobalWorkflowTriggerManager = NewWorkflowTriggerManager()
+// GlobalWorkflowTriggerManager was removed in Phase 13 (unused singleton).
+// Use NewWorkflowTriggerManager() to create instances.

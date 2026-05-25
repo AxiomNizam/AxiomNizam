@@ -64,9 +64,9 @@ func NewHealthMonitor() *HealthMonitor {
 		startTime:       time.Now(),
 		lastCheckTimes:  make(map[string]time.Time),
 		componentStatus: make(map[string]ComponentHealth),
-		dataMesh:        mesh.GlobalDataMesh,
-		bankManager:     apibanks.GlobalAPIBankManager,
-		metrics:         metrics.GlobalMetrics,
+		dataMesh:        nil,
+		bankManager:     nil,
+		metrics:         nil,
 		etcd:            integrationEtcdClient(),
 		stateKey:        "integration:healthmonitor:state",
 	}
@@ -301,9 +301,9 @@ type PlatformMetricsCollector struct {
 // NewPlatformMetricsCollector creates a metrics collector
 func NewPlatformMetricsCollector() *PlatformMetricsCollector {
 	return &PlatformMetricsCollector{
-		dataMesh:    mesh.GlobalDataMesh,
-		bankManager: apibanks.GlobalAPIBankManager,
-		auditor:     GlobalComplianceAuditor,
+		dataMesh:    nil,
+		bankManager: nil,
+		auditor:     nil,
 	}
 }
 

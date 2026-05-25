@@ -383,8 +383,6 @@ func (dac *DataAccessControl) RecordDataModification(ctx context.Context, user, 
 	})
 }
 
-// GlobalComplianceAuditor is the package-level compliance auditor
-var GlobalComplianceAuditor = NewComplianceAuditor(10000)
-
-// GlobalDataAccessControl is the package-level access control
-var GlobalDataAccessControl = NewDataAccessControl(GlobalComplianceAuditor)
+// Phase 13: Global singletons removed. Use constructors to create instances:
+//   - NewComplianceAuditor(maxEvents)
+//   - NewDataAccessControl(auditor)
