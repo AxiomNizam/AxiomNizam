@@ -9,44 +9,8 @@ import (
 	"time"
 )
 
-// JobStatus represents the status of a job
-type JobStatus string
-
-const (
-	JobStatusPending   JobStatus = "pending"
-	JobStatusRunning   JobStatus = "running"
-	JobStatusCompleted JobStatus = "completed"
-	JobStatusFailed    JobStatus = "failed"
-	JobStatusCancelled JobStatus = "cancelled"
-	JobStatusRetrying  JobStatus = "retrying"
-)
-
-// JobPriority represents job priority level
-type JobPriority int
-
-const (
-	PriorityLow      JobPriority = 1
-	PriorityNormal   JobPriority = 5
-	PriorityHigh     JobPriority = 10
-	PriorityCritical JobPriority = 20
-)
-
-// JobType represents the type of job
-type JobType string
-
-// Common job types
-const (
-	JobTypeEmail           JobType = "email"
-	JobTypeReport          JobType = "report"
-	JobTypeDataCleanup     JobType = "data_cleanup"
-	JobTypeDataMigration   JobType = "data_migration"
-	JobTypeNotification    JobType = "notification"
-	JobTypeWebhook         JobType = "webhook"
-	JobTypeImageProcessing JobType = "image_processing"
-	JobTypeBackup          JobType = "backup"
-	JobTypeExport          JobType = "export"
-	JobTypeImport          JobType = "import"
-)
+// JobStatus, JobPriority, JobType and their constants are defined in
+// jobs/models and re-exported via jobs/resource.go type aliases.
 
 // Job represents a background job
 type Job struct {

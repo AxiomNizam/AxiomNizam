@@ -97,7 +97,7 @@ func (c *JobController) Reconcile(ctx context.Context, obj reconciler.Resource) 
 	dispatch := jr.Status.ObservedGeneration < jr.Generation
 
 	if dispatch {
-		job := jr.ToJob()
+		job := ToJob(jr)
 		if err := c.manager.Submit(ctx, job); err != nil {
 			jr.Status.Error = err.Error()
 			jr.Status.JobStatus = JobStatusFailed
@@ -122,7 +122,7 @@ func (c *JobController) Reconcile(ctx context.Context, obj reconciler.Resource) 
 	}
 
 	// Observe current job state from the manager's queue.
-	current, err := c.manager.GetJob(ctx, jr.ToJob().ID)
+	current, err := c.manager.GetJob(ctx, ToJob(jr).ID)
 	if err == nil && current != nil {
 		jr.Status.JobStatus = current.Status
 		jr.Status.Phase = string(current.Status)

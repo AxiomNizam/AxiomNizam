@@ -1,99 +1,60 @@
 package jobs
 
-// =====================================================
-// P1.3 — Job as a declarative resource
-//
-// `Job` historically was an imperative runtime record owned by the
-// `JobManager`.  `JobResource` exposes the same concept as a declarative
-// resource (Spec/Status/Conditions/ObservedGeneration) so a controller
-// can reconcile it on the shared workqueue with rate-limited retries.
-//
-// The imperative `Job` type is left untouched and is still the wire /
-// storage shape.  `JobResource` is what the API server presents.
-// =====================================================
-
+// Re-export domain types from models sub-package for backward compatibility.
 import (
-	"time"
-
-	"example.com/axiomnizam/internal/resources"
+	"example.com/axiomnizam/internal/jobs/models"
 )
 
+// --- Constants ---
 const (
-	JobKind       = "Job"
-	JobAPIVersion = "jobs.axiomnizam.io/v1"
+	JobKind       = models.JobKind
+	JobAPIVersion = models.JobAPIVersion
 )
 
-// JobSpec is the *desired* state of a background job.
-type JobSpec struct {
-	Type        JobType                `json:"type"`
-	Priority    JobPriority            `json:"priority"`
-	Data        map[string]interface{} `json:"data"`
-	MaxRetries  int                    `json:"maxRetries"`
-	Timeout     time.Duration          `json:"timeout"`
-	Tags        []string               `json:"tags,omitempty"`
-	CallbackURL string                 `json:"callbackUrl,omitempty"`
-	DeadlineAt  time.Time              `json:"deadlineAt,omitempty"`
+// --- Type aliases for backward compatibility ---
 
-	// Schedule, if non-empty, asks the controller to register this job
-	// with a cron-style scheduler instead of submitting it once.
-	Schedule string `json:"schedule,omitempty"`
+type JobStatus = models.JobStatus
+type JobPriority = models.JobPriority
+type JobType = models.JobType
+type JobSpec = models.JobSpec
+type JobResourceStatus = models.JobResourceStatus
+type JobResource = models.JobResource
 
-	// Suspend, when true, prevents the controller from dispatching new
-	// runs of a scheduled job.
-	Suspend bool `json:"suspend,omitempty"`
-}
+// --- JobStatus constants re-exported for backward compatibility ---
+const (
+	JobStatusPending   = models.JobStatusPending
+	JobStatusRunning   = models.JobStatusRunning
+	JobStatusCompleted = models.JobStatusCompleted
+	JobStatusFailed    = models.JobStatusFailed
+	JobStatusCancelled = models.JobStatusCancelled
+	JobStatusRetrying  = models.JobStatusRetrying
+)
 
-// JobResourceStatus extends the canonical ObjectStatus with job-specific
-// lifecycle telemetry.
-type JobResourceStatus struct {
-	resources.ObjectStatus `json:",inline"`
+// --- JobPriority constants re-exported for backward compatibility ---
+const (
+	PriorityLow      = models.PriorityLow
+	PriorityNormal   = models.PriorityNormal
+	PriorityHigh     = models.PriorityHigh
+	PriorityCritical = models.PriorityCritical
+)
 
-	JobStatus   JobStatus              `json:"jobStatus,omitempty"`
-	Retries     int                    `json:"retries"`
-	Error       string                 `json:"error,omitempty"`
-	Result      map[string]interface{} `json:"result,omitempty"`
-	StartedAt   time.Time              `json:"startedAt,omitempty"`
-	CompletedAt time.Time              `json:"completedAt,omitempty"`
-}
-
-// JobResource is the declarative resource for a background job.
-type JobResource struct {
-	resources.TypeMeta   `json:",inline"`
-	resources.ObjectMeta `json:"metadata"`
-
-	Spec   JobSpec           `json:"spec"`
-	Status JobResourceStatus `json:"status"`
-}
-
-// --- resources.Resource ---
-
-func (j *JobResource) GetObjectMeta() *resources.ObjectMeta { return &j.ObjectMeta }
-func (j *JobResource) GetTypeMeta() *resources.TypeMeta     { return &j.TypeMeta }
-func (j *JobResource) GetStatus() *resources.ObjectStatus   { return &j.Status.ObjectStatus }
-func (j *JobResource) SetStatus(s *resources.ObjectStatus) {
-	if s != nil {
-		j.Status.ObjectStatus = *s
-	}
-}
-func (j *JobResource) DeepCopy() resources.Resource {
-	cp := *j
-	return &cp
-}
-
-// --- reconciler.Resource ---
-
-func (j *JobResource) GetKey() string {
-	if j.Namespace == "" {
-		return j.Name
-	}
-	return j.Namespace + "/" + j.Name
-}
-func (j *JobResource) GetGeneration() int64         { return j.Generation }
-func (j *JobResource) GetObservedGeneration() int64 { return j.Status.ObservedGeneration }
+// --- JobType constants re-exported for backward compatibility ---
+const (
+	JobTypeEmail           = models.JobTypeEmail
+	JobTypeReport          = models.JobTypeReport
+	JobTypeDataCleanup     = models.JobTypeDataCleanup
+	JobTypeDataMigration   = models.JobTypeDataMigration
+	JobTypeNotification    = models.JobTypeNotification
+	JobTypeWebhook         = models.JobTypeWebhook
+	JobTypeImageProcessing = models.JobTypeImageProcessing
+	JobTypeBackup          = models.JobTypeBackup
+	JobTypeExport          = models.JobTypeExport
+	JobTypeImport          = models.JobTypeImport
+)
 
 // ToJob converts the declarative resource into the imperative `*Job`
 // shape accepted by `JobManager.Submit`.
-func (j *JobResource) ToJob() *Job {
+func ToJob(j *JobResource) *Job {
 	id := j.UID
 	if id == "" {
 		id = j.Name

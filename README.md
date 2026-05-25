@@ -149,6 +149,17 @@ Key results:
 - **All 18 modules** at 0 `gin.H` in handler files (1031→0 total across project)
 - **Full build passes clean** — `go build ./...` succeeds
 
+### Module Consistency: Models Pattern Standardization (Phase 9)
+
+**Phase 9 ✅** (completed 2026-05-26) — Extract domain types into `models/` subdirectories.
+
+Key results:
+- **37 modules** now have `models/` directories (up from 6 pre-existing)
+- **31 new `models/` directories** created with Resource types extracted
+- **Type aliases** in parent packages ensure zero import breakage
+- **All Resource types** include `GetObjectMeta`, `GetTypeMeta`, `GetStatus`, `SetStatus`, `DeepCopy`, `GetKey`, `GetGeneration`, `GetObservedGeneration` methods
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:

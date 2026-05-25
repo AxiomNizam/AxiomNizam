@@ -1,4 +1,12 @@
 package audit
 
-// Domain Resource types have moved to models/.
-// Type aliases in types.go re-export them for backward compatibility.
+import "example.com/axiomnizam/internal/audit/models"
+
+const (
+	AuditPolicyKind       = models.AuditPolicyKind
+	AuditPolicyAPIVersion = models.AuditPolicyAPIVersion
+)
+
+type AuditPolicySpec = models.AuditPolicySpec
+type AuditPolicyResourceStatus = models.AuditPolicyResourceStatus
+type AuditPolicyResource = models.AuditPolicyResource
