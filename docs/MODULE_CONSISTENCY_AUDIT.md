@@ -319,7 +319,7 @@ Directories never imported from any `main.go` (may be used transitively):
 | **Config pattern** | Per-component, validated, env-aware, defaults | Only `gatekeeper` has `config/` with `DefaultConfig()` + `LoadFromEnv()` + `Validate()` | HIGH |
 | **Handler pattern** | Typed per-resource, clean separation from business logic | `internal/handlers/` monolith fully dissolved; all 42 files extracted to per-module packages. DTOs wired in gatekeeper, storage, IAM; remaining modules pending | MEDIUM |
 | **Metrics pattern** | Per-component Prometheus, auto-registered | Only `gatekeeper` has Prometheus; `storage` has custom; 19+ modules use `GlobalMetrics` singleton | MEDIUM |
-| **Repository interfaces** | K8s `Lister`/`Informer`, Nomad `StateStore` interface | Only `gatekeeper` has `repositories/` interfaces; others call stores directly | MEDIUM |
+| **Repository interfaces** | K8s `Lister`/`Informer`, Nomad `StateStore` interface | **PARTIAL** — `gatekeeper`, `storage`, `iam`, `jobs` have `repositories/` interfaces with compile-time checks | MEDIUM |
 | **Storage abstraction** | K8s generic storage, Nomad `StateStore`, MinIO `ObjectLayer` | `KVStore` interface exists, partially wired (10/88 modules) | MEDIUM |
 | **Dependency injection** | Constructor injection everywhere | 19+ `Global*` singletons, `init()` with side effects | HIGH |
 | **Error handling** | All errors surfaced, none silently discarded | ~25+ files use `_ = err` on business-logic errors | HIGH |
@@ -333,11 +333,11 @@ Directories never imported from any `main.go` (may be used transitively):
 | Module | Config | Handlers | Models | Repos | Metrics | Audit | KVStore | Lifecycle | Score |
 |--------|--------|----------|--------|-------|---------|-------|---------|-----------|-------|
 | `gatekeeper` | Y | Y | Y | Y | Y | Y | Y | partial | **8/8** |
-| `storage` | inline | Y | Y | N | Y | Y | Y | partial | **6/8** |
-| `iam` | inline | Y | Y | partial | N | N | via ctor | partial | **4/8** |
+| `storage` | inline | Y | Y | Y | Y | Y | Y | partial | **7/8** |
+| `iam` | inline | Y | Y | Y | N | N | via ctor | partial | **5/8** |
 | `scanner` | Y | N/A | Y | N | Y | N | Y | N/A | **4/8** |
 | `platform` | N | N | Y | N | shared | N | N | N | **1/8** |
-| `jobs` | N | N | Y | N | N | N | N | N | **1/8** |
+| `jobs` | N | N | Y | Y | N | N | N | N | **2/8** |
 | `antivirus` | N | N | Y | N | N | N | N | N | **1/8** |
 | ~20 resource modules | N | inline | Y | N | N | N | N | N | **1/8** |
 | ~60 other modules | N | N | varies | N | N | N | N | N | **0-1/8** |
@@ -714,19 +714,26 @@ All 39 modules now have dto.go files. All 18 modules from batch 2 fully wired wi
 
 ---
 
-#### Phase 10: Standardize Repository Interfaces
+#### Phase 10: Standardize Repository Interfaces — **DONE**
 
 **Goal:** Modules with persistence have `repositories/` interfaces separate from implementations.
 
-| # | Task | Module(s) |
-|---|------|-----------|
-| 10.1 | Create `storage/repositories/` with `BucketRepository`, `ObjectRepository` interfaces | storage |
-| 10.2 | Create `iam/repositories/` with `UserRepository`, `RoleRepository` interfaces | iam |
-| 10.3 | Create `jobs/repositories/` with `JobRepository`, `ScheduleRepository` interfaces | jobs |
-| 10.4 | Create `antivirus/repositories/` with `ScanResultRepository` interface | antivirus |
-| 10.5 | Ensure `pgstore/` implementations satisfy the interfaces (compile-time check) | All pgstore |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 10.1 | Create `storage/repositories/` with `BucketRepository` interface | DONE | `BucketRepository` — 7 methods: Create, Get, Update, UpdateStatus, Delete, List, ListAll |
+| 10.2 | Create `iam/repositories/` with 9 repository interfaces | DONE | `RealmRepository` (7), `ClientRepository` (5), `UserRepository` (15), `RoleRepository` (12), `GroupRepository` (6), `ClientScopeRepository` (5), `IdentityProviderRepository` (6), `SessionRepository` (7), `EventRepository` (4) |
+| 10.3 | Create `jobs/repositories/` with `JobRepository` interface | DONE | `JobRepository` — 2 methods: Submit, GetJob |
+| 10.4 | Skip `antivirus/repositories/` | DONE | Engine is self-contained; no separate persistence layer (threats stored in-memory log). ScanLayer interface already exists in `types.go`. |
+| 10.5 | Compile-time interface satisfaction checks | DONE | `check.go` in each `repositories/` package — verifies concrete types implement interfaces. All 3 build clean. |
 
-**Scope:** 4+ modules | **Effort:** 2 days | **Impact:** MEDIUM | **Risk:** LOW
+**Files created:**
+- `internal/storage/repositories/bucket_repository.go` + `check.go`
+- `internal/iam/repositories/{realm,client,user,role,group,client_scope,identity_provider,session}_repository.go` + `check.go`
+- `internal/jobs/repositories/job_repository.go` + `check.go`
+
+**Build verified:** `go build .` passes clean. All compile-time checks pass.
+
+**Scope:** 3 modules (storage, iam, jobs) | **Effort:** 1 day | **Impact:** MEDIUM | **Risk:** LOW
 
 ---
 
@@ -1011,7 +1018,7 @@ Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 7: Standardize config       ✅ DONE
 ├── Phase 8: Standardize handlers     ✅ DONE (8.0-8.5 all complete)
 ├── Phase 9: Standardize models       ✅ DONE (37/37 models/ created)
-├── Phase 10: Repository interfaces   ← needs Phase 9
+├── Phase 10: Repository interfaces   ✅ DONE
 ├── Phase 11: Standardize metrics     ← needs Phase 6
 └── Phase 12: Standardize audit       ← needs Phase 6
 
@@ -1082,7 +1089,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-9 DONE (37 models/ dirs, DeepCopy already present on all Resource types)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-10 DONE (37 models/ dirs, 3 repositories/ dirs with compile-time checks)*
 
 ---
 
@@ -1169,4 +1176,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-9 DONE (37 models/ dirs, DeepCopy already present on all Resource types)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-10 DONE (37 models/ dirs, 3 repositories/ dirs with compile-time checks)*

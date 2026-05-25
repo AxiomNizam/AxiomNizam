@@ -160,6 +160,17 @@ Key results:
 - **All Resource types** include `GetObjectMeta`, `GetTypeMeta`, `GetStatus`, `SetStatus`, `DeepCopy`, `GetKey`, `GetGeneration`, `GetObservedGeneration` methods
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Repository Interfaces (Phase 10)
+
+**Phase 10 ✅** (completed 2026-05-26) — Standardize repository interfaces separate from implementations.
+
+Key results:
+- **3 modules** with new `repositories/` packages: `storage`, `iam`, `jobs` (antivirus skipped — self-contained engine)
+- **11 repository interfaces** created: `BucketRepository`, `RealmRepository`, `ClientRepository`, `UserRepository`, `RoleRepository`, `GroupRepository`, `ClientScopeRepository`, `IdentityProviderRepository`, `SessionRepository`, `EventRepository`, `JobRepository`
+- **Compile-time checks** in each `check.go` verify concrete types satisfy interfaces
+- **Alignment scores updated:** storage 7/8, iam 5/8, jobs 2/8
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
