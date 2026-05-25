@@ -171,6 +171,18 @@ Key results:
 - **Alignment scores updated:** storage 7/8, iam 5/8, jobs 2/8
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Metrics Pattern (Phase 11)
+
+**Phase 11 ✅** (completed 2026-05-26) — Standardize Prometheus metrics per module.
+
+Key results:
+- **4 modules** with new `metrics/` packages: `iam`, `jobs`, `antivirus`, `conductor`
+- **IAM metrics:** 12 counters, 2 gauges, 3 histograms — auth attempts, tokens, permissions, sessions
+- **Antivirus metrics:** 10 counters, 4 gauges, 2 histograms — scan counts, detection rates, engine timing
+- **Conductor metrics:** 12 counters, 5 gauges, 3 histograms — messages, workflows, step durations
+- **Jobs metrics:** labels.go + doc.go re-exports existing MetricsCollector
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:

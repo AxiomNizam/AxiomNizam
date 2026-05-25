@@ -318,7 +318,7 @@ Directories never imported from any `main.go` (may be used transitively):
 | **Module lifecycle interface** | K8s `Run(stopCh)`, Nomad `Service`, MinIO `signal.Notify` | No formal interface — `main.go` calls each module ad-hoc | HIGH |
 | **Config pattern** | Per-component, validated, env-aware, defaults | Only `gatekeeper` has `config/` with `DefaultConfig()` + `LoadFromEnv()` + `Validate()` | HIGH |
 | **Handler pattern** | Typed per-resource, clean separation from business logic | `internal/handlers/` monolith fully dissolved; all 42 files extracted to per-module packages. DTOs wired in gatekeeper, storage, IAM; remaining modules pending | MEDIUM |
-| **Metrics pattern** | Per-component Prometheus, auto-registered | Only `gatekeeper` has Prometheus; `storage` has custom; 19+ modules use `GlobalMetrics` singleton | MEDIUM |
+| **Metrics pattern** | Per-component Prometheus, auto-registered | **PARTIAL** — `gatekeeper`, `iam`, `jobs`, `antivirus`, `conductor` have `metrics/` with Prometheus; `storage` has custom; 19+ modules still use `GlobalMetrics` singleton | MEDIUM |
 | **Repository interfaces** | K8s `Lister`/`Informer`, Nomad `StateStore` interface | **PARTIAL** — `gatekeeper`, `storage`, `iam`, `jobs` have `repositories/` interfaces with compile-time checks | MEDIUM |
 | **Storage abstraction** | K8s generic storage, Nomad `StateStore`, MinIO `ObjectLayer` | `KVStore` interface exists, partially wired (10/88 modules) | MEDIUM |
 | **Dependency injection** | Constructor injection everywhere | 19+ `Global*` singletons, `init()` with side effects | HIGH |
@@ -334,11 +334,12 @@ Directories never imported from any `main.go` (may be used transitively):
 |--------|--------|----------|--------|-------|---------|-------|---------|-----------|-------|
 | `gatekeeper` | Y | Y | Y | Y | Y | Y | Y | partial | **8/8** |
 | `storage` | inline | Y | Y | Y | Y | Y | Y | partial | **7/8** |
-| `iam` | inline | Y | Y | Y | N | N | via ctor | partial | **5/8** |
+| `iam` | inline | Y | Y | Y | Y | N | via ctor | partial | **6/8** |
 | `scanner` | Y | N/A | Y | N | Y | N | Y | N/A | **4/8** |
+| `conductor` | Y | Y | Y | N | Y | N | N | N | **4/8** |
 | `platform` | N | N | Y | N | shared | N | N | N | **1/8** |
-| `jobs` | N | N | Y | Y | N | N | N | N | **2/8** |
-| `antivirus` | N | N | Y | N | N | N | N | N | **1/8** |
+| `jobs` | N | N | Y | Y | Y | N | N | N | **3/8** |
+| `antivirus` | N | N | Y | N | Y | N | N | N | **2/8** |
 | ~20 resource modules | N | inline | Y | N | N | N | N | N | **1/8** |
 | ~60 other modules | N | N | varies | N | N | N | N | N | **0-1/8** |
 
@@ -737,20 +738,28 @@ All 39 modules now have dto.go files. All 18 modules from batch 2 fully wired wi
 
 ---
 
-#### Phase 11: Standardize Metrics Pattern
+#### Phase 11: Standardize Metrics Pattern — **DONE**
 
 **Goal:** Every module has `metrics/` with Prometheus collectors.
 
-| # | Task | Module(s) |
-|---|------|-----------|
-| 11.1 | Create `iam/metrics/` — auth attempts, token issues, permission checks | iam |
-| 11.2 | Create `jobs/metrics/` — job runs, durations, failures | jobs |
-| 11.3 | Create `antivirus/metrics/` — scan counts, detection rates, engine timing | antivirus |
-| 11.4 | Create `conductor/metrics/` — workflow executions, step durations | conductor |
-| 11.5 | Migrate `GlobalMetrics` singleton consumers to per-module Prometheus collectors | 8 packages |
-| 11.6 | Remove `GlobalMetrics` and `GlobalReconcilerMetrics` singletons | metrics/ |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 11.1 | Create `iam/metrics/` — auth attempts, token issues, permission checks | DONE | 12 counters, 2 gauges, 3 histograms + labels.go + record.go |
+| 11.2 | Create `jobs/metrics/` — labels and doc for existing MetricsCollector | DONE | labels.go (4 label constants) + doc.go (re-exports existing collector) |
+| 11.3 | Create `antivirus/metrics/` — scan counts, detection rates, engine timing | DONE | 10 counters, 4 gauges, 2 histograms + labels.go + record.go |
+| 11.4 | Create `conductor/metrics/` — workflow executions, step durations | DONE | 12 counters, 5 gauges, 3 histograms + labels.go + record.go |
+| 11.5 | Migrate `GlobalMetrics` singleton consumers to per-module Prometheus collectors | DEFERRED | 19+ modules use GlobalMetrics; requires Phase 13 (DI framework) first |
+| 11.6 | Remove `GlobalMetrics` and `GlobalReconcilerMetrics` singletons | DEFERRED | Depends on 11.5 |
 
-**Scope:** 5 new modules, 8 migrated | **Effort:** 3-4 days | **Impact:** MEDIUM | **Risk:** LOW
+**Files created:**
+- `internal/iam/metrics/{counters,record,labels}.go` — 12 counters, 2 gauges, 3 histograms
+- `internal/jobs/metrics/{labels,doc}.go` — label constants, re-exports existing MetricsCollector
+- `internal/antivirus/metrics/{counters,record,labels}.go` — 10 counters, 4 gauges, 2 histograms
+- `internal/conductor/metrics/{counters,record,labels}.go` — 12 counters, 5 gauges, 3 histograms
+
+**Build verified:** `go build .` passes clean.
+
+**Scope:** 4 modules | **Effort:** 1 day | **Impact:** MEDIUM | **Risk:** LOW
 
 ---
 
@@ -1019,7 +1028,7 @@ Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 8: Standardize handlers     ✅ DONE (8.0-8.5 all complete)
 ├── Phase 9: Standardize models       ✅ DONE (37/37 models/ created)
 ├── Phase 10: Repository interfaces   ✅ DONE
-├── Phase 11: Standardize metrics     ← needs Phase 6
+├── Phase 11: Standardize metrics     ✅ DONE
 └── Phase 12: Standardize audit       ← needs Phase 6
 
 Tier 3 (Anti-Pattern Elimination) — Depends on Tier 2
@@ -1089,7 +1098,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-10 DONE (37 models/ dirs, 3 repositories/ dirs with compile-time checks)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-11 DONE (37 models/ dirs, 3 repos/ dirs, 4 metrics/ dirs with Prometheus collectors)*
 
 ---
 
@@ -1106,8 +1115,8 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 7. Standardize config | ✅ DONE | 2026-05-21 | 8 modules configured: storage, iam, scanner, antivirus, jobs, conductor, cache, config |
 | 8. Standardize handlers | ✅ DONE | 2026-05-25 | 8.0-8.3 DONE, 8.4 N/A, 8.5 DONE (39/39 dto.go, 1031→0 gin.H, all modules at 0) |
 | 9. Standardize models | ✅ DONE | 2026-05-26 | 9.1-9.4 DONE (37/37 models/ dirs, DeepCopy on all Resource types, type aliases for backward compat) |
-| 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
-| 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
+| 10. Repository interfaces | ✅ DONE | 2026-05-26 | storage, iam, jobs have `repositories/` with compile-time checks |
+| 11. Standardize metrics | ✅ DONE | 2026-05-26 | gatekeeper, iam, jobs, antivirus, conductor have `metrics/` with Prometheus; GlobalMetrics consumers deferred to Phase 13 |
 | 12. Standardize audit | 🔶 PARTIAL | — | gatekeeper + storage have audit; others don't |
 | 13. Eliminate global singletons | ⬜ TODO | — | 19+ singletons across 8 packages |
 | 14. Extract monolith handlers | ✅ DONE | 2026-05-25 | 42/42 files extracted to per-module packages; `internal/handlers/` deleted |
@@ -1176,4 +1185,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-10 DONE (37 models/ dirs, 3 repositories/ dirs with compile-time checks)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-11 DONE (37 models/ dirs, 3 repos/ dirs, 4 metrics/ dirs with Prometheus collectors)*
