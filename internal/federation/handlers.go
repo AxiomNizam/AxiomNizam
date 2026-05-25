@@ -70,7 +70,7 @@ func (h *FederationHandlers) ListVirtualTables(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"virtualTables": tables, "count": len(tables)})
+	c.JSON(http.StatusOK, VirtualTableListResponse{VirtualTables: tables, Count: len(tables)})
 }
 
 func (h *FederationHandlers) GetVirtualTable(c *gin.Context) {
@@ -196,7 +196,7 @@ func (h *FederationHandlers) ExecuteQuery(c *gin.Context) {
 			if h.queryStore != nil {
 				_ = h.queryStore.Create(c.Request.Context(), query)
 			}
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "queryId": query.Name})
+			c.JSON(http.StatusBadRequest, QueryErrorResponse{Error: err.Error(), QueryID: query.Name})
 			return
 		}
 		query.Status.Plan = plan
@@ -214,12 +214,12 @@ func (h *FederationHandlers) ExecuteQuery(c *gin.Context) {
 		_ = h.queryStore.Create(c.Request.Context(), query)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"queryId":  query.Name,
-		"status":   query.Status.QueryStatus,
-		"plan":     query.Status.Plan,
-		"duration": fmt.Sprintf("%dms", query.Status.DurationMs),
-		"sources":  query.Status.SourcesQueried,
+	c.JSON(http.StatusOK, QueryExecResponse{
+		QueryID:  query.Name,
+		Status:   query.Status.QueryStatus,
+		Plan:     query.Status.Plan,
+		Duration: fmt.Sprintf("%dms", query.Status.DurationMs),
+		Sources:  query.Status.SourcesQueried,
 	})
 }
 
@@ -249,10 +249,7 @@ func (h *FederationHandlers) ExplainQuery(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"plan":    plan,
-		"sources": sources,
-	})
+	c.JSON(http.StatusOK, ExplainResponse{Plan: plan, Sources: sources})
 }
 
 func (h *FederationHandlers) ListQueries(c *gin.Context) {
@@ -262,7 +259,7 @@ func (h *FederationHandlers) ListQueries(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"queries": queries, "count": len(queries)})
+	c.JSON(http.StatusOK, QueryListResponse{Queries: queries, Count: len(queries)})
 }
 
 func (h *FederationHandlers) GetQuery(c *gin.Context) {

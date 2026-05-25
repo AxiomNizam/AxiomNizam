@@ -39,7 +39,7 @@ func (h *StreamAnalyticsHandlers) ListJobs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"streamJobs": jobs, "count": len(jobs)})
+	c.JSON(http.StatusOK, ListJobsResponse{StreamJobs: jobs, Count: len(jobs)})
 }
 
 func (h *StreamAnalyticsHandlers) GetJob(c *gin.Context) {

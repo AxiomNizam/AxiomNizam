@@ -540,7 +540,7 @@ These bring all modules toward the gatekeeper reference architecture.
 
 ---
 
-#### Phase 8: Standardize Handler Pattern — **IN PROGRESS**
+#### Phase 8: Standardize Handler Pattern — **DONE**
 
 **Goal:** Every module has `handlers/` with typed DTOs, mappers, clean request/response.
 
@@ -551,24 +551,21 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
 | 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | **DONE** (42/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
-| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **IN PROGRESS** — 39/39 dto.go files created; 1031→195 gin.H (81% reduction); error/ack + list/progress DTOs wired; complex success DTOs remaining |
+| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **DONE** — 39/39 dto.go files created; 1031→0 gin.H (100% reduction); all success + error DTOs wired |
 
 **Scope:** 39 modules, ~1031 gin.H occurrences | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** MEDIUM
 
-**Phase 8.5 progress (2026-05-25):**
+**Phase 8.5 — DONE (2026-05-25):**
 
-DTO sweep — all 39 modules addressed across 2 batches:
+DTO sweep — all 39 modules addressed across 3 batches:
 
-**Fully wired (dto.go + all gin.H replaced in handlers): 17 modules**
-`antivirus` (dto+mapper), `tenant` (dto+mapper), `bulk` (dto+mapper), `webhooks`, `conductor`, `eventbus`, `export`, `lineage`, `streaming`, `alerting`, `contracts`, `costing`, `tracing`, `versioning`, `mlpipeline`, `notification`, `audit`
-
-**DTO created (error responses wired, resource CRUD gin.H remaining): 18 modules**
-`anonymization`, `cdc`, `featurestore`, `federation`, `rbac`, `security`, `governance`, `schemaregistry`, `database`, `datasource`, `encryption`, `jobs`, `netintel`, `quality`, `resources`, `slo`, `catalog`, `streamanalytics`
+**Fully wired (dto.go + all gin.H replaced in handlers): 35 modules**
+`antivirus` (dto+mapper), `tenant` (dto+mapper), `bulk` (dto+mapper), `webhooks`, `conductor`, `eventbus`, `export`, `lineage`, `streaming`, `alerting`, `contracts`, `costing`, `tracing`, `versioning`, `mlpipeline`, `notification`, `audit`, `anonymization`, `cdc`, `featurestore`, `federation`, `rbac`, `security`, `governance`, `schemaregistry`, `database`, `datasource`, `encryption`, `jobs`, `netintel`, `quality`, `resources`, `slo`, `catalog`, `streamanalytics`
 
 **N/A (already use typed response structs): 4 modules**
 `gis` (uses typed structs), `integration` (uses models.Response), `iam/authn` (mixed models.Response), `iam/users` (mixed models.Response)
 
-All 39 modules now have dto.go files. Full project build passes clean. Remaining handler wiring (replacing resource CRUD `gin.H` with DTOs in the 18 partially-wired modules) can be done incrementally.
+All 39 modules now have dto.go files. All 18 modules from batch 2 fully wired with 0 gin.H remaining. Full project build passes clean (`go build ./...`).
 
 **Key changes (2026-05-20):**
 - `gatekeeper/handlers/http.go` — rewrote all 15 handlers to use named DTOs from `dto.go` and mappers from `mapper.go`; fixed VerifyChallengeRequest to use string (matches service contract)
@@ -1010,7 +1007,7 @@ Tier 1 (Critical Fixes) — Independent, any order
 Tier 2 (Structural Alignment) — Sequential dependency
 ├── Phase 6: Module lifecycle interface ✅
 ├── Phase 7: Standardize config       ✅ DONE
-├── Phase 8: Standardize handlers     ← 8.0-8.3 DONE; 8.4-8.5 PENDING
+├── Phase 8: Standardize handlers     ✅ DONE (8.0-8.5 all complete)
 ├── Phase 9: Standardize models       ← needs Phase 6
 ├── Phase 10: Repository interfaces   ← needs Phase 9
 ├── Phase 11: Standardize metrics     ← needs Phase 6
@@ -1018,7 +1015,7 @@ Tier 2 (Structural Alignment) — Sequential dependency
 
 Tier 3 (Anti-Pattern Elimination) — Depends on Tier 2
 ├── Phase 13: Kill singletons         ← needs Phase 6 (DI framework)
-├── Phase 14: Extract monolith handlers ← needs Phase 8
+├── Phase 14: Extract monolith handlers ✅ DONE (42/42 extracted)
 ├── Phase 15: system.go bootstrap     ← needs Phases 7-12
 ├── Phase 16: Central type package    ← needs Phase 9
 ├── Phase 17: Typed errors            ← independent
@@ -1083,7 +1080,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 1031→195 gin.H, 81% reduction)*
+*Last updated: 2026-05-25 (UTC+6) — Phases 1-8 DONE, Phase 8 complete (8.0-8.5 DONE, 1031→0 gin.H, 100% reduction)*
 
 ---
 
@@ -1098,7 +1095,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 5. KV persistence gaps | ✅ DONE | 2026-05-19 | All modules wired; keys standardized; dead fields removed |
 | 6. Module lifecycle interface | ✅ DONE | 2026-05-19 | `contracts.Module` interface + 6 modules wired + registry in main.go |
 | 7. Standardize config | ✅ DONE | 2026-05-21 | 8 modules configured: storage, iam, scanner, antivirus, jobs, conductor, cache, config |
-| 8. Standardize handlers | 🔶 PARTIAL | — | 8.0-8.3 DONE, 8.4 N/A, 8.5 IN PROGRESS (dto.go created, error patterns done, success DTOs remaining) |
+| 8. Standardize handlers | ✅ DONE | 2026-05-25 | 8.0-8.3 DONE, 8.4 N/A, 8.5 DONE (39/39 dto.go, 1031→0 gin.H, all modules at 0) |
 | 9. Standardize models | 🔶 PARTIAL | — | Some modules have models, not standardized |
 | 10. Repository interfaces | 🔶 PARTIAL | — | Only gatekeeper has `repositories/` interfaces |
 | 11. Standardize metrics | 🔶 PARTIAL | — | gatekeeper has Prometheus; others use GlobalMetrics |
@@ -1170,4 +1167,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 39/39 dto.go, 1031→195 gin.H, 81% reduction)*
+*Last updated: 2026-05-25 (UTC+6) — Phases 1-8 DONE, Phase 8 complete (8.0-8.5 DONE, 1031→0 gin.H, 100% reduction)*

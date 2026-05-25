@@ -36,13 +36,13 @@ func (h *RLSHandler) CheckRowAccess(c *gin.Context) {
 	allowed := true
 	reason := "Access allowed"
 
-	c.JSON(http.StatusOK, gin.H{
-		"user_id":   userID,
-		"table":     tableID,
-		"operation": req.Operation,
-		"allowed":   allowed,
-		"reason":    reason,
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, CheckRowAccessResponse{
+		UserID:    userID,
+		Table:     tableID,
+		Operation: req.Operation,
+		Allowed:   allowed,
+		Reason:    reason,
+		Timestamp: time.Now(),
 	})
 }
 
@@ -50,23 +50,23 @@ func (h *RLSHandler) CheckRowAccess(c *gin.Context) {
 func (h *RLSHandler) ListPolicies(c *gin.Context) {
 	tableID := c.Param("table")
 
-	c.JSON(http.StatusOK, gin.H{
-		"table":     tableID,
-		"policies":  []map[string]interface{}{},
-		"count":     0,
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, ListPoliciesResponse{
+		Table:     tableID,
+		Policies:  []map[string]interface{}{},
+		Count:     0,
+		Timestamp: time.Now(),
 	})
 }
 
 // GetSecurityStats gets security statistics.
 func (h *RLSHandler) GetSecurityStats(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"total_policies": 10,
-		"active_users":   100,
-		"access_allowed": 5000,
-		"access_denied":  50,
-		"denial_rate":    0.01,
-		"audit_log_size": 5050,
-		"timestamp":      time.Now(),
+	c.JSON(http.StatusOK, SecurityStatsResponse{
+		TotalPolicies: 10,
+		ActiveUsers:   100,
+		AccessAllowed: 5000,
+		AccessDenied:  50,
+		DenialRate:    0.01,
+		AuditLogSize:  5050,
+		Timestamp:     time.Now(),
 	})
 }

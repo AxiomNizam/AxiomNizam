@@ -6,3 +6,9 @@ type MessageResponse struct {
 	Message string `json:"message,omitempty"`
 	Name    string `json:"name,omitempty"`
 }
+
+// ListJobsResponse is the typed response for ListJobs.
+type ListJobsResponse struct {
+	StreamJobs []*StreamJobResource `json:"streamJobs"`
+	Count      int                  `json:"count"`
+}

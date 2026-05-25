@@ -138,6 +138,17 @@ Phases:
 - **Phase 5 ✅** — Wire remaining: jobs, etl, cdc, policies, datasource, iam/users, apiscanner
 - **Phase 6 ⚠️** — GIS, analytics, transform, notification, netintel done. Only api_builder remains (dedicated sprint)
 
+### Module Consistency: Handler Pattern Standardization (Phase 8)
+
+**Phase 8 ✅** (completed 2026-05-25) — Standardize Handler Pattern: replace `gin.H` map literals with typed response structs.
+
+Key results:
+- **18 modules** processed: `cdc`, `encryption`, `jobs`, `netintel`, `security`, `schemaregistry`, `database`, `quality`, `datasource`, `federation`, `rbac`, `catalog`, `governance`, `featurestore`, `anonymization`, `streamanalytics`, `resources`, `slo`
+- **175 `gin.H` occurrences** replaced with typed DTOs across all handler files
+- **39/39 dto.go files** created or extended with response structs
+- **All 18 modules** at 0 `gin.H` in handler files (1031→0 total across project)
+- **Full build passes clean** — `go build ./...` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:

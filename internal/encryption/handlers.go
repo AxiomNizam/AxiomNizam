@@ -77,7 +77,7 @@ func (h *EncryptionHandler) ListKeys(c *gin.Context) {
 		key.KeyMaterial = ""
 	}
 
-	c.JSON(http.StatusOK, gin.H{"keys": keys, "count": len(keys)})
+	c.JSON(http.StatusOK, KeyListResponse{Keys: keys, Count: len(keys)})
 }
 
 // RotateKey handles POST /api/v1/encryption/keys/:id/rotate
@@ -181,7 +181,7 @@ func (h *EncryptionHandler) CreatePolicy(c *gin.Context) {
 // ListPolicies handles GET /api/v1/encryption/policies
 func (h *EncryptionHandler) ListPolicies(c *gin.Context) {
 	// Retrieve policies (to be implemented)
-	c.JSON(http.StatusOK, gin.H{"policies": []interface{}{}, "count": 0})
+	c.JSON(http.StatusOK, PolicyListResponse{Policies: []interface{}{}, Count: 0})
 }
 
 // RegisterEncryptionRoutes registers all encryption routes

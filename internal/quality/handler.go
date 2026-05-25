@@ -30,11 +30,11 @@ func (h *Handler) ValidateData(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "validated",
-		"table":     req.TableName,
-		"record":    req.Record,
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, ValidateDataResponse{
+		Status:    "validated",
+		Table:     req.TableName,
+		Record:    req.Record,
+		Timestamp: time.Now(),
 	})
 }
 
@@ -52,22 +52,22 @@ func (h *Handler) DetectAnomalies(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"table":      tableName,
-		"field":      req.Field,
-		"anomalies":  []map[string]interface{}{},
-		"timestamp":  time.Now(),
+	c.JSON(http.StatusOK, DetectAnomaliesResponse{
+		Table:     tableName,
+		Field:     req.Field,
+		Anomalies: []map[string]interface{}{},
+		Timestamp: time.Now(),
 	})
 }
 
 // GetQualityMetrics gets quality metrics.
 func (h *Handler) GetQualityMetrics(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"total_checks":    1000,
-		"passed_checks":   950,
-		"failed_checks":   50,
-		"anomalies_found": 5,
-		"quality_score":   95.0,
-		"timestamp":       time.Now(),
+	c.JSON(http.StatusOK, QualityMetricsResponse{
+		TotalChecks:    1000,
+		PassedChecks:   950,
+		FailedChecks:   50,
+		AnomaliesFound: 5,
+		QualityScore:   95.0,
+		Timestamp:      time.Now(),
 	})
 }

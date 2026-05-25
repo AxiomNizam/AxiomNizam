@@ -105,7 +105,7 @@ func (h *SchemaRegistryHandlers) ListVersions(c *gin.Context) {
 	}
 
 	if len(versions) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "subject not found", "subject": subject})
+		c.JSON(http.StatusNotFound, SubjectNotFoundResponse{Error: "subject not found", Subject: subject})
 		return
 	}
 
@@ -163,13 +163,13 @@ func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"subject":    found.Spec.Subject,
-		"version":    found.Status.Version,
-		"id":         found.Status.SchemaID,
-		"schemaType": found.Spec.SchemaType,
-		"schema":     found.Spec.Schema,
-		"references": found.Spec.References,
+	c.JSON(http.StatusOK, SchemaDetailResponse{
+		Subject:    found.Spec.Subject,
+		Version:    found.Status.Version,
+		ID:         found.Status.SchemaID,
+		SchemaType: string(found.Spec.SchemaType),
+		Schema:     found.Spec.Schema,
+		References: found.Spec.References,
 	})
 }
 
@@ -248,7 +248,7 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 		}
 		if createErr := h.subjectStore.Create(ctx, subj); createErr != nil {
 			logging.Z().Warn("handler error", zap.String("op", "RegisterSchema.createSubject"), zap.Error(createErr))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create subject", "detail": createErr.Error()})
+			c.JSON(http.StatusInternalServerError, DetailErrorResponse{Error: "failed to create subject", Detail: createErr.Error()})
 			return
 		}
 	}
@@ -261,10 +261,10 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 	}
 
 	// Return 202 — reconciler will process compatibility.
-	c.JSON(http.StatusAccepted, gin.H{
-		"name":    schemaName,
-		"subject": subject,
-		"message": "schema submitted for compatibility validation",
+	c.JSON(http.StatusAccepted, SchemaRegisteredResponse{
+		Name:    schemaName,
+		Subject: subject,
+		Message: "schema submitted for compatibility validation",
 	})
 }
 
@@ -300,7 +300,7 @@ func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to delete schema"})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"version": version, "deleted": true})
+			c.JSON(http.StatusOK, VersionDeletedResponse{Version: version, Deleted: true})
 			return
 		}
 	}
@@ -331,17 +331,17 @@ func (h *SchemaRegistryHandlers) GetSchemaByID(c *gin.Context) {
 
 	for _, s := range schemas {
 		if s.Status.SchemaID == id {
-			c.JSON(http.StatusOK, gin.H{
-				"schema":     s.Spec.Schema,
-				"schemaType": s.Spec.SchemaType,
-				"subject":    s.Spec.Subject,
-				"version":    s.Status.Version,
+			c.JSON(http.StatusOK, SchemaByIDResponse{
+				Schema:     s.Spec.Schema,
+				SchemaType: string(s.Spec.SchemaType),
+				Subject:    s.Spec.Subject,
+				Version:    s.Status.Version,
 			})
 			return
 		}
 	}
 
-	c.JSON(http.StatusNotFound, gin.H{"error": "schema not found", "id": id})
+	c.JSON(http.StatusNotFound, SchemaIDNotFoundResponse{Error: "schema not found", ID: id})
 }
 
 // SetSubjectCompatibility updates the compatibility mode for a subject.
@@ -376,7 +376,7 @@ func (h *SchemaRegistryHandlers) SetSubjectCompatibility(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"compatibility": req.Compatibility})
+	c.JSON(http.StatusOK, CompatibilityResponse{Compatibility: req.Compatibility})
 }
 
 // GetSubjectCompatibility returns the compatibility mode for a subject.
@@ -393,8 +393,8 @@ func (h *SchemaRegistryHandlers) GetSubjectCompatibility(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"compatibility": subj.Spec.Compatibility,
+	c.JSON(http.StatusOK, CompatibilityResponse{
+		Compatibility: string(subj.Spec.Compatibility),
 	})
 }
 
@@ -474,8 +474,8 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 
 	errors := h.checker.CheckCompatibility(req.Schema, target.Spec.Schema, schemaType, compatMode)
 
-	c.JSON(http.StatusOK, gin.H{
-		"is_compatible": len(errors) == 0,
-		"errors":        errors,
+	c.JSON(http.StatusOK, CompatibilityCheckResponse{
+		IsCompatible: len(errors) == 0,
+		Errors:       errors,
 	})
 }

@@ -67,9 +67,9 @@ func (h *Phase3Handlers) RegisterEncryptionKey(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "encryption key registered",
-		"key_id":  req.KeyID,
+	c.JSON(http.StatusOK, KeyRegisteredResponse{
+		Message: "encryption key registered",
+		KeyID:   req.KeyID,
 	})
 }
 
@@ -107,10 +107,10 @@ func (h *Phase3Handlers) AddEncryptionPolicy(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "encryption policy added",
-		"table":   req.TableName,
-		"column":  req.ColumnName,
+	c.JSON(http.StatusOK, PolicyAddedResponse{
+		Message: "encryption policy added",
+		Table:   req.TableName,
+		Column:  req.ColumnName,
 	})
 }
 
@@ -134,10 +134,10 @@ func (h *Phase3Handlers) EncryptFieldValue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"encrypted_data": encrypted.EncryptedValue,
-		"iv":             encrypted.IV,
-		"key_id":         encrypted.KeyID,
+	c.JSON(http.StatusOK, EncryptedFieldResponse{
+		EncryptedData: encrypted.EncryptedValue,
+		IV:            encrypted.IV,
+		KeyID:         encrypted.KeyID,
 	})
 }
 
@@ -170,8 +170,8 @@ func (h *Phase3Handlers) DecryptFieldValue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"decrypted_value": decrypted,
+	c.JSON(http.StatusOK, DecryptedFieldResponse{
+		DecryptedValue: decrypted,
 	})
 }
 
@@ -197,9 +197,9 @@ func (h *Phase3Handlers) RotateEncryptionKey(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "encryption key rotated",
-		"key_id":  keyID,
+	c.JSON(http.StatusOK, KeyRotatedResponse{
+		Message: "encryption key rotated",
+		KeyID:   keyID,
 	})
 }
 
@@ -207,18 +207,14 @@ func (h *Phase3Handlers) RotateEncryptionKey(c *gin.Context) {
 func (h *Phase3Handlers) GetEncryptionMetrics(c *gin.Context) {
 	metrics := h.encryptionMgr.GetEncryptionMetrics()
 
-	c.JSON(http.StatusOK, gin.H{
-		"metrics": metrics,
-	})
+	c.JSON(http.StatusOK, MetricsResponse{Metrics: metrics})
 }
 
 // GetEncryptionStatus gets encryption status
 func (h *Phase3Handlers) GetEncryptionStatus(c *gin.Context) {
 	metrics := h.encryptionMgr.GetEncryptionMetrics()
 
-	c.JSON(http.StatusOK, gin.H{
-		"metrics": metrics,
-	})
+	c.JSON(http.StatusOK, MetricsResponse{Metrics: metrics})
 }
 
 // ========== LINEAGE ENDPOINTS ==========
@@ -250,9 +246,9 @@ func (h *Phase3Handlers) RegisterDataNode(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "data node registered",
-		"node_id": req.NodeID,
+	c.JSON(http.StatusOK, NodeRegisteredResponse{
+		Message: "data node registered",
+		NodeID:  req.NodeID,
 	})
 }
 
@@ -276,12 +272,12 @@ func (h *Phase3Handlers) CreateLineageEdge(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "lineage edge created",
-		"edge_id":  edge.ID,
-		"source":   req.SourceNodeID,
-		"target":   req.TargetNodeID,
-		"relation": req.RelationType,
+	c.JSON(http.StatusOK, LineageEdgeCreatedResponse{
+		Message:  "lineage edge created",
+		EdgeID:   edge.ID,
+		Source:   req.SourceNodeID,
+		Target:   req.TargetNodeID,
+		Relation: req.RelationType,
 	})
 }
 
@@ -295,9 +291,7 @@ func (h *Phase3Handlers) GetUpstreamLineage(c *gin.Context) {
 
 	lineageData := h.lineageMgr.GetUpstreamLineage(nodeID)
 
-	c.JSON(http.StatusOK, gin.H{
-		"upstream_lineage": lineageData,
-	})
+	c.JSON(http.StatusOK, UpstreamLineageResponse{UpstreamLineage: lineageData})
 }
 
 // GetDownstreamLineage gets downstream lineage
@@ -310,9 +304,7 @@ func (h *Phase3Handlers) GetDownstreamLineage(c *gin.Context) {
 
 	lineageData := h.lineageMgr.GetDownstreamLineage(nodeID)
 
-	c.JSON(http.StatusOK, gin.H{
-		"downstream_lineage": lineageData,
-	})
+	c.JSON(http.StatusOK, DownstreamLineageResponse{DownstreamLineage: lineageData})
 }
 
 // AnalyzeImpact analyzes change impact
@@ -329,27 +321,21 @@ func (h *Phase3Handlers) AnalyzeImpact(c *gin.Context) {
 
 	impact := h.lineageMgr.AnalyzeImpact(req.SourceNodeID)
 
-	c.JSON(http.StatusOK, gin.H{
-		"impact_analysis": impact,
-	})
+	c.JSON(http.StatusOK, ImpactAnalysisResponse{ImpactAnalysis: impact})
 }
 
 // GetLineageGraph gets lineage graph
 func (h *Phase3Handlers) GetLineageGraph(c *gin.Context) {
 	graph := h.lineageMgr.GetLineageGraph()
 
-	c.JSON(http.StatusOK, gin.H{
-		"lineage_graph": graph,
-	})
+	c.JSON(http.StatusOK, LineageGraphResponse{LineageGraph: graph})
 }
 
 // GetLineageStats gets lineage statistics
 func (h *Phase3Handlers) GetLineageStats(c *gin.Context) {
 	stats := h.lineageMgr.GetLineageStats()
 
-	c.JSON(http.StatusOK, gin.H{
-		"statistics": stats,
-	})
+	c.JSON(http.StatusOK, StatisticsResponse{Statistics: stats})
 }
 
 // ========== AUDIT & COMPLIANCE ENDPOINTS ==========
@@ -395,9 +381,7 @@ func (h *Phase3Handlers) LogAuditEvent(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "audit event logged",
-	})
+	c.JSON(http.StatusOK, AckResponse{Message: "audit event logged"})
 }
 
 // RegisterComplianceRule registers compliance rule
@@ -430,9 +414,9 @@ func (h *Phase3Handlers) RegisterComplianceRule(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "compliance rule registered",
-		"rule_id": req.RuleID,
+	c.JSON(http.StatusOK, ComplianceRuleRegisteredResponse{
+		Message: "compliance rule registered",
+		RuleID:  req.RuleID,
 	})
 }
 
@@ -450,18 +434,14 @@ func (h *Phase3Handlers) GenerateComplianceReport(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"compliance_report": report,
-	})
+	c.JSON(http.StatusOK, ComplianceReportResponse{ComplianceReport: report})
 }
 
 // GetComplianceStatus gets compliance status
 func (h *Phase3Handlers) GetComplianceStatus(c *gin.Context) {
 	status := h.auditMgr.GetComplianceStatus()
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": status,
-	})
+	c.JSON(http.StatusOK, StatusResponse{Status: status})
 }
 
 // SearchAuditLogs searches audit logs
@@ -471,9 +451,7 @@ func (h *Phase3Handlers) SearchAuditLogs(c *gin.Context) {
 
 	logs := h.auditMgr.SearchAuditLogs(userID, resourceType)
 
-	c.JSON(http.StatusOK, gin.H{
-		"audit_logs": logs,
-	})
+	c.JSON(http.StatusOK, AuditLogsResponse{AuditLogs: logs})
 }
 
 // RecordViolation records compliance violation
@@ -505,9 +483,7 @@ func (h *Phase3Handlers) RecordViolation(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "violation recorded",
-	})
+	c.JSON(http.StatusOK, AckResponse{Message: "violation recorded"})
 }
 
 // ========== WORKFLOW ENDPOINTS ==========
@@ -540,10 +516,10 @@ func (h *Phase3Handlers) CreateWorkflow(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":     "workflow created",
-		"workflow_id": wfDef.ID,
-		"version":     version.Version,
+	c.JSON(http.StatusOK, WorkflowCreatedResponse{
+		Message:    "workflow created",
+		WorkflowID: wfDef.ID,
+		Version:    version.Version,
 	})
 }
 
@@ -573,9 +549,9 @@ func (h *Phase3Handlers) PublishWorkflowVersion(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "workflow version published",
-		"version": version.Version,
+	c.JSON(http.StatusOK, WorkflowVersionPublishedResponse{
+		Message: "workflow version published",
+		Version: version.Version,
 	})
 }
 
@@ -599,10 +575,10 @@ func (h *Phase3Handlers) StartWorkflowInstance(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":     "workflow instance started",
-		"instance_id": instance.ID,
-		"status":      instance.Status,
+	c.JSON(http.StatusOK, WorkflowInstanceStartedResponse{
+		Message:    "workflow instance started",
+		InstanceID: instance.ID,
+		Status:     instance.Status,
 	})
 }
 
@@ -616,18 +592,14 @@ func (h *Phase3Handlers) GetWorkflowMetrics(c *gin.Context) {
 
 	metrics := h.workflowMgr.GetWorkflowMetrics(workflowID)
 
-	c.JSON(http.StatusOK, gin.H{
-		"metrics": metrics,
-	})
+	c.JSON(http.StatusOK, MetricsResponse{Metrics: metrics})
 }
 
 // GetWorkflowStatus gets workflow status
 func (h *Phase3Handlers) GetWorkflowStatus(c *gin.Context) {
 	status := h.workflowMgr.GetWorkflowStatus()
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": status,
-	})
+	c.JSON(http.StatusOK, StatusResponse{Status: status})
 }
 
 // GetInstanceHistory gets workflow instance history
@@ -641,7 +613,5 @@ func (h *Phase3Handlers) GetInstanceHistory(c *gin.Context) {
 	limit := 100
 	history := h.workflowMgr.GetInstanceHistory(workflowID, limit)
 
-	c.JSON(http.StatusOK, gin.H{
-		"instance_history": history,
-	})
+	c.JSON(http.StatusOK, InstanceHistoryResponse{InstanceHistory: history})
 }

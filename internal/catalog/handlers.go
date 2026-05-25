@@ -116,10 +116,7 @@ func (h *CatalogHandlers) ListAssets(c *gin.Context) {
 		filtered = append(filtered, asset)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"items": filtered,
-		"total": len(filtered),
-	})
+	c.JSON(http.StatusOK, AssetListResponse{Items: filtered, Total: len(filtered)})
 }
 
 // GetAsset returns a specific catalog asset.
@@ -243,11 +240,7 @@ func (h *CatalogHandlers) SearchAssets(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"query":   query,
-		"results": results,
-		"total":   len(results),
-	})
+	c.JSON(http.StatusOK, CatalogSearchResponse{Query: query, Results: results, Total: len(results)})
 }
 
 // ScanDataSource triggers a discovery scan of a datasource.
@@ -347,19 +340,19 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 		}
 	}
 
-	response := gin.H{
-		"dataSourceRef":  result.DataSourceRef,
-		"assetsFound":    result.AssetsFound,
-		"assetsCreated":  result.AssetsCreated,
-		"assetsUpdated":  result.AssetsUpdated,
-		"duration":       result.Duration.String(),
+	response := ScanResultResponse{
+		DataSourceRef: result.DataSourceRef,
+		AssetsFound:   result.AssetsFound,
+		AssetsCreated: result.AssetsCreated,
+		AssetsUpdated: result.AssetsUpdated,
+		Duration:      result.Duration.String(),
 	}
 	if len(scanErrors) > 0 {
-		response["errors"] = scanErrors
-		response["partialFailure"] = true
+		response.Errors = scanErrors
+		response.PartialFailure = true
 	}
 	if len(result.Errors) > 0 {
-		response["scanErrors"] = result.Errors
+		response.ScanErrors = result.Errors
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -392,7 +385,7 @@ func (h *CatalogHandlers) ListDomains(c *gin.Context) {
 		domains = append(domains, DomainInfo{Name: name, AssetCount: count})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"domains": domains, "total": len(domains)})
+	c.JSON(http.StatusOK, DomainListResponse{Domains: domains, Total: len(domains)})
 }
 
 // GetStatistics returns platform-wide catalog statistics.
@@ -458,7 +451,7 @@ func (h *CatalogHandlers) ListCollections(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list collections"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": collections, "total": len(collections)})
+	c.JSON(http.StatusOK, CollectionListResponse{Items: collections, Total: len(collections)})
 }
 
 // CreateCollection creates a new catalog collection.

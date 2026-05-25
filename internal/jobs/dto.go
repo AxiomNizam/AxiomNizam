@@ -1,11 +1,86 @@
 package jobs
 
+import "time"
+
 // MessageResponse is a generic error/ack response.
 type MessageResponse struct {
 	Error   string `json:"error,omitempty"`
 	Message string `json:"message,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Status  string `json:"status,omitempty"`
+}
+
+// --- Observability Response DTOs ---
+
+type JobStatsResponse struct {
+	Total     int64 `json:"total"`
+	Pending   int64 `json:"pending"`
+	Running   int64 `json:"running"`
+	Completed int64 `json:"completed"`
+	Failed    int64 `json:"failed"`
+	Cancelled int64 `json:"cancelled"`
+}
+
+type HealthStatusResponse struct {
+	Status string `json:"status"`
+}
+
+type JobMetricsResponse struct {
+	ID          string    `json:"id"`
+	Status      JobStatus `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at"`
+	DurationMs  int64     `json:"duration_ms"`
+	Retries     int       `json:"retries"`
+	Error       string    `json:"error,omitempty"`
+}
+
+type JobsByStatusResponse struct {
+	Count int    `json:"count"`
+	Jobs  []*Job `json:"jobs"`
+}
+
+type JobsByTypeResponse struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+	Jobs  []*Job `json:"jobs"`
+}
+
+type QueueHealthResponse struct {
+	Status  string `json:"status"`
+	Pending int    `json:"pending"`
+}
+
+type QueueDepthResponse struct {
+	Total   int `json:"depth"`
+	Pending int `json:"pending"`
+}
+
+type ProcessorStatsResponse struct {
+	WorkersActive int     `json:"workers_active"`
+	WorkersTotal  int     `json:"workers_total"`
+	JobsProcessed int64   `json:"jobs_processed"`
+	JobsSucceeded int64   `json:"jobs_succeeded"`
+	JobsFailed    int64   `json:"jobs_failed"`
+	SuccessRate   float64 `json:"success_rate"`
+}
+
+type WorkerInfoResponse struct {
+	Active      int     `json:"active"`
+	Total       int     `json:"total"`
+	Utilization float64 `json:"utilization_percent"`
+}
+
+type ProcessorHealthResponse struct {
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type SystemInfoResponse struct {
+	Name      string    `json:"name"`
+	Version   string    `json:"version"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // JobListResponse is the API response for listing jobs.

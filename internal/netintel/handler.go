@@ -37,13 +37,13 @@ func NewHandler() *Handler {
 // GetSummary GET /api/v1/netintel/summary
 func (h *Handler) GetSummary(c *gin.Context) {
 	summary := h.analytics.GetSummary()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "summary": summary})
+	c.JSON(http.StatusOK, SummaryResponse{Status: "success", Summary: summary})
 }
 
 // GetObservability GET /api/v1/netintel/observability
 func (h *Handler) GetObservability(c *gin.Context) {
 	stats := h.parser.GetEntryStats()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "observability": stats})
+	c.JSON(http.StatusOK, ObservabilityResponse{Status: "success", Observability: stats})
 }
 
 // ========================
@@ -53,7 +53,7 @@ func (h *Handler) GetObservability(c *gin.Context) {
 // GetLogTypes GET /api/v1/netintel/log-types
 func (h *Handler) GetLogTypes(c *gin.Context) {
 	types := h.parser.GetLogTypes()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "log_types": types, "total": len(types)})
+	c.JSON(http.StatusOK, LogTypesResponse{Status: "success", LogTypes: types, Total: len(types)})
 }
 
 // ========================
@@ -63,7 +63,7 @@ func (h *Handler) GetLogTypes(c *gin.Context) {
 // ListParsers GET /api/v1/netintel/parsers
 func (h *Handler) ListParsers(c *gin.Context) {
 	parsers := h.parser.ListParsers()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "parsers": parsers, "total": len(parsers)})
+	c.JSON(http.StatusOK, ParserListResponse{Status: "success", Parsers: parsers, Total: len(parsers)})
 }
 
 // GetParser GET /api/v1/netintel/parsers/:id
@@ -74,7 +74,7 @@ func (h *Handler) GetParser(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "parser not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "parser": p})
+	c.JSON(http.StatusOK, ParserResponse{Status: "success", Parser: p})
 }
 
 // CreateParser POST /api/v1/netintel/parsers
@@ -92,7 +92,7 @@ func (h *Handler) CreateParser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"status": "success", "parser": p})
+	c.JSON(http.StatusCreated, ParserResponse{Status: "success", Parser: p})
 }
 
 // UpdateParser PUT /api/v1/netintel/parsers/:id
@@ -108,7 +108,7 @@ func (h *Handler) UpdateParser(c *gin.Context) {
 		return
 	}
 	p, _ := h.parser.GetParser(id)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "parser": p})
+	c.JSON(http.StatusOK, ParserResponse{Status: "success", Parser: p})
 }
 
 // DeleteParser DELETE /api/v1/netintel/parsers/:id
@@ -136,7 +136,7 @@ func (h *Handler) ListEntries(c *gin.Context) {
 		}
 	}
 	entries := h.parser.ListEntries(logType, limit, severity)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "entries": entries, "total": len(entries)})
+	c.JSON(http.StatusOK, EntryListResponse{Status: "success", Entries: entries, Total: len(entries)})
 }
 
 // IngestLog POST /api/v1/netintel/logs
@@ -156,7 +156,7 @@ func (h *Handler) IngestLog(c *gin.Context) {
 // GetEntryStats GET /api/v1/netintel/logs/stats
 func (h *Handler) GetEntryStats(c *gin.Context) {
 	stats := h.parser.GetEntryStats()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "stats": stats})
+	c.JSON(http.StatusOK, StatsResponse{Status: "success", Stats: stats})
 }
 
 // ========================
@@ -166,7 +166,7 @@ func (h *Handler) GetEntryStats(c *gin.Context) {
 // GetTopology GET /api/v1/netintel/topology
 func (h *Handler) GetTopology(c *gin.Context) {
 	graph := h.topology.GetGraph()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "topology": graph})
+	c.JSON(http.StatusOK, TopologyResponse{Status: "success", Topology: graph})
 }
 
 // GetTopologyNode GET /api/v1/netintel/topology/nodes/:id
@@ -177,7 +177,7 @@ func (h *Handler) GetTopologyNode(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "node not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "node": node})
+	c.JSON(http.StatusOK, TopologyNodeResponse{Status: "success", Node: node})
 }
 
 // UpdateTopologyNode PUT /api/v1/netintel/topology/nodes/:id
@@ -205,7 +205,7 @@ func (h *Handler) UpdateTopologyNode(c *gin.Context) {
 func (h *Handler) GetHeatmap(c *gin.Context) {
 	category := c.DefaultQuery("category", "wifi_signal")
 	heatmap := h.parser.GenerateHeatmap(category)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "heatmap": heatmap})
+	c.JSON(http.StatusOK, HeatmapResponse{Status: "success", Heatmap: heatmap})
 }
 
 // ========================
@@ -222,7 +222,7 @@ func (h *Handler) GetTrends(c *gin.Context) {
 		}
 	}
 	points := h.parser.GetTrend(metric, hours)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "metric": metric, "hours": hours, "trend": points})
+	c.JSON(http.StatusOK, TrendsResponse{Status: "success", Metric: metric, Hours: hours, Trend: points})
 }
 
 // ========================
@@ -232,7 +232,7 @@ func (h *Handler) GetTrends(c *gin.Context) {
 // GetPredictions GET /api/v1/netintel/predictions
 func (h *Handler) GetPredictions(c *gin.Context) {
 	predictions := h.analytics.PredictMovement()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "predictions": predictions, "total": len(predictions)})
+	c.JSON(http.StatusOK, PredictionsResponse{Status: "success", Predictions: predictions, Total: len(predictions)})
 }
 
 // ========================
@@ -242,7 +242,7 @@ func (h *Handler) GetPredictions(c *gin.Context) {
 // ListTracks GET /api/v1/netintel/tracks
 func (h *Handler) ListTracks(c *gin.Context) {
 	tracks := h.parser.ListTracks()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "tracks": tracks, "total": len(tracks)})
+	c.JSON(http.StatusOK, TrackListResponse{Status: "success", Tracks: tracks, Total: len(tracks)})
 }
 
 // GetTrack GET /api/v1/netintel/tracks/:mac
@@ -253,7 +253,7 @@ func (h *Handler) GetTrack(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "track not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "track": track})
+	c.JSON(http.StatusOK, TrackResponse{Status: "success", Track: track})
 }
 
 // ========================
@@ -265,7 +265,7 @@ func (h *Handler) ListAnomalies(c *gin.Context) {
 	status := c.Query("status")
 	severity := c.Query("severity")
 	anomalies := h.analytics.ListAnomalies(status, severity)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "anomalies": anomalies, "total": len(anomalies)})
+	c.JSON(http.StatusOK, AnomalyListResponse{Status: "success", Anomalies: anomalies, Total: len(anomalies)})
 }
 
 // AcknowledgeAnomaly POST /api/v1/netintel/anomalies/:id/acknowledge
@@ -296,7 +296,7 @@ func (h *Handler) ResolveAnomaly(c *gin.Context) {
 func (h *Handler) ListAlerts(c *gin.Context) {
 	status := c.Query("status")
 	alerts := h.analytics.ListAlerts(status)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "alerts": alerts, "total": len(alerts)})
+	c.JSON(http.StatusOK, AlertListResponse{Status: "success", Alerts: alerts, Total: len(alerts)})
 }
 
 // AcknowledgeAlert POST /api/v1/netintel/alerts/:id/acknowledge
@@ -326,7 +326,7 @@ func (h *Handler) ResolveAlert(c *gin.Context) {
 // ListForecasts GET /api/v1/netintel/forecasts
 func (h *Handler) ListForecasts(c *gin.Context) {
 	forecasts := h.analytics.ListForecasts()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "forecasts": forecasts})
+	c.JSON(http.StatusOK, ForecastListResponse{Status: "success", Forecasts: forecasts})
 }
 
 // GetForecast GET /api/v1/netintel/forecasts/:metric
@@ -337,5 +337,5 @@ func (h *Handler) GetForecast(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "forecast not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "forecast": forecast})
+	c.JSON(http.StatusOK, ForecastResponse{Status: "success", Forecast: forecast})
 }

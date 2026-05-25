@@ -133,9 +133,9 @@ func (h *Handler) getTLSCertificateStatus(c *gin.Context) {
 	}
 
 	if len(targets) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "no certificate target provided",
-			"message": "set CERT_MONITOR_TARGETS in env or pass ?target=host[:port]",
+		c.JSON(http.StatusBadRequest, MessageResponse{
+			Error:   "no certificate target provided",
+			Message: "set CERT_MONITOR_TARGETS in env or pass ?target=host[:port]",
 		})
 		return
 	}
@@ -150,13 +150,13 @@ func (h *Handler) getTLSCertificateStatus(c *gin.Context) {
 		statuses = append(statuses, status)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"mode":                     h.mode,
-		"status":                   "ok",
-		"threshold_days":           h.renewalThresholdDays,
-		"renew_command_configured": h.renewCommand != "",
-		"has_error":                hasError,
-		"certificates":             statuses,
+	c.JSON(http.StatusOK, TLSCertStatusResponse{
+		Mode:                   h.mode,
+		Status:                 "ok",
+		ThresholdDays:          h.renewalThresholdDays,
+		RenewCommandConfigured: h.renewCommand != "",
+		HasError:               hasError,
+		Certificates:           statuses,
 	})
 }
 
@@ -178,15 +178,15 @@ func (h *Handler) getKubeadmCertificateStatus(c *gin.Context) {
 		statuses = append(statuses, status)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"mode":                     h.mode,
-		"status":                   "ok",
-		"pki_dir":                  h.pkiDir,
-		"managed_certs":            h.managedCerts,
-		"threshold_days":           h.renewalThresholdDays,
-		"renew_command_configured": h.renewCommand != "",
-		"has_error":                hasError,
-		"certificates":             statuses,
+	c.JSON(http.StatusOK, KubeadmCertStatusResponse{
+		Mode:                   h.mode,
+		Status:                 "ok",
+		PKIDir:                 h.pkiDir,
+		ManagedCerts:           h.managedCerts,
+		ThresholdDays:          h.renewalThresholdDays,
+		RenewCommandConfigured: h.renewCommand != "",
+		HasError:               hasError,
+		Certificates:           statuses,
 	})
 }
 
@@ -202,9 +202,9 @@ func (h *Handler) RenewCertificate(c *gin.Context) {
 
 func (h *Handler) renewTLSCertificate(c *gin.Context) {
 	if h.renewCommand == "" {
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"error":   "renew command not configured",
-			"message": "set CERT_RENEW_COMMAND in env to enable TLS target renewal",
+		c.JSON(http.StatusNotImplemented, MessageResponse{
+			Error:   "renew command not configured",
+			Message: "set CERT_RENEW_COMMAND in env to enable TLS target renewal",
 		})
 		return
 	}
@@ -220,9 +220,9 @@ func (h *Handler) renewTLSCertificate(c *gin.Context) {
 	target := strings.TrimSpace(req.Target)
 	if target == "" {
 		if len(h.monitorTargets) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "target is required",
-				"message": "provide target in request body or configure CERT_MONITOR_TARGETS",
+			c.JSON(http.StatusBadRequest, MessageResponse{
+				Error:   "target is required",
+				Message: "provide target in request body or configure CERT_MONITOR_TARGETS",
 			})
 			return
 		}
@@ -242,11 +242,11 @@ func (h *Handler) renewTLSCertificate(c *gin.Context) {
 	}
 
 	if req.DryRun {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"message": "dry run: renewal command prepared",
-			"target":  normalizedTarget,
-			"command": commandParts,
+		c.JSON(http.StatusOK, DryRunResponse{
+			Status:  "ok",
+			Message: "dry run: renewal command prepared",
+			Target:  normalizedTarget,
+			Command: commandParts,
 		})
 		return
 	}
@@ -254,28 +254,28 @@ func (h *Handler) renewTLSCertificate(c *gin.Context) {
 	cmd := exec.Command(commandParts[0], commandParts[1:]...)
 	output, runErr := cmd.CombinedOutput()
 	if runErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   fmt.Sprintf("renewal command failed: %v", runErr),
-			"target":  normalizedTarget,
-			"command": commandParts,
-			"output":  strings.TrimSpace(string(output)),
+		c.JSON(http.StatusInternalServerError, RenewErrorResponse{
+			Error:   fmt.Sprintf("renewal command failed: %v", runErr),
+			Target:  normalizedTarget,
+			Command: commandParts,
+			Output:  strings.TrimSpace(string(output)),
 		})
 		return
 	}
 
 	status := h.inspectTarget(normalizedTarget)
-	resp := gin.H{
-		"mode":               h.mode,
-		"status":             "ok",
-		"message":            "certificate renewal command executed",
-		"target":             normalizedTarget,
-		"command":            commandParts,
-		"output":             strings.TrimSpace(string(output)),
-		"certificate_status": status,
+	resp := RenewSuccessResponse{
+		Mode:              h.mode,
+		Status:            "ok",
+		Message:           "certificate renewal command executed",
+		Target:            normalizedTarget,
+		Command:           commandParts,
+		Output:            strings.TrimSpace(string(output)),
+		CertificateStatus: &status,
 	}
 
 	if status.Error != "" {
-		resp["message"] = "renew command executed, but certificate check failed"
+		resp.Message = "renew command executed, but certificate check failed"
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -306,12 +306,12 @@ func (h *Handler) renewKubeadmCertificate(c *gin.Context) {
 	}
 
 	if req.DryRun {
-		c.JSON(http.StatusOK, gin.H{
-			"mode":    h.mode,
-			"status":  "ok",
-			"message": "dry run: kubeadm renewal command prepared",
-			"cert":    certName,
-			"command": commandParts,
+		c.JSON(http.StatusOK, DryRunResponse{
+			Mode:    h.mode,
+			Status:  "ok",
+			Message: "dry run: kubeadm renewal command prepared",
+			Cert:    certName,
+			Command: commandParts,
 		})
 		return
 	}
@@ -323,12 +323,12 @@ func (h *Handler) renewKubeadmCertificate(c *gin.Context) {
 		if errors.Is(runErr, exec.ErrNotFound) {
 			message = "kubeadm command not found; install kubeadm or set CERT_RENEW_COMMAND"
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"mode":    h.mode,
-			"error":   message,
-			"cert":    certName,
-			"command": commandParts,
-			"output":  strings.TrimSpace(string(output)),
+		c.JSON(http.StatusInternalServerError, RenewErrorResponse{
+			Mode:    h.mode,
+			Error:   message,
+			Cert:    certName,
+			Command: commandParts,
+			Output:  strings.TrimSpace(string(output)),
 		})
 		return
 	}
@@ -343,14 +343,14 @@ func (h *Handler) renewKubeadmCertificate(c *gin.Context) {
 		statuses = append(statuses, h.inspectKubeadmCertificate(cName))
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"mode":         h.mode,
-		"status":       "ok",
-		"message":      "kubeadm certificate renewal command executed",
-		"cert":         certName,
-		"command":      commandParts,
-		"output":       strings.TrimSpace(string(output)),
-		"certificates": statuses,
+	c.JSON(http.StatusOK, RenewSuccessResponse{
+		Mode:         h.mode,
+		Status:       "ok",
+		Message:      "kubeadm certificate renewal command executed",
+		Cert:         certName,
+		Command:      commandParts,
+		Output:       strings.TrimSpace(string(output)),
+		Certificates: statuses,
 	})
 }
 

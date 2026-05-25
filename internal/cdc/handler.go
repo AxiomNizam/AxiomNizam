@@ -34,10 +34,10 @@ func NewHandler(etcd ...*clientv3.Client) *Handler {
 // ListETLPipelines GET /api/v1/etl/pipelines
 func (h *Handler) ListETLPipelines(c *gin.Context) {
 	pipelines := h.etlEngine.ListPipelines()
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "success",
-		"pipelines": pipelines,
-		"total":     len(pipelines),
+	c.JSON(http.StatusOK, ETLPipelineListResponse{
+		Status:    "success",
+		Pipelines: pipelines,
+		Total:     len(pipelines),
 	})
 }
 
@@ -49,7 +49,7 @@ func (h *Handler) GetETLPipeline(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "pipeline not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "pipeline": p})
+	c.JSON(http.StatusOK, ETLPipelineResponse{Status: "success", Pipeline: p})
 }
 
 // CreateETLPipeline POST /api/v1/etl/pipelines
@@ -67,7 +67,7 @@ func (h *Handler) CreateETLPipeline(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"status": "success", "pipeline": p})
+	c.JSON(http.StatusCreated, ETLPipelineResponse{Status: "success", Pipeline: p})
 }
 
 // UpdateETLPipeline PUT /api/v1/etl/pipelines/:id
@@ -83,7 +83,7 @@ func (h *Handler) UpdateETLPipeline(c *gin.Context) {
 		return
 	}
 	p, _ := h.etlEngine.GetPipeline(id)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "pipeline": p})
+	c.JSON(http.StatusOK, ETLPipelineResponse{Status: "success", Pipeline: p})
 }
 
 // DeleteETLPipeline DELETE /api/v1/etl/pipelines/:id
@@ -104,14 +104,14 @@ func (h *Handler) RunETLPipeline(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "run": run})
+	c.JSON(http.StatusOK, ETLRunResponse{Status: "success", Run: run})
 }
 
 // ListETLRuns GET /api/v1/etl/runs
 func (h *Handler) ListETLRuns(c *gin.Context) {
 	pipelineID := c.Query("pipeline_id")
 	runs := h.etlEngine.ListRuns(pipelineID)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "runs": runs, "total": len(runs)})
+	c.JSON(http.StatusOK, ETLRunListResponse{Status: "success", Runs: runs, Total: len(runs)})
 }
 
 // GetETLRun GET /api/v1/etl/runs/:id
@@ -122,7 +122,7 @@ func (h *Handler) GetETLRun(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "run not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "run": run})
+	c.JSON(http.StatusOK, ETLRunResponse{Status: "success", Run: run})
 }
 
 // GetETLConnectors GET /api/v1/etl/connectors
@@ -152,11 +152,11 @@ func (h *Handler) GetETLConnectors(c *gin.Context) {
 		categories[connector.Category]++
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":     "success",
-		"connectors": filtered,
-		"total":      len(filtered),
-		"categories": categories,
+	c.JSON(http.StatusOK, ETLConnectorListResponse{
+		Status:     "success",
+		Connectors: filtered,
+		Total:      len(filtered),
+		Categories: categories,
 	})
 }
 
@@ -173,7 +173,7 @@ func (h *Handler) CreateETLConnector(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"status": "success", "connector": connector})
+	c.JSON(http.StatusCreated, ETLConnectorResponse{Status: "success", Connector: connector})
 }
 
 // UpdateETLConnector PUT /api/v1/etl/connectors/:id
@@ -188,7 +188,7 @@ func (h *Handler) UpdateETLConnector(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "connector": updated})
+	c.JSON(http.StatusOK, ETLConnectorResponse{Status: "success", Connector: updated})
 }
 
 // DeleteETLConnector DELETE /api/v1/etl/connectors/:id
@@ -208,34 +208,34 @@ func (h *Handler) GetETLConnectorCatalog(c *gin.Context) {
 		byCategory[connector.Category] = append(byCategory[connector.Category], connector)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":      "success",
-		"connectors":  connectors,
-		"by_category": byCategory,
-		"total":       len(connectors),
+	c.JSON(http.StatusOK, ETLConnectorCatalogResponse{
+		Status:     "success",
+		Connectors: connectors,
+		ByCategory: byCategory,
+		Total:      len(connectors),
 	})
 }
 
 // GetETLOrchestrationCapabilities GET /api/v1/etl/orchestration/capabilities
 func (h *Handler) GetETLOrchestrationCapabilities(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":       "success",
-		"capabilities": h.etlEngine.GetOrchestrationCapabilities(),
+	c.JSON(http.StatusOK, ETLCapabilitiesResponse{
+		Status:       "success",
+		Capabilities: h.etlEngine.GetOrchestrationCapabilities(),
 	})
 }
 
 // GetETLBlueprints GET /api/v1/etl/blueprints
 func (h *Handler) GetETLBlueprints(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":     "success",
-		"blueprints": h.etlEngine.GetPipelineBlueprints(),
+	c.JSON(http.StatusOK, ETLBlueprintsResponse{
+		Status:     "success",
+		Blueprints: h.etlEngine.GetPipelineBlueprints(),
 	})
 }
 
 // GetETLObservability GET /api/v1/etl/observability
 func (h *Handler) GetETLObservability(c *gin.Context) {
 	obs := h.etlEngine.GetObservability()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "observability": obs})
+	c.JSON(http.StatusOK, ETLObservabilityResponse{Status: "success", Observability: obs})
 }
 
 // ================
@@ -245,7 +245,7 @@ func (h *Handler) GetETLObservability(c *gin.Context) {
 // ListCDCPipelines GET /api/v1/cdc/pipelines
 func (h *Handler) ListCDCPipelines(c *gin.Context) {
 	pipelines := h.cdcEngine.ListPipelines()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "pipelines": pipelines, "total": len(pipelines)})
+	c.JSON(http.StatusOK, CDCPipelineListResponse{Status: "success", Pipelines: pipelines, Total: len(pipelines)})
 }
 
 // GetCDCPipeline GET /api/v1/cdc/pipelines/:id
@@ -256,7 +256,7 @@ func (h *Handler) GetCDCPipeline(c *gin.Context) {
 		c.JSON(http.StatusNotFound, MessageResponse{Error: "pipeline not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "pipeline": p})
+	c.JSON(http.StatusOK, CDCPipelineResponse{Status: "success", Pipeline: p})
 }
 
 // CreateCDCPipeline POST /api/v1/cdc/pipelines
@@ -274,7 +274,7 @@ func (h *Handler) CreateCDCPipeline(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"status": "success", "pipeline": p})
+	c.JSON(http.StatusCreated, CDCPipelineResponse{Status: "success", Pipeline: p})
 }
 
 // UpdateCDCPipeline PUT /api/v1/cdc/pipelines/:id
@@ -290,7 +290,7 @@ func (h *Handler) UpdateCDCPipeline(c *gin.Context) {
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "pipeline": p})
+	c.JSON(http.StatusOK, CDCPipelineResponse{Status: "success", Pipeline: p})
 }
 
 // DeleteCDCPipeline DELETE /api/v1/cdc/pipelines/:id
@@ -311,7 +311,7 @@ func (h *Handler) StartCDCPipeline(c *gin.Context) {
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "pipeline started", "pipeline": p})
+	c.JSON(http.StatusOK, CDCPipelineActionResponse{Status: "success", Message: "pipeline started", Pipeline: p})
 }
 
 // PauseCDCPipeline POST /api/v1/cdc/pipelines/:id/pause
@@ -322,7 +322,7 @@ func (h *Handler) PauseCDCPipeline(c *gin.Context) {
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "pipeline paused", "pipeline": p})
+	c.JSON(http.StatusOK, CDCPipelineActionResponse{Status: "success", Message: "pipeline paused", Pipeline: p})
 }
 
 // StopCDCPipeline POST /api/v1/cdc/pipelines/:id/stop
@@ -333,23 +333,23 @@ func (h *Handler) StopCDCPipeline(c *gin.Context) {
 		return
 	}
 	p, _ := h.cdcEngine.GetPipeline(id)
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "pipeline stopped", "pipeline": p})
+	c.JSON(http.StatusOK, CDCPipelineActionResponse{Status: "success", Message: "pipeline stopped", Pipeline: p})
 }
 
 // GetCDCSourceTypes GET /api/v1/cdc/sources
 func (h *Handler) GetCDCSourceTypes(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "success", "sources": h.cdcEngine.GetSourceTypes()})
+	c.JSON(http.StatusOK, CDCSourceTypesResponse{Status: "success", Sources: h.cdcEngine.GetSourceTypes()})
 }
 
 // GetCDCSinkTypes GET /api/v1/cdc/sinks
 func (h *Handler) GetCDCSinkTypes(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "success", "sinks": h.cdcEngine.GetSinkTypes()})
+	c.JSON(http.StatusOK, CDCSinkTypesResponse{Status: "success", Sinks: h.cdcEngine.GetSinkTypes()})
 }
 
 // GetCDCObservability GET /api/v1/cdc/observability
 func (h *Handler) GetCDCObservability(c *gin.Context) {
 	obs := h.cdcEngine.GetObservability()
-	c.JSON(http.StatusOK, gin.H{"status": "success", "observability": obs})
+	c.JSON(http.StatusOK, CDCObservabilityResponse{Status: "success", Observability: obs})
 }
 
 // ================
@@ -363,36 +363,36 @@ func (h *Handler) GetPlatformOverview(c *gin.Context) {
 	etlPipelines := h.etlEngine.ListPipelines()
 	cdcPipelines := h.cdcEngine.ListPipelines()
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"overview": gin.H{
-			"etl": gin.H{
-				"pipelines_total":      etlObs.PipelinesTotal,
-				"runs_total":           etlObs.RunsTotal,
-				"runs_success":         etlObs.RunsSuccess,
-				"runs_failed":          etlObs.RunsFailed,
-				"runs_running":         etlObs.RunsRunning,
-				"total_rows_read":      etlObs.TotalRowsRead,
-				"total_rows_written":   etlObs.TotalRowsWrite,
-				"avg_duration_seconds": etlObs.AvgDuration,
-				"pipelines":            etlPipelines,
+	c.JSON(http.StatusOK, PlatformOverviewResponse{
+		Status: "success",
+		Overview: PlatformOverview{
+			ETL: ETLOverview{
+				PipelinesTotal:     etlObs.PipelinesTotal,
+				RunsTotal:          etlObs.RunsTotal,
+				RunsSuccess:        etlObs.RunsSuccess,
+				RunsFailed:         etlObs.RunsFailed,
+				RunsRunning:        etlObs.RunsRunning,
+				TotalRowsRead:      etlObs.TotalRowsRead,
+				TotalRowsWritten:   etlObs.TotalRowsWrite,
+				AvgDurationSeconds: etlObs.AvgDuration,
+				Pipelines:          etlPipelines,
 			},
-			"cdc": gin.H{
-				"pipelines_total":   cdcObs.PipelinesTotal,
-				"pipelines_active":  cdcObs.PipelinesActive,
-				"pipelines_paused":  cdcObs.PipelinesPaused,
-				"pipelines_failed":  cdcObs.PipelinesFailed,
-				"total_events":      cdcObs.TotalEvents,
-				"events_per_second": cdcObs.EventsPerSecond,
-				"total_errors":      cdcObs.TotalErrors,
-				"error_rate":        cdcObs.ErrorRate,
-				"avg_lag_ms":        cdcObs.AvgLagMs,
-				"pipelines":         cdcPipelines,
+			CDC: CDCOverview{
+				PipelinesTotal:  cdcObs.PipelinesTotal,
+				PipelinesActive: cdcObs.PipelinesActive,
+				PipelinesPaused: cdcObs.PipelinesPaused,
+				PipelinesFailed: cdcObs.PipelinesFailed,
+				TotalEvents:     cdcObs.TotalEvents,
+				EventsPerSecond: cdcObs.EventsPerSecond,
+				TotalErrors:     cdcObs.TotalErrors,
+				ErrorRate:       cdcObs.ErrorRate,
+				AvgLagMs:        cdcObs.AvgLagMs,
+				Pipelines:       cdcPipelines,
 			},
-			"connectors": gin.H{
-				"etl_connectors": len(h.etlEngine.GetConnectors()),
-				"cdc_sources":    len(h.cdcEngine.GetSourceTypes()),
-				"cdc_sinks":      len(h.cdcEngine.GetSinkTypes()),
+			Connectors: ConnectorSummary{
+				ETLConnectors: len(h.etlEngine.GetConnectors()),
+				CDCSources:    len(h.cdcEngine.GetSourceTypes()),
+				CDCSinks:      len(h.cdcEngine.GetSinkTypes()),
 			},
 		},
 	})

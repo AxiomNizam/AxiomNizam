@@ -41,7 +41,7 @@ func (h *RBACHandler) CreateRole(c *gin.Context) {
 				_ = h.roleDualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "role resource created"})
+		c.JSON(http.StatusAccepted, RoleCreatedResponse{Name: resource.Name, Status: "Pending", Message: "role resource created"})
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *RBACHandler) ListRoles(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"roles": roles, "count": len(roles)})
+	c.JSON(http.StatusOK, RoleListResponse{Roles: roles, Count: len(roles)})
 }
 
 // UpdateRole handles PATCH /api/v1/roles/:id
@@ -171,7 +171,7 @@ func (h *RBACHandler) ListBindings(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"bindings": bindings, "count": len(bindings)})
+	c.JSON(http.StatusOK, BindingListResponse{Bindings: bindings, Count: len(bindings)})
 }
 
 // DeleteBinding handles DELETE /api/v1/role-bindings/:id
@@ -213,7 +213,7 @@ func (h *RBACHandler) ListPermissions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"permissions": permissions, "count": len(permissions)})
+	c.JSON(http.StatusOK, PermissionListResponse{Permissions: permissions, Count: len(permissions)})
 }
 
 // CreateAccessRequest handles POST /api/v1/access-requests
@@ -274,7 +274,7 @@ func (h *RBACHandler) ListAccessRequests(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"accessRequests": requests, "count": len(requests)})
+	c.JSON(http.StatusOK, AccessRequestListResponse{AccessRequests: requests, Count: len(requests)})
 }
 
 // ApproveAccessRequest handles POST /api/v1/access-requests/:id/approve

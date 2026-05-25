@@ -141,5 +141,5 @@ func (h *V1Handler) Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "datasource '" + name + "' deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "datasource '" + name + "' deleted"})
 }

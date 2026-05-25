@@ -33,11 +33,11 @@ func (h *StreamHandler) CaptureChange(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"id":        fmt.Sprintf("cdc-%d", time.Now().UnixNano()),
-		"table":     req.TableName,
-		"operation": req.Operation,
-		"timestamp": time.Now(),
+	c.JSON(http.StatusCreated, CDCStreamChangeResponse{
+		ID:        fmt.Sprintf("cdc-%d", time.Now().UnixNano()),
+		Table:     req.TableName,
+		Operation: req.Operation,
+		Timestamp: time.Now(),
 	})
 }
 
@@ -45,11 +45,11 @@ func (h *StreamHandler) CaptureChange(c *gin.Context) {
 func (h *StreamHandler) GetChangeHistory(c *gin.Context) {
 	tableName := c.Param("table")
 
-	c.JSON(http.StatusOK, gin.H{
-		"table":     tableName,
-		"events":    []map[string]interface{}{},
-		"count":     0,
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, CDCStreamHistoryResponse{
+		Table:     tableName,
+		Events:    []map[string]interface{}{},
+		Count:     0,
+		Timestamp: time.Now(),
 	})
 }
 
@@ -57,33 +57,33 @@ func (h *StreamHandler) GetChangeHistory(c *gin.Context) {
 func (h *StreamHandler) CreateStream(c *gin.Context) {
 	tableName := c.Param("table")
 
-	c.JSON(http.StatusCreated, gin.H{
-		"id":        fmt.Sprintf("stream-%d", time.Now().UnixNano()),
-		"table":     tableName,
-		"status":    "active",
-		"timestamp": time.Now(),
+	c.JSON(http.StatusCreated, CDCStreamCreateResponse{
+		ID:        fmt.Sprintf("stream-%d", time.Now().UnixNano()),
+		Table:     tableName,
+		Status:    "active",
+		Timestamp: time.Now(),
 	})
 }
 
 // SubscribeToChanges subscribes to changes (WebSocket placeholder).
 func (h *StreamHandler) SubscribeToChanges(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message":   "WebSocket subscription available at /api/v2/cdc/subscribe",
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, CDCSubscribeResponse{
+		Message:   "WebSocket subscription available at /api/v2/cdc/subscribe",
+		Timestamp: time.Now(),
 	})
 }
 
 // GetCDCStats gets CDC statistics.
 func (h *StreamHandler) GetCDCStats(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"total_events":       10000,
-		"total_streams":      5,
-		"active_streams":     3,
-		"total_webhooks":     2,
-		"insert_events":      5000,
-		"update_events":      4000,
-		"delete_events":      1000,
-		"buffer_utilization": 45.5,
-		"timestamp":          time.Now(),
+	c.JSON(http.StatusOK, CDCStatsResponse{
+		TotalEvents:      10000,
+		TotalStreams:      5,
+		ActiveStreams:     3,
+		TotalWebhooks:     2,
+		InsertEvents:      5000,
+		UpdateEvents:      4000,
+		DeleteEvents:      1000,
+		BufferUtilization: 45.5,
+		Timestamp:         time.Now(),
 	})
 }

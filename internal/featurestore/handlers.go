@@ -39,7 +39,7 @@ func (h *FeatureStoreHandlers) ListGroups(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"featureGroups": groups, "count": len(groups)})
+	c.JSON(http.StatusOK, FeatureGroupListResponse{FeatureGroups: groups, Count: len(groups)})
 }
 
 func (h *FeatureStoreHandlers) GetGroup(c *gin.Context) {
@@ -146,11 +146,11 @@ func (h *FeatureStoreHandlers) ServeOnline(c *gin.Context) {
 	}
 
 	// In production, this would look up features from the online store.
-	c.JSON(http.StatusOK, gin.H{
-		"featureGroup": req.FeatureGroup,
-		"entities":     len(req.Entities),
-		"features":     group.Status.FeatureCount,
-		"freshness":    group.Status.FreshnessStatus,
-		"message":      "online serving placeholder — connect to online store backend",
+	c.JSON(http.StatusOK, OnlineServingResponse{
+		FeatureGroup: req.FeatureGroup,
+		Entities:     len(req.Entities),
+		Features:     group.Status.FeatureCount,
+		Freshness:    group.Status.FreshnessStatus,
+		Message:      "online serving placeholder — connect to online store backend",
 	})
 }

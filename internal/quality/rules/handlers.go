@@ -97,9 +97,9 @@ func (h *QualityRulesHandlers) ListRules(c *gin.Context) {
 		filtered = append(filtered, rule)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"rules": filtered,
-		"count": len(filtered),
+	c.JSON(http.StatusOK, RuleListResponse{
+		Rules: filtered,
+		Count: len(filtered),
 	})
 }
 
@@ -216,9 +216,9 @@ func (h *QualityRulesHandlers) RunRule(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"rule":   name,
-		"result": output,
+	c.JSON(http.StatusOK, RunRuleResponse{
+		Rule:   name,
+		Result: output,
 	})
 }
 
@@ -246,9 +246,9 @@ func (h *QualityRulesHandlers) ListChecks(c *gin.Context) {
 		filtered = append(filtered, check)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"checks": filtered,
-		"count":  len(filtered),
+	c.JSON(http.StatusOK, CheckListResponse{
+		Checks: filtered,
+		Count:  len(filtered),
 	})
 }
 
@@ -305,13 +305,13 @@ func (h *QualityRulesHandlers) GetAssetScore(c *gin.Context) {
 		score = float64(passingRules) / float64(totalRules) * 100.0
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"asset":         asset,
-		"score":         score,
-		"totalRules":    totalRules,
-		"passingRules":  passingRules,
-		"criticalFails": criticalFails,
-		"warningFails":  warningFails,
+	c.JSON(http.StatusOK, AssetScoreResponse{
+		Asset:         asset,
+		Score:         score,
+		TotalRules:    totalRules,
+		PassingRules:  passingRules,
+		CriticalFails: criticalFails,
+		WarningFails:  warningFails,
 	})
 }
 
@@ -344,12 +344,12 @@ func (h *QualityRulesHandlers) GetSummary(c *gin.Context) {
 		overallScore = float64(passing) / float64(total) * 100.0
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"totalRules":   total,
-		"passing":      passing,
-		"failing":      failing,
-		"errors":       errors,
-		"pending":      pending,
-		"overallScore": overallScore,
+	c.JSON(http.StatusOK, QualitySummaryResponse{
+		TotalRules:   total,
+		Passing:      passing,
+		Failing:      failing,
+		Errors:       errors,
+		Pending:      pending,
+		OverallScore: overallScore,
 	})
 }

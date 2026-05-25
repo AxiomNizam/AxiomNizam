@@ -284,13 +284,13 @@ func (h *Handler) CreateDatabase(c *gin.Context) {
 	}
 
 	logging.Z().Info("database created", zap.String("database", req.DatabaseName), zap.String("server", targetKey), zap.String("dbType", resolvedDBType))
-	c.JSON(http.StatusCreated, gin.H{
-		"status":      "success",
-		"message":     fmt.Sprintf("Database '%s' created successfully", req.DatabaseName),
-		"database":    req.DatabaseName,
-		"db_type":     resolvedDBType,
-		"db_server":   targetKey,
-		"server_name": serverName,
+	c.JSON(http.StatusCreated, CreateDatabaseResponse{
+		Status:     "success",
+		Message:    fmt.Sprintf("Database '%s' created successfully", req.DatabaseName),
+		Database:   req.DatabaseName,
+		DBType:     resolvedDBType,
+		DBServer:   targetKey,
+		ServerName: serverName,
 	})
 }
 
@@ -414,17 +414,17 @@ func (h *Handler) ConnectDatabaseServer(c *gin.Context) {
 	}
 
 	logging.Z().Info("connected custom DB server", zap.String("key", serverKey), zap.String("name", serverName), zap.String("dbType", dbType), zap.String("host", host), zap.Int("port", port))
-	c.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": "Database server connected",
-		"server": gin.H{
-			"key":       serverKey,
-			"name":      serverName,
-			"db_type":   dbType,
-			"host":      host,
-			"port":      port,
-			"source":    "custom",
-			"connected": true,
+	c.JSON(http.StatusCreated, ConnectDatabaseServerResponse{
+		Status:  "success",
+		Message: "Database server connected",
+		Server: DatabaseServerInfo{
+			Key:       serverKey,
+			Name:      serverName,
+			DBType:    dbType,
+			Host:      host,
+			Port:      port,
+			Source:    "custom",
+			Connected: true,
 		},
 	})
 }
@@ -448,10 +448,10 @@ func (h *Handler) ListDatabaseServers(c *gin.Context) {
 		return servers[i].DBType < servers[j].DBType
 	})
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"count":   len(servers),
-		"servers": servers,
+	c.JSON(http.StatusOK, ListDatabaseServersResponse{
+		Status:  "success",
+		Count:   len(servers),
+		Servers: servers,
 	})
 }
 
@@ -510,12 +510,12 @@ func (h *Handler) CreateTable(c *gin.Context) {
 	}
 
 	logging.Z().Info("table created", zap.String("table", req.TableName), zap.String("dbType", req.DBType))
-	c.JSON(http.StatusCreated, gin.H{
-		"status":  "success",
-		"message": fmt.Sprintf("Table '%s' created successfully", req.TableName),
-		"table":   req.TableName,
-		"db_type": req.DBType,
-		"columns": len(req.Columns),
+	c.JSON(http.StatusCreated, CreateTableResponse{
+		Status:  "success",
+		Message: fmt.Sprintf("Table '%s' created successfully", req.TableName),
+		Table:   req.TableName,
+		DBType:  req.DBType,
+		Columns: len(req.Columns),
 	})
 }
 
@@ -660,11 +660,11 @@ func (h *Handler) ListDatabases(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "success",
-		"db_type":   dbType,
-		"databases": databases,
-		"count":     len(databases),
+	c.JSON(http.StatusOK, ListDatabasesResponse{
+		Status:    "success",
+		DBType:    dbType,
+		Databases: databases,
+		Count:     len(databases),
 	})
 }
 
@@ -749,11 +749,11 @@ func (h *Handler) ListTables(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"db_type": dbType,
-		"tables":  tables,
-		"count":   len(tables),
+	c.JSON(http.StatusOK, ListTablesResponse{
+		Status: "success",
+		DBType: dbType,
+		Tables: tables,
+		Count:  len(tables),
 	})
 }
 
@@ -901,17 +901,17 @@ func (h *Handler) UpdateDatabaseServer(c *gin.Context) {
 	}
 
 	logging.Z().Info("updated custom DB server", zap.String("key", serverKey), zap.String("name", serverName), zap.String("dbType", dbType), zap.String("host", host), zap.Int("port", port))
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": "Database server updated",
-		"server": gin.H{
-			"key":       serverKey,
-			"name":      serverName,
-			"db_type":   dbType,
-			"host":      host,
-			"port":      port,
-			"source":    "custom",
-			"connected": true,
+	c.JSON(http.StatusOK, ConnectDatabaseServerResponse{
+		Status:  "success",
+		Message: "Database server updated",
+		Server: DatabaseServerInfo{
+			Key:       serverKey,
+			Name:      serverName,
+			DBType:    dbType,
+			Host:      host,
+			Port:      port,
+			Source:    "custom",
+			Connected: true,
 		},
 	})
 }
@@ -957,8 +957,8 @@ func (h *Handler) DeleteDatabaseServer(c *gin.Context) {
 	}
 
 	logging.Z().Info("deleted custom DB server", zap.String("key", serverKey))
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": fmt.Sprintf("Database server '%s' deleted", serverKey),
+	c.JSON(http.StatusOK, StatusResponse{
+		Status:  "success",
+		Message: fmt.Sprintf("Database server '%s' deleted", serverKey),
 	})
 }

@@ -88,7 +88,7 @@ func (h *GovernanceHandlers) ListPolicies(c *gin.Context) {
 		filtered = append(filtered, p)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"policies": filtered, "count": len(filtered)})
+	c.JSON(http.StatusOK, PolicyListResponse{Policies: filtered, Count: len(filtered)})
 }
 
 func (h *GovernanceHandlers) GetPolicy(c *gin.Context) {
@@ -195,7 +195,7 @@ func (h *GovernanceHandlers) ListRetentionPolicies(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"retentionPolicies": policies, "count": len(policies)})
+	c.JSON(http.StatusOK, RetentionPolicyListResponse{RetentionPolicies: policies, Count: len(policies)})
 }
 
 func (h *GovernanceHandlers) GetRetentionPolicy(c *gin.Context) {
@@ -263,7 +263,7 @@ func (h *GovernanceHandlers) ListAccessRequests(c *gin.Context) {
 		filtered = append(filtered, req)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"accessRequests": filtered, "count": len(filtered)})
+	c.JSON(http.StatusOK, AccessRequestListResponse{AccessRequests: filtered, Count: len(filtered)})
 }
 
 func (h *GovernanceHandlers) GetAccessRequest(c *gin.Context) {
@@ -446,13 +446,13 @@ func (h *GovernanceHandlers) GetSummary(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"totalPolicies":        totalPolicies,
-		"compliantPolicies":    compliantPolicies,
-		"nonCompliantPolicies": nonCompliantPolicies,
-		"totalViolations":      totalViolations,
-		"avgComplianceScore":   avgScore,
-		"pendingAccessRequests": pendingRequests,
-		"activeAccessGrants":   approvedRequests,
+	c.JSON(http.StatusOK, GovernanceSummaryResponse{
+		TotalPolicies:         totalPolicies,
+		CompliantPolicies:     compliantPolicies,
+		NonCompliantPolicies:  nonCompliantPolicies,
+		TotalViolations:       totalViolations,
+		AvgComplianceScore:    avgScore,
+		PendingAccessRequests: pendingRequests,
+		ActiveAccessGrants:    approvedRequests,
 	})
 }

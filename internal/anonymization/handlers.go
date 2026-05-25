@@ -38,7 +38,7 @@ func (h *AnonymizationHandlers) ListPolicies(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"policies": policies, "count": len(policies)})
+	c.JSON(http.StatusOK, ListPoliciesResponse{Policies: policies, Count: len(policies)})
 }
 
 func (h *AnonymizationHandlers) GetPolicy(c *gin.Context) {

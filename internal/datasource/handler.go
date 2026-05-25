@@ -131,10 +131,10 @@ func (h *DataSourceHandler) Create(c *gin.Context) {
 	h.datasources[name] = &ds
 	h.saveState()
 
-	c.JSON(http.StatusCreated, gin.H{
-		"status":    "ok",
-		"message":   "Datasource created successfully",
-		"datasource": ds,
+	c.JSON(http.StatusCreated, DataSourceCreatedResponse{
+		Status:     "ok",
+		Message:    "Datasource created successfully",
+		Datasource: ds,
 	})
 }
 
@@ -148,10 +148,10 @@ func (h *DataSourceHandler) List(c *gin.Context) {
 		datasources = append(datasources, ds)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":      "ok",
-		"datasources": datasources,
-		"total":       len(datasources),
+	c.JSON(http.StatusOK, DataSourceListResponse{
+		Status:      "ok",
+		Datasources: datasources,
+		Total:       len(datasources),
 	})
 }
 
@@ -168,9 +168,9 @@ func (h *DataSourceHandler) Get(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":      "ok",
-		"datasource":  ds,
+	c.JSON(http.StatusOK, DataSourceGetResponse{
+		Status:     "ok",
+		Datasource: ds,
 	})
 }
 
@@ -204,10 +204,10 @@ func (h *DataSourceHandler) Update(c *gin.Context) {
 	h.datasources[name] = &ds
 	h.saveState()
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "ok",
-		"message":   "Datasource updated successfully",
-		"datasource": ds,
+	c.JSON(http.StatusOK, DataSourceUpdatedResponse{
+		Status:     "ok",
+		Message:    "Datasource updated successfully",
+		Datasource: ds,
 	})
 }
 
@@ -226,10 +226,7 @@ func (h *DataSourceHandler) Delete(c *gin.Context) {
 	delete(h.datasources, name)
 	h.saveState()
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"message": "Datasource deleted successfully",
-	})
+	c.JSON(http.StatusOK, MessageResponse{Message: "Datasource deleted successfully"})
 }
 
 // Apply creates or updates a datasource from YAML-sourced data
@@ -265,11 +262,11 @@ func (h *DataSourceHandler) Test(c *gin.Context) {
 		endpoint = host
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":   "ok",
-		"message":  fmt.Sprintf("Connection to %s (%s) successful", endpoint, driver),
-		"driver":   driver,
-		"endpoint": endpoint,
-		"tested_at": time.Now().UTC().Format(time.RFC3339),
+	c.JSON(http.StatusOK, DataSourceTestResponse{
+		Status:   "ok",
+		Message:  fmt.Sprintf("Connection to %s (%s) successful", endpoint, driver),
+		Driver:   driver,
+		Endpoint: endpoint,
+		TestedAt: time.Now().UTC(),
 	})
 }

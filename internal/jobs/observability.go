@@ -74,19 +74,17 @@ func (oh *ObservabilityHandler) RegisterRoutes(router *gin.Engine) {
 func (oh *ObservabilityHandler) GetJobStats(c *gin.Context) {
 	stats, err := oh.manager.GetJobStats(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get job stats",
-		})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "Failed to get job stats"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"total":     stats.Total,
-		"pending":   stats.Pending,
-		"running":   stats.Running,
-		"completed": stats.Completed,
-		"failed":    stats.Failed,
-		"cancelled": stats.Cancelled,
+	c.JSON(http.StatusOK, JobStatsResponse{
+		Total:     stats.Total,
+		Pending:   stats.Pending,
+		Running:   stats.Running,
+		Completed: stats.Completed,
+		Failed:    stats.Failed,
+		Cancelled: stats.Cancelled,
 	})
 }
 
@@ -94,16 +92,11 @@ func (oh *ObservabilityHandler) GetJobStats(c *gin.Context) {
 func (oh *ObservabilityHandler) GetJobHealth(c *gin.Context) {
 	err := oh.manager.Health()
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"error":  err.Error(),
-		})
+		c.JSON(http.StatusServiceUnavailable, MessageResponse{Status: "unhealthy", Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "healthy",
-	})
+	c.JSON(http.StatusOK, HealthStatusResponse{Status: "healthy"})
 }
 
 // GetJobDetails returns detailed job information
@@ -112,9 +105,7 @@ func (oh *ObservabilityHandler) GetJobDetails(c *gin.Context) {
 
 	job, err := oh.manager.GetJob(jobID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Job not found",
-		})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "Job not found"})
 		return
 	}
 
@@ -127,9 +118,7 @@ func (oh *ObservabilityHandler) GetJobMetrics(c *gin.Context) {
 
 	job, err := oh.manager.GetJob(jobID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Job not found",
-		})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "Job not found"})
 		return
 	}
 
@@ -138,15 +127,15 @@ func (oh *ObservabilityHandler) GetJobMetrics(c *gin.Context) {
 		duration = job.CompletedAt.Sub(job.CreatedAt)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":           job.ID,
-		"status":       job.Status,
-		"created_at":   job.CreatedAt,
-		"started_at":   job.StartedAt,
-		"completed_at": job.CompletedAt,
-		"duration_ms":  duration.Milliseconds(),
-		"retries":      job.Retries,
-		"error":        job.Error,
+	c.JSON(http.StatusOK, JobMetricsResponse{
+		ID:          job.ID,
+		Status:      job.Status,
+		CreatedAt:   job.CreatedAt,
+		StartedAt:   job.StartedAt,
+		CompletedAt: job.CompletedAt,
+		DurationMs:  duration.Milliseconds(),
+		Retries:     job.Retries,
+		Error:       job.Error,
 	})
 }
 
@@ -159,16 +148,11 @@ func (oh *ObservabilityHandler) GetJobsByStatus(c *gin.Context) {
 		Limit:  100,
 	})
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid status",
-		})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "Invalid status"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"count": len(jobs),
-		"jobs":  jobs,
-	})
+	c.JSON(http.StatusOK, JobsByStatusResponse{Count: len(jobs), Jobs: jobs})
 }
 
 // GetJobsByType returns jobs by type
@@ -188,20 +172,14 @@ func (oh *ObservabilityHandler) GetJobsByType(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"type":  jobType,
-		"count": len(filteredJobs),
-		"jobs":  filteredJobs,
-	})
+	c.JSON(http.StatusOK, JobsByTypeResponse{Type: jobType, Count: len(filteredJobs), Jobs: filteredJobs})
 }
 
 // GetQueueStats returns queue statistics
 func (oh *ObservabilityHandler) GetQueueStats(c *gin.Context) {
 	stats, err := oh.manager.GetJobStats(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get queue stats",
-		})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "Failed to get queue stats"})
 		return
 	}
 
@@ -212,9 +190,7 @@ func (oh *ObservabilityHandler) GetQueueStats(c *gin.Context) {
 func (oh *ObservabilityHandler) GetQueueHealth(c *gin.Context) {
 	stats, err := oh.manager.GetJobStats(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-		})
+		c.JSON(http.StatusServiceUnavailable, HealthStatusResponse{Status: "unhealthy"})
 		return
 	}
 
@@ -226,26 +202,18 @@ func (oh *ObservabilityHandler) GetQueueHealth(c *gin.Context) {
 		status = "critical"
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  status,
-		"pending": stats.Pending,
-	})
+	c.JSON(http.StatusOK, QueueHealthResponse{Status: status, Pending: int(stats.Pending)})
 }
 
 // GetQueueDepth returns current queue depth
 func (oh *ObservabilityHandler) GetQueueDepth(c *gin.Context) {
 	stats, err := oh.manager.GetJobStats(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get queue depth",
-		})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "Failed to get queue depth"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"depth":   stats.Total,
-		"pending": stats.Pending,
-	})
+	c.JSON(http.StatusOK, QueueDepthResponse{Total: int(stats.Total), Pending: int(stats.Pending)})
 }
 
 // GetProcessorStats returns processor statistics
@@ -257,13 +225,13 @@ func (oh *ObservabilityHandler) GetProcessorStats(c *gin.Context) {
 		successRate = float64(stats.JobsSucceeded) / float64(stats.JobsProcessed)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"workers_active": stats.WorkersActive,
-		"workers_total":  stats.WorkersTotal,
-		"jobs_processed": stats.JobsProcessed,
-		"jobs_succeeded": stats.JobsSucceeded,
-		"jobs_failed":    stats.JobsFailed,
-		"success_rate":   successRate,
+	c.JSON(http.StatusOK, ProcessorStatsResponse{
+		WorkersActive: stats.WorkersActive,
+		WorkersTotal:  stats.WorkersTotal,
+		JobsProcessed: stats.JobsProcessed,
+		JobsSucceeded: stats.JobsSucceeded,
+		JobsFailed:    stats.JobsFailed,
+		SuccessRate:   successRate,
 	})
 }
 
@@ -271,10 +239,10 @@ func (oh *ObservabilityHandler) GetProcessorStats(c *gin.Context) {
 func (oh *ObservabilityHandler) GetWorkerInfo(c *gin.Context) {
 	stats := oh.manager.GetProcessorStats()
 
-	c.JSON(http.StatusOK, gin.H{
-		"active":              stats.WorkersActive,
-		"total":               stats.WorkersTotal,
-		"utilization_percent": (float64(stats.WorkersActive) / float64(stats.WorkersTotal)) * 100,
+	c.JSON(http.StatusOK, WorkerInfoResponse{
+		Active:      stats.WorkersActive,
+		Total:       stats.WorkersTotal,
+		Utilization: (float64(stats.WorkersActive) / float64(stats.WorkersTotal)) * 100,
 	})
 }
 
@@ -283,16 +251,11 @@ func (oh *ObservabilityHandler) GetProcessorHealth(c *gin.Context) {
 	stats := oh.manager.GetProcessorStats()
 
 	if stats.WorkersActive == 0 && stats.WorkersTotal > 0 {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"reason": "No active workers",
-		})
+		c.JSON(http.StatusServiceUnavailable, ProcessorHealthResponse{Status: "unhealthy", Reason: "No active workers"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "healthy",
-	})
+	c.JSON(http.StatusOK, ProcessorHealthResponse{Status: "healthy"})
 }
 
 // GetSystemHealth returns overall system health
@@ -313,10 +276,10 @@ func (oh *ObservabilityHandler) GetSystemHealth(c *gin.Context) {
 
 // GetSystemInfo returns system information
 func (oh *ObservabilityHandler) GetSystemInfo(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"name":      "Axiom Nizam Job System",
-		"version":   "4.0.0",
-		"timestamp": time.Now(),
+	c.JSON(http.StatusOK, SystemInfoResponse{
+		Name:      "Axiom Nizam Job System",
+		Version:   "4.0.0",
+		Timestamp: time.Now(),
 	})
 }
 
