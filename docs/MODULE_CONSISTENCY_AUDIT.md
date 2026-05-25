@@ -551,7 +551,7 @@ These bring all modules toward the gatekeeper reference architecture.
 | 8.2 | Add IAM DTOs + mappers | iam | DONE |
 | 8.3 | Extract handlers from monolith `internal/handlers/` into per-module packages | All affected | **DONE** (42/42 extracted) |
 | 8.4 | Split `internal/handlers/` into: `handlers/auth/`, `handlers/health/`, `handlers/admin/` | handlers | PENDING (incremental) |
-| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **IN PROGRESS** — 39/39 dto.go files created; 1031→198 gin.H (81% reduction); error/ack + list/progress DTOs wired; complex success DTOs remaining |
+| 8.5 | Add DTO structs + mappers to each module's handlers | All modules | **IN PROGRESS** — 39/39 dto.go files created; 1031→195 gin.H (81% reduction); error/ack + list/progress DTOs wired; complex success DTOs remaining |
 
 **Scope:** 39 modules, ~1031 gin.H occurrences | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** MEDIUM
 
@@ -1083,7 +1083,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phases 1-8 DONE (Phase 8: all 39 modules have DTO files)*
+*Last updated: 2026-05-25 (UTC+6) — Phases 1-7 DONE, Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 1031→195 gin.H, 81% reduction)*
 
 ---
 
@@ -1170,4 +1170,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-25 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 39/39 dto.go, 1031→206 gin.H, error patterns done, success DTOs remaining)*
+*Last updated: 2026-05-25 (UTC+6) — Phase 8 IN PROGRESS (8.0-8.3 DONE, 8.5: 39/39 dto.go, 1031→195 gin.H, 81% reduction)*
