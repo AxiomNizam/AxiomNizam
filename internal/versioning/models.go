@@ -57,16 +57,6 @@ const (
 	ActionRestore VersionAction = "RESTORE"
 )
 
-// RetentionPolicy defines how long version is kept
-type RetentionPolicy struct {
-	DaysToKeep       int  `json:"daysToKeep"`
-	VersionsToKeep   int  `json:"versionsToKeep"`   // Keep last N versions
-	ArchiveAfterDays int  `json:"archiveAfterDays"` // Move to cold storage
-	DeleteAfterDays  int  `json:"deleteAfterDays"`
-	KeepMinor        bool `json:"keepMinor"` // Keep minor revisions
-	KeepMajor        bool `json:"keepMajor"` // Always keep major releases
-}
-
 // VersionHistory aggregates version data
 type VersionHistory struct {
 	TenantID       string            `json:"tenantId"`

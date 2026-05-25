@@ -1,4 +1,4 @@
-package featurestore
+package models
 
 // =====================================================
 // WS-7.1 — Feature Store as declarative resources
@@ -76,15 +76,15 @@ type FeatureGroupSpec struct {
 type FeatureGroupResourceStatus struct {
 	resources.ObjectStatus `json:",inline"`
 
-	FeatureCount          int        `json:"featureCount"`
-	EntityCount           int64      `json:"entityCount"`
-	LastMaterializedAt    *time.Time `json:"lastMaterializedAt,omitempty"`
+	FeatureCount           int        `json:"featureCount"`
+	EntityCount            int64      `json:"entityCount"`
+	LastMaterializedAt     *time.Time `json:"lastMaterializedAt,omitempty"`
 	MaterializationDuration string   `json:"materializationDuration,omitempty"`
-	OnlineStoreStatus     string     `json:"onlineStoreStatus,omitempty"`  // ready, stale, error
-	OfflineStoreStatus    string     `json:"offlineStoreStatus,omitempty"` // ready, stale, error
+	OnlineStoreStatus      string     `json:"onlineStoreStatus,omitempty"`  // ready, stale, error
+	OfflineStoreStatus     string     `json:"offlineStoreStatus,omitempty"` // ready, stale, error
 	OnlineServingLatencyMs float64   `json:"onlineServingLatencyMs"`
-	TotalServingRequests  int64      `json:"totalServingRequests"`
-	FreshnessStatus       string     `json:"freshnessStatus,omitempty"` // fresh, stale
+	TotalServingRequests   int64      `json:"totalServingRequests"`
+	FreshnessStatus        string     `json:"freshnessStatus,omitempty"` // fresh, stale
 }
 
 // --- FeatureGroupResource ---

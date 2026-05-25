@@ -18,75 +18,25 @@ import (
 // Dynamic pipelines with observability
 // =====================================================
 
-// --- Pipeline Models ---
+// Domain types (PipelineStatus, StepType, Step, OrchestrationConfig)
+// are re-exported via type aliases in pipeline_resource.go from the
+// models sub-package.  Pipeline and runtime types remain here.
 
-type PipelineStatus string
-
-const (
-	PipelineCreated PipelineStatus = "created"
-	PipelineRunning PipelineStatus = "running"
-	PipelinePaused  PipelineStatus = "paused"
-	PipelineSuccess PipelineStatus = "succeeded"
-	PipelineFailed  PipelineStatus = "failed"
-	PipelineStopped PipelineStatus = "stopped"
-)
-
-type StepType string
-
-const (
-	StepExtract   StepType = "extract"
-	StepTransform StepType = "transform"
-	StepLoad      StepType = "load"
-	StepFilter    StepType = "filter"
-	StepMap       StepType = "map"
-	StepAggregate StepType = "aggregate"
-	StepJoin      StepType = "join"
-	StepValidate  StepType = "validate"
-	StepEnrich    StepType = "enrich"
-	StepDedupe    StepType = "deduplicate"
-)
-
+// Pipeline is the imperative runtime shape used by Engine.
 type Pipeline struct {
-	ID            string                 `json:"id"`
-	Name          string                 `json:"name"`
-	Description   string                 `json:"description"`
-	Steps         []Step                 `json:"steps"`
-	Schedule      string                 `json:"schedule,omitempty"` // cron expression
-	Orchestration OrchestrationConfig    `json:"orchestration,omitempty"`
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
+	Description   string              `json:"description"`
+	Steps         []Step              `json:"steps"`
+	Schedule      string              `json:"schedule,omitempty"` // cron expression
+	Orchestration OrchestrationConfig `json:"orchestration,omitempty"`
 	Config        map[string]interface{} `json:"config,omitempty"`
-	Status        PipelineStatus         `json:"status"`
-	CreatedAt     time.Time              `json:"created_at"`
-	UpdatedAt     time.Time              `json:"updated_at"`
-	LastRunAt     *time.Time             `json:"last_run_at,omitempty"`
-	RunCount      int                    `json:"run_count"`
-	Tags          []string               `json:"tags,omitempty"`
-}
-
-type OrchestrationConfig struct {
-	Owner          string   `json:"owner,omitempty"`
-	Queue          string   `json:"queue,omitempty"`
-	MaxActiveRuns  int      `json:"max_active_runs,omitempty"`
-	Concurrency    int      `json:"concurrency,omitempty"`
-	PriorityWeight int      `json:"priority_weight,omitempty"`
-	Retries        int      `json:"retries,omitempty"`
-	RetryDelaySec  int      `json:"retry_delay_sec,omitempty"`
-	TimeoutSec     int      `json:"timeout_sec,omitempty"`
-	SLASeconds     int      `json:"sla_seconds,omitempty"`
-	Catchup        bool     `json:"catchup"`
-	DependsOnPast  bool     `json:"depends_on_past"`
-	AlertChannels  []string `json:"alert_channels,omitempty"`
-}
-
-type Step struct {
-	ID         string                 `json:"id"`
-	Name       string                 `json:"name"`
-	Type       StepType               `json:"type"`
-	Connector  string                 `json:"connector"` // e.g. mysql, postgres, csv, api, kafka
-	Config     map[string]interface{} `json:"config"`
-	Order      int                    `json:"order"`
-	DependsOn  []string               `json:"depends_on,omitempty"`
-	RetryCount int                    `json:"retry_count,omitempty"`
-	Timeout    string                 `json:"timeout,omitempty"` // duration string
+	Status        PipelineStatus      `json:"status"`
+	CreatedAt     time.Time           `json:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"`
+	LastRunAt     *time.Time          `json:"last_run_at,omitempty"`
+	RunCount      int                 `json:"run_count"`
+	Tags          []string            `json:"tags,omitempty"`
 }
 
 // --- Run / Execution ---

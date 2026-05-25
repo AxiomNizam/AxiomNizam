@@ -17,30 +17,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// DataSourceResource represents a datasource on the server
-type DataSourceResource struct {
-	APIVersion string                 `json:"apiVersion"`
-	Kind       string                 `json:"kind"`
-	Metadata   DataSourceMetadata     `json:"metadata"`
-	Spec       map[string]interface{} `json:"spec,omitempty"`
-	Status     DataSourceStatus       `json:"status,omitempty"`
-}
-
-// DataSourceMetadata holds datasource metadata
-type DataSourceMetadata struct {
-	Name              string `json:"name"`
-	Namespace         string `json:"namespace,omitempty"`
-	UID               string `json:"uid,omitempty"`
-	CreationTimestamp string `json:"creationTimestamp,omitempty"`
-}
-
-// DataSourceStatus holds datasource status
-type DataSourceStatus struct {
-	Connected bool   `json:"connected"`
-	LastCheck string `json:"lastCheck,omitempty"`
-	Message   string `json:"message,omitempty"`
-}
-
 // DataSourceHandler manages datasource resources
 type DataSourceHandler struct {
 	mu          sync.RWMutex

@@ -1,10 +1,10 @@
-// Package datasourceresource adds the declarative `DataSourceV1Resource`
-// wrapper and a matching reconciler.
+package models
+
+// DataSource domain types and declarative DataSourceV1Resource.
 //
-// The legacy `handlers.DataSourceResource` is kept for API-shape
-// compatibility; this package is the canonical Spec/Status type that
-// flows through the store → informer → workqueue → reconciler pipeline.
-package datasourceresource
+// Contains the canonical Spec/Status type that flows through the
+// store -> informer -> workqueue -> reconciler pipeline, along
+// with the Prober interface and DataSourceReconciler.
 
 import (
 	"context"
@@ -21,7 +21,7 @@ const (
 )
 
 // DataSourceSpec is the desired state of a DataSource.  Backend-agnostic:
-// `Driver` identifies the concrete adapter (postgres, mysql, kafka, …)
+// `Driver` identifies the concrete adapter (postgres, mysql, kafka, ...)
 // and `Config` carries its parameters.
 type DataSourceSpec struct {
 	Driver      string                 `json:"driver"`
@@ -135,3 +135,29 @@ func (r *DataSourceReconciler) Reconcile(ctx context.Context, obj reconciler.Res
 type dsErr string
 
 func (e dsErr) Error() string { return string(e) }
+
+// --- Legacy handler types ---
+
+// DataSourceResource represents a datasource on the server (legacy handler type).
+type DataSourceResource struct {
+	APIVersion string                 `json:"apiVersion"`
+	Kind       string                 `json:"kind"`
+	Metadata   DataSourceMetadata     `json:"metadata"`
+	Spec       map[string]interface{} `json:"spec,omitempty"`
+	Status     DataSourceStatus       `json:"status,omitempty"`
+}
+
+// DataSourceMetadata holds datasource metadata.
+type DataSourceMetadata struct {
+	Name              string `json:"name"`
+	Namespace         string `json:"namespace,omitempty"`
+	UID               string `json:"uid,omitempty"`
+	CreationTimestamp string `json:"creationTimestamp,omitempty"`
+}
+
+// DataSourceStatus holds datasource status.
+type DataSourceStatus struct {
+	Connected bool   `json:"connected"`
+	LastCheck string `json:"lastCheck,omitempty"`
+	Message   string `json:"message,omitempty"`
+}

@@ -21,16 +21,6 @@ type APIBank struct {
 	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
-// APIReference is a reference to an API in the bank
-type APIReference struct {
-	Name        string   `json:"name"`
-	Kind        string   `json:"kind"` // e.g., "GraphQL", "REST", "gRPC"
-	Endpoint    string   `json:"endpoint"`
-	Description string   `json:"description,omitempty"`
-	SLA         string   `json:"sla,omitempty"`         // e.g., "99.9%"
-	DataClasses []string `json:"dataClasses,omitempty"` // What data this API exposes
-}
-
 // APIBankManager manages API banks
 type APIBankManager struct {
 	mu    sync.RWMutex

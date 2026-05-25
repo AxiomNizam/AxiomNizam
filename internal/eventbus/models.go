@@ -46,41 +46,6 @@ type EventTopic struct {
 	IsActive          bool            `json:"isActive"`
 }
 
-// EventSchema validates event structure
-type EventSchema struct {
-	Version  string                   `json:"version"`
-	Fields   map[string]FieldSchema   `json:"fields"`
-	Required []string                 `json:"required"`
-	Examples []map[string]interface{} `json:"examples"`
-}
-
-// FieldSchema describes event field
-type FieldSchema struct {
-	Type        string        `json:"type"` // string, int, bool, object, array
-	Description string        `json:"description"`
-	Required    bool          `json:"required"`
-	Pattern     string        `json:"pattern,omitempty"` // Regex validation
-	Enum        []interface{} `json:"enum,omitempty"`    // Allowed values
-	Min         interface{}   `json:"min,omitempty"`
-	Max         interface{}   `json:"max,omitempty"`
-}
-
-// RetentionConfig defines data retention
-type RetentionConfig struct {
-	Type            string `json:"type"` // "time", "size", "both"
-	TimeMs          int64  `json:"timeMs"`
-	SizeBytes       int64  `json:"sizeBytes"`
-	DeletePolicy    string `json:"deletePolicy"` // "delete", "compact"
-	CompactDeleteMs int64  `json:"compactDeleteMs"`
-}
-
-// TopicConfig configures topic behavior
-type TopicConfig struct {
-	CompressionType   string `json:"compressionType"` // "none", "gzip", "snappy", "lz4"
-	MinInSyncReplicas int    `json:"minInSyncReplicas"`
-	MaxMessageBytes   int    `json:"maxMessageBytes"`
-}
-
 // EventSubscription represents consumer subscription
 type EventSubscription struct {
 	ID             string             `json:"id"`
@@ -100,46 +65,6 @@ type EventSubscription struct {
 	ProcessedCount int64              `json:"processedCount"`
 	FailedCount    int64              `json:"failedCount"`
 	Metadata       map[string]string  `json:"metadata"`
-}
-
-// EventFilter filters which events trigger handler
-type EventFilter struct {
-	Types          []string          `json:"types"`          // Event types
-	Sources        []string          `json:"sources"`        // From these services
-	Subjects       []string          `json:"subjects"`       // About these subjects
-	AggregateTypes []string          `json:"aggregateTypes"` // Resource types
-	Conditions     []FilterCondition `json:"conditions"`     // Custom logic
-	MinPriority    int               `json:"minPriority"`    // Only important events
-}
-
-// FilterCondition represents filter condition
-type FilterCondition struct {
-	Path     string      `json:"path"`     // JSON path in data
-	Operator string      `json:"operator"` // eq, ne, gt, lt, contains, exists, matches
-	Value    interface{} `json:"value"`
-}
-
-// SubscriptionConfig configures subscription behavior
-type SubscriptionConfig struct {
-	ProcessingMode  string      `json:"processingMode"` // "auto", "manual"
-	DeliveryMode    string      `json:"deliveryMode"`   // "at_most_once", "at_least_once", "exactly_once"
-	Timeout         int         `json:"timeout"`        // Seconds
-	MaxConcurrency  int         `json:"maxConcurrency"` // Parallel handlers
-	RetryPolicy     RetryPolicy `json:"retryPolicy"`
-	DeadLetterTopic string      `json:"deadLetterTopic"` // Failed events go here
-	DLQ             bool        `json:"dlq"`             // Enable DLQ
-	AckTimeout      int         `json:"ackTimeout"`      // Seconds before redelivery
-	OrderGuarantee  string      `json:"orderGuarantee"`  // "none", "key", "partition"
-	StartFromOffset int64       `json:"startFromOffset"`
-	StartFromTime   time.Time   `json:"startFromTime"`
-}
-
-// RetryPolicy defines retry behavior
-type RetryPolicy struct {
-	MaxRetries    int     `json:"maxRetries"`
-	InitialDelay  int     `json:"initialDelay"` // Milliseconds
-	MaxDelay      int     `json:"maxDelay"`
-	BackoffFactor float64 `json:"backoffFactor"`
 }
 
 // EventPublishRequest API request

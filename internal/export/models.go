@@ -40,53 +40,6 @@ type ExportJob struct {
 	Notification  NotificationConfig     `json:"notification"` // Notify when done
 }
 
-// ExportStatus represents export state
-type ExportStatus string
-
-const (
-	ExportPending               ExportStatus = "PENDING"
-	ExportValidating            ExportStatus = "VALIDATING"
-	ExportQueued                ExportStatus = "QUEUED"
-	ExportRunning               ExportStatus = "RUNNING"
-	ExportProcessing            ExportStatus = "PROCESSING"
-	ExportCompressing           ExportStatus = "COMPRESSING"
-	ExportEncrypting            ExportStatus = "ENCRYPTING"
-	ExportUploadingExportStatus              = "UPLOADING"
-	ExportCompleted             ExportStatus = "COMPLETED"
-	ExportFailed                ExportStatus = "FAILED"
-	ExportCancelled             ExportStatus = "CANCELLED"
-	ExportPartial               ExportStatus = "PARTIAL"
-)
-
-// ExportFormat defines output format
-type ExportFormat string
-
-const (
-	FormatJSON     ExportFormat = "JSON"
-	FormatCSV      ExportFormat = "CSV"
-	FormatXML      ExportFormat = "XML"
-	FormatParquet  ExportFormat = "PARQUET"
-	FormatAvro     ExportFormat = "AVRO"
-	FormatProtobuf ExportFormat = "PROTOBUF"
-	FormatExcel    ExportFormat = "EXCEL"
-	FormatPDF      ExportFormat = "PDF"
-	FormatSQL      ExportFormat = "SQL"
-	FormatNDJSON   ExportFormat = "NDJSON"
-)
-
-// ExportSource defines what to export
-type ExportSource struct {
-	Type           string `json:"type"` // "resource", "query", "database", "table"
-	ResourceType   string `json:"resourceType,omitempty"`
-	ResourceID     string `json:"resourceId,omitempty"`
-	Database       string `json:"database,omitempty"`
-	Table          string `json:"table,omitempty"`
-	Query          string `json:"query,omitempty"`
-	IncludeRelated bool   `json:"includeRelated"`
-	IncludeAudit   bool   `json:"includeAudit"`
-	IncludeHistory bool   `json:"includeHistory"`
-}
-
 // SortOrder for export
 type SortOrder struct {
 	Field     string `json:"field"`
@@ -97,66 +50,6 @@ type SortOrder struct {
 type PaginationConfig struct {
 	Limit  int64 `json:"limit"` // 0 = unlimited
 	Offset int64 `json:"offset"`
-}
-
-// CompressionType for export compression
-type CompressionType string
-
-const (
-	CompressionNone   CompressionType = "NONE"
-	CompressionGzip   CompressionType = "GZIP"
-	CompressionBrotli CompressionType = "BROTLI"
-	CompressionLZ4    CompressionType = "LZ4"
-	CompressionZstd   CompressionType = "ZSTD"
-)
-
-// EncryptionConfig for export encryption
-type EncryptionConfig struct {
-	Enabled     bool   `json:"enabled"`
-	Algorithm   string `json:"algorithm"`   // "AES-256-GCM", "AES-256-CBC"
-	KeyID       string `json:"keyId"`       // Reference to encryption key
-	KeyProvider string `json:"keyProvider"` // "kms", "vault", "local"
-	Passphrase  string `json:"passphrase"`  // Client-side encryption key
-}
-
-// ExportDestination where to store export
-type ExportDestination struct {
-	Type              string             `json:"type"`             // "local", "s3", "gcs", "azure", "ftp", "sftp"
-	Path              string             `json:"path"`             // Local path or remote path
-	Bucket            string             `json:"bucket,omitempty"` // S3/GCS bucket
-	Region            string             `json:"region,omitempty"` // AWS region
-	AccessKey         string             `json:"accessKey,omitempty"`
-	SecretKey         string             `json:"secretKey,omitempty"`
-	Endpoint          string             `json:"endpoint,omitempty"` // Custom endpoint
-	StorageClass      string             `json:"storageClass"`       // S3 storage class
-	ACL               string             `json:"acl"`                // S3 ACL
-	MakePublic        bool               `json:"makePublic"`
-	CreateBackup      bool               `json:"createBackup"` // Keep backup copy
-	OverwriteExisting bool               `json:"overwriteExisting"`
-	Notification      NotificationConfig `json:"notification"`
-}
-
-// ScheduleConfig for recurring exports
-type ScheduleConfig struct {
-	Enabled    bool   `json:"enabled"`
-	Cron       string `json:"cron"` // Cron expression
-	Timezone   string `json:"timezone"`
-	Frequency  string `json:"frequency"`           // "hourly", "daily", "weekly", "monthly"
-	Time       string `json:"time"`                // HH:MM
-	DayOfWeek  string `json:"dayOfWeek,omitempty"` // "monday", "tuesday", etc
-	DayOfMonth int    `json:"dayOfMonth,omitempty"`
-	MaxRuns    int    `json:"maxRuns"`   // 0 = unlimited
-	Retention  int    `json:"retention"` // Days to keep scheduled exports
-}
-
-// NotificationConfig for export notifications
-type NotificationConfig struct {
-	Enabled      bool
-	OnSuccess    bool
-	OnFailure    bool
-	Webhooks     []string // Webhook URLs
-	Email        []string // Email addresses
-	SlackWebhook string   // Slack webhook
 }
 
 // ExportCreateRequest API request

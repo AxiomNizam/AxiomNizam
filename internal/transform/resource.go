@@ -8,51 +8,23 @@ import (
 
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/reconciler"
-	"example.com/axiomnizam/internal/resources"
+	"example.com/axiomnizam/internal/transform/models"
 )
+
+// --- Constants (aliases) ---
 
 const (
-	RuleKind       = "TransformRule"
-	RuleAPIVersion = "transform.axiomnizam.io/v1"
+	RuleKind       = models.RuleKind
+	RuleAPIVersion = models.RuleAPIVersion
 )
 
-type RuleSpec struct {
-	RuleName    string                 `json:"ruleName"`
-	Description string                 `json:"description,omitempty"`
-	Type        string                 `json:"type,omitempty"`
-	Config      map[string]interface{} `json:"config,omitempty"`
-	Enabled     bool                   `json:"enabled"`
-}
+// --- Type aliases ---
 
-type RuleResourceStatus struct {
-	resources.ObjectStatus `json:",inline"`
-	RuleActive             bool `json:"ruleActive"`
-}
+type RuleSpec = models.RuleSpec
+type RuleResourceStatus = models.RuleResourceStatus
+type RuleResource = models.RuleResource
 
-type RuleResource struct {
-	resources.TypeMeta   `json:",inline"`
-	resources.ObjectMeta `json:"metadata"`
-	Spec                 RuleSpec           `json:"spec"`
-	Status               RuleResourceStatus `json:"status"`
-}
-
-func (r *RuleResource) GetObjectMeta() *resources.ObjectMeta { return &r.ObjectMeta }
-func (r *RuleResource) GetTypeMeta() *resources.TypeMeta     { return &r.TypeMeta }
-func (r *RuleResource) GetStatus() *resources.ObjectStatus   { return &r.Status.ObjectStatus }
-func (r *RuleResource) SetStatus(s *resources.ObjectStatus) {
-	if s != nil {
-		r.Status.ObjectStatus = *s
-	}
-}
-func (r *RuleResource) DeepCopy() resources.Resource { cp := *r; return &cp }
-func (r *RuleResource) GetKey() string {
-	if r.Namespace == "" {
-		return r.Name
-	}
-	return r.Namespace + "/" + r.Name
-}
-func (r *RuleResource) GetGeneration() int64         { return r.Generation }
-func (r *RuleResource) GetObservedGeneration() int64 { return r.Status.ObservedGeneration }
+// --- Reconciler (business logic stays in parent package) ---
 
 type RuleReconciler struct {
 	store store.ResourceStore[*RuleResource]

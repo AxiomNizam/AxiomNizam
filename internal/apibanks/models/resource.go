@@ -1,7 +1,7 @@
-package apibanks
+package models
 
 // =====================================================
-// P2 resource-ification — APIBank.
+// P2 resource-ification -- APIBank.
 //
 // This file adds a declarative envelope around the existing imperative
 // `APIBank` config object so the platform can reconcile API banks like
@@ -17,6 +17,16 @@ import (
 
 	"example.com/axiomnizam/internal/resources"
 )
+
+// APIReference is a reference to an API in the bank
+type APIReference struct {
+	Name        string   `json:"name"`
+	Kind        string   `json:"kind"` // e.g., "GraphQL", "REST", "gRPC"
+	Endpoint    string   `json:"endpoint"`
+	Description string   `json:"description,omitempty"`
+	SLA         string   `json:"sla,omitempty"`         // e.g., "99.9%"
+	DataClasses []string `json:"dataClasses,omitempty"` // What data this API exposes
+}
 
 // Kind / APIVersion constants.
 const (

@@ -61,18 +61,6 @@ type StreamRequest struct {
 	Track     bool                   `json:"track"`     // Enable progress tracking
 }
 
-// OutputFormat for streaming
-type OutputFormat string
-
-const (
-	FormatJSON     OutputFormat = "JSON"
-	FormatCSV      OutputFormat = "CSV"
-	FormatParquet  OutputFormat = "PARQUET"
-	FormatXML      OutputFormat = "XML"
-	FormatProtobuf OutputFormat = "PROTOBUF"
-	FormatNDJSON   OutputFormat = "NDJSON" // Newline-delimited JSON
-)
-
 // StreamSession manages a streaming session
 type StreamSession struct {
 	ID           string
@@ -104,15 +92,6 @@ type StreamSubscription struct {
 	LastActivity time.Time              `json:"lastActivity"`
 	DeliveryMode DeliveryMode           `json:"deliveryMode"` // At-most-once, At-least-once
 }
-
-// DeliveryMode for subscriptions
-type DeliveryMode string
-
-const (
-	DeliveryAtMostOnce  DeliveryMode = "AT_MOST_ONCE"
-	DeliveryAtLeastOnce DeliveryMode = "AT_LEAST_ONCE"
-	DeliveryExactlyOnce DeliveryMode = "EXACTLY_ONCE"
-)
 
 // RealtimeEvent represents event for subscriptions
 type RealtimeEvent struct {

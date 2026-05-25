@@ -1,88 +1,40 @@
 package cdc
 
-// =====================================================
-// P1.2 — CDC Pipeline as a declarative resource
-//
-// The existing `CDCPipeline` (owned by `PipelineEngine`) and `CDCStream`
-// (owned by `ChangeDataCapture`) are imperative runtime objects.  Here
-// we expose `CDCPipelineResource` as a declarative envelope with Spec /
-// Status / Conditions so a controller can reconcile it.
-// =====================================================
-
+// Re-export domain types from models sub-package for backward compatibility.
 import (
 	"time"
 
-	"example.com/axiomnizam/internal/resources"
+	"example.com/axiomnizam/internal/cdc/models"
 )
 
+// --- Constants ---
 const (
-	CDCPipelineKind       = "CDCPipeline"
-	CDCPipelineAPIVersion = "cdc.axiomnizam.io/v1"
+	CDCPipelineKind       = models.CDCPipelineKind
+	CDCPipelineAPIVersion = models.CDCPipelineAPIVersion
 )
 
-// CDCPipelineSpec is the *desired* state of a CDC Pipeline.
-type CDCPipelineSpec struct {
-	Description string                 `json:"description,omitempty"`
-	Source      CDCSource              `json:"source"`
-	Sink        CDCSink                `json:"sink"`
-	Filters     CDCFilters             `json:"filters"`
-	Config      map[string]interface{} `json:"config,omitempty"`
-	Tags        []string               `json:"tags,omitempty"`
+// --- Type aliases for backward compatibility ---
 
-	// Paused asks the controller to keep the underlying CDCPipeline in
-	// the `paused` state.
-	Paused bool `json:"paused,omitempty"`
-}
+type PipelineStatus = models.PipelineStatus
+type CDCSource = models.CDCSource
+type CDCSink = models.CDCSink
+type CDCFilters = models.CDCFilters
+type CDCPipelineSpec = models.CDCPipelineSpec
+type CDCPipelineResourceStatus = models.CDCPipelineResourceStatus
+type CDCPipelineResource = models.CDCPipelineResource
 
-// CDCPipelineResourceStatus extends canonical status with CDC telemetry.
-type CDCPipelineResourceStatus struct {
-	resources.ObjectStatus `json:",inline"`
-
-	CDCStatus   PipelineStatus `json:"cdcStatus,omitempty"`
-	EventCount  int64          `json:"eventCount"`
-	ErrorCount  int64          `json:"errorCount"`
-	LastEventAt *time.Time     `json:"lastEventAt,omitempty"`
-	Lag         string         `json:"lag,omitempty"`
-}
-
-// CDCPipelineResource is the declarative resource for a CDC pipeline.
-type CDCPipelineResource struct {
-	resources.TypeMeta   `json:",inline"`
-	resources.ObjectMeta `json:"metadata"`
-
-	Spec   CDCPipelineSpec           `json:"spec"`
-	Status CDCPipelineResourceStatus `json:"status"`
-}
-
-// --- resources.Resource ---
-
-func (c *CDCPipelineResource) GetObjectMeta() *resources.ObjectMeta { return &c.ObjectMeta }
-func (c *CDCPipelineResource) GetTypeMeta() *resources.TypeMeta     { return &c.TypeMeta }
-func (c *CDCPipelineResource) GetStatus() *resources.ObjectStatus   { return &c.Status.ObjectStatus }
-func (c *CDCPipelineResource) SetStatus(s *resources.ObjectStatus) {
-	if s != nil {
-		c.Status.ObjectStatus = *s
-	}
-}
-func (c *CDCPipelineResource) DeepCopy() resources.Resource {
-	cp := *c
-	return &cp
-}
-
-// --- reconciler.Resource ---
-
-func (c *CDCPipelineResource) GetKey() string {
-	if c.Namespace == "" {
-		return c.Name
-	}
-	return c.Namespace + "/" + c.Name
-}
-func (c *CDCPipelineResource) GetGeneration() int64         { return c.Generation }
-func (c *CDCPipelineResource) GetObservedGeneration() int64 { return c.Status.ObservedGeneration }
+// --- PipelineStatus constants re-exported for backward compatibility ---
+const (
+	CDCActive  = models.CDCActive
+	CDCPaused  = models.CDCPaused
+	CDCStopped = models.CDCStopped
+	CDCFailed  = models.CDCFailed
+	CDCCreated = models.CDCCreated
+)
 
 // ToCDCPipeline projects the declarative resource onto the imperative
 // `*CDCPipeline` shape consumed by `PipelineEngine`.
-func (c *CDCPipelineResource) ToCDCPipeline() *CDCPipeline {
+func ToCDCPipeline(c *CDCPipelineResource) *CDCPipeline {
 	id := c.UID
 	if id == "" {
 		id = c.Name

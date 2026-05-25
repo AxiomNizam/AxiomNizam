@@ -61,7 +61,7 @@ func (c *CDCPipelineController) Reconcile(ctx context.Context, obj reconciler.Re
 		return reconciler.ReconcileResult{Error: fmt.Errorf("CDCPipelineController: engine is nil")}
 	}
 
-	desired := pr.ToCDCPipeline()
+	desired := ToCDCPipeline(pr)
 
 	c.engine.mu.Lock()
 	existing, exists := c.engine.pipelines[desired.ID]

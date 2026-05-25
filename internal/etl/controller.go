@@ -77,7 +77,7 @@ func (c *PipelineController) Reconcile(ctx context.Context, obj reconciler.Resou
 		return reconciler.ReconcileResult{Error: fmt.Errorf("PipelineController: engine is nil")}
 	}
 
-	desired := pr.ToPipeline()
+	desired := ToPipeline(pr)
 
 	// Observe actual state inside the engine.
 	c.engine.mu.Lock()

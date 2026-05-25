@@ -18,16 +18,8 @@ import (
 // =====================================================
 
 // --- Pipeline Models ---
-
-type PipelineStatus string
-
-const (
-	CDCActive  PipelineStatus = "active"
-	CDCPaused  PipelineStatus = "paused"
-	CDCStopped PipelineStatus = "stopped"
-	CDCFailed  PipelineStatus = "failed"
-	CDCCreated PipelineStatus = "created"
-)
+// PipelineStatus, CDCSource, CDCSink, CDCFilters are defined in
+// cdc/models and re-exported via cdc/types.go.
 
 type CDCPipeline struct {
 	ID          string                 `json:"id"`
@@ -47,26 +39,8 @@ type CDCPipeline struct {
 	Tags        []string               `json:"tags,omitempty"`
 }
 
-type CDCSource struct {
-	Type      string                 `json:"type"`      // mysql_binlog, pg_wal, mongo_oplog, polling, api_webhook
-	Connector string                 `json:"connector"` // mysql, postgres, mongodb, etc.
-	Config    map[string]interface{} `json:"config"`
-	Tables    []string               `json:"tables,omitempty"`
-}
-
-type CDCSink struct {
-	Type      string                 `json:"type"` // kafka, webhook, api, database, elasticsearch, s3
-	Connector string                 `json:"connector"`
-	Config    map[string]interface{} `json:"config"`
-	BatchSize int                    `json:"batch_size,omitempty"`
-}
-
-type CDCFilters struct {
-	Tables     []string `json:"tables,omitempty"`
-	Operations []string `json:"operations,omitempty"` // INSERT, UPDATE, DELETE
-	Schemas    []string `json:"schemas,omitempty"`
-	Exclude    []string `json:"exclude,omitempty"`
-}
+// CDCSource, CDCSink, CDCFilters are defined in cdc/models and
+// re-exported via cdc/types.go.
 
 // --- Source/Sink Types ---
 
