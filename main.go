@@ -65,8 +65,10 @@ import (
 	"example.com/axiomnizam/internal/kubeplus/crd"
 	"example.com/axiomnizam/internal/kubeplus/scheduler"
 	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/metrics"
 	"example.com/axiomnizam/internal/migrations"
+	"example.com/axiomnizam/internal/observability"
 	"example.com/axiomnizam/internal/mlpipeline"
 	"example.com/axiomnizam/internal/models"
 	"example.com/axiomnizam/internal/netintel/modes"
@@ -300,6 +302,21 @@ func main() {
 		log.Println("✅ IAM system initialized")
 	}
 
+	// Initialize OpenTelemetry tracing (no-op if OTEL_EXPORTER_OTLP_ENDPOINT not set)
+	otelShutdown, otelErr := observability.InitTracer(ctx, "axiomnizam")
+	if otelErr != nil {
+		log.Printf("⚠️  OTel tracer init failed: %v (tracing disabled)", otelErr)
+	} else {
+		defer otelShutdown(context.Background())
+	}
+
+	// Initialize structured logging
+	logEnv := os.Getenv("LOG_ENV")
+	if logEnv == "" {
+		logEnv = "production"
+	}
+	logging.Init(logEnv)
+
 	// Create Gin router
 	router := gin.Default()
 
@@ -356,6 +373,13 @@ func main() {
 		}
 		c.Next()
 	})
+
+	// Observability middleware — request ID, trace context, structured access logs
+	router.Use(observability.RequestIDMiddleware())
+	router.Use(observability.AccessLogMiddleware())
+
+	// Prometheus /metrics endpoint
+	metrics.RegisterMetricsEndpoint(router)
 
 	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware

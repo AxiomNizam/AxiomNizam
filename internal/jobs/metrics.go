@@ -47,7 +47,7 @@ type MetricsCollector struct {
 // NewMetricsCollector creates a new metrics collector
 func NewMetricsCollector(namespace string) *MetricsCollector {
 	if namespace == "" {
-		namespace = "axiom_nizam"
+		namespace = "axiom_jobs"
 	}
 
 	mc := &MetricsCollector{

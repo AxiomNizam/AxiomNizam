@@ -146,48 +146,48 @@ func NewCollector() *Collector {
 	return &Collector{
 		startTime: time.Now(),
 		EnrollmentsTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "enrollments_total",
 			Help:      "Total number of factor enrollments",
 		}),
 		VerificationsTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "verifications_total",
 			Help:      "Total number of successful MFA verifications",
 		}),
 		VerificationFailures: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "verification_failures_total",
 			Help:      "Total number of failed MFA verifications",
 		}),
 		BackupCodesUsed: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "backup_codes_used_total",
 			Help:      "Total number of backup codes consumed",
 		}),
 		TrustedDevicesCreated: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "trusted_devices_total",
 			Help:      "Total number of trusted devices created",
 		}),
 		ActiveFactorsTotal: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "active_factors",
 			Help:      "Number of active MFA factors",
 		}),
 		HighRiskEvents: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "high_risk_events",
 			Help:      "Number of high-risk authentication events",
 		}),
 		VerificationDuration: promauto.NewHistogram(prometheus.HistogramOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "verification_duration_seconds",
 			Help:      "Time taken to verify MFA code",
 			Buckets:   prometheus.DefBuckets,
 		}),
 		EnrollmentDuration: promauto.NewHistogram(prometheus.HistogramOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "enrollment_duration_seconds",
 			Help:      "Time taken to complete MFA enrollment",
 			Buckets:   prometheus.DefBuckets,

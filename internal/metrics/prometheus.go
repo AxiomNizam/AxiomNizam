@@ -6,32 +6,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var (
-	// Registry is the application-wide Prometheus registry.
-	// All per-module collectors should register here.
-	Registry = prometheus.NewRegistry()
-
-	// Gatherer exposes the default gatherer for the /metrics handler.
-	Gatherer prometheus.Gatherer = Registry
-)
-
-func init() {
-	// Register Go runtime metrics (goroutines, memory, GC).
-	Registry.MustRegister(prometheus.NewGoCollector())
-	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-}
-
-// RegisterCollector registers a Prometheus collector with the application registry.
+// RegisterCollector registers a Prometheus collector with the default registry.
 // Call this from per-module metrics/ packages to wire collectors into /metrics.
+// Note: modules using promauto already auto-register with the default registry,
+// so this is only needed for manually-created collectors.
 func RegisterCollector(c prometheus.Collector) {
-	Registry.MustRegister(c)
+	prometheus.MustRegister(c)
 }
 
 // MetricsHandler returns a Gin handler that serves Prometheus metrics at /metrics.
+// All metrics registered with promauto or RegisterCollector are included.
 func MetricsHandler() gin.HandlerFunc {
-	h := promhttp.HandlerFor(Gatherer, promhttp.HandlerOpts{
-		EnableOpenMetrics: true,
-	})
+	h := promhttp.InstrumentMetricHandler(
+		prometheus.DefaultRegisterer,
+		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
+			EnableOpenMetrics: true,
+		}),
+	)
 	return func(c *gin.Context) {
 		h.ServeHTTP(c.Writer, c.Request)
 	}

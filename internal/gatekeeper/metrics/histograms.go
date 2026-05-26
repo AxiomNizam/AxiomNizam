@@ -9,7 +9,7 @@ import (
 
 // ChallengeDuration tracks time to complete challenge verification.
 var ChallengeDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-	Namespace: "mfa",
+	Namespace: "axiom_mfa",
 	Name:      "challenge_duration_seconds",
 	Help:      "Time taken to complete an MFA challenge (begin to verify)",
 	Buckets:   prometheus.DefBuckets,
@@ -17,7 +17,7 @@ var ChallengeDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 
 // BackupCodeRegenerationDuration tracks time to regenerate backup codes.
 var BackupCodeRegenerationDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-	Namespace: "mfa",
+	Namespace: "axiom_mfa",
 	Name:      "backup_code_regen_duration_seconds",
 	Help:      "Time taken to regenerate backup codes",
 	Buckets:   prometheus.DefBuckets,
@@ -25,7 +25,7 @@ var BackupCodeRegenerationDuration = promauto.NewHistogram(prometheus.HistogramO
 
 // RiskScoringDuration tracks time to calculate risk scores.
 var RiskScoringDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-	Namespace: "mfa",
+	Namespace: "axiom_mfa",
 	Name:      "risk_scoring_duration_seconds",
 	Help:      "Time taken to calculate risk scores",
 	Buckets:   prometheus.DefBuckets,

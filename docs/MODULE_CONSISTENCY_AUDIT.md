@@ -1056,19 +1056,33 @@ These bring the codebase to production-grade quality matching K8s/Nomad/MinIO.
 
 ---
 
-#### Phase 23: Observability Stack
+#### Phase 23: Observability Stack — DONE (2026-05-26)
 
 **Goal:** Unified metrics, tracing, and health across all modules.
 
-| # | Task | Detail |
-|---|------|--------|
-| 23.1 | Add OpenTelemetry tracing to all HTTP handlers | Middleware |
-| 23.2 | Add trace context propagation to RPC/service calls | All modules |
-| 23.3 | Standardize Prometheus metric naming: `axiom_<module>_<metric>` | All metrics/ |
-| 23.4 | Add `/metrics` endpoint with all module collectors | main.go |
-| 23.5 | Add structured logging correlation (trace ID in logs) | logging/ |
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 23.1 | Add OpenTelemetry tracing to all HTTP handlers | `internal/observability/tracing.go` — TracerProvider + OTLP gRPC exporter; no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` unset | DONE |
+| 23.2 | Add trace context propagation to RPC/service calls | `internal/observability/middleware.go` — W3C traceparent + X-Request-ID propagation | DONE |
+| 23.3 | Standardize Prometheus metric naming: `axiom_<module>_<metric>` | All metrics/: iam→axiom_iam, antivirus→axiom_antivirus, conductor→axiom_conductor, mfa→axiom_mfa, jobs→axiom_jobs | DONE |
+| 23.4 | Add `/metrics` endpoint with all module collectors | `internal/metrics/prometheus.go` — uses `prometheus.DefaultRegisterer` (promauto auto-registers); wired in main.go via `RegisterMetricsEndpoint(router)` | DONE |
+| 23.5 | Add structured logging correlation (trace ID in logs) | `internal/observability/middleware.go` — AccessLogMiddleware + TraceLogger; `internal/logging/trace.go` — context helpers | DONE |
 
-**Scope:** All modules | **Effort:** 3-4 days | **Impact:** MEDIUM | **Risk:** LOW
+**Files created:**
+- `internal/observability/middleware.go` — RequestIDMiddleware (X-Request-ID + W3C traceparent), AccessLogMiddleware (structured zap logs with trace_id/request_id)
+- `internal/observability/tracing.go` — InitTracer (OTel TracerProvider + OTLP gRPC exporter, graceful no-op when unconfigured)
+
+**Files updated:**
+- `internal/metrics/prometheus.go` — Fixed registry mismatch: removed custom `Registry`, now uses `prometheus.DefaultRegisterer` so all `promauto`-registered collectors appear on `/metrics`
+- `internal/iam/metrics/counters.go` — namespace `iam` → `axiom_iam`
+- `internal/antivirus/metrics/counters.go` — namespace `antivirus` → `axiom_antivirus`
+- `internal/conductor/metrics/counters.go` — namespace `conductor` → `axiom_conductor`
+- `internal/gatekeeper/metrics/counters.go` — namespace `mfa` → `axiom_mfa`
+- `internal/gatekeeper/metrics/histograms.go` — namespace `mfa` → `axiom_mfa`
+- `internal/jobs/metrics.go` — default namespace `axiom_nizam` → `axiom_jobs`
+- `main.go` — added OTel tracer init, `logging.Init()`, `RequestIDMiddleware`, `AccessLogMiddleware`, `RegisterMetricsEndpoint`
+
+**Scope:** All modules | **Effort:** 1 day | **Impact:** MEDIUM | **Risk:** LOW
 
 ---
 
@@ -1190,7 +1204,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-21 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-23 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging)*
 
 ---
 
@@ -1220,7 +1234,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 20. Reconciler standardization | ✅ DONE | 2026-05-26 | 30 GenericControllers with DefaultControllerRateLimiter; K8s-style /healthz probes |
 | 21. Event bus standardization | ✅ DONE | 2026-05-26 | Audit: no overlap — events/ (audit trails) vs eventbus/ (pub/sub); no merge needed |
 | 22. Storage backend abstraction | ✅ DONE | 2026-05-26 | `models.Backend` interface + native/s3client impls + dual-mode KV persistence |
-| 23. Observability stack | 🔶 PARTIAL | — | zap + Prometheus + tracing modules exist, not fully wired |
+| 23. Observability stack | ✅ DONE | 2026-05-26 | OTel tracing + /metrics + structured access logging + axiom_ namespace |
 | 24. Security hardening | 🔶 PARTIAL | — | sqlfilter + scanner + gatekeeper done; rate limiting, CSRF pending |
 | 25. Main.go decomposition | ⬜ TODO | — | ~2500 lines, needs decomposition |
 
@@ -1277,4 +1291,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-21 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-23 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging)*
