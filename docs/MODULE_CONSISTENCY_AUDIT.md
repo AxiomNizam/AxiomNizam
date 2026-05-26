@@ -1219,7 +1219,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 19. Configurable timeouts | ✅ DONE | 2026-05-26 | 7 modules with config/; cncf_cloud_native.go env-configurable |
 | 20. Reconciler standardization | ✅ DONE | 2026-05-26 | 30 GenericControllers with DefaultControllerRateLimiter; K8s-style /healthz probes |
 | 21. Event bus standardization | ✅ DONE | 2026-05-26 | Audit: no overlap — events/ (audit trails) vs eventbus/ (pub/sub); no merge needed |
-| 22. Storage backend abstraction | 🔶 PARTIAL | — | BackendManager with Raft/etcd dual backend |
+| 22. Storage backend abstraction | ✅ DONE | 2026-05-26 | `models.Backend` interface + native/s3client impls + dual-mode KV persistence |
 | 23. Observability stack | 🔶 PARTIAL | — | zap + Prometheus + tracing modules exist, not fully wired |
 | 24. Security hardening | 🔶 PARTIAL | — | sqlfilter + scanner + gatekeeper done; rate limiting, CSRF pending |
 | 25. Main.go decomposition | ⬜ TODO | — | ~2500 lines, needs decomposition |

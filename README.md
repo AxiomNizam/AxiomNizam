@@ -276,6 +276,29 @@ Key results:
 - **ReconcilerMetrics** wired to all 30 controllers via Prometheus
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Event Bus Standardization (Phase 21)
+
+**Phase 21 ✅** (completed 2026-05-26) — Audit of events/ vs eventbus/ — no merge needed.
+
+Key findings:
+- **`internal/events/`** — K8s-style EventRecorder for resource audit trails (RecordedEvent, InvolvedObject)
+- **`internal/eventbus/`** — CloudEvents-style pub/sub for async messaging (EventBusEvent, topics, DLQ)
+- **No overlap** — packages serve different purposes (audit vs messaging)
+- **KV persistence** already in events/audit.go from Phase 12
+- **Full build passes clean** — `go build .` succeeds
+
+### Module Consistency: Storage Backend Abstraction (Phase 22)
+
+**Phase 22 ✅** (completed 2026-05-26) — Clean backend interface for storage (MinIO pattern).
+
+Key results:
+- **`models.Backend`** interface in `storage/models/backend.go` — 80+ methods (buckets, objects, versioning, lifecycle, encryption, CORS, etc.)
+- **`native.Backend`** — filesystem implementation
+- **`s3client.Client`** — S3-compatible implementation
+- **Dual-mode persistence** — `BucketStore` supports both etcd and Raft KV via `ConfigurePersistence()` / `ConfigureKVPersistence()`
+- **Runtime selection** — `STORAGE_BACKEND=raft|etcd` env var
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
