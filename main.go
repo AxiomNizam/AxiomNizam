@@ -1206,28 +1206,18 @@ func main() {
 	cdcSystem := cdc.NewSystem(conns.Etcd)
 	cdcEtlHandler := cdcSystem.Handler()
 	_ = cdcSystem.Start(ctx)
-	log.Println("✅ CDC/ETL module started")
+	log.Println("✅ CDC module started")
 
-	// ETL Pipeline Management
+	// ETL System (standalone with audit/metrics/KV persistence)
+	etlEngine := etl.NewEngine(conns.Etcd)
+	etlSystem := etl.NewSystem(etlEngine)
+	_ = etlSystem.Start(ctx)
+	etlHandler := etlSystem.Handler()
+	log.Println("✅ ETL module started")
+
+	// ETL Pipeline Management (standalone handler with typed DTOs + audit + metrics)
 	etlAPI := router.Group("/api/v1/etl", authMiddleware)
-	{
-		etlAPI.GET("/pipelines", cdcEtlHandler.ListETLPipelines)
-		etlAPI.GET("/pipelines/:id", cdcEtlHandler.GetETLPipeline)
-		etlAPI.POST("/pipelines", adminOrSysMiddleware, cdcEtlHandler.CreateETLPipeline)
-		etlAPI.PUT("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLPipeline)
-		etlAPI.DELETE("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLPipeline)
-		etlAPI.POST("/pipelines/:id/run", adminOrSysMiddleware, cdcEtlHandler.RunETLPipeline)
-		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
-		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
-		etlAPI.POST("/connectors", adminOrSysMiddleware, cdcEtlHandler.CreateETLConnector)
-		etlAPI.PUT("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLConnector)
-		etlAPI.DELETE("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLConnector)
-		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
-		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
-		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)
-		etlAPI.GET("/blueprints", cdcEtlHandler.GetETLBlueprints)
-		etlAPI.GET("/observability", cdcEtlHandler.GetETLObservability)
-	}
+	etlHandler.RegisterRoutes(etlAPI, adminOrSysMiddleware)
 
 	// CDC Pipeline Management
 	cdcAPI := router.Group("/api/v1/cdc", authMiddleware)
@@ -1868,8 +1858,11 @@ func main() {
 				log.Println("✅ Gatekeeper: Raft KV persistence wired (deferred)")
 			}
 
-			// Wire CDC/ETL audit persistence
+			// Wire CDC audit persistence
 			cdcSystem.SetKVStore(backendMgr.KV())
+
+			// Wire ETL audit + metrics persistence
+			etlSystem.SetKVStore(backendMgr.KV())
 
 			// Wire GIS audit persistence
 			gisSystem.SetKVStore(backendMgr.KV())
