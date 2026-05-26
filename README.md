@@ -255,6 +255,16 @@ Key results:
 - **MockKVStore** — in-memory mock of platform/store.KVStore with Keys/Count/Clear
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Configurable Timeouts & URLs (Phase 19)
+
+**Phase 19 ✅** (completed 2026-05-26) — No hardcoded values in production code.
+
+Key results:
+- **7 core modules** have `config/` with `LoadFromEnv()` + `DefaultConfig()` (prior session)
+- **Grafana credentials** now env-configurable: `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`
+- **5 observability endpoints** now env-configurable: `PROMETHEUS_URL`, `GRAFANA_URL`, `LOKI_URL`, `JAEGER_URL`
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:

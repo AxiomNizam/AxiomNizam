@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -61,10 +62,15 @@ type PrometheusConfig struct {
 	AlertRules         []string
 }
 
-// NewPrometheusConfig creates a new Prometheus configuration
+// NewPrometheusConfig creates a new Prometheus configuration.
+// Endpoint defaults to env GRAFANA_PROMETHEUS_URL or "http://prometheus:9090".
 func NewPrometheusConfig() *PrometheusConfig {
+	endpoint := os.Getenv("PROMETHEUS_URL")
+	if endpoint == "" {
+		endpoint = "http://prometheus:9090"
+	}
 	return &PrometheusConfig{
-		Endpoint:           "http://prometheus:9090",
+		Endpoint:           endpoint,
 		ScrapeInterval:     15 * time.Second,
 		EvaluationInterval: 15 * time.Second,
 		GlobalLabels:       make(map[string]string),
@@ -81,12 +87,25 @@ type GrafanaConfig struct {
 	DataSource       string
 }
 
-// NewGrafanaConfig creates a new Grafana configuration
+// NewGrafanaConfig creates a new Grafana configuration.
+// Credentials default to env GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD.
 func NewGrafanaConfig() *GrafanaConfig {
+	user := os.Getenv("GRAFANA_ADMIN_USER")
+	if user == "" {
+		user = "admin"
+	}
+	pass := os.Getenv("GRAFANA_ADMIN_PASSWORD")
+	if pass == "" {
+		pass = "admin"
+	}
+	endpoint := os.Getenv("GRAFANA_URL")
+	if endpoint == "" {
+		endpoint = "http://grafana:3000"
+	}
 	return &GrafanaConfig{
-		Endpoint:         "http://grafana:3000",
-		AdminUsername:    "admin",
-		AdminPassword:    "admin",
+		Endpoint:         endpoint,
+		AdminUsername:    user,
+		AdminPassword:    pass,
 		DefaultDashboard: "axiom-nizam",
 		DataSource:       "Prometheus",
 	}
@@ -100,10 +119,15 @@ type LokiConfig struct {
 	ChunkScanInterval time.Duration
 }
 
-// NewLokiConfig creates a new Loki configuration
+// NewLokiConfig creates a new Loki configuration.
+// Endpoint defaults to env LOKI_URL or "http://loki:3100".
 func NewLokiConfig() *LokiConfig {
+	endpoint := os.Getenv("LOKI_URL")
+	if endpoint == "" {
+		endpoint = "http://loki:3100"
+	}
 	return &LokiConfig{
-		Endpoint:          "http://loki:3100",
+		Endpoint:          endpoint,
 		RetentionDays:     30,
 		MaxChunkAge:       2 * time.Hour,
 		ChunkScanInterval: 10 * time.Minute,
@@ -119,10 +143,15 @@ type JaegerConfig struct {
 	BufferSize   int
 }
 
-// NewJaegerConfig creates a new Jaeger configuration
+// NewJaegerConfig creates a new Jaeger configuration.
+// Endpoint defaults to env JAEGER_URL or "http://jaeger:6831".
 func NewJaegerConfig() *JaegerConfig {
+	endpoint := os.Getenv("JAEGER_URL")
+	if endpoint == "" {
+		endpoint = "http://jaeger:6831"
+	}
 	return &JaegerConfig{
-		Endpoint:     "http://jaeger:6831",
+		Endpoint:     endpoint,
 		AgentHost:    "jaeger",
 		AgentPort:    6831,
 		SamplingRate: 0.1,
