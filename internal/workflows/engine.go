@@ -422,10 +422,11 @@ func ConfigureGlobalKVPersistence(kv platformstore.KVStore) {
 	GlobalWorkflowEngine.ConfigureKVPersistence(kv)
 }
 
-// Initialize builtin handlers
-func init() {
-	GlobalWorkflowEngine.RegisterHandler("notification", NotificationHandler)
-	GlobalWorkflowEngine.RegisterHandler("http", HTTPHandler)
+// RegisterBuiltinHandlers registers the built-in step handlers (notification, http).
+// Call this explicitly after creating the engine instead of relying on init().
+func (e *WorkflowEngine) RegisterBuiltinHandlers() {
+	e.RegisterHandler("notification", NotificationHandler)
+	e.RegisterHandler("http", HTTPHandler)
 }
 
 // AddWorkflow adds workflow via global engine

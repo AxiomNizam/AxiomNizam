@@ -153,7 +153,7 @@ func TestCatalogIntegration(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "CatalogTest", product)
 
 	// Get complete catalog
-	catalog := GlobalCatalogIntegration.GetCompleteDataCatalog()
+	catalog := NewCatalogIntegration().GetCompleteDataCatalog()
 
 	if catalog == nil {
 		t.Fatal("Expected catalog")
@@ -179,7 +179,7 @@ func TestDataQualityMonitoring(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "QualityTest", product)
 
 	// Check quality
-	quality := GlobalDataQualityMonitor.CheckProductQuality("QualityTest", "QualityTestProduct")
+	quality := NewDataQualityMonitor(mesh.GlobalDataMesh).CheckProductQuality("QualityTest", "QualityTestProduct")
 
 	if quality == nil {
 		t.Fatal("Expected quality report")
@@ -208,7 +208,7 @@ func TestDataLineageAnalysis(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "LineageTest", product)
 
 	// Analyze lineage
-	analysis := GlobalDataLineageAnalyzer.AnalyzeDataFlow("LineageTest", "LineageTestProduct")
+	analysis := NewDataLineageAnalyzer().AnalyzeDataFlow("LineageTest", "LineageTestProduct")
 
 	if analysis == nil {
 		t.Fatal("Expected lineage analysis")
@@ -261,6 +261,7 @@ func TestPlatformMetrics(t *testing.T) {
 // TestFullIntegration performs comprehensive integration test
 func TestFullIntegration(t *testing.T) {
 	ctx := context.Background()
+	auditor := NewComplianceAuditor(10000)
 
 	// 1. Create domain
 	domain := &mesh.DataDomain{Name: "FullIntegrationTest", Owner: testOwnerInteg}
@@ -307,7 +308,7 @@ func TestFullIntegration(t *testing.T) {
 			Action:       "read",
 			Status:       "success",
 		}
-		if err := NewComplianceAuditor(10000).RecordOperation(ctx, op); err != nil {
+		if err := auditor.RecordOperation(ctx, op); err != nil {
 			t.Fatalf("Failed to record operation: %v", err)
 		}
 	}
@@ -317,15 +318,15 @@ func TestFullIntegration(t *testing.T) {
 	health := GlobalHealthMonitor.CheckHealth(ctx)
 	t.Logf("✅ Health check: %s", health.Status)
 
-	complianceReport := NewComplianceAuditor(10000).GenerateReport(AuditFilter{})
+	complianceReport := auditor.GenerateReport(AuditFilter{})
 	t.Logf("✅ Compliance report: %d operations, %.1f%% success",
 		complianceReport.TotalOperations,
 		float64(complianceReport.SuccessfulOps)*100/float64(complianceReport.TotalOperations))
 
-	qualityReport := GlobalDataQualityMonitor.GetQualityReport("FullIntegrationTest")
+	qualityReport := NewDataQualityMonitor(mesh.GlobalDataMesh).GetQualityReport("FullIntegrationTest")
 	t.Logf("✅ Quality report: avg score %v%%", qualityReport["averageQualityScore"])
 
-	lineageAnalysis := GlobalDataLineageAnalyzer.AnalyzeDataFlow("FullIntegrationTest", "IntegrationTestProduct")
+	lineageAnalysis := NewDataLineageAnalyzer().AnalyzeDataFlow("FullIntegrationTest", "IntegrationTestProduct")
 	t.Logf("✅ Lineage analysis: %v", lineageAnalysis["dataProduct"])
 
 	// 7. Collect metrics

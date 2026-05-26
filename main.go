@@ -1839,6 +1839,7 @@ func main() {
 
 			// Wire remaining modules to KV persistence in Raft mode.
 			workflows.ConfigureGlobalKVPersistence(backendMgr.KV())
+			workflows.GlobalWorkflowEngine.RegisterBuiltinHandlers()
 			modes.ConfigureGlobalKVPersistence(backendMgr.KV())
 			vectorplus.ConfigureGlobalKVPersistence(backendMgr.KV())
 			reviewflow.ConfigureGlobalKVPersistence(backendMgr.KV())

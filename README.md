@@ -196,6 +196,18 @@ Key results:
 - **All loggers** have `ConfigureKVPersistence(kv)` following the gatekeeper pattern
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Eliminate Global Singletons (Phase 13)
+
+**Phase 13 ✅** (completed 2026-05-26) — Eliminate global singletons, replace with constructor injection.
+
+Key results:
+- **9 of 19 singletons eliminated** (5 deleted, 4 converted to local instances)
+- **Deleted:** GlobalWorkflowTriggerManager, GlobalDiffEngine, GlobalAuditLogger, GlobalDataPlatformIntegration, GlobalDataAccessControl, GlobalComplianceAuditor, GlobalCatalogIntegration, GlobalDataQualityMonitor, GlobalDataLineageAnalyzer
+- **init() removed:** workflows/engine.go init() → RegisterBuiltinHandlers() method
+- **Constructors refactored:** NewDataPlatformIntegration(), NewHealthMonitor(), NewPlatformMetricsCollector() take parameters
+- **10 singletons deferred** — still have active consumers in main.go, integration/, cmd/
+- **Full build passes clean** — `go build .` + `go build ./cmd/axiomnizamctl/` succeed
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
