@@ -57,7 +57,7 @@ func NewGenericController[T store.Resource](
 		name:       name,
 		store:      s,
 		reconciler: r,
-		queue:      workqueue.NewSimpleQueue(nil),
+		queue:      workqueue.NewSimpleQueue(workqueue.DefaultControllerRateLimiter()),
 		workers:    workers,
 		shadowMode: shadowMode,
 		metrics:    m,

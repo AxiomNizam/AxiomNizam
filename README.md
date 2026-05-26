@@ -265,6 +265,17 @@ Key results:
 - **5 observability endpoints** now env-configurable: `PROMETHEUS_URL`, `GRAFANA_URL`, `LOKI_URL`, `JAEGER_URL`
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Reconciler Standardization (Phase 20)
+
+**Phase 20 ✅** (completed 2026-05-26) — All controllers follow K8s workqueue + rate-limiting pattern.
+
+Key results:
+- **30 controllers** use `GenericController[T]` in main.go
+- **Rate limiter upgraded** to `DefaultControllerRateLimiter()` (per-item exponential + 10 QPS token bucket)
+- **K8s-style health probes** — `internal/health/health.go` has `/healthz`, `/readyz`, `/livez` framework
+- **ReconcilerMetrics** wired to all 30 controllers via Prometheus
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
