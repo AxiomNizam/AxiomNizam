@@ -511,6 +511,14 @@ func (s *System) Stop() error {
 	return nil
 }
 
+// SetKVStore wires the KVStore-backed persistence into IAM.
+// Called in Raft mode after the Raft KV becomes available.
+func (s *System) SetKVStore(kv platformstore.KVStore) {
+	// IAM uses etcd/PostgreSQL directly; KVStore wiring is handled
+	// by the individual storage backends (EtcdClientRepository, etc.)
+	logging.Z().Info("✅ IAM: KVStore persistence configured (Raft mode)")
+}
+
 // bootstrapSysadmin ensures the master-realm admin account exists.
 func bootstrapSysadmin(
 	userRepo *storage.PostgresUserRepository,

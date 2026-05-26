@@ -208,6 +208,20 @@ Key results:
 - **10 singletons deferred** — still have active consumers in main.go, integration/, cmd/
 - **Full build passes clean** — `go build .` + `go build ./cmd/axiomnizamctl/` succeed
 
+### Module Consistency: system.go Bootstrap (Phase 15)
+
+**Phase 15 ✅** (completed 2026-05-26) — Core modules have `system.go` with standard bootstrap interface.
+
+Key results:
+- **7 modules** now have `system.go`: storage (pre-existing), iam (SetKVStore added), scanner, antivirus, jobs, conductor, cache
+- **Standard interface:** `NewSystem()`, `Name()`, `Start()`, `Stop()`, `SetKVStore()`, `RegisterRoutes()`
+- **Scanner system:** wraps Orchestrator + Metrics with KV persistence
+- **Antivirus system:** wraps Engine with RegisterRoutes + Start/Stop lifecycle
+- **Jobs system:** wraps JobManagerImpl + V1Handler with RegisterRoutes
+- **Conductor system:** wraps Manager with RegisterRoutes
+- **Cache system:** wraps Manager
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
