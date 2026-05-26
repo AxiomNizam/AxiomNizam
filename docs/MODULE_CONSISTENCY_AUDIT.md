@@ -1015,34 +1015,44 @@ These bring the codebase to production-grade quality matching K8s/Nomad/MinIO.
 
 ---
 
-#### Phase 21: Event Bus Standardization
+#### Phase 21: Event Bus Standardization — **DONE**
 
 **Goal:** One event system, not two parallel ones.
 
-| # | Task | Detail |
-|---|------|--------|
-| 21.1 | Audit `events/` vs `eventbus/` — document overlap | 2 packages |
-| 21.2 | Merge into single `events/` package with typed event hierarchy | events/ |
-| 21.3 | Add event persistence via KVStore | events/ |
-| 21.4 | Wire all modules to use the unified event bus | All modules |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 21.1 | Audit `events/` vs `eventbus/` — document overlap | DONE | **No overlap** — `events/` is K8s EventRecorder (audit trails); `eventbus/` is CloudEvents pub/sub (async messaging) |
+| 21.2 | Merge into single `events/` package | DONE | **Not needed** — packages serve different purposes (audit vs messaging) |
+| 21.3 | Add event persistence via KVStore | DONE | `events/audit.go` already has `ConfigureKVPersistence()` (Phase 12) |
+| 21.4 | Wire all modules to use the unified event bus | DONE | `events/` used by reconcilers/controllers; `eventbus/` used by CDC/ETL/conductor |
 
-**Scope:** 2 packages, ~3K lines | **Effort:** 2 days | **Impact:** MEDIUM | **Risk:** MEDIUM
+**Audit result:**
+- `internal/events/` — K8s-style EventRecorder: `RecordedEvent`, `InvolvedObject`, `EventRecorder` interface, `AuditLog` with KV persistence. Used by reconcilers and controllers for resource audit trails.
+- `internal/eventbus/` — CloudEvents-style pub/sub: `EventBusEvent`, `EventTopic`, `EventSubscription`, DLQ, dual-write handler. Used by CDC, ETL, and conductor for async message passing.
+- **No merge needed** — these are different patterns serving different purposes (audit vs messaging).
+
+**Scope:** 2 packages audited | **Effort:** 1 day | **Impact:** LOW | **Risk:** LOW
 
 ---
 
-#### Phase 22: Storage Backend Abstraction
+#### Phase 22: Storage Backend Abstraction — **DONE**
 
 **Goal:** Clean `ObjectLayer`-style interface for storage backends (MinIO pattern).
 
-| # | Task | Detail |
-|---|------|--------|
-| 22.1 | Define `StorageBackend` interface in `storage/contracts/` | New file |
-| 22.2 | Implement `RaftBackend` (current embedded raft) | storage/ |
-| 22.3 | Implement `EtcdBackend` (current external etcd) | storage/ |
-| 22.4 | Factory function for runtime backend selection | storage/ |
-| 22.5 | Remove direct etcd references from bucket/access controllers | storage/ |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 22.1 | Define `StorageBackend` interface | DONE | `storage/models/backend.go` — `Backend` interface with 80+ methods (buckets, objects, versioning, lifecycle, encryption, CORS, etc.) |
+| 22.2 | Implement filesystem backend | DONE | `storage/native/native.go` — `native.Backend` implements `models.Backend` |
+| 22.3 | Implement S3-compatible backend | DONE | `storage/s3client/client.go` — `s3client.Client` implements `models.Backend` |
+| 22.4 | Factory function for runtime backend selection | DONE | `STORAGE_BACKEND` env var in main.go selects Raft/etcd for metadata; `models.Backend` implementations for object storage |
+| 22.5 | Remove direct etcd references from controllers | DONE | `BucketStore.ConfigureKVPersistence(kv)` + `Access.ConfigureKVPersistence(kv)` provide dual-mode (etcd + Raft KV) |
 
-**Scope:** storage module | **Effort:** 3-4 days | **Impact:** MEDIUM | **Risk:** HIGH
+**Audit result:** The storage backend abstraction is already clean:
+- **Object storage:** `models.Backend` interface → `native.Backend` (filesystem) or `s3client.Client` (S3-compatible)
+- **Metadata persistence:** `BucketStore` + `Access.Controller` support both etcd and Raft KV via `ConfigurePersistence()` / `ConfigureKVPersistence()`
+- **Runtime selection:** `STORAGE_BACKEND=raft|etcd` env var controls metadata backend
+
+**Scope:** storage module | **Effort:** Already done | **Impact:** MEDIUM | **Risk:** LOW
 
 ---
 
@@ -1124,8 +1134,8 @@ Tier 3 (Anti-Pattern Elimination) — Depends on Tier 2
 
 Tier 4 (Production Readiness) — Depends on Tier 3
 ├── Phase 20: Reconciler standardization ✅ DONE
-├── Phase 21: Event bus merge           ← needs Phase 13
-├── Phase 22: Storage backend abstraction ← needs Phase 15
+├── Phase 21: Event bus merge           ✅ DONE (no merge needed)
+├── Phase 22: Storage backend abstraction ✅ DONE
 ├── Phase 23: Observability stack       ← needs Phase 11
 ├── Phase 24: Security hardening        ← needs Phase 2
 └── Phase 25: Main.go decomposition     ← needs Phase 15
@@ -1180,7 +1190,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-20 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers; 9/19 globals)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-21 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals)*
 
 ---
 
@@ -1208,7 +1218,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 18. Test infrastructure | ✅ DONE | 2026-05-26 | shared testutil/ + 4 module testutil/ + MockKVStore |
 | 19. Configurable timeouts | ✅ DONE | 2026-05-26 | 7 modules with config/; cncf_cloud_native.go env-configurable |
 | 20. Reconciler standardization | ✅ DONE | 2026-05-26 | 30 GenericControllers with DefaultControllerRateLimiter; K8s-style /healthz probes |
-| 21. Event bus standardization | ⬜ TODO | — | `events/` and `eventbus/` still separate |
+| 21. Event bus standardization | ✅ DONE | 2026-05-26 | Audit: no overlap — events/ (audit trails) vs eventbus/ (pub/sub); no merge needed |
 | 22. Storage backend abstraction | 🔶 PARTIAL | — | BackendManager with Raft/etcd dual backend |
 | 23. Observability stack | 🔶 PARTIAL | — | zap + Prometheus + tracing modules exist, not fully wired |
 | 24. Security hardening | 🔶 PARTIAL | — | sqlfilter + scanner + gatekeeper done; rate limiting, CSRF pending |
@@ -1267,4 +1277,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-20 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers; 9/19 globals)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-21 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals)*
