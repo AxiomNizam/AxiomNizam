@@ -1173,7 +1173,9 @@ func main() {
 	}
 
 	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
-	gisSpecHandler := gispkg.NewGISSpecializedHandler()
+	gisSystem := gispkg.NewSystem()
+	gisSpecHandler := gisSystem.Handler()
+	_ = gisSystem.Start(ctx)
 	gisSpecAPI := router.Group("/api/v1/gis/dashboards", authMiddleware)
 	{
 		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)
@@ -1868,6 +1870,9 @@ func main() {
 
 			// Wire CDC/ETL audit persistence
 			cdcSystem.SetKVStore(backendMgr.KV())
+
+			// Wire GIS audit persistence
+			gisSystem.SetKVStore(backendMgr.KV())
 
 			// Wire API Builder audit persistence
 			apiBuilderSystem.SetKVStore(backendMgr.KV())
