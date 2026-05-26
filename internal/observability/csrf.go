@@ -77,6 +77,9 @@ func DefaultCSRFConfig() CSRFConfig {
 //  2. On state-changing methods (POST/PUT/PATCH/DELETE), the middleware checks
 //     that the X-CSRF-Token header matches the cookie value.
 //  3. The cookie is HttpOnly=false so JavaScript can read it and set the header.
+//  4. Requests carrying an Authorization: Bearer token skip CSRF entirely —
+//     browsers don't auto-attach Authorization headers cross-site, so CSRF
+//     attacks are impossible when using token-based auth.
 func CSRFMiddleware(cfg CSRFConfig) gin.HandlerFunc {
 	exemptSet := make(map[string]struct{}, len(cfg.ExemptMethods))
 	for _, m := range cfg.ExemptMethods {
@@ -93,6 +96,12 @@ func CSRFMiddleware(cfg CSRFConfig) gin.HandlerFunc {
 		// Always issue/refresh the CSRF cookie on safe methods.
 		if _, exempt := exemptSet[method]; exempt {
 			ensureCSRFCookie(c, cfg)
+			c.Next()
+			return
+		}
+
+		// Exempt requests carrying a Bearer token — JWT auth is CSRF-immune.
+		if strings.HasPrefix(c.GetHeader("Authorization"), "Bearer ") {
 			c.Next()
 			return
 		}
