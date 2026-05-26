@@ -1263,7 +1263,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 22. Storage backend abstraction | ✅ DONE | 2026-05-26 | `models.Backend` interface + native/s3client impls + dual-mode KV persistence |
 | 23. Observability stack | ✅ DONE | 2026-05-26 | OTel tracing + /metrics + structured access logging + axiom_ namespace |
 | 24. Security hardening | ✅ DONE | 2026-05-26 | _=err fixed, security headers, CSRF, body limits, hardcoded creds removed |
-| 25. Main.go decomposition | 🔶 PARTIAL | 2026-05-26 | 3386→2310 lines; helpers.go + unwired.go extracted (1142 lines); routes not yet extracted |
+| 25. Main.go decomposition | 🔶 PARTIAL | 2026-05-26 | 3386→2310 lines; 1076 extracted (helpers.go+unwired.go); 23 deps block further extraction |
 
 ---
 
