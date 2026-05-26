@@ -1201,7 +1201,10 @@ func main() {
 	// ====================================
 	// CDC & ETL DATA PLATFORM ENDPOINTS
 	// ====================================
-	cdcEtlHandler := cdc.NewHandler(conns.Etcd)
+	cdcSystem := cdc.NewSystem(conns.Etcd)
+	cdcEtlHandler := cdcSystem.Handler()
+	_ = cdcSystem.Start(ctx)
+	log.Println("✅ CDC/ETL module started")
 
 	// ETL Pipeline Management
 	etlAPI := router.Group("/api/v1/etl", authMiddleware)
@@ -1862,6 +1865,9 @@ func main() {
 				gkSystem.SetKVStore(backendMgr.KV())
 				log.Println("✅ Gatekeeper: Raft KV persistence wired (deferred)")
 			}
+
+			// Wire CDC/ETL audit persistence
+			cdcSystem.SetKVStore(backendMgr.KV())
 
 			// Wire API Builder audit persistence
 			apiBuilderSystem.SetKVStore(backendMgr.KV())
