@@ -2,15 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -25,7 +22,6 @@ import (
 	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/auth"
 	"example.com/axiomnizam/internal/autopilot"
-	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
 	"example.com/axiomnizam/internal/catalog"
 	"example.com/axiomnizam/internal/cdc"
@@ -84,6 +80,7 @@ import (
 	reconcilerpkg "example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
+	"example.com/axiomnizam/internal/server"
 	securitypkg "example.com/axiomnizam/internal/security"
 	"example.com/axiomnizam/internal/schemaregistry"
 	"example.com/axiomnizam/internal/serviceregistry"
@@ -101,7 +98,6 @@ import (
 	"example.com/axiomnizam/internal/workflows"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"gorm.io/gorm"
 )
 
@@ -135,7 +131,7 @@ func main() {
 
 	// Load configuration
 	cfg := config.LoadConfig()
-	applySecurityGuardrails(cfg)
+	server.ApplySecurityGuardrails(cfg)
 	iamOnlyAuthRaw := strings.TrimSpace(os.Getenv("IAM_ONLY_AUTH"))
 	iamOnlyAuth := true
 	if iamOnlyAuthRaw != "" {
@@ -249,7 +245,7 @@ func main() {
 	// When using etcd (default), they run immediately.
 	earlyStorageBackend := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_BACKEND")))
 	if earlyStorageBackend != "raft" {
-		if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
+		if _, secretErr := server.EnsureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
 			log.Printf("⚠️  DEMO_JWT_SECRET synchronization failed: %v", secretErr)
 		} else {
 			log.Println("✅ DEMO_JWT_SECRET synchronized for replica-safe token validation")
@@ -261,7 +257,7 @@ func main() {
 		integration.ConfigureGlobalPersistence(conns.Etcd)
 	} else {
 		// Raft mode: JWT secret from env or postgres only (KVStore not ready yet).
-		if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, nil); secretErr != nil {
+		if _, secretErr := server.EnsureSharedDemoJWTSecret(conns.PostgreSQL, nil, nil); secretErr != nil {
 			log.Printf("ℹ️  DEMO_JWT_SECRET deferred to Raft backend init: %v", secretErr)
 		} else {
 			log.Println("✅ DEMO_JWT_SECRET synchronized (postgres/env)")
@@ -270,7 +266,7 @@ func main() {
 	}
 
 	// Create tables
-	createTables(conns)
+	server.CreateTables(conns)
 
 	// NOTE: Legacy train / bd-train GIS PostgreSQL connections and their
 	// handlers (GISTrainHandler, GISBDTrainHandler) were removed as part of
@@ -885,7 +881,7 @@ func main() {
 			}
 		}
 
-		if err := ensureWorkflowRegistered(c.Request.Context(), resourceHandler, workflowName); err != nil {
+		if err := server.EnsureWorkflowRegistered(c.Request.Context(), resourceHandler, workflowName); err != nil {
 			if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) == nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 				return
@@ -1814,7 +1810,7 @@ func main() {
 			}
 
 			// Re-attempt JWT secret with KVStore.
-			if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, backendMgr.KV()); secretErr != nil {
+			if _, secretErr := server.EnsureSharedDemoJWTSecret(conns.PostgreSQL, nil, backendMgr.KV()); secretErr != nil {
 				log.Printf("⚠️  DEMO_JWT_SECRET synchronization via Raft KV failed: %v", secretErr)
 			} else {
 				log.Println("✅ DEMO_JWT_SECRET synchronized via Raft KV store")
@@ -2839,548 +2835,4 @@ func main() {
 
 	cancel()
 	log.Println("✅ AxiomNizam stopped")
-}
-
-// Create tables on all databases
-func createTables(conns *database.Connections) {
-	if conns.MySQL != nil {
-		conns.MySQL.AutoMigrate(&models.User{})
-		log.Println("✅ MySQL table created/migrated")
-	}
-	if conns.MariaDB != nil {
-		conns.MariaDB.AutoMigrate(&models.User{})
-		log.Println("✅ MariaDB table created/migrated")
-	}
-	if conns.PostgreSQL != nil {
-		conns.PostgreSQL.AutoMigrate(&models.User{})
-		log.Println("✅ PostgreSQL table created/migrated")
-	}
-	if conns.Percona != nil {
-		conns.Percona.AutoMigrate(&models.User{})
-		log.Println("✅ Percona table created/migrated")
-	}
-	if conns.Oracle != nil {
-		conns.Oracle.AutoMigrate(&models.User{})
-		log.Println("✅ Oracle table created/migrated")
-	}
-}
-
-const (
-	demoJWTSecretStoreKey = "demo-jwt-secret"
-	demoJWTSecretEtcdKey  = "iam:bootstrap:demo-jwt-secret"
-)
-
-func ensureSharedDemoJWTSecret(pg *gorm.DB, etcd *clientv3.Client, kv platformstore.KVStore) (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")); configured != "" {
-		if pg != nil {
-			resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
-				return configured, nil
-			})
-			if err != nil {
-				log.Printf("⚠️  failed to seed DEMO_JWT_SECRET into postgres bootstrap store: %v", err)
-			} else if resolved != configured {
-				log.Printf("⚠️  postgres bootstrap DEMO_JWT_SECRET differs from env value; keeping env for current runtime")
-			}
-		}
-		auth.SetDemoJWTSecret(configured)
-		return configured, nil
-	}
-
-	if pg != nil {
-		resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
-			return generateBootstrapSecret(48)
-		})
-		if err == nil {
-			if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
-				return "", fmt.Errorf("setting DEMO_JWT_SECRET from postgres: %w", err)
-			}
-			auth.SetDemoJWTSecret(resolved)
-			return resolved, nil
-		}
-		log.Printf("⚠️  postgres bootstrap for DEMO_JWT_SECRET failed, falling back to KV store: %v", err)
-	}
-
-	resolved, err := ensureSharedDemoJWTSecretFromKV(kv, etcd)
-	if err != nil {
-		return "", err
-	}
-	if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
-		return "", fmt.Errorf("setting DEMO_JWT_SECRET from KV store: %w", err)
-	}
-	auth.SetDemoJWTSecret(resolved)
-	return resolved, nil
-}
-
-// ensureSharedDemoJWTSecretFromKV uses the KVStore abstraction (works
-// with both etcd and Raft backends).  Falls back to raw etcd if KV is nil.
-func ensureSharedDemoJWTSecretFromKV(kv platformstore.KVStore, etcd *clientv3.Client) (string, error) {
-	if kv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		candidate, err := generateBootstrapSecret(48)
-		if err != nil {
-			return "", err
-		}
-
-		resolved, _, err := kv.CAS(ctx, demoJWTSecretEtcdKey, candidate)
-		if err != nil {
-			return "", fmt.Errorf("persisting demo token secret via KV store: %w", err)
-		}
-		if resolved == "" {
-			return "", fmt.Errorf("demo token secret CAS returned empty value")
-		}
-		return resolved, nil
-	}
-
-	// Fallback to raw etcd client.
-	return ensureSharedDemoJWTSecretFromEtcd(etcd)
-}
-
-func ensureSharedDemoJWTSecretFromEtcd(etcd *clientv3.Client) (string, error) {
-
-	if etcd == nil {
-		return "", fmt.Errorf("DEMO_JWT_SECRET is not set and neither postgres nor etcd bootstrap store is available")
-	}
-
-	getCtx, getCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	resp, err := etcd.Get(getCtx, demoJWTSecretEtcdKey)
-	getCancel()
-	if err != nil {
-		return "", fmt.Errorf("reading demo token secret from etcd: %w", err)
-	}
-	if len(resp.Kvs) > 0 {
-		secret := strings.TrimSpace(string(resp.Kvs[0].Value))
-		if secret != "" {
-			return secret, nil
-		}
-	}
-
-	candidate, err := generateBootstrapSecret(48)
-	if err != nil {
-		return "", err
-	}
-
-	txnCtx, txnCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	txnResp, err := etcd.Txn(txnCtx).
-		If(clientv3.Compare(clientv3.Version(demoJWTSecretEtcdKey), "=", 0)).
-		Then(clientv3.OpPut(demoJWTSecretEtcdKey, candidate)).
-		Else(clientv3.OpGet(demoJWTSecretEtcdKey)).
-		Commit()
-	txnCancel()
-	if err != nil {
-		return "", fmt.Errorf("persisting demo token secret in etcd: %w", err)
-	}
-
-	resolved := candidate
-	if !txnResp.Succeeded {
-		resolved = ""
-		if len(txnResp.Responses) > 0 {
-			rangeResp := txnResp.Responses[0].GetResponseRange()
-			if rangeResp != nil && len(rangeResp.Kvs) > 0 {
-				resolved = strings.TrimSpace(string(rangeResp.Kvs[0].Value))
-			}
-		}
-		if resolved == "" {
-			return "", fmt.Errorf("demo token secret exists in etcd but value is empty")
-		}
-	}
-
-	return resolved, nil
-}
-
-func generateBootstrapSecret(size int) (string, error) {
-	if size <= 0 {
-		size = 48
-	}
-	random := make([]byte, size)
-	if _, err := rand.Read(random); err != nil {
-		return "", fmt.Errorf("generating bootstrap secret: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(random), nil
-}
-
-func resolveSecurityEnvironment() string {
-	candidates := []string{
-		strings.TrimSpace(os.Getenv("AXIOMNIZAM_ENV")),
-		strings.TrimSpace(os.Getenv("APP_ENV")),
-		strings.TrimSpace(os.Getenv("ENVIRONMENT")),
-		strings.TrimSpace(os.Getenv("GO_ENV")),
-	}
-	for _, c := range candidates {
-		if c != "" {
-			return strings.ToLower(c)
-		}
-	}
-	return "development"
-}
-
-func isProductionEnvironment(env string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(env))
-	return normalized == "production" || normalized == "prod"
-}
-
-func resolveSecurityGuardrailMode(env string) string {
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("SECURITY_GUARDRAILS_MODE")))
-	switch mode {
-	case "off", "audit", "enforce":
-		return mode
-	case "":
-		if isProductionEnvironment(env) {
-			return "audit"
-		}
-		return "off"
-	default:
-		log.Printf("⚠️  Unknown SECURITY_GUARDRAILS_MODE=%q, defaulting to audit", mode)
-		return "audit"
-	}
-}
-
-func applySecurityGuardrails(cfg *config.Config) {
-	if cfg == nil {
-		return
-	}
-
-	env := resolveSecurityEnvironment()
-	mode := resolveSecurityGuardrailMode(env)
-	if mode == "off" {
-		return
-	}
-
-	blocking := make([]string, 0)
-	warnings := make([]string, 0)
-	addBlocking := func(msg string) {
-		if strings.TrimSpace(msg) != "" {
-			blocking = append(blocking, msg)
-		}
-	}
-	addWarning := func(msg string) {
-		if strings.TrimSpace(msg) != "" {
-			warnings = append(warnings, msg)
-		}
-	}
-
-	isDefault := func(value string, defaults ...string) bool {
-		trimmed := strings.ToLower(strings.TrimSpace(value))
-		for _, d := range defaults {
-			if trimmed == strings.ToLower(strings.TrimSpace(d)) {
-				return true
-			}
-		}
-		return false
-	}
-
-	if isDefault(cfg.IAM.SysadminPassword, "", "change-me", "changeme", "default", "password", "admin") {
-		addBlocking("IAM_SYSADMIN_PASSWORD is empty or default-like")
-	}
-	if strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")) == "" {
-		addBlocking("DEMO_JWT_SECRET is not set")
-	}
-	if strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS")) == "" {
-		addBlocking("CORS_ALLOWED_ORIGINS is empty")
-	}
-
-	if isDefault(cfg.MySQL.Password, "root", "password") {
-		addWarning("MYSQL_PASSWORD appears to be a default credential")
-	}
-	if isDefault(cfg.PostgreSQL.Password, "postgres", "password") {
-		addWarning("POSTGRES_PASSWORD appears to be a default credential")
-	}
-	if isDefault(cfg.Oracle.Password, "oracle123", "password") {
-		addWarning("ORACLE_PASSWORD appears to be a default credential")
-	}
-
-	for _, w := range warnings {
-		log.Printf("⚠️  Security guardrail warning: %s", w)
-	}
-
-	if len(blocking) == 0 {
-		if mode == "audit" {
-			log.Printf("✅ Security guardrails check passed (env=%s, mode=%s)", env, mode)
-		}
-		return
-	}
-
-	for _, b := range blocking {
-		log.Printf("🚨 Security guardrail issue: %s", b)
-	}
-
-	if mode == "enforce" && isProductionEnvironment(env) {
-		log.Fatalf("❌ Security guardrails blocked startup in production (mode=%s)", mode)
-		return
-	}
-
-	log.Printf("⚠️  Security guardrails detected %d blocking issue(s) but startup continues (env=%s, mode=%s)", len(blocking), env, mode)
-}
-
-func ensureWorkflowRegistered(ctx context.Context, resourceHandler *resourcespkg.GenericResourceHandler, workflowName string) error {
-	if resourceHandler == nil {
-		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
-			return nil
-		}
-		return fmt.Errorf("workflow %q not found", workflowName)
-	}
-
-	resource, found := resourceHandler.FindResourceByKindAndName("workflow", workflowName)
-	if !found {
-		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
-			return nil
-		}
-		return fmt.Errorf("workflow %q not found", workflowName)
-	}
-
-	workflowDef, err := workflowFromResource(resource)
-	if err != nil {
-		return err
-	}
-
-	return workflows.AddWorkflow(ctx, workflowDef)
-}
-
-func workflowFromResource(resource *resourcespkg.GenericResource) (*workflows.Workflow, error) {
-	if resource == nil {
-		return nil, fmt.Errorf("workflow definition is nil")
-	}
-
-	name := strings.TrimSpace(resource.Metadata.Name)
-	if name == "" {
-		return nil, fmt.Errorf("workflow metadata.name is required")
-	}
-
-	steps, err := workflowStepsFromSpec(name, resource.Spec)
-	if err != nil {
-		return nil, err
-	}
-
-	enabled := true
-	if v, ok := boolFromAny(resource.Spec["enabled"]); ok {
-		enabled = v
-	}
-	if schedule, ok := resource.Spec["schedule"].(map[string]interface{}); ok {
-		if v, ok := boolFromAny(schedule["enabled"]); ok {
-			enabled = v
-		}
-	}
-
-	version := strings.TrimSpace(stringFromAny(resource.Spec["version"]))
-	if version == "" {
-		version = "v1"
-	}
-
-	namespace := strings.TrimSpace(resource.Metadata.Namespace)
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	return &workflows.Workflow{
-		Name:        name,
-		Namespace:   namespace,
-		Version:     version,
-		Description: stringFromAny(resource.Spec["description"]),
-		Triggers:    workflowTriggersFromSpec(resource.Spec),
-		Steps:       steps,
-		Enabled:     enabled,
-		Labels:      resource.Metadata.Labels,
-		Annotations: resource.Metadata.Annotations,
-	}, nil
-}
-
-func workflowTriggersFromSpec(spec map[string]interface{}) []workflows.WorkflowTrigger {
-	triggers := make([]workflows.WorkflowTrigger, 0)
-
-	if raw, ok := spec["triggers"].([]interface{}); ok {
-		for _, item := range raw {
-			triggerMap, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			triggerType := strings.TrimSpace(stringFromAny(triggerMap["type"]))
-			if triggerType == "" {
-				continue
-			}
-
-			condition := make(map[string]interface{})
-			if condMap, ok := triggerMap["condition"].(map[string]interface{}); ok {
-				for k, v := range condMap {
-					condition[k] = v
-				}
-			}
-
-			triggers = append(triggers, workflows.WorkflowTrigger{
-				Type:      triggerType,
-				Condition: condition,
-			})
-		}
-	}
-
-	if schedule, ok := spec["schedule"].(map[string]interface{}); ok {
-		condition := make(map[string]interface{}, len(schedule))
-		for k, v := range schedule {
-			condition[k] = v
-		}
-		triggers = append(triggers, workflows.WorkflowTrigger{Type: "schedule", Condition: condition})
-	}
-
-	if len(triggers) == 0 {
-		triggers = append(triggers, workflows.WorkflowTrigger{Type: "manual", Condition: map[string]interface{}{"source": "api"}})
-	}
-
-	return triggers
-}
-
-func workflowStepsFromSpec(workflowName string, spec map[string]interface{}) ([]workflows.WorkflowStep, error) {
-	rawSteps, ok := spec["steps"].([]interface{})
-	if !ok || len(rawSteps) == 0 {
-		return nil, fmt.Errorf("workflow %q must define at least one step", workflowName)
-	}
-
-	steps := make([]workflows.WorkflowStep, 0, len(rawSteps))
-	for i, rawStep := range rawSteps {
-		stepMap, ok := rawStep.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		stepID := strings.TrimSpace(stringFromAny(stepMap["id"]))
-		if stepID == "" {
-			stepID = fmt.Sprintf("%s-step-%d", workflowName, i+1)
-		}
-
-		stepName := strings.TrimSpace(stringFromAny(stepMap["name"]))
-		if stepName == "" {
-			stepName = stepID
-		}
-
-		stepType := strings.TrimSpace(stringFromAny(stepMap["type"]))
-		if stepType == "" {
-			stepType = "http"
-		}
-
-		action := strings.TrimSpace(stringFromAny(stepMap["action"]))
-		if action == "" {
-			action = stepType
-		}
-
-		config := make(map[string]interface{})
-		if rawConfig, ok := stepMap["config"].(map[string]interface{}); ok {
-			for k, v := range rawConfig {
-				config[k] = v
-			}
-		}
-
-		for k, v := range stepMap {
-			switch k {
-			case "id", "name", "type", "action", "retry", "timeout", "config":
-				continue
-			default:
-				config[k] = v
-			}
-		}
-
-		if _, exists := config["action"]; !exists && action != "" {
-			config["action"] = action
-		}
-		if stepType == "http" {
-			if _, exists := config["method"]; !exists {
-				method := strings.ToUpper(strings.TrimSpace(stringFromAny(stepMap["method"])))
-				if method == "" {
-					method = "GET"
-				}
-				config["method"] = method
-			}
-		}
-
-		steps = append(steps, workflows.WorkflowStep{
-			ID:      stepID,
-			Name:    stepName,
-			Type:    stepType,
-			Action:  action,
-			Config:  config,
-			Timeout: durationFromAny(stepMap["timeout"]),
-			Retry:   intFromAny(stepMap["retry"]),
-		})
-	}
-
-	if len(steps) == 0 {
-		return nil, fmt.Errorf("workflow %q has invalid steps", workflowName)
-	}
-
-	return steps, nil
-}
-
-func stringFromAny(value interface{}) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case fmt.Stringer:
-		return v.String()
-	case int:
-		return strconv.Itoa(v)
-	case int32:
-		return strconv.FormatInt(int64(v), 10)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		return ""
-	}
-}
-
-func boolFromAny(value interface{}) (bool, bool) {
-	switch v := value.(type) {
-	case bool:
-		return v, true
-	case string:
-		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
-		if err == nil {
-			return parsed, true
-		}
-	}
-	return false, false
-}
-
-func intFromAny(value interface{}) int {
-	switch v := value.(type) {
-	case int:
-		return v
-	case int32:
-		return int(v)
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	case string:
-		parsed, err := strconv.Atoi(strings.TrimSpace(v))
-		if err == nil {
-			return parsed
-		}
-	}
-	return 0
-}
-
-func durationFromAny(value interface{}) time.Duration {
-	switch v := value.(type) {
-	case time.Duration:
-		return v
-	case string:
-		parsed, err := time.ParseDuration(strings.TrimSpace(v))
-		if err == nil {
-			return parsed
-		}
-	case int:
-		if v > 0 {
-			return time.Duration(v) * time.Second
-		}
-	case int64:
-		if v > 0 {
-			return time.Duration(v) * time.Second
-		}
-	case float64:
-		if v > 0 {
-			return time.Duration(v * float64(time.Second))
-		}
-	}
-	return 0
 }

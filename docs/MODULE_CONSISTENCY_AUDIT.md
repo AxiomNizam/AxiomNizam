@@ -1120,19 +1120,27 @@ These bring the codebase to production-grade quality matching K8s/Nomad/MinIO.
 
 ---
 
-#### Phase 25: Main.go Decomposition
+#### Phase 25: Main.go Decomposition — PARTIAL (2026-05-26)
 
-**Goal:** Reduce main.go from ~2500 lines to <200 lines.
+**Goal:** Reduce main.go from ~3400 lines to <200 lines.
 
-| # | Task | Detail |
-|---|------|--------|
-| 25.1 | Create `cmd/axiomnizam-server/` with `main()` that delegates to `server.Run()` | cmd/ |
-| 25.2 | Create `internal/server/server.go` with module registration loop | New file |
-| 25.3 | Each module registers itself via `module.RegisterRoutes()` + `module.Start()` | All modules |
-| 25.4 | main.go becomes: load config → create modules → start → wait for signal | main.go |
-| 25.5 | Add graceful shutdown with context cancellation and module `Stop()` calls | main.go |
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 25.1 | Create `cmd/axiomnizam-server/` with `main()` that delegates to `server.Run()` | Deferred — root main.go stays per project convention | DEFERRED |
+| 25.2 | Create `internal/server/` with extracted helpers | `internal/server/helpers.go` — 583 lines: CreateTables, EnsureSharedDemoJWTSecret, GenerateBootstrapSecret, ApplySecurityGuardrails, workflow parsing, type conversion helpers | DONE |
+| 25.3 | Each module registers itself via `module.RegisterRoutes()` + `module.Start()` | Deferred — 30+ local variables in route registration make clean extraction require Server struct | DEFERRED |
+| 25.4 | main.go becomes: load config → create modules → start → wait for signal | main.go reduced 3386→2838 lines (548 lines extracted) | PARTIAL |
+| 25.5 | Add graceful shutdown with context cancellation and module `Stop()` calls | Already existed in main.go | DONE |
 
-**Scope:** main.go + all modules | **Effort:** 3-5 days | **Impact:** HIGH | **Risk:** HIGH
+**Files created:**
+- `internal/server/helpers.go` — 583 lines of helper functions extracted from main.go (CreateTables, EnsureSharedDemoJWTSecret, EnsureSharedDemoJWTSecretFromKV, EnsureSharedDemoJWTSecretFromEtcd, GenerateBootstrapSecret, ResolveSecurityEnvironment, ApplySecurityGuardrails, EnsureWorkflowRegistered, WorkflowFromResource, WorkflowTriggersFromSpec, WorkflowStepsFromSpec, StringFromAny, BoolFromAny, IntFromAny, DurationFromAny)
+
+**Files updated:**
+- `main.go` — deleted 548 lines of helper functions, replaced with `server.` package calls, removed unused imports (crypto/rand, encoding/base64, strconv, bootstrapsecrets, clientv3)
+
+**Remaining work:** Full decomposition to <200 lines requires extracting route registration (~1200 lines) and reconciler startup (~500 lines) into `internal/server/routes.go` and `internal/server/reconcilers.go`. This requires a `Server` struct to hold 50+ handler/system variables — a high-risk refactor.
+
+**Scope:** main.go + all modules | **Effort:** 1 day (of estimated 3-5) | **Impact:** HIGH | **Risk:** HIGH
 
 ---
 
@@ -1170,7 +1178,7 @@ Tier 4 (Production Readiness) — Depends on Tier 3
 ├── Phase 22: Storage backend abstraction ✅ DONE
 ├── Phase 23: Observability stack       ← needs Phase 11
 ├── Phase 24: Security hardening        ✅ DONE
-└── Phase 25: Main.go decomposition     ← needs Phase 15
+└── Phase 25: Main.go decomposition     🔶 PARTIAL
 ```
 
 ### Priority Matrix
@@ -1254,7 +1262,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 22. Storage backend abstraction | ✅ DONE | 2026-05-26 | `models.Backend` interface + native/s3client impls + dual-mode KV persistence |
 | 23. Observability stack | ✅ DONE | 2026-05-26 | OTel tracing + /metrics + structured access logging + axiom_ namespace |
 | 24. Security hardening | ✅ DONE | 2026-05-26 | _=err fixed, security headers, CSRF, body limits, hardcoded creds removed |
-| 25. Main.go decomposition | ⬜ TODO | — | ~2500 lines, needs decomposition |
+| 25. Main.go decomposition | 🔶 PARTIAL | 2026-05-26 | 3386→2838 lines; helpers.go extracted (583 lines); route extraction deferred |
 
 ---
 
