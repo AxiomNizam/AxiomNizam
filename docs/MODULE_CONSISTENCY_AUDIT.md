@@ -1230,7 +1230,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-24 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging + security hardening)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-24 DONE, Phase 25 PARTIAL (3386→2838 lines; helpers.go extracted; route extraction deferred)*
 
 ---
 
@@ -1317,4 +1317,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-24 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging + security hardening)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-24 DONE, Phase 25 PARTIAL (3386→2838 lines; helpers.go extracted; route extraction deferred)*
