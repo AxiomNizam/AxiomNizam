@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,10 @@ type CSRFConfig struct {
 
 	// ExemptMethods are HTTP methods that skip CSRF checks (default: GET, HEAD, OPTIONS).
 	ExemptMethods []string
+
+	// ExemptPaths are URL path prefixes that skip CSRF checks entirely.
+	// Use for login/signup/token endpoints where the user has no cookie yet.
+	ExemptPaths []string
 }
 
 // DefaultCSRFConfig returns safe defaults for CSRF protection.
@@ -43,6 +48,19 @@ func DefaultCSRFConfig() CSRFConfig {
 		Secure:        false, // set true behind TLS
 		SameSite:      "Lax",
 		ExemptMethods: []string{http.MethodGet, http.MethodHead, http.MethodOptions},
+		ExemptPaths: []string{
+			"/auth/login",
+			"/auth/signup",
+			"/auth/register",
+			"/auth/token",
+			"/auth/refresh",
+			"/auth/forgot",
+			"/auth/reset",
+			"/api/v1/auth/login",
+			"/api/v1/auth/refresh",
+			"/api/health",
+			"/api/status",
+		},
 	}
 }
 
@@ -64,12 +82,23 @@ func CSRFMiddleware(cfg CSRFConfig) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		method := c.Request.Method
+		path := c.Request.URL.Path
 
 		// Always issue/refresh the CSRF cookie on safe methods.
 		if _, exempt := exemptSet[method]; exempt {
 			ensureCSRFCookie(c, cfg)
 			c.Next()
 			return
+		}
+
+		// Exempt paths — login/signup/token endpoints where the user
+		// may not have a CSRF cookie yet.
+		for _, prefix := range cfg.ExemptPaths {
+			if strings.HasPrefix(path, prefix) {
+				ensureCSRFCookie(c, cfg)
+				c.Next()
+				return
+			}
 		}
 
 		// State-changing method — validate token.

@@ -294,6 +294,25 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
+	// Trust proxies for X-Forwarded-For / X-Real-IP.
+	// Set TRUSTED_PROXIES env to comma-separated CIDRs (e.g. "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16").
+	// Defaults to private Docker/K8s CIDRs. Set to "0.0.0.0/0" to trust all, or "*" to trust none.
+	trustedProxiesEnv := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if trustedProxiesEnv == "" {
+		trustedProxiesEnv = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+	}
+	var trustedProxies []string
+	if trustedProxiesEnv == "*" {
+		trustedProxies = []string{} // trust none
+	} else {
+		for _, cidr := range strings.Split(trustedProxiesEnv, ",") {
+			if trimmed := strings.TrimSpace(cidr); trimmed != "" {
+				trustedProxies = append(trustedProxies, trimmed)
+			}
+		}
+	}
+	_ = router.SetTrustedProxies(trustedProxies)
+
 	allowedOriginSet := make(map[string]struct{})
 	addAllowedOrigin := func(raw string) {
 		candidate := strings.TrimSpace(raw)
