@@ -152,7 +152,9 @@ func (e *Engine) LayerCount() int {
 // call, the layer list is frozen and Scan() may be called concurrently.
 // Start starts the antivirus engine with a background context.
 func (e *Engine) Start() {
-	_ = e.StartCtx(context.Background())
+	if err := e.StartCtx(context.Background()); err != nil {
+		logging.Z().Error(fmt.Sprintf("antivirus: engine start failed: %v", err))
+	}
 }
 
 // StartCtx starts the antivirus engine with the given context.

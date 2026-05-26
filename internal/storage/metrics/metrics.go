@@ -137,7 +137,9 @@ func (c *Collector) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), metricsTimeout)
 	defer cancel()
-	_ = kv.Put(ctx, metricsKVKey, string(data))
+	if err := kv.Put(ctx, metricsKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("storage metrics: kv persist failed: %v", err))
+	}
 }
 
 func bKey(tenantID, bucket string) string {

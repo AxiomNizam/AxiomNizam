@@ -105,7 +105,9 @@ func (l *Logger) saveToKV() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), avAuditTTL)
 	defer cancel()
-	_ = kv.Put(ctx, avAuditKVKey, string(data))
+	if err := kv.Put(ctx, avAuditKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("antivirus audit: kv persist failed: %v", err))
+	}
 }
 
 func (l *Logger) recordToBuffer(event *Event) {

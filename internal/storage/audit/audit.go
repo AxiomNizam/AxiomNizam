@@ -120,7 +120,9 @@ func (a *AuditLog) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), auditTimeout)
 	defer cancel()
-	_ = kv.Put(ctx, auditKVKey, string(data))
+	if err := kv.Put(ctx, auditKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("storage audit: kv persist failed: %v", err))
+	}
 }
 
 // List returns events filtered by optional tenant and event type.

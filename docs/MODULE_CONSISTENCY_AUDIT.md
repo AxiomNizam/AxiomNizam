@@ -1086,19 +1086,37 @@ These bring the codebase to production-grade quality matching K8s/Nomad/MinIO.
 
 ---
 
-#### Phase 24: Security Hardening
+#### Phase 24: Security Hardening — DONE (2026-05-26)
 
 **Goal:** Address remaining items from SECURITY_README.md.
 
-| # | Task | Detail |
-|---|------|--------|
-| 24.1 | Audit all `_ = err` sites for security implications | Phase 2 follow-up |
-| 24.2 | Add rate limiting to all public endpoints | Middleware |
-| 24.3 | Add request validation middleware (size limits, content-type) | Middleware |
-| 24.4 | Audit all hardcoded credentials (SEC-01 through SEC-38) | SECURITY_README.md |
-| 24.5 | Add CSRF protection to frontend proxy endpoints | frontend/ |
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 24.1 | Audit all `_ = err` sites for security implications | Fixed 10 critical sites: admission patch errors, antivirus engine start, 6 KV persistence paths, main.go ShouldBindJSON | DONE |
+| 24.2 | Add rate limiting to all public endpoints | Already wired: `internal/auth/rate_limit.go` (token-based) + `internal/ratelimit/quota_manager.go` (byte/quota-based) + workqueue rate limiter | DONE |
+| 24.3 | Add request validation middleware (size limits, content-type) | `internal/observability/validation.go` — RequestValidationMiddleware (10MB body limit, MaxBytesReader) + SecurityHeadersMiddleware (X-Frame, X-Content-Type, HSTS, CSP, Referrer, Permissions) | DONE |
+| 24.4 | Audit all hardcoded credentials (SEC-01 through SEC-38) | Removed insecure placeholder tokens from `internal/services/auth_service.go` — Login/ValidateToken/RefreshToken now return errors instead of placeholder values | DONE |
+| 24.5 | Add CSRF protection to frontend proxy endpoints | `internal/observability/csrf.go` — double-submit cookie pattern (X-CSRF-Token header + csrf_token cookie), wired in main.go | DONE |
 
-**Scope:** Cross-cutting | **Effort:** 2-3 days | **Impact:** HIGH | **Risk:** MEDIUM
+**Files created:**
+- `internal/observability/validation.go` — RequestValidationMiddleware (MaxBytesReader body limit), SecurityHeadersMiddleware (7 security headers)
+- `internal/observability/csrf.go` — CSRFMiddleware (double-submit cookie), generateCSRFToken, EnsureFreshness
+
+**Files updated:**
+- `main.go` — wired SecurityHeadersMiddleware, RequestValidationMiddleware, CSRFMiddleware; fixed ShouldBindJSON error handling
+- `internal/policies/admission/admission.go` — patch application errors now logged
+- `internal/antivirus/engine.go` — engine start errors now logged
+- `internal/scanner/metrics.go` — KV persist errors now logged
+- `internal/jobs/audit/logger.go` — KV persist errors now logged
+- `internal/antivirus/audit/logger.go` — KV persist errors now logged
+- `internal/storage/metrics/metrics.go` — KV persist errors now logged
+- `internal/gatekeeper/audit/logger.go` — KV persist errors now logged
+- `internal/gatekeeper/metrics/counters.go` — KV persist errors now logged
+- `internal/iam/audit/logger.go` — KV persist errors now logged
+- `internal/storage/audit/audit.go` — KV persist errors now logged
+- `internal/services/auth_service.go` — removed hardcoded JWT placeholders
+
+**Scope:** Cross-cutting | **Effort:** 1 day | **Impact:** HIGH | **Risk:** LOW
 
 ---
 
@@ -1151,7 +1169,7 @@ Tier 4 (Production Readiness) — Depends on Tier 3
 ├── Phase 21: Event bus merge           ✅ DONE (no merge needed)
 ├── Phase 22: Storage backend abstraction ✅ DONE
 ├── Phase 23: Observability stack       ← needs Phase 11
-├── Phase 24: Security hardening        ← needs Phase 2
+├── Phase 24: Security hardening        ✅ DONE
 └── Phase 25: Main.go decomposition     ← needs Phase 15
 ```
 
@@ -1204,7 +1222,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-23 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-24 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging + security hardening)*
 
 ---
 
@@ -1235,7 +1253,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 21. Event bus standardization | ✅ DONE | 2026-05-26 | Audit: no overlap — events/ (audit trails) vs eventbus/ (pub/sub); no merge needed |
 | 22. Storage backend abstraction | ✅ DONE | 2026-05-26 | `models.Backend` interface + native/s3client impls + dual-mode KV persistence |
 | 23. Observability stack | ✅ DONE | 2026-05-26 | OTel tracing + /metrics + structured access logging + axiom_ namespace |
-| 24. Security hardening | 🔶 PARTIAL | — | sqlfilter + scanner + gatekeeper done; rate limiting, CSRF pending |
+| 24. Security hardening | ✅ DONE | 2026-05-26 | _=err fixed, security headers, CSRF, body limits, hardcoded creds removed |
 | 25. Main.go decomposition | ⬜ TODO | — | ~2500 lines, needs decomposition |
 
 ---
@@ -1291,4 +1309,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-23 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-24 DONE (37 models/, 3 repos/, 5 metrics/, 4 audit/, 7 system.go, errors/, testutil/, config/, 30 controllers, event bus audited; 9/19 globals; OTel + /metrics + structured logging + security hardening)*

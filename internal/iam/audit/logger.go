@@ -105,7 +105,9 @@ func (l *Logger) saveToKV() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), iamAuditTTL)
 	defer cancel()
-	_ = kv.Put(ctx, iamAuditKVKey, string(data))
+	if err := kv.Put(ctx, iamAuditKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("iam audit: kv persist failed: %v", err))
+	}
 }
 
 func (l *Logger) recordToBuffer(event *Event) {

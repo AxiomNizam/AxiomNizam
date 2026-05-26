@@ -64,7 +64,7 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 	}
 
 	// Get user by email (username is treated as email)
-	user, err := s.userRepo.GetByEmail(ctx, username)
+	_, err := s.userRepo.GetByEmail(ctx, username)
 	if err != nil {
 		if err == repositories.ErrNotFound {
 			logging.Z().Info(fmt.Sprintf("LOGIN_ATTEMPT_FAILED: email=%s, reason=not_found", username))
@@ -75,19 +75,11 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 		return nil, "", ErrInternalServer
 	}
 
-	// TODO: Verify password hash
-	// This should use bcrypt or similar to compare hashed passwords
-	// if !VerifyPasswordHash(user.PasswordHash, password) {
-	//     logging.Z().Info(fmt.Sprintf("LOGIN_ATTEMPT_FAILED: username=%s, reason=invalid_password", username))
-	//     return nil, "", ErrUnauthorized
-	// }
-
-	// Generate JWT token
-	// TODO: Implement JWT token generation
-	token := "jwt-token-placeholder"
-
-	logging.Z().Info(fmt.Sprintf("LOGIN_SUCCESS: username=%s, user_id=%s", username, user.ID))
-	return user, token, nil
+	// Password verification — defer to IAM system.
+	// This service is not used in production; main.go uses IAM directly.
+	// Returning an error to prevent insecure placeholder tokens.
+	s.LogError("Login", fmt.Errorf("auth_service.Login is deprecated — use IAM system"))
+	return nil, "", ErrInternalServer
 }
 
 // Register registers a new user with validation
@@ -149,25 +141,14 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 
 // ValidateToken validates an authentication token
 func (s *authService) ValidateToken(ctx context.Context, token string) (bool, error) {
-	if token == "" {
-		return false, ErrInvalidInput
-	}
-
-	// TODO: Implement JWT token validation
-	// This should verify the token signature and expiration
-	// For now, just check if token is not empty
-	return token != "", nil
+	// Deprecated — defer to IAM system for token validation.
+	return false, fmt.Errorf("auth_service.ValidateToken is deprecated — use IAM system")
 }
 
 // RefreshToken refreshes an authentication token
 func (s *authService) RefreshToken(ctx context.Context, token string) (string, error) {
-	if token == "" {
-		return "", ErrInvalidInput
-	}
-
-	// TODO: Implement JWT token refresh
-	// This should verify the current token and return a new one
-	return "new-jwt-token", nil
+	// Deprecated — defer to IAM system for token refresh.
+	return "", fmt.Errorf("auth_service.RefreshToken is deprecated — use IAM system")
 }
 
 // Logout logs out a user

@@ -117,7 +117,9 @@ func (l *Logger) saveToKV() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), gkAuditTTL)
 	defer cancel()
-	_ = kv.Put(ctx, gkAuditKVKey, string(data))
+	if err := kv.Put(ctx, gkAuditKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("gatekeeper audit: kv persist failed: %v", err))
+	}
 }
 
 // recordToBuffer adds an event to the in-memory buffer for KV persistence.

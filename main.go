@@ -378,6 +378,11 @@ func main() {
 	router.Use(observability.RequestIDMiddleware())
 	router.Use(observability.AccessLogMiddleware())
 
+	// Security headers + request body size limits + CSRF
+	router.Use(observability.SecurityHeadersMiddleware())
+	router.Use(observability.RequestValidationMiddleware(observability.DefaultRequestValidationConfig()))
+	router.Use(observability.CSRFMiddleware(observability.DefaultCSRFConfig()))
+
 	// Prometheus /metrics endpoint
 	metrics.RegisterMetricsEndpoint(router)
 
@@ -2448,7 +2453,10 @@ func main() {
 			var body struct {
 				Reason string `json:"reason"`
 			}
-			_ = c.ShouldBindJSON(&body)
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+				return
+			}
 			if strings.TrimSpace(body.Reason) == "" {
 				body.Reason = "manual rollback"
 			}

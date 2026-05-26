@@ -104,7 +104,9 @@ func (l *Logger) saveToKV() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), jobsAuditTTL)
 	defer cancel()
-	_ = kv.Put(ctx, jobsAuditKVKey, string(data))
+	if err := kv.Put(ctx, jobsAuditKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("jobs audit: kv persist failed: %v", err))
+	}
 }
 
 func (l *Logger) recordToBuffer(event *Event) {

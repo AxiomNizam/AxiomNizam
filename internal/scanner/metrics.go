@@ -229,7 +229,9 @@ func (m *Metrics) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), scannerMetricsTimeout)
 	defer cancel()
-	_ = kv.Put(ctx, scannerMetricsKVKey, string(data))
+	if err := kv.Put(ctx, scannerMetricsKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("scanner metrics: kv persist failed: %v", err))
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

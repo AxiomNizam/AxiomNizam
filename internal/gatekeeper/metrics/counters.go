@@ -138,7 +138,9 @@ func (c *Collector) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), mfaMetricsTTL)
 	defer cancel()
-	_ = kv.Put(ctx, mfaMetricsKVKey, string(data))
+	if err := kv.Put(ctx, mfaMetricsKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("gatekeeper metrics: kv persist failed: %v", err))
+	}
 }
 
 // NewCollector creates a new metrics collector with Prometheus.

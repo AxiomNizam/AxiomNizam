@@ -2,6 +2,7 @@ package admission
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -245,7 +246,9 @@ func (ac *AdmissionController) Admit(request AdmissionRequest) AdmissionResponse
 				continue
 			}
 			// Apply patches to object
-			_ = ac.applyPatches(request.Object, rule.Patch)
+			if patchErr := ac.applyPatches(request.Object, rule.Patch); patchErr != nil {
+				log.Printf("admission: patch application failed (rule=%s): %v", rule.Name, patchErr)
+			}
 		}
 	}
 
