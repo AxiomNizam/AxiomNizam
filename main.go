@@ -71,6 +71,7 @@ import (
 	"example.com/axiomnizam/internal/tenant"
 	"example.com/axiomnizam/internal/tracing"
 	"example.com/axiomnizam/internal/vectorplus"
+	"example.com/axiomnizam/internal/waitx"
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
 	"example.com/axiomnizam/internal/workflows"
@@ -2210,6 +2211,14 @@ func main() {
 		go genericctrl.NewGenericController("apibanks", apiBankReconcilerStore, apiBankReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ APIBank controller started")
 
+		// WaitCheck reconciler
+		waitCheckStore := platformstore.NewStore[*waitx.WaitCheckResource](backendMgr, "wait-checks", func() *waitx.WaitCheckResource { return &waitx.WaitCheckResource{} })
+		waitCheckReconciler := reconcilerpkg.NewInstrumented("waitx",
+			waitx.NewWaitCheckReconciler(), reconcilerMetrics)
+		reconcilerMetrics.Register("waitx")
+		go genericctrl.NewGenericController("waitx", waitCheckStore, waitCheckReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ WaitX controller started")
+
 		// Phase 0.4: etcd key-space monitoring
 		etcdPrefixes := []string{
 			"/axiomnizam/bulkoperations/",
@@ -2253,6 +2262,13 @@ func main() {
 
 	// Wire previously-unwired modules (migrations, heartbeat, service registry, etc.)
 	server.WireUnwiredModules(conns, cfg, router, authMiddleware, adminOrSysMiddleware, backendMgr, platformManagers, storageSys)
+
+	// WaitX — service readiness checks (TCP, HTTP, DNS, gRPC, Redis, MySQL, PostgreSQL, MongoDB, Kafka, RabbitMQ)
+	waitxSystem := waitx.NewSystem()
+	waitxSystem.SetKVStore(backendMgr.KV())
+	_ = waitxSystem.Start(ctx)
+	waitxSystem.Handler().RegisterRoutes(router.Group("/api/v1", authMiddleware))
+	log.Println("✅ WaitX module started")
 
 	// Print startup banner
 	server.PrintStartupBanner(cfg, iamOnlyAuth)
