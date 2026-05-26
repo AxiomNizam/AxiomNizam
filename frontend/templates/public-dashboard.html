@@ -9,7 +9,7 @@
                 <img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" class="hero-logo">
                 AxiomNizam
             </h1>
-            <p class="hero-subtitle">Enterprise-grade Kubernetes-style Data Control Plane with 50+ integrated modules for API management, real-time analytics, CDC/ETL pipelines, network intelligence, GIS mapping, and full IAM governance.</p>
+            <p class="hero-subtitle">Enterprise-grade Kubernetes-style Data Control Plane with 100+ integrated modules for API management, real-time analytics, CDC/ETL pipelines, network intelligence, GIS mapping, and full IAM governance.</p>
             <div class="hero-actions">
                 {{ if .isAuth }}
                 <a href="/admin" class="hero-btn hero-btn-primary">Go to Dashboard</a>
@@ -26,15 +26,15 @@
                     <span class="hero-stat-label">Platform Status</span>
                 </div>
                 <div class="hero-stat">
-                    <span class="hero-stat-value">50+</span>
+                    <span class="hero-stat-value">100+</span>
                     <span class="hero-stat-label">Modules</span>
                 </div>
                 <div class="hero-stat">
-                    <span class="hero-stat-value">200+</span>
+                    <span class="hero-stat-value">350+</span>
                     <span class="hero-stat-label">API Endpoints</span>
                 </div>
                 <div class="hero-stat">
-                    <span class="hero-stat-value">7+</span>
+                    <span class="hero-stat-value">10</span>
                     <span class="hero-stat-label">Databases</span>
                 </div>
             </div>
@@ -77,6 +77,12 @@
                         <h4>API Builder</h4>
                         <p>Create REST APIs visually — connect to MySQL, PostgreSQL, MariaDB, MongoDB, Oracle, Firebase with auto-generated CRUD endpoints.</p>
                         <div class="feature-tags"><span class="tag">REST</span><span class="tag">CRUD</span><span class="tag">Multi-DB</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🧬</div>
+                        <h4>Data Sources</h4>
+                        <p>Connect external databases, APIs, and data streams — test connectivity, manage connection pools, and federate queries across sources.</p>
+                        <div class="feature-tags"><span class="tag">Connectors</span><span class="tag">Federation</span><span class="tag">Pool</span></div>
                     </div>
                     <div class="feature-card" onclick="requireAuth('/admin')">
                         <div class="feature-card-icon">◈</div>
@@ -252,6 +258,24 @@
                         <p>Per-user and per-endpoint rate limiting, daily quota tracking, and adaptive throttling for API protection.</p>
                         <div class="feature-tags"><span class="tag">Rate Limit</span><span class="tag">Quota</span><span class="tag">Throttle</span></div>
                     </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🛡️</div>
+                        <h4>CSRF Protection</h4>
+                        <p>Double-submit cookie CSRF protection for all state-changing endpoints with token rotation and SameSite enforcement.</p>
+                        <div class="feature-tags"><span class="tag">CSRF</span><span class="tag">Cookies</span><span class="tag">SameSite</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔒</div>
+                        <h4>Security Headers</h4>
+                        <p>HSTS, X-Content-Type-Options, X-Frame-Options, CSP, Referrer-Policy — enforced on every response via middleware.</p>
+                        <div class="feature-tags"><span class="tag">HSTS</span><span class="tag">CSP</span><span class="tag">Hardened</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🔍</div>
+                        <h4>Request Validation</h4>
+                        <p>Global body size limits (10MB), content-type enforcement, and malformed request rejection via middleware.</p>
+                        <div class="feature-tags"><span class="tag">Body Limits</span><span class="tag">Validation</span><span class="tag">Middleware</span></div>
+                    </div>
                 </div>
             </div>
 
@@ -297,6 +321,42 @@
                         <h4>Distributed Cluster</h4>
                         <p>Multi-instance coordination, leader election, state synchronization, health monitoring, and etcd-backed state management.</p>
                         <div class="feature-tags"><span class="tag">Cluster</span><span class="tag">etcd</span><span class="tag">Leader</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🩺</div>
+                        <h4>Heartbeat Tracker</h4>
+                        <p>Entity liveness monitoring with TTL-based heartbeats, expiration alerts, and health status propagation.</p>
+                        <div class="feature-tags"><span class="tag">Heartbeat</span><span class="tag">TTL</span><span class="tag">Liveness</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📋</div>
+                        <h4>Service Registry</h4>
+                        <p>Service registration with health checks, status tracking, and discovery by name — Consul-style service mesh foundation.</p>
+                        <div class="feature-tags"><span class="tag">Registry</span><span class="tag">Discovery</span><span class="tag">Health Checks</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🚀</div>
+                        <h4>Deployment Controller</h4>
+                        <p>Blue-green and canary deployments with health checks, automatic promotion/rollback, and release state tracking.</p>
+                        <div class="feature-tags"><span class="tag">Blue-Green</span><span class="tag">Canary</span><span class="tag">Rollback</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🏥</div>
+                        <h4>Trivy Scanner</h4>
+                        <p>Integrated Trivy vulnerability scanning for container images, filesystems, and git repositories with severity classification.</p>
+                        <div class="feature-tags"><span class="tag">Trivy</span><span class="tag">CVE</span><span class="tag">Vulnerability</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🏦</div>
+                        <h4>API Banks</h4>
+                        <p>Catalog of API endpoints organized by data class, owner, and tags — discovery and documentation for API governance.</p>
+                        <div class="feature-tags"><span class="tag">Catalog</span><span class="tag">Discovery</span><span class="tag">Governance</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🤖</div>
+                        <h4>Autopilot</h4>
+                        <p>Automated cluster health evaluation with trailing log analysis, dead server cleanup, and quorum management.</p>
+                        <div class="feature-tags"><span class="tag">Autopilot</span><span class="tag">Quorum</span><span class="tag">Auto-heal</span></div>
                     </div>
                 </div>
             </div>
@@ -344,6 +404,24 @@
                         <p>Validation rules, quality metrics, anomaly detection, data profiling, and quality scorecards for data governance.</p>
                         <div class="feature-tags"><span class="tag">Quality</span><span class="tag">Profiling</span><span class="tag">Scorecards</span></div>
                     </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📐</div>
+                        <h4>Schema Registry</h4>
+                        <p>Avro, Protobuf, and JSON schema management with compatibility checks, version tracking, and subject organization.</p>
+                        <div class="feature-tags"><span class="tag">Avro</span><span class="tag">Protobuf</span><span class="tag">Compatibility</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🤖</div>
+                        <h4>ML Pipeline</h4>
+                        <p>Machine learning pipeline orchestration with model deployment, feature extraction, training workflows, and experiment tracking.</p>
+                        <div class="feature-tags"><span class="tag">ML</span><span class="tag">Training</span><span class="tag">Deploy</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">🧬</div>
+                        <h4>Feature Store</h4>
+                        <p>Feature group management, online/offline serving, version control, and feature lineage for ML/AI workloads.</p>
+                        <div class="feature-tags"><span class="tag">Features</span><span class="tag">Serving</span><span class="tag">ML</span></div>
+                    </div>
                 </div>
             </div>
 
@@ -389,6 +467,24 @@
                         <h4>Review Flow</h4>
                         <p>Code and configuration review pipeline with approval workflows, comment tracking, and status management.</p>
                         <div class="feature-tags"><span class="tag">Reviews</span><span class="tag">Approvals</span><span class="tag">Comments</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📡</div>
+                        <h4>OpenTelemetry Tracing</h4>
+                        <p>OTLP trace propagation, request ID correlation, structured access logging with trace_id injection, and service map export.</p>
+                        <div class="feature-tags"><span class="tag">OTel</span><span class="tag">Traces</span><span class="tag">Correlation</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/admin')">
+                        <div class="feature-card-icon">📊</div>
+                        <h4>Prometheus Metrics</h4>
+                        <p>Per-module metric collectors (axiom_iam, axiom_antivirus, axiom_conductor, axiom_mfa, axiom_jobs) with /metrics endpoint and OpenMetrics support.</p>
+                        <div class="feature-tags"><span class="tag">Prometheus</span><span class="tag">Metrics</span><span class="tag">OpenMetrics</span></div>
+                    </div>
+                    <div class="feature-card" onclick="requireAuth('/two-factor')">
+                        <div class="feature-card-icon">🔐</div>
+                        <h4>2FA / MFA (Gatekeeper)</h4>
+                        <p>TOTP enrollment, backup codes, trusted devices, SMS/Email OTP verification, challenge workflows, and risk scoring.</p>
+                        <div class="feature-tags"><span class="tag">TOTP</span><span class="tag">MFA</span><span class="tag">Gatekeeper</span></div>
                     </div>
                 </div>
             </div>
@@ -478,7 +574,7 @@
                 </div>
                 <div class="arch-card">
                     <div class="arch-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></div>
-                    <h4>50+ Modules</h4>
+                    <h4>100+ Modules</h4>
                     <p>From API building to compliance — everything is modular, independently deployable, and extensible.</p>
                 </div>
                 <div class="arch-card">
