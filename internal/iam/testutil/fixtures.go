@@ -35,13 +35,15 @@ func NewTestRealm() *models.Realm {
 func NewTestUser() *models.User {
 	now := time.Now().UTC()
 	return &models.User{
-		ID:          TestUserID,
-		RealmID:     TestRealmID,
-		Username:    "testuser",
-		Email:       "test@example.com",
-		Enabled:     true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           TestUserID,
+		RealmID:      TestRealmID,
+		Username:     "testuser",
+		Email:        "test@example.com",
+		Active:       true,
+		DisplayName:  "Test User",
+		PasswordHash: "hashed-password",
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 }
 
@@ -49,14 +51,12 @@ func NewTestUser() *models.User {
 func NewTestClient() *models.Client {
 	now := time.Now().UTC()
 	return &models.Client{
-		ID:           TestClientID,
-		RealmID:      TestRealmID,
-		ClientID:     "test-client",
-		Name:         "Test Client",
-		Enabled:      true,
-		PublicClient: true,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:        TestClientID,
+		RealmID:   TestRealmID,
+		Name:      "Test Client",
+		Enabled:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
 

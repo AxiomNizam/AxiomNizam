@@ -19,21 +19,23 @@ const TestObjectKey = "test-object.txt"
 func NewTestBucket() *models.BucketResource {
 	now := time.Now().UTC()
 	return &models.BucketResource{
+		APIVersion: "v1",
+		Kind:       "Bucket",
+		Metadata: models.BucketMetadata{
+			Name:      TestBucketName,
+			TenantID:  TestTenantID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
 		Spec: models.BucketSpec{
-			TenantID:    TestTenantID,
-			Name:        TestBucketName,
-			Region:      "us-east-1",
-			Versioning:  false,
-			Encryption:  models.EncryptionConfig{Enabled: false},
+			Name:       TestBucketName,
+			Region:     "us-east-1",
+			Versioning: models.VersioningDisabled,
 		},
-		Status: models.BucketResourceStatus{
-			Phase:      models.BucketPhaseReady,
-			Endpoint:   "http://localhost:8000",
-			ObjectCount: 0,
-			TotalSize:   0,
+		Status: models.BucketStatus{
+			Phase:    models.BucketPhaseReady,
+			Endpoint: "http://localhost:8000",
 		},
-		CreatedAt: now,
-		UpdatedAt: now,
 	}
 }
 

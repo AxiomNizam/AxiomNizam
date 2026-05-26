@@ -245,6 +245,16 @@ Key results:
 - **`ErrorResponse`** struct for standard JSON error responses
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Test Infrastructure (Phase 18)
+
+**Phase 18 ✅** (completed 2026-05-26) — Shared test helpers and per-module test fixtures.
+
+Key results:
+- **`internal/testutil/`** created with helpers.go (Context, SkipIfShort) + mocks.go (MockKVStore)
+- **4 modules** with `testutil/fixtures.go`: storage, iam, jobs, scanner
+- **MockKVStore** — in-memory mock of platform/store.KVStore with Keys/Count/Clear
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:

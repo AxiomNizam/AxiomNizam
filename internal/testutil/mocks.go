@@ -44,7 +44,7 @@ func (m *MockKVStore) Put(_ context.Context, key, value string) error {
 }
 
 func (m *MockKVStore) PutWithTTL(_ context.Context, key, value string, _ time.Duration) error {
-	return m.Put(nil, key, value)
+	return m.Put(context.TODO(), key, value)
 }
 
 func (m *MockKVStore) Delete(_ context.Context, key string) error {
