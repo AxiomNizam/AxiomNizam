@@ -3,6 +3,10 @@ package netintel
 import (
 	"net/http"
 	"strconv"
+	"time"
+
+	"example.com/axiomnizam/internal/netintel/audit"
+	nmetrics "example.com/axiomnizam/internal/netintel/metrics"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,6 +21,8 @@ type Handler struct {
 	parser    *ParserEngine
 	analytics *AnalyticsEngine
 	topology  *TopologyEngine
+	metrics   *nmetrics.MetricsCollector
+	auditLog  *audit.Logger
 }
 
 func NewHandler() *Handler {
@@ -27,7 +33,79 @@ func NewHandler() *Handler {
 		parser:    parser,
 		analytics: analytics,
 		topology:  topo,
+		metrics:   nmetrics.Collector,
+		auditLog:  nil,
 	}
+}
+
+// NewHandlerWithDeps creates a handler with injected dependencies.
+func NewHandlerWithDeps(parser *ParserEngine, analytics *AnalyticsEngine, topo *TopologyEngine, metrics *nmetrics.MetricsCollector, auditLog *audit.Logger) *Handler {
+	return &Handler{
+		parser:    parser,
+		analytics: analytics,
+		topology:  topo,
+		metrics:   metrics,
+		auditLog:  auditLog,
+	}
+}
+
+// RegisterRoutes registers all netintel API routes on the given router group.
+func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
+	// Summary / Observability
+	group.GET("/summary", h.GetSummary)
+	group.GET("/observability", h.GetObservability)
+
+	// Log Types
+	group.GET("/log-types", h.GetLogTypes)
+
+	// Parser CRUD
+	group.GET("/parsers", h.ListParsers)
+	group.GET("/parsers/:id", h.GetParser)
+	group.POST("/parsers", h.CreateParser)
+	group.PUT("/parsers/:id", h.UpdateParser)
+	group.DELETE("/parsers/:id", h.DeleteParser)
+
+	// Log Entries
+	group.GET("/logs", h.ListEntries)
+	group.POST("/logs", h.IngestLog)
+	group.GET("/logs/stats", h.GetEntryStats)
+
+	// Topology
+	group.GET("/topology", h.GetTopology)
+	group.GET("/topology/nodes/:id", h.GetTopologyNode)
+	group.PUT("/topology/nodes/:id", h.UpdateTopologyNode)
+
+	// Heatmaps
+	group.GET("/heatmap", h.GetHeatmap)
+
+	// Trends
+	group.GET("/trends", h.GetTrends)
+
+	// Predictions
+	group.GET("/predictions", h.GetPredictions)
+
+	// Movement Tracks
+	group.GET("/tracks", h.ListTracks)
+	group.GET("/tracks/:mac", h.GetTrack)
+
+	// Anomalies
+	group.GET("/anomalies", h.ListAnomalies)
+	group.POST("/anomalies/:id/acknowledge", h.AcknowledgeAnomaly)
+	group.POST("/anomalies/:id/resolve", h.ResolveAnomaly)
+
+	// Alerts
+	group.GET("/alerts", h.ListAlerts)
+	group.POST("/alerts/:id/acknowledge", h.AcknowledgeAlert)
+	group.POST("/alerts/:id/resolve", h.ResolveAlert)
+
+	// Forecasts
+	group.GET("/forecasts", h.ListForecasts)
+	group.GET("/forecasts/:metric", h.GetForecast)
+
+	// Health / Metrics / Audit
+	group.GET("/health", h.Health)
+	group.GET("/metrics", h.MetricsEndpoint)
+	group.GET("/audit", h.AuditLogEndpoint)
 }
 
 // ========================
@@ -71,7 +149,7 @@ func (h *Handler) GetParser(c *gin.Context) {
 	id := c.Param("id")
 	p, ok := h.parser.GetParser(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: "parser not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrParserNotFound.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, ParserResponse{Status: "success", Parser: p})
@@ -85,12 +163,18 @@ func (h *Handler) CreateParser(c *gin.Context) {
 		return
 	}
 	if p.Name == "" {
-		c.JSON(http.StatusBadRequest, MessageResponse{Error: "name is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: ErrParserNameRequired.Error()})
 		return
 	}
 	if err := h.parser.CreateParser(&p); err != nil {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordParserOperation("create")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogParser(audit.ActionParserCreated, p.ID, "parser created: "+p.Name)
 	}
 	c.JSON(http.StatusCreated, ParserResponse{Status: "success", Parser: p})
 }
@@ -104,8 +188,14 @@ func (h *Handler) UpdateParser(c *gin.Context) {
 		return
 	}
 	if err := h.parser.UpdateParser(id, updates); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrParserNotFound.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordParserOperation("update")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogParser(audit.ActionParserUpdated, id, "parser updated")
 	}
 	p, _ := h.parser.GetParser(id)
 	c.JSON(http.StatusOK, ParserResponse{Status: "success", Parser: p})
@@ -115,8 +205,14 @@ func (h *Handler) UpdateParser(c *gin.Context) {
 func (h *Handler) DeleteParser(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.parser.DeleteParser(id); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrParserNotFound.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordParserOperation("delete")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogParser(audit.ActionParserDeleted, id, "parser deleted")
 	}
 	c.JSON(http.StatusOK, MessageResponse{Message: "parser deleted"})
 }
@@ -146,9 +242,23 @@ func (h *Handler) IngestLog(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
+
+	start := time.Now()
 	if err := h.parser.IngestLog(entry); err != nil {
 		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
+	}
+
+	_ = time.Since(start).Milliseconds()
+	if h.metrics != nil {
+		sev := entry.Severity
+		if sev == "" {
+			sev = "info"
+		}
+		h.metrics.RecordLogEntry(string(entry.LogType), sev)
+	}
+	if h.auditLog != nil {
+		h.auditLog.Log(audit.SeverityInfo, audit.CategoryIngest, audit.ActionEntryIngested, "log entry ingested: "+string(entry.LogType))
 	}
 	c.JSON(http.StatusCreated, MessageResponse{Message: "log ingested"})
 }
@@ -174,7 +284,7 @@ func (h *Handler) GetTopologyNode(c *gin.Context) {
 	id := c.Param("id")
 	node, ok := h.topology.GetNode(id)
 	if !ok {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: "node not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrNodeNotFound.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, TopologyNodeResponse{Status: "success", Node: node})
@@ -191,8 +301,11 @@ func (h *Handler) UpdateTopologyNode(c *gin.Context) {
 		return
 	}
 	if err := h.topology.UpdateNodeStatus(id, body.Status); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrNodeNotFound.Error()})
 		return
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogWithResource(audit.SeverityInfo, audit.CategoryTopology, audit.ActionTopologyUpdated, id, "node status updated to "+body.Status)
 	}
 	c.JSON(http.StatusOK, MessageResponse{Message: "node updated"})
 }
@@ -216,8 +329,8 @@ func (h *Handler) GetHeatmap(c *gin.Context) {
 func (h *Handler) GetTrends(c *gin.Context) {
 	metric := c.DefaultQuery("metric", "traffic")
 	hours := 24
-	if h := c.Query("hours"); h != "" {
-		if v, err := strconv.Atoi(h); err == nil && v > 0 && v <= 168 {
+	if hrs := c.Query("hours"); hrs != "" {
+		if v, err := strconv.Atoi(hrs); err == nil && v > 0 && v <= 168 {
 			hours = v
 		}
 	}
@@ -232,6 +345,11 @@ func (h *Handler) GetTrends(c *gin.Context) {
 // GetPredictions GET /api/v1/netintel/predictions
 func (h *Handler) GetPredictions(c *gin.Context) {
 	predictions := h.analytics.PredictMovement()
+	if h.metrics != nil {
+		for range predictions {
+			h.metrics.RecordPrediction()
+		}
+	}
 	c.JSON(http.StatusOK, PredictionsResponse{Status: "success", Predictions: predictions, Total: len(predictions)})
 }
 
@@ -250,7 +368,7 @@ func (h *Handler) GetTrack(c *gin.Context) {
 	mac := c.Param("mac")
 	track, ok := h.parser.GetTrack(mac)
 	if !ok {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: "track not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrTrackNotFound.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, TrackResponse{Status: "success", Track: track})
@@ -272,8 +390,14 @@ func (h *Handler) ListAnomalies(c *gin.Context) {
 func (h *Handler) AcknowledgeAnomaly(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.AcknowledgeAnomaly(id); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrAnomalyNotFound.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordAnomalyOperation("acknowledge")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogAnomaly(audit.ActionAnomalyAcked, id, "anomaly acknowledged")
 	}
 	c.JSON(http.StatusOK, MessageResponse{Message: "anomaly acknowledged"})
 }
@@ -282,8 +406,14 @@ func (h *Handler) AcknowledgeAnomaly(c *gin.Context) {
 func (h *Handler) ResolveAnomaly(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.ResolveAnomaly(id); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrAnomalyNotFound.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordAnomalyOperation("resolve")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogAnomaly(audit.ActionAnomalyResolved, id, "anomaly resolved")
 	}
 	c.JSON(http.StatusOK, MessageResponse{Message: "anomaly resolved"})
 }
@@ -303,8 +433,14 @@ func (h *Handler) ListAlerts(c *gin.Context) {
 func (h *Handler) AcknowledgeAlert(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.AcknowledgeAlert(id); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrAlertNotFound.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordAlertOperation("acknowledge")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogAlert(audit.ActionAlertAcked, id, "alert acknowledged")
 	}
 	c.JSON(http.StatusOK, MessageResponse{Message: "alert acknowledged"})
 }
@@ -313,8 +449,14 @@ func (h *Handler) AcknowledgeAlert(c *gin.Context) {
 func (h *Handler) ResolveAlert(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.analytics.ResolveAlert(id); err != nil {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrAlertNotFound.Error()})
 		return
+	}
+	if h.metrics != nil {
+		h.metrics.RecordAlertOperation("resolve")
+	}
+	if h.auditLog != nil {
+		h.auditLog.LogAlert(audit.ActionAlertResolved, id, "alert resolved")
 	}
 	c.JSON(http.StatusOK, MessageResponse{Message: "alert resolved"})
 }
@@ -334,8 +476,46 @@ func (h *Handler) GetForecast(c *gin.Context) {
 	metric := c.Param("metric")
 	forecast, ok := h.analytics.GetForecast(metric)
 	if !ok {
-		c.JSON(http.StatusNotFound, MessageResponse{Error: "forecast not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: ErrForecastNotFound.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, ForecastResponse{Status: "success", Forecast: forecast})
+}
+
+// ========================
+// Health / Metrics / Audit
+// ========================
+
+// Health GET /api/v1/netintel/health
+func (h *Handler) Health(c *gin.Context) {
+	snapshot := nmetrics.Collector.Snapshot()
+	c.JSON(http.StatusOK, HealthResponse{
+		Status:        "healthy",
+		UptimeSec:     snapshot.UptimeSeconds,
+		TotalIngested: snapshot.TotalIngested,
+		Module:        "netintel",
+	})
+}
+
+// MetricsEndpoint GET /api/v1/netintel/metrics
+func (h *Handler) MetricsEndpoint(c *gin.Context) {
+	snapshot := nmetrics.Collector.Snapshot()
+	c.JSON(http.StatusOK, MetricsEndpointResponse{
+		TotalIngested:  snapshot.TotalIngested,
+		TotalAnomalies: snapshot.TotalAnomalies,
+		TotalAlerts:    snapshot.TotalAlerts,
+		UptimeSeconds:  snapshot.UptimeSeconds,
+		ByLogType:      snapshot.ByLogType,
+		BySeverity:     snapshot.BySeverity,
+	})
+}
+
+// AuditLogEndpoint GET /api/v1/netintel/audit
+func (h *Handler) AuditLogEndpoint(c *gin.Context) {
+	if h.auditLog == nil {
+		c.JSON(http.StatusOK, AuditLogResponse{Events: []audit.Event{}, Count: 0})
+		return
+	}
+	events := h.auditLog.List()
+	c.JSON(http.StatusOK, AuditLogResponse{Events: events, Count: len(events)})
 }

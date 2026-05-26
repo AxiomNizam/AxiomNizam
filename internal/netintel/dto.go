@@ -107,3 +107,53 @@ type ForecastResponse struct {
 	Status   string      `json:"status"`
 	Forecast interface{} `json:"forecast"`
 }
+
+// HealthResponse is the module health check response.
+type HealthResponse struct {
+	Status        string `json:"status"`
+	UptimeSec     int64  `json:"uptime_seconds"`
+	TotalIngested int64  `json:"total_ingested"`
+	Module        string `json:"module"`
+}
+
+// MetricsEndpointResponse is the module metrics snapshot response.
+type MetricsEndpointResponse struct {
+	TotalIngested  int64            `json:"total_ingested"`
+	TotalAnomalies int64            `json:"total_anomalies"`
+	TotalAlerts    int64            `json:"total_alerts"`
+	UptimeSeconds  int64            `json:"uptime_seconds"`
+	ByLogType      map[string]int64 `json:"by_log_type,omitempty"`
+	BySeverity     map[string]int64 `json:"by_severity,omitempty"`
+}
+
+// AuditLogResponse is the audit log response.
+type AuditLogResponse struct {
+	Events interface{} `json:"events"`
+	Count  int         `json:"count"`
+}
+
+// --- Modes Response DTOs ---
+
+// ModesListResponse is the modes list response.
+type ModesListResponse struct {
+	Status string      `json:"status"`
+	Modes  interface{} `json:"modes"`
+}
+
+// ModesUpsertResponse is the mode upsert response.
+type ModesUpsertResponse struct {
+	Message string      `json:"message"`
+	Mode    interface{} `json:"mode"`
+}
+
+// ModesEventsResponse is the mode events list response.
+type ModesEventsResponse struct {
+	Status string      `json:"status"`
+	Events interface{} `json:"events"`
+}
+
+// ModesDetectResponse is the anomaly detector response.
+type ModesDetectResponse struct {
+	Detector int     `json:"detector"`
+	Score    float64 `json:"score"`
+}

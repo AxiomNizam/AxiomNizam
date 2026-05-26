@@ -49,7 +49,7 @@ These modules already have models + DTOs + handlers + reconcilers. Add **metrics
 | P1 | **etl** | metrics, audit, types, errors, dto, system | 1.5h |
 | P1 | **datasource** | metrics, audit, errors, system | 1h |
 | P1 | **transform** | metrics, audit, types, errors, dto, system | 1.5h |
-| P1 | **netintel** | metrics, audit, errors, system | 1h |
+| ~~P1~~ | ~~**netintel**~~ | ~~DONE — 9/9~~ | ~~0h~~ |
 | P2 | **alerting** | metrics, audit, types, errors, system | 1h |
 | P2 | **governance** | metrics, audit, errors, system | 1h |
 | P2 | **costing** | metrics, audit, errors, system | 1h |

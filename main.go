@@ -1300,8 +1300,9 @@ func main() {
 	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS
 	// ====================================
-	netIntelHandler := netintelpkg.NewHandler()
-	modeManager := modes.NewManager()
+	netintelSystem := netintelpkg.NewSystem()
+	netIntelHandler := netintelSystem.Handler()
+	modeManager := netintelSystem.ModesManager()
 
 	// ====================================
 	// NEWLY ADDED FEATURE MODULES
@@ -1318,84 +1319,42 @@ func main() {
 
 	netintelAPI := router.Group("/api/v1/netintel", authMiddleware)
 	{
-		// Summary & Observability
-		netintelAPI.GET("/summary", netIntelHandler.GetSummary)
-		netintelAPI.GET("/observability", netIntelHandler.GetObservability)
-		netintelAPI.GET("/log-types", netIntelHandler.GetLogTypes)
+		// Register all core netintel routes via the handler
+		netIntelHandler.RegisterRoutes(netintelAPI)
 
-		// Parser CRUD
-		netintelAPI.GET("/parsers", netIntelHandler.ListParsers)
-		netintelAPI.GET("/parsers/:id", netIntelHandler.GetParser)
-		netintelAPI.POST("/parsers", adminOrSysMiddleware, netIntelHandler.CreateParser)
-		netintelAPI.PUT("/parsers/:id", adminOrSysMiddleware, netIntelHandler.UpdateParser)
-		netintelAPI.DELETE("/parsers/:id", adminOrSysMiddleware, netIntelHandler.DeleteParser)
-
-		// Log Entries
-		netintelAPI.GET("/logs", netIntelHandler.ListEntries)
-		netintelAPI.POST("/logs", adminOrSysMiddleware, netIntelHandler.IngestLog)
-		netintelAPI.GET("/logs/stats", netIntelHandler.GetEntryStats)
-
-		// Topology
-		netintelAPI.GET("/topology", netIntelHandler.GetTopology)
-		netintelAPI.GET("/topology/nodes/:id", netIntelHandler.GetTopologyNode)
-		netintelAPI.PUT("/topology/nodes/:id", adminOrSysMiddleware, netIntelHandler.UpdateTopologyNode)
-
-		// Heatmaps & Trends
-		netintelAPI.GET("/heatmap", netIntelHandler.GetHeatmap)
-		netintelAPI.GET("/trends", netIntelHandler.GetTrends)
-
-		// Predictions & Tracks
-		netintelAPI.GET("/predictions", netIntelHandler.GetPredictions)
-		netintelAPI.GET("/tracks", netIntelHandler.ListTracks)
-		netintelAPI.GET("/tracks/:mac", netIntelHandler.GetTrack)
-
-		// Anomalies
-		netintelAPI.GET("/anomalies", netIntelHandler.ListAnomalies)
-		netintelAPI.POST("/anomalies/:id/acknowledge", adminOrSysMiddleware, netIntelHandler.AcknowledgeAnomaly)
-		netintelAPI.POST("/anomalies/:id/resolve", adminOrSysMiddleware, netIntelHandler.ResolveAnomaly)
-
-		// Alerts
-		netintelAPI.GET("/alerts", netIntelHandler.ListAlerts)
-		netintelAPI.POST("/alerts/:id/acknowledge", adminOrSysMiddleware, netIntelHandler.AcknowledgeAlert)
-		netintelAPI.POST("/alerts/:id/resolve", adminOrSysMiddleware, netIntelHandler.ResolveAlert)
-
-		// Forecasts
-		netintelAPI.GET("/forecasts", netIntelHandler.ListForecasts)
-		netintelAPI.GET("/forecasts/:metric", netIntelHandler.GetForecast)
-
-		// Modes (new module-backed endpoints)
+		// Modes endpoints (inline — modes manager is separate from handler)
 		netintelAPI.GET("/modes", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"modes": modeManager.List()})
+			c.JSON(http.StatusOK, netintelpkg.ModesListResponse{Status: "success", Modes: modeManager.List()})
 		})
 		netintelAPI.PUT("/modes/:name", adminOrSysMiddleware, func(c *gin.Context) {
 			var cfg modes.ModeConfig
 			if err := c.ShouldBindJSON(&cfg); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
 				return
 			}
 			cfg.Name = modes.Mode(strings.ToLower(strings.TrimSpace(c.Param("name"))))
 			if cfg.Name == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "mode name is required"})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: "mode name is required"})
 				return
 			}
 			modeManager.Upsert(cfg)
-			c.JSON(http.StatusOK, gin.H{"message": "mode upserted", "mode": cfg})
+			c.JSON(http.StatusOK, netintelpkg.ModesUpsertResponse{Message: "mode upserted", Mode: cfg})
 		})
 		netintelAPI.POST("/modes/events", adminOrSysMiddleware, func(c *gin.Context) {
 			var ev modes.ModeEvent
 			if err := c.ShouldBindJSON(&ev); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
 				return
 			}
 			if ev.Timestamp.IsZero() {
 				ev.Timestamp = time.Now().UTC()
 			}
 			modeManager.Record(ev)
-			c.JSON(http.StatusOK, gin.H{"message": "event recorded"})
+			c.JSON(http.StatusOK, netintelpkg.MessageResponse{Message: "event recorded"})
 		})
 		netintelAPI.GET("/modes/:name/events", func(c *gin.Context) {
 			name := modes.Mode(strings.ToLower(strings.TrimSpace(c.Param("name"))))
-			c.JSON(http.StatusOK, gin.H{"events": modeManager.FindByMode(name)})
+			c.JSON(http.StatusOK, netintelpkg.ModesEventsResponse{Status: "success", Events: modeManager.FindByMode(name)})
 		})
 		netintelAPI.POST("/modes/detect", func(c *gin.Context) {
 			var body struct {
@@ -1403,7 +1362,7 @@ func main() {
 				Samples  []float64 `json:"samples"`
 			}
 			if err := c.ShouldBindJSON(&body); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
 				return
 			}
 			var score float64
@@ -1419,7 +1378,7 @@ func main() {
 			default:
 				score = modes.Detector001(body.Samples)
 			}
-			c.JSON(http.StatusOK, gin.H{"detector": body.Detector, "score": score})
+			c.JSON(http.StatusOK, netintelpkg.ModesDetectResponse{Detector: body.Detector, Score: score})
 		})
 	}
 
@@ -1870,6 +1829,9 @@ func main() {
 			// Wire API Builder audit persistence
 			apiBuilderSystem.SetKVStore(backendMgr.KV())
 			log.Println("✅ API Builder: Raft KV persistence wired (deferred)")
+
+			// Wire NetIntel audit + metrics persistence
+			netintelSystem.SetKVStore(backendMgr.KV())
 
 			// Wire remaining modules to KV persistence in Raft mode.
 			workflows.ConfigureGlobalKVPersistence(backendMgr.KV())
