@@ -56,10 +56,16 @@ func DefaultCSRFConfig() CSRFConfig {
 			"/auth/refresh",
 			"/auth/forgot",
 			"/auth/reset",
+			"/iam/auth/login",
+			"/iam/auth/refresh",
 			"/api/v1/auth/login",
 			"/api/v1/auth/refresh",
+			"/api/v1/auth/logout",
+			"/oauth/token",
+			"/realms/",
 			"/api/health",
 			"/api/status",
+			"/api/v1/stream",
 		},
 	}
 }
