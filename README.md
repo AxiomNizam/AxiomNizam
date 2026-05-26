@@ -83,15 +83,15 @@ Runtime notes:
 ## Project Size Snapshot
 
 <!-- README_METRICS:START -->
-Code inventory snapshot (workspace scan on 2026-05-25):
+Code inventory snapshot (workspace scan on 2026-05-28):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 951
-- Total code lines: 272510
-- Go files (repository): 892
-- Go lines (repository): 232255
-- Internal modules: 106
-- Internal Go files: 838
-- Internal Go lines: 216653
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 1051
+- Total code lines: 278515
+- Go files (repository): 992
+- Go lines (repository): 238260
+- Internal modules: 111
+- Internal Go files: 938
+- Internal Go lines: 223699
 
 Counting method used:
 
@@ -430,7 +430,7 @@ all critical findings to harden the codebase for production readiness.
 - **Import standardization:** All handler and module files follow stdlib → internal → external import ordering
 - **Naming collision fix:** Resolved `EvalConditionType` collision in `internal/alerting`
 - **Quality rules alignment:** Fixed schema field mismatches in `internal/quality`
-- **Build verification:** `go build ./...` and `go vet ./...` both pass clean (100 modules, 675 Go files)
+- **Build verification:** `go build ./...` and `go vet ./...` both pass clean (111 modules, 938 Go files)
 
 See [docs/CODING_PRACTICES.md](docs/CODING_PRACTICES.md) for the full standards reference and [docs/PLATFORM_COMPLETION_PLAN.md](docs/PLATFORM_COMPLETION_PLAN.md) for the overall platform status.
 
@@ -1154,27 +1154,29 @@ This split is intentional in the current codebase.
 
 ## Internal Module Coverage
 
-Internal scan snapshot (2026-05-25):
+Internal scan snapshot (2026-05-28):
 
-- Module folders under internal/: 106
-- Go files under internal/: 838
-- Go lines under internal/: 216653
+- Module folders under internal/: 111
+- Go files under internal/: 938
+- Go lines under internal/: 223699
 
 Largest modules by Go lines:
 
-- handlers (36 files, 18938 lines)
-- utils (36 files, 13187 lines)
+- utils (36 files, 13215 lines)
 - kubeplus (6 files, 12624 lines)
-- storage (20 files, 7881 lines)
-- platform (19 files, 7281 lines)
-- jobs (20 files, 7155 lines)
-- iam (14 files, 6780 lines)
-- policies (16 files, 6219 lines)
-- netintel (5 files, 6025 lines)
-- vectorplus (2 files, 5059 lines)
-- catalog (5 files, ~2500 lines) [NEW]
-- schemaregistry (4 files, ~2200 lines) [NEW]
-- alerting (2 files, ~1800 lines) [NEW]
+- antivirus (40 files, 12049 lines)
+- iam (42 files, 11996 lines)
+- platform (36 files, 10699 lines)
+- gatekeeper (98 files, 9358 lines)
+- storage (29 files, 9143 lines)
+- jobs (35 files, 8811 lines)
+- netintel (10 files, 6620 lines)
+- policies (16 files, 6222 lines)
+- scanner (21 files, 5456 lines)
+- vectorplus (2 files, 5100 lines)
+- apibuilder (10 files, 5024 lines)
+- reviewflow (2 files, 4870 lines)
+- apimachinery (29 files, 4577 lines)
 - quality/rules (2 files, ~1500 lines) [NEW]
 
 Full internal module inventory (alphabetical):
