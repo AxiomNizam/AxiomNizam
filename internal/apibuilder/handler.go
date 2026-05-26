@@ -67,27 +67,7 @@ type apiRuntimeRateBucket struct {
 	Count       int
 }
 
-type SchemaDefinition struct {
-	Type       string                 `json:"type"` // object, array, string, number, boolean
-	Properties map[string]SchemaField `json:"properties,omitempty"`
-	Required   []string               `json:"required,omitempty"`
-	Example    interface{}            `json:"example,omitempty"`
-}
-
-type SchemaField struct {
-	Type        string      `json:"type"`
-	Description string      `json:"description,omitempty"`
-	Default     interface{} `json:"default,omitempty"`
-	Enum        []string    `json:"enum,omitempty"`
-}
-
-type ParamDef struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Required    bool   `json:"required"`
-	Description string `json:"description,omitempty"`
-	Default     string `json:"default,omitempty"`
-}
+// SchemaDefinition, SchemaField, ParamDef — defined in types.go (aliases from models/)
 
 type customAPISuccessEnvelope struct {
 	Message      string      `json:"message"`
@@ -138,23 +118,19 @@ type APIScanReport struct {
 
 // ---------- Dashboard <-> GIS Conversion ----------
 
+// ConversionResult is an in-memory conversion record (legacy).
+// Use ConversionResource from models/ for new code.
 type ConversionResult struct {
 	ID             string         `json:"id"`
-	SourceType     string         `json:"source_type"` // dashboard, gis
+	SourceType     string         `json:"source_type"`
 	SourceID       string         `json:"source_id"`
-	TargetType     string         `json:"target_type"` // gis, dashboard
+	TargetType     string         `json:"target_type"`
 	TargetID       string         `json:"target_id"`
 	FieldMappings  []FieldMapping `json:"field_mappings"`
 	GeoFieldsFound []string       `json:"geo_fields_found,omitempty"`
-	Confidence     float64        `json:"confidence"` // 0-1 how good the conversion is
-	Status         string         `json:"status"`     // pending, completed, failed
+	Confidence     float64        `json:"confidence"`
+	Status         string         `json:"status"`
 	CreatedAt      time.Time      `json:"created_at"`
-}
-
-type FieldMapping struct {
-	SourceField string `json:"source_field"`
-	TargetField string `json:"target_field"`
-	MappingType string `json:"mapping_type"` // direct, inferred, geo_lat, geo_lng, geo_region
 }
 
 // ---------- Handler ----------

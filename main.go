@@ -1247,6 +1247,9 @@ func main() {
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
 	apiBuilderHandler := apibuilder.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
+	apiBuilderSystem := apibuilder.NewSystem(apiBuilderHandler)
+	_ = apiBuilderSystem.Start(ctx)
+	log.Println("✅ API Builder module started")
 
 	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{
@@ -1860,6 +1863,10 @@ func main() {
 				log.Println("✅ Gatekeeper: Raft KV persistence wired (deferred)")
 			}
 
+			// Wire API Builder audit persistence
+			apiBuilderSystem.SetKVStore(backendMgr.KV())
+			log.Println("✅ API Builder: Raft KV persistence wired (deferred)")
+
 			// Wire remaining modules to KV persistence in Raft mode.
 			workflows.ConfigureGlobalKVPersistence(backendMgr.KV())
 			workflows.GlobalWorkflowEngine.RegisterBuiltinHandlers()
@@ -2218,6 +2225,14 @@ func main() {
 		reconcilerMetrics.Register("waitx")
 		go genericctrl.NewGenericController("waitx", waitCheckStore, waitCheckReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ WaitX controller started")
+
+		// API Builder reconciler
+		customAPIStore := platformstore.NewStore[*apibuilder.CustomAPIResource](backendMgr, "custom-apis", func() *apibuilder.CustomAPIResource { return &apibuilder.CustomAPIResource{} })
+		customAPIReconciler := reconcilerpkg.NewInstrumented("apibuilder",
+			apibuilder.NewCustomAPIReconciler(apiBuilderHandler), reconcilerMetrics)
+		reconcilerMetrics.Register("apibuilder")
+		go genericctrl.NewGenericController("apibuilder", customAPIStore, customAPIReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ API Builder controller started")
 
 		// Phase 0.4: etcd key-space monitoring
 		etcdPrefixes := []string{
