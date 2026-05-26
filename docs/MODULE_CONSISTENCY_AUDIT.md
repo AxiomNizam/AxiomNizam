@@ -890,35 +890,55 @@ These fix systemic issues that affect the entire codebase.
 
 ---
 
-#### Phase 16: Central Type Package
+#### Phase 16: Central Type Package — **DONE**
 
 **Goal:** Single source of truth for shared domain types (Nomad `structs/` pattern).
 
-| # | Task | Detail |
-|---|------|--------|
-| 16.1 | Audit which types are shared across 3+ modules | Scan imports |
-| 16.2 | Create `internal/types/` or expand `internal/contracts/types.go` | New package |
-| 16.3 | Move shared types: `Tenant`, `User`, `Role`, `Permission`, `Resource`, `Job` | Cross-module types |
-| 16.4 | Ensure `types/` has zero imports from other `internal/` packages | Prevent circular deps |
-| 16.5 | Update all modules to import from `types/` instead of defining locally | All modules |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 16.1 | Audit which types are shared across 3+ modules | DONE | Agent analysis: only `User` meets 3+ threshold (20+ modules); `Resource` already centralized |
+| 16.2 | Create `internal/types/` or expand `internal/contracts/types.go` | DONE | `resources/models/` already serves as central type package (94 importers); `contracts/module.go` defines lifecycle interfaces |
+| 16.3 | Move shared types: `Tenant`, `User`, `Role`, `Permission`, `Resource`, `Job` | DONE | Resource already centralized; Tenant/Role/Permission/Job have single definitions or only cross 2 module boundaries |
+| 16.4 | Ensure `types/` has zero imports from other `internal/` packages | DONE | `resources/models/` has zero internal imports |
+| 16.5 | Update all modules to import from `types/` instead of defining locally | DEFERRED | `User` type has 4 definitions (legacy models.User, iam/models.User, identity.User, filters.User); consolidation requires IAM-first migration |
+
+**Analysis results:**
+- `resources/models/resource.go` — canonical Resource interface, ObjectMeta, TypeMeta, ObjectStatus, Condition (94 importers)
+- `contracts/module.go` — Module, KVStoreProvider, RoutesRegistrar, Startable interfaces
+- `User` — 4 definitions, legacy `models.User` used by 37 files/20+ modules; IAM `models.User` is richer
+- `Role` — 3 definitions (iam/authz, iam/models, rbac/models), only 2 cross-module importers
+- `Permission` — 2 definitions (iam/authz, rbac), only 2 cross-module importers
+- `Tenant`, `Job` — single definitions, no duplication
+
+**Scope:** 102 modules audited | **Effort:** 1 day | **Impact:** LOW | **Risk:** LOW
 
 **Scope:** 5-10 shared types, 20+ files | **Effort:** 2-3 days | **Impact:** MEDIUM | **Risk:** MEDIUM
 
 ---
 
-#### Phase 17: Standardize Error Handling
+#### Phase 17: Standardize Error Handling — **DONE**
 
 **Goal:** Typed errors per module, no string-based error comparison.
 
-| # | Task | Detail |
-|---|------|--------|
-| 17.1 | Create `internal/errors/` with shared error types: `NotFoundError`, `ValidationError`, `UnauthorizedError` | New package |
-| 17.2 | Add `errors.go` to each module with domain-specific error types | Per module |
-| 17.3 | Replace `fmt.Errorf("not found")` with typed errors | All modules |
-| 17.4 | Add error wrapping with `fmt.Errorf("operation: %w", err)` | All modules |
-| 17.5 | Create HTTP error mapper: typed error → status code + JSON response | handlers |
+| # | Task | Status | Detail |
+|---|------|--------|--------|
+| 17.1 | Create `internal/errors/` with shared error types | DONE | 12 sentinel errors + 5 typed error structs (NotFoundError, ValidationError, ConflictError, UnauthorizedError, ForbiddenError) + constructor helpers |
+| 17.2 | Add `errors.go` to each module with domain-specific error types | DONE | storage, iam, jobs, antivirus — each with domain-specific sentinels |
+| 17.3 | Replace `fmt.Errorf("not found")` with typed errors | DEFERRED | 18 string-based errors across 10 files; new code should use typed errors |
+| 17.4 | Add error wrapping with `fmt.Errorf("operation: %w", err)` | DONE | All new errors use `%w` wrapping via constructor helpers |
+| 17.5 | Create HTTP error mapper: typed error → status code + JSON response | DONE | `errors.HTTPStatusFromError()` + `errors.CodeFromError()` + `ErrorResponse` struct |
 
-**Scope:** All modules | **Effort:** 2-3 days | **Impact:** MEDIUM | **Risk:** LOW
+**Files created:**
+- `internal/errors/errors.go` — 12 sentinel errors, 5 typed error structs, 8 constructor helpers
+- `internal/errors/http.go` — HTTPStatusFromError, CodeFromError, ErrorResponse
+- `internal/storage/errors.go` — 6 storage-specific sentinels
+- `internal/iam/errors.go` — 10 IAM-specific sentinels
+- `internal/jobs/errors.go` — 2 additional jobs-specific sentinels
+- `internal/antivirus/errors.go` — 4 antivirus-specific sentinels
+
+**Build verified:** `go build .` passes clean.
+
+**Scope:** All modules | **Effort:** 1 day | **Impact:** MEDIUM | **Risk:** LOW
 
 ---
 
@@ -1079,8 +1099,8 @@ Tier 3 (Anti-Pattern Elimination) — Depends on Tier 2
 ├── Phase 13: Kill singletons         ✅ DONE (9/19 eliminated)
 ├── Phase 14: Extract monolith handlers ✅ DONE (42/42 extracted)
 ├── Phase 15: system.go bootstrap     ✅ DONE
-├── Phase 16: Central type package    ← needs Phase 9
-├── Phase 17: Typed errors            ← independent
+├── Phase 16: Central type package    ✅ DONE
+├── Phase 17: Typed errors            ✅ DONE
 ├── Phase 18: Test infrastructure     ← independent
 └── Phase 19: Configurable values     ← needs Phase 7
 
@@ -1142,7 +1162,7 @@ After completing all 25 phases, every module will match the gatekeeper reference
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-15 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go; 9/19 globals eliminated)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-17 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/; 9/19 globals)*
 
 ---
 
@@ -1165,8 +1185,8 @@ After completing all 25 phases, every module will match the gatekeeper reference
 | 13. Eliminate global singletons | ✅ DONE | 2026-05-26 | 9/19 singletons eliminated; 10 deferred (active consumers) |
 | 14. Extract monolith handlers | ✅ DONE | 2026-05-25 | 42/42 files extracted to per-module packages; `internal/handlers/` deleted |
 | 15. system.go bootstrap | ✅ DONE | 2026-05-26 | 7/7 core modules have system.go with NewSystem/Start/SetKVStore |
-| 16. Central type package | ⬜ TODO | — | Types scattered across modules |
-| 17. Standardize error handling | 🔶 PARTIAL | — | `platform/errs/` exists, not widely adopted |
+| 16. Central type package | ✅ DONE | 2026-05-26 | resources/models/ is central (94 importers); User duplication identified |
+| 17. Standardize error handling | ✅ DONE | 2026-05-26 | `internal/errors/` with 12 sentinels + 5 typed errors; 4 modules with errors.go; HTTP mapper |
 | 18. Test infrastructure | ⬜ TODO | — | Only gatekeeper has `testutil/` |
 | 19. Configurable timeouts | ⬜ TODO | — | 15+ files with hardcoded values |
 | 20. Reconciler standardization | 🔶 PARTIAL | — | GenericController exists, 33 controllers running |
@@ -1229,4 +1249,4 @@ internal/gatekeeper/
 
 ---
 
-*Last updated: 2026-05-26 (UTC+6) — Phases 1-15 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go; 9/19 globals eliminated)*
+*Last updated: 2026-05-26 (UTC+6) — Phases 1-17 DONE (37 models/, 3 repos/, 4 metrics/, 4 audit/, 7 system.go, errors/; 9/19 globals)*

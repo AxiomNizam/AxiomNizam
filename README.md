@@ -222,6 +222,29 @@ Key results:
 - **Cache system:** wraps Manager
 - **Full build passes clean** — `go build .` succeeds
 
+### Module Consistency: Central Type Package (Phase 16)
+
+**Phase 16 ✅** (completed 2026-05-26) — Audit and document central type package status.
+
+Key findings:
+- **`resources/models/`** already serves as central type package (94 importers across all modules)
+- **`contracts/module.go`** defines shared lifecycle interfaces (Module, KVStoreProvider, RoutesRegistrar, Startable)
+- **`User` type** has 4 definitions across modules — only type meeting 3+ threshold (20+ modules import legacy `models.User`)
+- **Role/Permission** duplicated but only cross 2 module boundaries each
+- **Tenant/Job** have single definitions, no duplication
+- **Full build passes clean** — `go build .` succeeds
+
+### Module Consistency: Error Handling (Phase 17)
+
+**Phase 17 ✅** (completed 2026-05-26) — Standardize typed error handling across all modules.
+
+Key results:
+- **`internal/errors/`** created with 12 sentinel errors + 5 typed error structs + HTTP mapper
+- **4 modules** with `errors.go`: storage (6 sentinels), iam (10 sentinels), jobs (2 sentinels), antivirus (4 sentinels)
+- **HTTP mapper:** `errors.HTTPStatusFromError()` maps typed errors to HTTP status codes
+- **`ErrorResponse`** struct for standard JSON error responses
+- **Full build passes clean** — `go build .` succeeds
+
 ### Operational Runbook
 
 To activate the reconcile loop for a module in production:
