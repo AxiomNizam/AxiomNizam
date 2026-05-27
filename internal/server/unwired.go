@@ -13,7 +13,6 @@ import (
 	alertingmodels "example.com/axiomnizam/internal/alerting/models"
 	"example.com/axiomnizam/internal/anonymization"
 	"example.com/axiomnizam/internal/antivirus"
-	"example.com/axiomnizam/internal/apibanks"
 	"example.com/axiomnizam/internal/autopilot"
 	"example.com/axiomnizam/internal/catalog"
 	"example.com/axiomnizam/internal/config"
@@ -102,75 +101,6 @@ func WireUnwiredModules(
 	}
 	trivyEngine := trivy.NewEngine(trivyBinaryPath)
 	log.Printf("✅ Trivy vulnerability scanner initialized (binary: %s)", trivyBinaryPath)
-
-	// ====================================
-	// API BANKS (previously unwired)
-	// ====================================
-	apiBankManager := apibanks.NewAPIBankManager()
-	apiBankCatalog := apibanks.NewAPIBankCatalog(apiBankManager)
-	_ = apiBankCatalog // available for API discovery
-	log.Println("✅ API Banks module initialized")
-
-	// ====================================
-	// API BANKS ROUTES
-	// ====================================
-	apiBankAPI := router.Group("/api/v1/apibanks", authMiddleware)
-	{
-		apiBankAPI.POST("", adminOrSysMiddleware, func(c *gin.Context) {
-			var bank apibanks.APIBank
-			if err := c.ShouldBindJSON(&bank); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if err := apiBankManager.CreateBank(c.Request.Context(), &bank); err != nil {
-				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusCreated, gin.H{"message": "bank created", "bank": bank})
-		})
-		apiBankAPI.GET("", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"banks": apiBankManager.ListBanks()})
-		})
-		apiBankAPI.GET("/:name", func(c *gin.Context) {
-			bank := apiBankManager.GetBank(strings.TrimSpace(c.Param("name")))
-			if bank == nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "bank not found"})
-				return
-			}
-			c.JSON(http.StatusOK, bank)
-		})
-		apiBankAPI.POST("/:name/apis", adminOrSysMiddleware, func(c *gin.Context) {
-			var api apibanks.APIReference
-			if err := c.ShouldBindJSON(&api); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if err := apiBankManager.AddAPIToBank(c.Request.Context(), strings.TrimSpace(c.Param("name")), api); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"message": "API added to bank"})
-		})
-		apiBankAPI.DELETE("/:name/apis/:apiName", adminOrSysMiddleware, func(c *gin.Context) {
-			if err := apiBankManager.RemoveAPIFromBank(c.Request.Context(), strings.TrimSpace(c.Param("name")), strings.TrimSpace(c.Param("apiName"))); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"message": "API removed from bank"})
-		})
-		apiBankAPI.GET("/search/data-class", func(c *gin.Context) {
-			dataClass := strings.TrimSpace(c.Query("class"))
-			c.JSON(http.StatusOK, gin.H{"apis": apiBankCatalog.SearchByDataClass(dataClass)})
-		})
-		apiBankAPI.GET("/search/owner", func(c *gin.Context) {
-			owner := strings.TrimSpace(c.Query("owner"))
-			c.JSON(http.StatusOK, gin.H{"banks": apiBankCatalog.SearchByOwner(owner)})
-		})
-		apiBankAPI.GET("/search/tag", func(c *gin.Context) {
-			tag := strings.TrimSpace(c.Query("tag"))
-			c.JSON(http.StatusOK, gin.H{"banks": apiBankCatalog.SearchByTag(tag)})
-		})
-	}
 
 	// ====================================
 	// TRIVY SCANNER ROUTES
