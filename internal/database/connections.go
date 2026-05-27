@@ -36,12 +36,25 @@ type Connections struct {
 	Firebase      interface{} // Placeholder for Firebase connection
 }
 
+// gormCfg is the shared GORM config that suppresses "record not found" noise.
+var gormCfg = &gorm.Config{
+	Logger: logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  false,
+		},
+	),
+}
+
 // InitConnections initializes all database connections
 func InitConnections(cfg *config.Config) *Connections {
 	conns := &Connections{}
 
 	// MySQL
-	if db, err := gorm.Open(mysql.Open(cfg.GetMySQLDSN()), &gorm.Config{}); err == nil {
+	if db, err := gorm.Open(mysql.Open(cfg.GetMySQLDSN()), gormCfg); err == nil {
 		conns.MySQL = db
 		logging.Z().Info("✅ MySQL connected")
 	} else {
@@ -49,7 +62,7 @@ func InitConnections(cfg *config.Config) *Connections {
 	}
 
 	// MariaDB
-	if db, err := gorm.Open(mysql.Open(cfg.GetMariaDBDSN()), &gorm.Config{}); err == nil {
+	if db, err := gorm.Open(mysql.Open(cfg.GetMariaDBDSN()), gormCfg); err == nil {
 		conns.MariaDB = db
 		logging.Z().Info("✅ MariaDB connected")
 	} else {
@@ -57,7 +70,7 @@ func InitConnections(cfg *config.Config) *Connections {
 	}
 
 	// Percona
-	if db, err := gorm.Open(mysql.Open(cfg.GetPerconaDSN()), &gorm.Config{}); err == nil {
+	if db, err := gorm.Open(mysql.Open(cfg.GetPerconaDSN()), gormCfg); err == nil {
 		conns.Percona = db
 		logging.Z().Info("✅ Percona connected")
 	} else {
@@ -65,7 +78,7 @@ func InitConnections(cfg *config.Config) *Connections {
 	}
 
 	// PostgreSQL
-	if db, err := gorm.Open(postgres.Open(cfg.GetPostgresDSN()), &gorm.Config{}); err == nil {
+	if db, err := gorm.Open(postgres.Open(cfg.GetPostgresDSN()), gormCfg); err == nil {
 		conns.PostgreSQL = db
 		logging.Z().Info("✅ PostgreSQL connected")
 	} else {
@@ -120,7 +133,7 @@ func InitConnections(cfg *config.Config) *Connections {
 	}
 
 	// Oracle
-	if db, err := gorm.Open(postgres.Open(cfg.GetOracleDSN()), &gorm.Config{}); err == nil {
+	if db, err := gorm.Open(postgres.Open(cfg.GetOracleDSN()), gormCfg); err == nil {
 		conns.Oracle = db
 		logging.Z().Info("✅ Oracle connected")
 	} else {

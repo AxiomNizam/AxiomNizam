@@ -102,14 +102,14 @@ func (h *Handler) restoreSavedServers() {
 		switch rec.DBType {
 		case "mysql", "mariadb", "percona":
 			dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", rec.Username, rec.Password, rec.Host, rec.Port, rec.DefaultDatabase)
-			db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+			db, err = gorm.Open(mysql.Open(dsn), gormCfg)
 		case "postgres":
 			sslMode := rec.SSLMode
 			if sslMode == "" {
 				sslMode = "disable"
 			}
 			dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", rec.Host, rec.Username, rec.Password, rec.DefaultDatabase, rec.Port, sslMode)
-			db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			db, err = gorm.Open(postgres.Open(dsn), gormCfg)
 		default:
 			logging.Z().Warn("skipping saved server: unsupported db type", zap.String("key", rec.ServerKey), zap.String("dbType", rec.DBType))
 			continue
@@ -354,14 +354,14 @@ func (h *Handler) ConnectDatabaseServer(c *gin.Context) {
 	switch dbType {
 	case "mysql", "mariadb", "percona":
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", req.Username, req.Password, host, port, defaultDB)
-		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		db, err = gorm.Open(mysql.Open(dsn), gormCfg)
 	case "postgres":
 		sslMode := strings.TrimSpace(req.SSLMode)
 		if sslMode == "" {
 			sslMode = "disable"
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", host, req.Username, req.Password, defaultDB, port, sslMode)
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		db, err = gorm.Open(postgres.Open(dsn), gormCfg)
 	}
 
 	if err != nil {
@@ -844,14 +844,14 @@ func (h *Handler) UpdateDatabaseServer(c *gin.Context) {
 	switch dbType {
 	case "mysql", "mariadb", "percona":
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", req.Username, req.Password, host, port, defaultDB)
-		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		db, err = gorm.Open(mysql.Open(dsn), gormCfg)
 	case "postgres":
 		sslMode := strings.TrimSpace(req.SSLMode)
 		if sslMode == "" {
 			sslMode = "disable"
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC", host, req.Username, req.Password, defaultDB, port, sslMode)
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		db, err = gorm.Open(postgres.Open(dsn), gormCfg)
 	}
 
 	if err != nil {
