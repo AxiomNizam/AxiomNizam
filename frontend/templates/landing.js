@@ -744,6 +744,84 @@
         }
     }
 
+    // ============================================================
+    // API DEMO TABS
+    // ============================================================
+    var apiDemoTabs = document.querySelectorAll('.api-demo__tab');
+    var apiDemoPanels = document.querySelectorAll('.api-demo__panel');
+
+    apiDemoTabs.forEach(function(tab) {
+        tab.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var targetId = 'demo-' + tab.getAttribute('data-demo');
+            apiDemoTabs.forEach(function(t) { t.classList.remove('active'); });
+            apiDemoPanels.forEach(function(p) { p.classList.remove('active'); });
+            tab.classList.add('active');
+            var panel = document.getElementById(targetId);
+            if (panel) panel.classList.add('active');
+        });
+    });
+
+    // Auto-cycle API demo panels
+    var demoPanelNames = ['request', 'response', 'endpoints'];
+    var demoCycleIdx = 0;
+    var demoCycleTimer = null;
+
+    function cycleApiDemo() {
+        demoCycleIdx = (demoCycleIdx + 1) % demoPanelNames.length;
+        var targetId = 'demo-' + demoPanelNames[demoCycleIdx];
+        apiDemoTabs.forEach(function(t) {
+            t.classList.toggle('active', t.getAttribute('data-demo') === demoPanelNames[demoCycleIdx]);
+        });
+        apiDemoPanels.forEach(function(p) { p.classList.remove('active'); });
+        var panel = document.getElementById(targetId);
+        if (panel) panel.classList.add('active');
+    }
+
+    // Start auto-cycle when visible
+    var apiDemo = document.getElementById('apiDemo');
+    if (apiDemo) {
+        var demoObserver = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting) {
+                demoCycleTimer = setInterval(cycleApiDemo, 3500);
+            } else {
+                clearInterval(demoCycleTimer);
+            }
+        }, { threshold: 0.5 });
+        demoObserver.observe(apiDemo);
+
+        // Stop auto-cycle on manual click
+        apiDemoTabs.forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                clearInterval(demoCycleTimer);
+                demoCycleIdx = demoPanelNames.indexOf(tab.getAttribute('data-demo'));
+            });
+        });
+    }
+
+    // ============================================================
+    // STORAGE DEMO BAR ANIMATION
+    // ============================================================
+    var storageBars = document.querySelectorAll('.storage-demo__bar-fill');
+    if (storageBars.length > 0) {
+        var storageObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    var bars = entry.target.querySelectorAll('.storage-demo__bar-fill');
+                    bars.forEach(function(bar, i) {
+                        var width = bar.getAttribute('data-width') || '50';
+                        setTimeout(function() {
+                            bar.style.width = width + '%';
+                        }, i * 200);
+                    });
+                    storageObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.3 });
+        var storageDemo = document.getElementById('storageDemo');
+        if (storageDemo) storageObserver.observe(storageDemo);
+    }
+
     // ---- Particle System ----
     var canvas = document.getElementById('particleCanvas');
     if (canvas) {
@@ -809,7 +887,11 @@
                 if (p.y < -10) p.y = canvas.height + 10;
                 if (p.y > canvas.height + 10) p.y = -10;
 
-                // Draw particle
+                // Draw particle with glow
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius + 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(52, 211, 153, ' + (p.opacity * 0.15) + ')';
+                ctx.fill();
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(52, 211, 153, ' + p.opacity + ')';
@@ -889,17 +971,61 @@
         if (cursorCrosshair) cursorCrosshair.classList.remove('active');
     });
 
-    // Detect hoverable elements for ring expansion
+    // Click ripple effect
+    document.addEventListener('mousedown', function(e) {
+        if (cursorRing) cursorRing.classList.add('clicking');
+        // Create ripple
+        var ripple = document.createElement('div');
+        ripple.className = 'cursor-ripple';
+        ripple.style.left = e.clientX + 'px';
+        ripple.style.top = e.clientY + 'px';
+        document.body.appendChild(ripple);
+        setTimeout(function() { ripple.remove(); }, 600);
+        // Burst particles
+        for (var b = 0; b < 8; b++) {
+            var angle = (Math.PI * 2 / 8) * b;
+            trailParticles.push({
+                x: e.clientX,
+                y: e.clientY,
+                vx: Math.cos(angle) * 3.5,
+                vy: Math.sin(angle) * 3.5,
+                life: 1,
+                size: Math.random() * 2.5 + 1.5
+            });
+        }
+    });
+    document.addEventListener('mouseup', function() {
+        if (cursorRing) cursorRing.classList.remove('clicking');
+    });
+
+    // Detect hoverable elements for ring expansion + particle burst
+    var lastHoverTarget = null;
     document.addEventListener('mouseover', function(e) {
         var target = e.target;
-        if (target.closest('a, button, [data-tilt], .search-trigger, .deep__tab, .bento__card, .arch__card, .search-result, .terminal__autocomplete-item')) {
+        if (target.closest('a, button, [data-tilt], .search-trigger, .deep__tab, .bento__card, .arch__card, .search-result, .terminal__autocomplete-item, .api-demo__tab')) {
             if (cursorRing) cursorRing.classList.add('hovering');
+            // Mini particle burst on hover enter
+            var el = target.closest('a, button, [data-tilt], .search-trigger, .deep__tab, .bento__card, .arch__card, .search-result, .terminal__autocomplete-item, .api-demo__tab');
+            if (el !== lastHoverTarget) {
+                lastHoverTarget = el;
+                for (var h = 0; h < 5; h++) {
+                    trailParticles.push({
+                        x: cursorX + (Math.random() - 0.5) * 20,
+                        y: cursorY + (Math.random() - 0.5) * 20,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: (Math.random() - 0.5) * 2,
+                        life: 0.8,
+                        size: Math.random() * 2 + 1
+                    });
+                }
+            }
         }
     });
     document.addEventListener('mouseout', function(e) {
         var target = e.target;
-        if (target.closest('a, button, [data-tilt], .search-trigger, .deep__tab, .bento__card, .arch__card, .search-result, .terminal__autocomplete-item')) {
+        if (target.closest('a, button, [data-tilt], .search-trigger, .deep__tab, .bento__card, .arch__card, .search-result, .terminal__autocomplete-item, .api-demo__tab')) {
             if (cursorRing) cursorRing.classList.remove('hovering');
+            lastHoverTarget = null;
         }
     });
 
@@ -939,14 +1065,33 @@
             cursorCrosshair.style.top = crossY + 'px';
         }
 
-        // Draw trail particles
+        // Draw trail particles with glow and flowing line
         if (cursorTrailCanvas && trailCtx) {
             trailCtx.clearRect(0, 0, cursorTrailCanvas.width, cursorTrailCanvas.height);
+
+            // Draw flowing cursor trail line
+            if (trailParticles.length > 3 && isMouseInDoc) {
+                var recent = trailParticles.slice(-15);
+                trailCtx.beginPath();
+                trailCtx.moveTo(recent[0].x, recent[0].y);
+                for (var t = 1; t < recent.length - 1; t++) {
+                    var cpx = (recent[t].x + recent[t + 1].x) / 2;
+                    var cpy = (recent[t].y + recent[t + 1].y) / 2;
+                    trailCtx.quadraticCurveTo(recent[t].x, recent[t].y, cpx, cpy);
+                }
+                var lastP = recent[recent.length - 1];
+                trailCtx.lineTo(lastP.x, lastP.y);
+                trailCtx.strokeStyle = 'rgba(52, 211, 153, 0.12)';
+                trailCtx.lineWidth = 2;
+                trailCtx.stroke();
+            }
             for (var i = trailParticles.length - 1; i >= 0; i--) {
                 var p = trailParticles[i];
                 p.x += p.vx;
                 p.y += p.vy;
-                p.life -= 0.025;
+                p.vx *= 0.98;
+                p.vy *= 0.98;
+                p.life -= 0.02;
                 if (p.life <= 0) {
                     trailParticles.splice(i, 1);
                     continue;

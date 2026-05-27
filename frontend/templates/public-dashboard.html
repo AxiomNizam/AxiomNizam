@@ -291,25 +291,39 @@
                     <h3>API Builder</h3>
                     <p>Create REST APIs visually — connect MySQL, PostgreSQL, MariaDB, MongoDB, Oracle, Firebase with auto-generated CRUD endpoints and OpenAPI specs.</p>
                     <div class="bento__card-tags"><span>REST</span><span>CRUD</span><span>Multi-DB</span></div>
-                    <div class="bento__card-metrics">
-                        <div class="bento__metric">
-                            <span class="bento__metric-val" data-count="350">0</span><span class="bento__metric-plus">+</span>
-                            <span class="bento__metric-label">Endpoints</span>
+
+                    <!-- Live API Demo -->
+                    <div class="api-demo" id="apiDemo">
+                        <div class="api-demo__tabs">
+                            <button class="api-demo__tab active" data-demo="request">Request</button>
+                            <button class="api-demo__tab" data-demo="response">Response</button>
+                            <button class="api-demo__tab" data-demo="endpoints">Endpoints</button>
                         </div>
-                        <div class="bento__metric-divider"></div>
-                        <div class="bento__metric">
-                            <span class="bento__metric-val" data-count="10">0</span>
-                            <span class="bento__metric-label">Databases</span>
-                        </div>
-                        <div class="bento__metric-divider"></div>
-                        <div class="bento__metric">
-                            <span class="bento__metric-val" data-count="50">0</span><span class="bento__metric-plus">+</span>
-                            <span class="bento__metric-label">Templates</span>
-                        </div>
-                        <div class="bento__metric-divider"></div>
-                        <div class="bento__metric">
-                            <span class="bento__metric-val"><svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></span>
-                            <span class="bento__metric-label">OpenAPI</span>
+                        <div class="api-demo__panels">
+                            <div class="api-demo__panel active" id="demo-request">
+                                <div class="api-demo__line"><span class="api-demo__method">GET</span> <span class="api-demo__url">/api/v1/users</span></div>
+                                <div class="api-demo__line"><span class="api-demo__key">Authorization:</span> <span class="api-demo__val">Bearer eyJhbG...</span></div>
+                                <div class="api-demo__line"><span class="api-demo__key">Content-Type:</span> <span class="api-demo__val">application/json</span></div>
+                                <div class="api-demo__line"><span class="api-demo__key">X-Request-ID:</span> <span class="api-demo__val api-demo__val--accent">req_7f3a9b2c</span></div>
+                                <div class="api-demo__cursor-line"><span class="api-demo__cursor">|</span></div>
+                            </div>
+                            <div class="api-demo__panel" id="demo-response">
+                                <div class="api-demo__line"><span class="api-demo__status">200</span> <span class="api-demo__status-text">OK</span> <span class="api-demo__latency">23ms</span></div>
+                                <div class="api-demo__line">{</div>
+                                <div class="api-demo__line">  <span class="api-demo__key">"data"</span>: [</div>
+                                <div class="api-demo__line">    { <span class="api-demo__key">"id"</span>: <span class="api-demo__num">1</span>, <span class="api-demo__key">"name"</span>: <span class="api-demo__val">"John Doe"</span> },</div>
+                                <div class="api-demo__line">    { <span class="api-demo__key">"id"</span>: <span class="api-demo__num">2</span>, <span class="api-demo__key">"name"</span>: <span class="api-demo__val">"Jane Smith"</span> }</div>
+                                <div class="api-demo__line">  ],</div>
+                                <div class="api-demo__line">  <span class="api-demo__key">"total"</span>: <span class="api-demo__num">2</span></div>
+                                <div class="api-demo__line">}</div>
+                            </div>
+                            <div class="api-demo__panel" id="demo-endpoints">
+                                <div class="api-demo__endpoint"><span class="api-demo__ep-method api-demo__ep-method--get">GET</span> <span class="api-demo__ep-path">/api/v1/users</span></div>
+                                <div class="api-demo__endpoint"><span class="api-demo__ep-method api-demo__ep-method--post">POST</span> <span class="api-demo__ep-path">/api/v1/users</span></div>
+                                <div class="api-demo__endpoint"><span class="api-demo__ep-method api-demo__ep-method--get">GET</span> <span class="api-demo__ep-path">/api/v1/users/:id</span></div>
+                                <div class="api-demo__endpoint"><span class="api-demo__ep-method api-demo__ep-method--put">PUT</span> <span class="api-demo__ep-path">/api/v1/users/:id</span></div>
+                                <div class="api-demo__endpoint"><span class="api-demo__ep-method api-demo__ep-method--del">DEL</span> <span class="api-demo__ep-path">/api/v1/users/:id</span></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -326,6 +340,66 @@
                     <h3>Object Storage</h3>
                     <p>S3-compatible storage with bucket management, pre-signed URLs, access keys, policies, encryption, quotas, and per-bucket rate limits.</p>
                     <div class="bento__card-tags"><span>S3</span><span>Buckets</span><span>Encryption</span></div>
+
+                    <!-- Live Storage Demo -->
+                    <div class="storage-demo" id="storageDemo">
+                        <div class="storage-demo__header">
+                            <span class="storage-demo__title">Buckets</span>
+                            <span class="storage-demo__count">3 active</span>
+                        </div>
+                        <div class="storage-demo__bucket">
+                            <div class="storage-demo__bucket-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                                <span class="storage-demo__bucket-name">uploads</span>
+                                <span class="storage-demo__bucket-enc">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="10" height="10"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                </span>
+                            </div>
+                            <div class="storage-demo__bucket-stats">
+                                <span>1,247 objects</span>
+                                <span class="storage-demo__divider"></span>
+                                <span>2.3 GB</span>
+                            </div>
+                            <div class="storage-demo__bar"><div class="storage-demo__bar-fill" data-width="72"></div></div>
+                        </div>
+                        <div class="storage-demo__bucket">
+                            <div class="storage-demo__bucket-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                                <span class="storage-demo__bucket-name">backups</span>
+                                <span class="storage-demo__bucket-enc">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="10" height="10"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                </span>
+                            </div>
+                            <div class="storage-demo__bucket-stats">
+                                <span>89 objects</span>
+                                <span class="storage-demo__divider"></span>
+                                <span>456 MB</span>
+                            </div>
+                            <div class="storage-demo__bar"><div class="storage-demo__bar-fill" data-width="28"></div></div>
+                        </div>
+                        <div class="storage-demo__bucket">
+                            <div class="storage-demo__bucket-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                                <span class="storage-demo__bucket-name">media</span>
+                            </div>
+                            <div class="storage-demo__bucket-stats">
+                                <span>3,456 objects</span>
+                                <span class="storage-demo__divider"></span>
+                                <span>12.1 GB</span>
+                            </div>
+                            <div class="storage-demo__bar"><div class="storage-demo__bar-fill" data-width="91"></div></div>
+                        </div>
+                        <div class="storage-demo__totals">
+                            <div class="storage-demo__total">
+                                <span class="storage-demo__total-val">4,792</span>
+                                <span class="storage-demo__total-label">Total Objects</span>
+                            </div>
+                            <div class="storage-demo__total">
+                                <span class="storage-demo__total-val">14.8 GB</span>
+                                <span class="storage-demo__total-label">Total Size</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
