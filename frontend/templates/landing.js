@@ -1,6 +1,7 @@
 /* =============================================
    AxiomNizam — Reimagined Landing Page JS
-   Scroll reveals, counters, tabs, cursor glow, tilt
+   Particles, parallax, cursor glow, 3D tilt,
+   counters, tabs, magnetic hover, spotlight
    ============================================= */
 (function() {
     'use strict';
@@ -30,6 +31,111 @@
         }
     };
 
+    // ---- Particle System ----
+    var canvas = document.getElementById('particleCanvas');
+    if (canvas) {
+        var ctx = canvas.getContext('2d');
+        var particles = [];
+        var particleCount = 80;
+        var connectionDistance = 150;
+        var mouseParticle = { x: -1000, y: -1000, radius: 150 };
+
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        function Particle() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.vx = (Math.random() - 0.5) * 0.5;
+            this.vy = (Math.random() - 0.5) * 0.5;
+            this.radius = Math.random() * 1.5 + 0.5;
+            this.opacity = Math.random() * 0.5 + 0.2;
+        }
+
+        for (var i = 0; i < particleCount; i++) {
+            particles.push(new Particle());
+        }
+
+        // Track mouse for particle repulsion
+        document.addEventListener('mousemove', function(e) {
+            var rect = canvas.getBoundingClientRect();
+            mouseParticle.x = e.clientX - rect.left;
+            mouseParticle.y = e.clientY - rect.top;
+        });
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+
+                // Mouse repulsion
+                var dx = p.x - mouseParticle.x;
+                var dy = p.y - mouseParticle.y;
+                var dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < mouseParticle.radius) {
+                    var force = (mouseParticle.radius - dist) / mouseParticle.radius;
+                    p.vx += (dx / dist) * force * 0.3;
+                    p.vy += (dy / dist) * force * 0.3;
+                }
+
+                // Damping
+                p.vx *= 0.99;
+                p.vy *= 0.99;
+
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Wrap around
+                if (p.x < -10) p.x = canvas.width + 10;
+                if (p.x > canvas.width + 10) p.x = -10;
+                if (p.y < -10) p.y = canvas.height + 10;
+                if (p.y > canvas.height + 10) p.y = -10;
+
+                // Draw particle
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(52, 211, 153, ' + p.opacity + ')';
+                ctx.fill();
+
+                // Draw connections
+                for (var j = i + 1; j < particles.length; j++) {
+                    var p2 = particles[j];
+                    var dx2 = p.x - p2.x;
+                    var dy2 = p.y - p2.y;
+                    var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+                    if (dist2 < connectionDistance) {
+                        var alpha = (1 - dist2 / connectionDistance) * 0.15;
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = 'rgba(52, 211, 153, ' + alpha + ')';
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw connection to mouse
+                if (dist < mouseParticle.radius * 1.5) {
+                    var alphaMouse = (1 - dist / (mouseParticle.radius * 1.5)) * 0.2;
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(mouseParticle.x, mouseParticle.y);
+                    ctx.strokeStyle = 'rgba(56, 189, 248, ' + alphaMouse + ')';
+                    ctx.lineWidth = 0.8;
+                    ctx.stroke();
+                }
+            }
+
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+    }
+
     // ---- Cursor Glow ----
     var cursorGlow = document.getElementById('cursorGlow');
     if (cursorGlow) {
@@ -58,7 +164,6 @@
         var revealObserver = new IntersectionObserver(function(entries) {
             entries.forEach(function(entry) {
                 if (entry.isIntersecting) {
-                    // Stagger siblings
                     var parent = entry.target.parentElement;
                     var siblings = parent ? parent.querySelectorAll('[data-reveal]') : [];
                     var delay = 0;
@@ -98,7 +203,6 @@
             function step(timestamp) {
                 if (!startTime) startTime = timestamp;
                 var progress = Math.min((timestamp - startTime) / duration, 1);
-                // Ease out cubic
                 var eased = 1 - Math.pow(1 - progress, 3);
                 el.textContent = Math.floor(eased * target);
                 if (progress < 1) {
@@ -111,7 +215,6 @@
         });
     }
 
-    // Trigger counters when hero stats come into view
     var heroStats = document.querySelector('.hero__stats');
     if (heroStats) {
         var statsObserver = new IntersectionObserver(function(entries) {
@@ -132,9 +235,39 @@
             var y = e.clientY - rect.top;
             var centerX = rect.width / 2;
             var centerY = rect.height / 2;
-            var rotateX = ((y - centerY) / centerY) * -4;
-            var rotateY = ((x - centerX) / centerX) * 4;
-            card.style.transform = 'perspective(800px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) translateY(-4px)';
+            var rotateX = ((y - centerY) / centerY) * -5;
+            var rotateY = ((x - centerX) / centerX) * 5;
+            card.style.transform = 'perspective(800px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) translateY(-6px)';
+
+            // Move spotlight
+            var spotlight = card.querySelector('.bento__card-spotlight');
+            if (spotlight) {
+                spotlight.style.left = x + 'px';
+                spotlight.style.top = y + 'px';
+            }
+        });
+        card.addEventListener('mouseleave', function() {
+            card.style.transform = '';
+        });
+    });
+
+    // ---- Magnetic Hover on Arch Cards ----
+    var magneticCards = document.querySelectorAll('.arch__card');
+    magneticCards.forEach(function(card) {
+        card.setAttribute('data-magnetic', '');
+        card.addEventListener('mousemove', function(e) {
+            var rect = card.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+            card.style.setProperty('--mouse-x', x + 'px');
+            card.style.setProperty('--mouse-y', y + 'px');
+
+            // Subtle magnetic pull
+            var centerX = rect.width / 2;
+            var centerY = rect.height / 2;
+            var pullX = ((x - centerX) / centerX) * 4;
+            var pullY = ((y - centerY) / centerY) * 4;
+            card.style.transform = 'translateY(-6px) translate(' + pullX + 'px, ' + pullY + 'px)';
         });
         card.addEventListener('mouseleave', function() {
             card.style.transform = '';
@@ -160,6 +293,64 @@
         });
     });
 
+    // ---- Parallax on Scroll ----
+    var parallaxElements = document.querySelectorAll('[data-parallax]');
+    if (parallaxElements.length > 0) {
+        var ticking = false;
+        window.addEventListener('scroll', function() {
+            if (!ticking) {
+                requestAnimationFrame(function() {
+                    var scrollY = window.pageYOffset;
+                    parallaxElements.forEach(function(el) {
+                        var speed = parseFloat(el.getAttribute('data-parallax')) || 0.3;
+                        var rect = el.getBoundingClientRect();
+                        var offset = (rect.top + scrollY) * speed;
+                        el.style.transform = 'translateY(' + (scrollY * speed - offset) + 'px)';
+                    });
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        });
+    }
+
+    // ---- Hero Parallax Orbs (mouse-reactive) ----
+    var heroSection = document.getElementById('hero');
+    var heroOrbs = document.querySelectorAll('.hero__orb');
+    if (heroSection && heroOrbs.length > 0) {
+        heroSection.addEventListener('mousemove', function(e) {
+            var rect = heroSection.getBoundingClientRect();
+            var x = (e.clientX - rect.left) / rect.width - 0.5;
+            var y = (e.clientY - rect.top) / rect.height - 0.5;
+
+            heroOrbs.forEach(function(orb, i) {
+                var depth = (i + 1) * 8;
+                orb.style.transform = 'translate(' + (x * depth) + 'px, ' + (y * depth) + 'px)';
+            });
+        });
+    }
+
+    // ---- Terminal Typing Effect ----
+    var terminalBody = document.querySelector('.terminal__body');
+    if (terminalBody) {
+        var lines = terminalBody.querySelectorAll('.terminal__line');
+        var termObserver = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting) {
+                lines.forEach(function(line, i) {
+                    line.style.opacity = '0';
+                    line.style.transform = 'translateX(-10px)';
+                    line.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                    setTimeout(function() {
+                        line.style.opacity = '1';
+                        line.style.transform = 'translateX(0)';
+                    }, i * 120);
+                });
+                termObserver.unobserve(terminalBody);
+            }
+        }, { threshold: 0.3 });
+        termObserver.observe(terminalBody);
+    }
+
     // ---- Hero Platform Status ----
     var statusEl = document.getElementById('heroStatus');
     if (statusEl) {
@@ -168,7 +359,6 @@
         if (!backendURL) {
             backendURL = window.BACKEND_URL || 'http://localhost:8000';
         }
-        // Remove trailing slash
         if (backendURL.length > 1 && backendURL.charAt(backendURL.length - 1) === '/') {
             backendURL = backendURL.slice(0, -1);
         }
@@ -182,18 +372,5 @@
                 statusEl.innerHTML = '<span class="pulse-dot" style="background:#ef4444"></span>';
             });
     }
-
-    // ---- Keyboard shortcut: / to focus search ----
-    document.addEventListener('keydown', function(e) {
-        if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            var tag = (document.activeElement || {}).tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            var searchInput = document.getElementById('featureSearch');
-            if (searchInput) {
-                e.preventDefault();
-                searchInput.focus();
-            }
-        }
-    });
 
 })();
