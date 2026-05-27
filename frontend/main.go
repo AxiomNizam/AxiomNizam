@@ -594,16 +594,16 @@ func faviconHandler(c *gin.Context) {
 }
 
 // apiHealthHandler fetches and returns health status as JSON.
-// Returns 200 with degraded status when backend is unreachable,
-// so the frontend itself is never blamed for backend startup delays.
+// Returns 200 when both frontend and backend are healthy.
+// Returns 502 when the backend is unreachable (bad gateway).
 func apiHealthHandler(c *gin.Context) {
 	health, err := fetchHealth()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status":         "degraded",
-			"message":        fmt.Sprintf("Backend unreachable at %s: %v", backendProxyURL, err),
-			"frontend":       "ok",
-			"backend":        "unreachable",
+		c.JSON(http.StatusBadGateway, gin.H{
+			"status":   "error",
+			"code":     "backend_unreachable",
+			"message":  fmt.Sprintf("Backend unreachable: %v", err),
+			"frontend": "ok",
 		})
 		return
 	}
