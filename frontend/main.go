@@ -593,13 +593,17 @@ func faviconHandler(c *gin.Context) {
 	c.String(http.StatusOK, `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>`)
 }
 
-// apiHealthHandler fetches and returns health status as JSON
+// apiHealthHandler fetches and returns health status as JSON.
+// Returns 200 with degraded status when backend is unreachable,
+// so the frontend itself is never blamed for backend startup delays.
 func apiHealthHandler(c *gin.Context) {
 	health, err := fetchHealth()
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":  "error",
-			"message": fmt.Sprintf("Failed to fetch health from %s: %v", backendProxyURL, err),
+		c.JSON(http.StatusOK, gin.H{
+			"status":         "degraded",
+			"message":        fmt.Sprintf("Backend unreachable at %s: %v", backendProxyURL, err),
+			"frontend":       "ok",
+			"backend":        "unreachable",
 		})
 		return
 	}
