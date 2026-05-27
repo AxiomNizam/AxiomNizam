@@ -1355,7 +1355,7 @@
             setTimeout(function() {
                 piece.style.transition = 'transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.6s ease';
                 piece.style.transform = 'translate(' + fromX + 'px, ' + fromY + 'px) rotate(' + fromR + 'deg) scale(' + fromS + ')';
-                piece.style.opacity = '0.3';
+                piece.style.opacity = '0.5';
             }, i * 80);
         });
 
