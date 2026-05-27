@@ -1298,7 +1298,7 @@
     var heroSection = document.getElementById('hero');
     var heroOrbs = document.querySelectorAll('.hero__orb');
     var heroLogoBg = document.getElementById('heroLogoBg');
-    var heroLogoInner = document.getElementById('heroLogoInner');
+    var heroLogoSvg = document.getElementById('heroLogoSvg');
 
     if (heroSection) {
         heroSection.addEventListener('mousemove', function(e) {
@@ -1312,22 +1312,13 @@
                 orb.style.transform = 'translate(' + (x * depth) + 'px, ' + (y * depth) + 'px)';
             });
 
-            // Logo reacts to mouse — 3D tilt effect
-            if (heroLogoInner) {
-                var logoX = x * 25;
-                var logoY = y * 25;
-                heroLogoInner.style.transform = 'translate(' + logoX + 'px, ' + logoY + 'px) perspective(600px) rotateY(' + (x * 8) + 'deg) rotateX(' + (-y * 8) + 'deg)';
+            // Logo subtle mouse follow
+            if (heroLogoBg) {
+                heroLogoBg.style.transform = 'translate(calc(-50% + ' + (x * 15) + 'px), calc(-50% + ' + (y * 15) + 'px))';
             }
         });
 
-        // Reset logo on mouse leave
-        heroSection.addEventListener('mouseleave', function() {
-            if (heroLogoInner) {
-                heroLogoInner.style.transform = '';
-            }
-        });
-
-        // Logo parallax on scroll — fades and scales as you scroll down
+        // Logo parallax on scroll — fades as you scroll
         var logoParallaxTicking = false;
         window.addEventListener('scroll', function() {
             if (!logoParallaxTicking) {
@@ -1335,18 +1326,78 @@
                     var scrollY = window.pageYOffset;
                     var heroH = heroSection.offsetHeight;
                     var progress = Math.min(scrollY / heroH, 1);
-
                     if (heroLogoBg) {
-                        var scale = 1 - progress * 0.4;
-                        var opacity = 1 - progress * 1.5;
-                        heroLogoBg.style.opacity = Math.max(opacity, 0);
-                        heroLogoBg.style.transform = 'translate(-50%, calc(-50% - ' + (progress * 80) + 'px)) scale(' + scale + ')';
+                        heroLogoBg.style.opacity = Math.max(1 - progress * 1.5, 0);
                     }
                     logoParallaxTicking = false;
                 });
                 logoParallaxTicking = true;
             }
         });
+    }
+
+    // ============================================================
+    // LEGO ASSEMBLY / DISASSEMBLY ANIMATION
+    // ============================================================
+    var logoPieces = document.querySelectorAll('.logo-piece');
+    var legoState = 'assembled'; // assembled | disassembled
+    var legoTimer = null;
+
+    function legoDisassemble() {
+        legoState = 'disassembled';
+        logoPieces.forEach(function(piece, i) {
+            var fromX = parseFloat(piece.getAttribute('data-from-x')) || 0;
+            var fromY = parseFloat(piece.getAttribute('data-from-y')) || 0;
+            var fromR = parseFloat(piece.getAttribute('data-from-r')) || 0;
+            var fromS = parseFloat(piece.getAttribute('data-from-s')) || 0.5;
+
+            // Stagger each piece
+            setTimeout(function() {
+                piece.style.transition = 'transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.6s ease';
+                piece.style.transform = 'translate(' + fromX + 'px, ' + fromY + 'px) rotate(' + fromR + 'deg) scale(' + fromS + ')';
+                piece.style.opacity = '0.3';
+            }, i * 80);
+        });
+
+        // After disassembled, wait then reassemble
+        legoTimer = setTimeout(legoAssemble, 2500);
+    }
+
+    function legoAssemble() {
+        legoState = 'assembled';
+        logoPieces.forEach(function(piece, i) {
+            // Stagger reassembly — pieces fly in
+            setTimeout(function() {
+                piece.style.transition = 'transform 1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease';
+                piece.style.transform = 'translate(0, 0) rotate(0deg) scale(1)';
+                piece.style.opacity = '1';
+            }, i * 120);
+        });
+
+        // After assembled, wait then disassemble again
+        legoTimer = setTimeout(legoDisassemble, 5000);
+    }
+
+    // Start the cycle when hero is visible
+    if (logoPieces.length > 0) {
+        var legoObserver = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting) {
+                // Initial assembly animation — pieces fly in from scattered positions
+                logoPieces.forEach(function(piece) {
+                    var fromX = parseFloat(piece.getAttribute('data-from-x')) || 0;
+                    var fromY = parseFloat(piece.getAttribute('data-from-y')) || 0;
+                    var fromR = parseFloat(piece.getAttribute('data-from-r')) || 0;
+                    var fromS = parseFloat(piece.getAttribute('data-from-s')) || 0.5;
+                    piece.style.transform = 'translate(' + fromX + 'px, ' + fromY + 'px) rotate(' + fromR + 'deg) scale(' + fromS + ')';
+                    piece.style.opacity = '0';
+                });
+
+                // Animate in after a short delay
+                setTimeout(legoAssemble, 800);
+                legoObserver.unobserve(heroSection);
+            }
+        }, { threshold: 0.3 });
+        legoObserver.observe(heroSection);
     }
 
     // ---- Terminal Typing Effect ----

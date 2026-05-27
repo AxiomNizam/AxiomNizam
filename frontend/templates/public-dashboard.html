@@ -60,11 +60,10 @@
             <div class="hero__orb hero__orb--4"></div>
             <div class="hero__orb hero__orb--5"></div>
         </div>
-        <!-- Animated Logo Background -->
+        <!-- Animated Logo Background — Lego Assembly -->
         <div class="hero__logo-bg" id="heroLogoBg">
             <div class="hero__logo-glow"></div>
-            <div class="hero__logo-inner" id="heroLogoInner">
-            <svg class="hero__logo-svg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <svg class="hero__logo-svg" id="heroLogoSvg" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <defs>
                     <radialGradient id="bgGrad2" cx="35%" cy="30%" r="70%">
                         <stop offset="0%" stop-color="#008C63"/>
@@ -91,21 +90,43 @@
                         <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#000000" flood-opacity="0.35"/>
                     </filter>
                 </defs>
-                <circle cx="64" cy="64" r="58" fill="url(#bgGrad2)" filter="url(#softShadow2)"/>
-                <circle cx="64" cy="64" r="55" stroke="url(#silverAccent2)" stroke-width="2" opacity="0.9"/>
-                <circle cx="64" cy="64" r="21" fill="url(#redGrad2)"/>
-                <path filter="url(#softShadow2)" d="M64 30C55 30 47 37.2 47 46C47 54.8 55 62 64 62C72.2 62 79.2 56.2 80.9 48.4C79.2 52.8 74.8 56 69.8 56C63.3 56 58 50.7 58 44.2C58 37.7 63.3 32.4 69.8 32.4C74.7 32.4 79.1 35.6 80.8 40C78.9 34.2 73.9 30 64 30Z" fill="#FFFFFF"/>
-                <path d="M80.5 36.5L82 39.8L85.6 40.1L82.9 42.5L83.7 46L80.5 44.1L77.3 46L78.1 42.5L75.4 40.1L79 39.8L80.5 36.5Z" fill="url(#redGrad2)" filter="url(#softShadow2)"/>
-                <g transform="translate(24 71)" filter="url(#softShadow2)">
-                    <path d="M0 29V18.5C0 13.8 3.6 10 8.2 10H30.5C35.3 10 40 11.8 44 15.1V38.5C40.2 35.4 35.2 33.6 30.3 33.6H8.2C3.7 33.6 0 30 0 25.5V29Z" fill="url(#pageGrad2)"/>
-                    <path d="M80 29V18.5C80 13.8 76.4 10 71.8 10H49.5C44.7 10 40 11.8 36 15.1V38.5C39.8 35.4 44.8 33.6 49.7 33.6H71.8C76.3 33.6 80 30 80 25.5V29Z" fill="url(#pageGrad2)"/>
-                    <path d="M0 29V18.5C0 13.8 3.6 10 8.2 10H30.5C35.3 10 40 11.8 44 15.1V38.5C40.2 35.4 35.2 33.6 30.3 33.6H8.2C3.7 33.6 0 30 0 25.5" stroke="url(#flagGreen2)" stroke-width="2"/>
-                    <path d="M80 29V18.5C80 13.8 76.4 10 71.8 10H49.5C44.7 10 40 11.8 36 15.1V38.5C39.8 35.4 44.8 33.6 49.7 33.6H71.8C76.3 33.6 80 30 80 25.5" stroke="url(#redGrad2)" stroke-width="2"/>
-                    <line x1="40" y1="15" x2="40" y2="40" stroke="url(#redGrad2)" stroke-width="2.4" stroke-linecap="round"/>
+                <!-- Each piece is a separate group for animation -->
+                <g class="logo-piece" data-piece="0" data-from-x="-120" data-from-y="-80" data-from-r="-45" data-from-s="0.3">
+                    <circle cx="64" cy="64" r="58" fill="url(#bgGrad2)" filter="url(#softShadow2)"/>
                 </g>
-                <rect x="24" y="110" width="80" height="4" rx="2" fill="url(#flagGreen2)" filter="url(#softShadow2)"/>
+                <g class="logo-piece" data-piece="1" data-from-x="100" data-from-y="-60" data-from-r="30" data-from-s="0.4">
+                    <circle cx="64" cy="64" r="55" stroke="url(#silverAccent2)" stroke-width="2" opacity="0.9"/>
+                </g>
+                <g class="logo-piece" data-piece="2" data-from-x="0" data-from-y="120" data-from-r="60" data-from-s="0.2">
+                    <circle cx="64" cy="64" r="21" fill="url(#redGrad2)"/>
+                </g>
+                <g class="logo-piece" data-piece="3" data-from-x="-80" data-from-y="40" data-from-r="-30" data-from-s="0.5">
+                    <path filter="url(#softShadow2)" d="M64 30C55 30 47 37.2 47 46C47 54.8 55 62 64 62C72.2 62 79.2 56.2 80.9 48.4C79.2 52.8 74.8 56 69.8 56C63.3 56 58 50.7 58 44.2C58 37.7 63.3 32.4 69.8 32.4C74.7 32.4 79.1 35.6 80.8 40C78.9 34.2 73.9 30 64 30Z" fill="#FFFFFF"/>
+                </g>
+                <g class="logo-piece" data-piece="4" data-from-x="90" data-from-y="50" data-from-r="50" data-from-s="0.2">
+                    <path d="M80.5 36.5L82 39.8L85.6 40.1L82.9 42.5L83.7 46L80.5 44.1L77.3 46L78.1 42.5L75.4 40.1L79 39.8L80.5 36.5Z" fill="url(#redGrad2)" filter="url(#softShadow2)"/>
+                </g>
+                <g class="logo-piece" data-piece="5" data-from-x="-100" data-from-y="80" data-from-r="-40" data-from-s="0.3">
+                    <g transform="translate(24 71)">
+                        <path d="M0 29V18.5C0 13.8 3.6 10 8.2 10H30.5C35.3 10 40 11.8 44 15.1V38.5C40.2 35.4 35.2 33.6 30.3 33.6H8.2C3.7 33.6 0 30 0 25.5V29Z" fill="url(#pageGrad2)"/>
+                        <path d="M0 29V18.5C0 13.8 3.6 10 8.2 10H30.5C35.3 10 40 11.8 44 15.1V38.5C40.2 35.4 35.2 33.6 30.3 33.6H8.2C3.7 33.6 0 30 0 25.5" stroke="url(#flagGreen2)" stroke-width="2"/>
+                    </g>
+                </g>
+                <g class="logo-piece" data-piece="6" data-from-x="110" data-from-y="70" data-from-r="35" data-from-s="0.3">
+                    <g transform="translate(24 71)">
+                        <path d="M80 29V18.5C80 13.8 76.4 10 71.8 10H49.5C44.7 10 40 11.8 36 15.1V38.5C39.8 35.4 44.8 33.6 49.7 33.6H71.8C76.3 33.6 80 30 80 25.5V29Z" fill="url(#pageGrad2)"/>
+                        <path d="M80 29V18.5C80 13.8 76.4 10 71.8 10H49.5C44.7 10 40 11.8 36 15.1V38.5C39.8 35.4 44.8 33.6 49.7 33.6H71.8C76.3 33.6 80 30 80 25.5" stroke="url(#redGrad2)" stroke-width="2"/>
+                    </g>
+                </g>
+                <g class="logo-piece" data-piece="7" data-from-x="0" data-from-y="-100" data-from-r="70" data-from-s="0.2">
+                    <g transform="translate(24 71)">
+                        <line x1="40" y1="15" x2="40" y2="40" stroke="url(#redGrad2)" stroke-width="2.4" stroke-linecap="round"/>
+                    </g>
+                </g>
+                <g class="logo-piece" data-piece="8" data-from-x="-60" data-from-y="120" data-from-r="-20" data-from-s="0.5">
+                    <rect x="24" y="110" width="80" height="4" rx="2" fill="url(#flagGreen2)" filter="url(#softShadow2)"/>
+                </g>
             </svg>
-            </div>
             <!-- Orbiting rings -->
             <div class="hero__logo-orbit hero__logo-orbit--1"></div>
             <div class="hero__logo-orbit hero__logo-orbit--2"></div>
