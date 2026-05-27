@@ -83,15 +83,15 @@ Runtime notes:
 ## Project Size Snapshot
 
 <!-- README_METRICS:START -->
-Code inventory snapshot (workspace scan on 2026-05-28):
+Code inventory snapshot (workspace scan on 2026-06-01):
 
-- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 1051
-- Total code lines: 278515
-- Go files (repository): 992
-- Go lines (repository): 238260
+- Total code files (.go/.js/.ts/.tsx/.css/.html/.sql/.sh/.yaml/.yml): 1099
+- Total code lines: 285240
+- Go files (repository): 1040
+- Go lines (repository): 244889
 - Internal modules: 111
-- Internal Go files: 938
-- Internal Go lines: 223699
+- Internal Go files: 986
+- Internal Go lines: 230269
 
 Counting method used:
 
@@ -430,7 +430,7 @@ all critical findings to harden the codebase for production readiness.
 - **Import standardization:** All handler and module files follow stdlib → internal → external import ordering
 - **Naming collision fix:** Resolved `EvalConditionType` collision in `internal/alerting`
 - **Quality rules alignment:** Fixed schema field mismatches in `internal/quality`
-- **Build verification:** `go build ./...` and `go vet ./...` both pass clean (111 modules, 938 Go files)
+- **Build verification:** `go build ./...` and `go vet ./...` both pass clean (111 modules, 986 Go files)
 
 See [docs/CODING_PRACTICES.md](docs/CODING_PRACTICES.md) for the full standards reference and [docs/PLATFORM_COMPLETION_PLAN.md](docs/PLATFORM_COMPLETION_PLAN.md) for the overall platform status.
 
@@ -1154,11 +1154,11 @@ This split is intentional in the current codebase.
 
 ## Internal Module Coverage
 
-Internal scan snapshot (2026-05-28):
+Internal scan snapshot (2026-06-01):
 
 - Module folders under internal/: 111
-- Go files under internal/: 938
-- Go lines under internal/: 223699
+- Go files under internal/: 986
+- Go lines under internal/: 230269
 
 Largest modules by Go lines:
 
@@ -1166,108 +1166,134 @@ Largest modules by Go lines:
 - kubeplus (6 files, 12624 lines)
 - antivirus (40 files, 12049 lines)
 - iam (42 files, 11996 lines)
-- platform (36 files, 10699 lines)
+- platform (40 files, 11437 lines)
 - gatekeeper (98 files, 9358 lines)
 - storage (29 files, 9143 lines)
 - jobs (35 files, 8811 lines)
-- netintel (10 files, 6620 lines)
+- netintel (16 files, 7524 lines)
 - policies (16 files, 6222 lines)
+- apibuilder (18 files, 5964 lines)
 - scanner (21 files, 5456 lines)
 - vectorplus (2 files, 5100 lines)
-- apibuilder (10 files, 5024 lines)
 - reviewflow (2 files, 4870 lines)
 - apimachinery (29 files, 4577 lines)
-- quality/rules (2 files, ~1500 lines) [NEW]
+- integration (14 files, 3825 lines)
 
 Full internal module inventory (alphabetical):
 
 | Module | Go Files | Go Lines |
 |---|---:|---:|
 | admission | 3 | 451 |
-| apibanks | 3 | 427 |
+| alerting | 7 | 2113 |
+| analytics | 1 | 161 |
+| anonymization | 7 | 859 |
+| antivirus | 40 | 12049 |
+| apibanks | 10 | 1167 |
+| apibuilder | 18 | 5964 |
 | apimachinery | 29 | 4577 |
-| apiscanner | 10 | 2509 |
+| apiscanner | 10 | 2571 |
 | apiserver | 9 | 1598 |
-| audit | 6 | 901 |
+| audit | 11 | 1161 |
 | auth | 4 | 1108 |
 | autopilot | 1 | 164 |
 | blocking | 1 | 136 |
 | bootstrapsecrets | 1 | 102 |
-| bulk | 3 | 450 |
-| cache | 7 | 1815 |
-| cdc | 4 | 1411 |
+| bulk | 9 | 913 |
+| cache | 9 | 1969 |
+| catalog | 8 | 1843 |
+| cdc | 12 | 2595 |
 | client | 8 | 1570 |
-| conductor | 6 | 2232 |
-| config | 1 | 278 |
+| conductor | 18 | 3027 |
+| config | 1 | 289 |
+| contracts | 8 | 1113 |
 | controller | 14 | 1561 |
 | controllers | 7 | 2521 |
-| database | 1 | 156 |
-| datasource | 1 | 137 |
+| costing | 7 | 883 |
+| database | 3 | 1188 |
+| datasource | 5 | 634 |
 | deployment | 1 | 249 |
-| diff | 1 | 272 |
+| diff | 1 | 261 |
 | distributed | 1 | 194 |
-| distributedstate | 9 | 1603 |
-| docs | 1 | 291 |
+| distributedstate | 9 | 1605 |
+| docs | 2 | 408 |
 | drainer | 1 | 205 |
-| encryption | 4 | 1081 |
-| etl | 3 | 1450 |
+| encryption | 10 | 2295 |
+| errors | 2 | 264 |
+| etl | 10 | 2519 |
 | evalbroker | 2 | 263 |
-| eventbus | 4 | 975 |
-| events | 6 | 1608 |
-| export | 3 | 662 |
-| graphql | 2 | 296 |
-| handlers | 36 | 18938 |
-| health | 2 | 441 |
+| eventbus | 9 | 1363 |
+| events | 6 | 1607 |
+| export | 8 | 1077 |
+| featurestore | 8 | 1068 |
+| federation | 12 | 2244 |
+| gatekeeper | 98 | 9358 |
+| gis | 8 | 1542 |
+| governance | 9 | 2065 |
+| graphql | 3 | 418 |
+| health | 3 | 641 |
 | heartbeat | 1 | 158 |
-| iam | 14 | 6780 |
+| iam | 42 | 11996 |
 | informer | 2 | 457 |
-| integration | 11 | 3318 |
-| jobs | 20 | 7155 |
+| integration | 14 | 3825 |
+| jobs | 35 | 8811 |
 | keyring | 1 | 161 |
 | kubeplus | 6 | 12624 |
-| lineage | 5 | 1408 |
-| logging | 1 | 71 |
+| lineage | 9 | 1600 |
+| logging | 2 | 138 |
 | mesh | 1 | 388 |
-| metrics | 1 | 300 |
+| metrics | 5 | 1071 |
 | migrations | 1 | 137 |
+| mlpipeline | 5 | 602 |
 | models | 15 | 1279 |
-| netintel | 5 | 6025 |
+| netintel | 16 | 7524 |
+| notification | 5 | 482 |
+| observability | 4 | 510 |
 | output | 2 | 258 |
-| performance | 1 | 328 |
+| performance | 2 | 479 |
 | periodic | 2 | 352 |
 | planner | 1 | 220 |
-| platform | 19 | 7281 |
-| policies | 16 | 6219 |
-| quality | 2 | 795 |
+| platform | 40 | 11437 |
+| policies | 16 | 6222 |
+| quality | 12 | 2870 |
+| query | 4 | 2252 |
 | ratelimit | 2 | 377 |
-| rbac | 4 | 1624 |
+| rbac | 8 | 2016 |
+| reconciler | 6 | 1677 |
 | repositories | 15 | 1664 |
-| resources | 13 | 2762 |
-| reviewflow | 2 | 4831 |
+| resources | 16 | 3296 |
+| reviewflow | 2 | 4870 |
+| rpcpool | 1 | 117 |
 | runtime | 1 | 407 |
-| scanner | 7 | 827 |
+| scanner | 21 | 5456 |
 | scheduler | 1 | 142 |
-| scripts | 1 | 177 |
-| security | 1 | 370 |
+| schemaregistry | 9 | 2129 |
+| security | 4 | 1224 |
+| securitysiem | 2 | 446 |
+| server | 2 | 1142 |
 | serverboot | 1 | 109 |
 | serviceregistry | 1 | 235 |
-| services | 5 | 1279 |
+| services | 5 | 1254 |
+| slo | 6 | 704 |
 | snapshot | 1 | 116 |
+| sqlfilter | 10 | 1564 |
 | status | 1 | 384 |
-| storage | 20 | 7881 |
+| storage | 29 | 9143 |
 | stream | 2 | 288 |
-| streaming | 3 | 439 |
+| streamanalytics | 8 | 1168 |
+| streaming | 8 | 660 |
 | template | 1 | 190 |
-| tenant | 4 | 790 |
-| tracing | 4 | 1455 |
+| tenant | 9 | 1007 |
+| testutil | 2 | 157 |
+| tracing | 10 | 1707 |
+| transform | 3 | 501 |
 | trivy | 7 | 797 |
-| utils | 36 | 13187 |
-| vectorplus | 2 | 5059 |
-| versioning | 4 | 916 |
-| waitx | 11 | 1672 |
-| webhooks | 5 | 660 |
-| workflows | 2 | 879 |
-| workqueue | 4 | 1228 |
+| utils | 36 | 13215 |
+| vectorplus | 2 | 5100 |
+| versioning | 11 | 1362 |
+| waitx | 20 | 2839 |
+| webhooks | 9 | 777 |
+| workflows | 2 | 908 |
+| workqueue | 5 | 1335 |
 
 ## Frontend Template Coverage
 
