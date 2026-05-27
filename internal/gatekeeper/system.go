@@ -272,6 +272,7 @@ func (s *System) initialize() error {
 		s.factorRepo,
 		s.TOTPService,
 		challenge.NewRealClock(),
+		s.cfg.EncryptionKey,
 	)
 
 	// 6. Initialize enrollment service

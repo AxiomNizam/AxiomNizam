@@ -88,6 +88,7 @@ func (m *Module) initialize() error {
 		m.factorRepo,
 		m.totpSvc,
 		challenge.NewRealClock(),
+		m.cfg.EncryptionKey,
 	)
 
 	// 5. Initialize enrollment service
