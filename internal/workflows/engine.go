@@ -119,7 +119,7 @@ func (we *WorkflowEngine) loadState() {
 
 	if we.kvStore != nil {
 		val, err := we.kvStore.Get(ctx, we.stateKey)
-		if err != nil {
+		if err != nil || val == "" {
 			return
 		}
 		data = []byte(val)

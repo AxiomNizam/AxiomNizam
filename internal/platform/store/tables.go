@@ -59,6 +59,12 @@ func AllResourceTables() []string {
 		// APIBanks
 		"apibanks",
 
+		// API Builder custom APIs
+		"custom-apis",
+
+		// WaitX health checks
+		"wait-checks",
+
 		// Platform Completion (WS-1 through WS-4)
 		"catalogassets",
 		"catalogcollections",

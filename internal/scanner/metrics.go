@@ -155,8 +155,8 @@ func (m *Metrics) load() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, scannerMetricsKVKey)
-	if err != nil {
-		return // not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var state metricsState

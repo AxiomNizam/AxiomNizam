@@ -67,8 +67,8 @@ func (l *Logger) loadFromKV() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, jobsAuditKVKey)
-	if err != nil {
-		return
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var events []*Event

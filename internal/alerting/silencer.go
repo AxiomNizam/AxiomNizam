@@ -270,8 +270,8 @@ func (s *Silencer) loadFromKV() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, silencerKVKey)
-	if err != nil {
-		return
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var state silencerState

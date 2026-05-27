@@ -85,8 +85,8 @@ func (c *Collector) load() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, mfaMetricsKVKey)
-	if err != nil {
-		return // likely not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var state mfaCollectorState

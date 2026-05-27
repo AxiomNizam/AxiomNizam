@@ -117,7 +117,7 @@ func (m *Manager) loadState() {
 
 	if m.kvStore != nil {
 		val, err := m.kvStore.Get(ctx, m.stateKey)
-		if err != nil {
+		if err != nil || val == "" {
 			return
 		}
 		data = []byte(val)

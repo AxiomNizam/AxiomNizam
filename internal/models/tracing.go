@@ -21,9 +21,6 @@ type TraceModel struct {
 	Tags      datatypes.JSON `gorm:"type:jsonb"`
 	Metadata  datatypes.JSON `gorm:"type:jsonb"`
 	DeletedAt gorm.DeletedAt `gorm:"index;type:timestamp"`
-
-	// Relations
-	Spans []*SpanModel `gorm:"foreignKey:TraceID;references:ID"`
 }
 
 // TableName specifies table name
@@ -47,9 +44,6 @@ type SpanModel struct {
 	Logs         datatypes.JSON `gorm:"type:jsonb"`
 	Error        string         `gorm:"type:text"`
 	DeletedAt    gorm.DeletedAt `gorm:"index;type:timestamp"`
-
-	// Foreign Key
-	Trace *TraceModel `gorm:"foreignKey:TraceID;references:ID"`
 }
 
 // TableName specifies table name

@@ -79,8 +79,8 @@ func (l *Logger) loadFromKV() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, gkAuditKVKey)
-	if err != nil {
-		return // not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var events []*Event

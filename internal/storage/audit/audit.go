@@ -83,7 +83,7 @@ func (a *AuditLog) load() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, auditKVKey)
-	if err != nil {
+	if err != nil || val == "" {
 		return
 	}
 

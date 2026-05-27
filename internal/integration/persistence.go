@@ -99,8 +99,8 @@ func loadStateFromKV(kv platformstore.KVStore, stateKey string, out interface{})
 	defer cancel()
 
 	val, err := kv.Get(ctx, stateKey)
-	if err != nil {
-		return false
+	if err != nil || val == "" {
+		return false // not found or empty
 	}
 
 	if err := json.Unmarshal([]byte(val), out); err != nil {
