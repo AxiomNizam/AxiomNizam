@@ -116,7 +116,7 @@ func main() {
 	// Get browser-facing backend URL from environment or use default.
 	backendURL = trimTrailingSlash(os.Getenv("BACKEND_URL"))
 	if backendURL == "" {
-		backendURL = "http://localhost:8000"
+		backendURL = "http://127.0.0.1:8000"
 	}
 
 	// Backend proxy URL is used by frontend server-side routes (/api/health, /api/status).
@@ -624,14 +624,32 @@ func apiStatusHandler(c *gin.Context) {
 }
 
 // fetchHealth makes a request to the backend health endpoint.
-// Tries backendProxyURL first, falls back to backendURL if it fails.
+// Tries backendProxyURL first, falls back to backendURL, then to 127.0.0.1.
 func fetchHealth() (*HealthResponse, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
+	// Build candidate URLs: proxy, direct, and localhost→127.0.0.1 fallback.
+	seen := map[string]bool{}
+	var candidates []string
+	for _, u := range []string{backendProxyURL, backendURL} {
+		if u != "" && !seen[u] {
+			seen[u] = true
+			candidates = append(candidates, u)
+		}
+		// If URL contains "localhost", also try with 127.0.0.1 (IPv4 fallback).
+		if strings.Contains(u, "localhost") {
+			fallback := strings.Replace(u, "localhost", "127.0.0.1", 1)
+			if !seen[fallback] {
+				seen[fallback] = true
+				candidates = append(candidates, fallback)
+			}
+		}
+	}
+
 	var lastErr error
-	for _, baseURL := range []string{backendProxyURL, backendURL} {
+	for _, baseURL := range candidates {
 		resp, err := client.Get(fmt.Sprintf("%s/health", baseURL))
 		if err != nil {
 			lastErr = err
