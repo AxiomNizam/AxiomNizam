@@ -393,6 +393,211 @@
     }
 
     // ============================================================
+    // DATA FLOW CANVAS ANIMATION
+    // ============================================================
+    var dfCanvas = document.getElementById('dataflowCanvas');
+    if (dfCanvas) {
+        var dfCtx = dfCanvas.getContext('2d');
+        var dfParticles = [];
+        var dfPaths = [
+            // Source -> Transform
+            [{x: 0.08, y: 0.2}, {x: 0.15, y: 0.35}, {x: 0.28, y: 0.55}],
+            // Transform -> Process
+            [{x: 0.28, y: 0.55}, {x: 0.38, y: 0.35}, {x: 0.50, y: 0.25}],
+            // Process -> Store
+            [{x: 0.50, y: 0.25}, {x: 0.58, y: 0.45}, {x: 0.70, y: 0.6}],
+            // Store -> Serve
+            [{x: 0.70, y: 0.6}, {x: 0.78, y: 0.35}, {x: 0.90, y: 0.3}],
+        ];
+
+        function resizeDfCanvas() {
+            dfCanvas.width = dfCanvas.offsetWidth;
+            dfCanvas.height = dfCanvas.offsetHeight;
+        }
+        resizeDfCanvas();
+        window.addEventListener('resize', resizeDfCanvas);
+
+        // Spawn particles along paths
+        function spawnDfParticle() {
+            var pathIdx = Math.floor(Math.random() * dfPaths.length);
+            var path = dfPaths[pathIdx];
+            dfParticles.push({
+                path: path,
+                t: 0,
+                speed: 0.005 + Math.random() * 0.008,
+                size: Math.random() * 2.5 + 1.5,
+                hue: pathIdx === 0 ? 160 : pathIdx === 1 ? 190 : pathIdx === 2 ? 260 : 160
+            });
+        }
+
+        function drawDf() {
+            dfCtx.clearRect(0, 0, dfCanvas.width, dfCanvas.height);
+
+            // Draw paths
+            for (var p = 0; p < dfPaths.length; p++) {
+                var path = dfPaths[p];
+                dfCtx.beginPath();
+                dfCtx.moveTo(path[0].x * dfCanvas.width, path[0].y * dfCanvas.height);
+                for (var pt = 1; pt < path.length; pt++) {
+                    var prev = path[pt - 1];
+                    var curr = path[pt];
+                    var cpx = (prev.x + curr.x) / 2 * dfCanvas.width;
+                    var cpy = (prev.y + curr.y) / 2 * dfCanvas.height;
+                    dfCtx.quadraticCurveTo(prev.x * dfCanvas.width, prev.y * dfCanvas.height, cpx, cpy);
+                }
+                var last = path[path.length - 1];
+                dfCtx.lineTo(last.x * dfCanvas.width, last.y * dfCanvas.height);
+                dfCtx.strokeStyle = 'rgba(52, 211, 153, 0.06)';
+                dfCtx.lineWidth = 2;
+                dfCtx.stroke();
+            }
+
+            // Draw & update particles
+            for (var i = dfParticles.length - 1; i >= 0; i--) {
+                var particle = dfParticles[i];
+                particle.t += particle.speed;
+                if (particle.t >= 1) {
+                    dfParticles.splice(i, 1);
+                    continue;
+                }
+
+                var path = particle.path;
+                var segCount = path.length - 1;
+                var segT = particle.t * segCount;
+                var segIdx = Math.min(Math.floor(segT), segCount - 1);
+                var localT = segT - segIdx;
+                var from = path[segIdx];
+                var to = path[segIdx + 1];
+                var px = (from.x + (to.x - from.x) * localT) * dfCanvas.width;
+                var py = (from.y + (to.y - from.y) * localT) * dfCanvas.height;
+
+                // Glow
+                dfCtx.beginPath();
+                dfCtx.arc(px, py, particle.size + 4, 0, Math.PI * 2);
+                dfCtx.fillStyle = 'hsla(' + particle.hue + ', 80%, 55%, 0.15)';
+                dfCtx.fill();
+                // Core
+                dfCtx.beginPath();
+                dfCtx.arc(px, py, particle.size, 0, Math.PI * 2);
+                dfCtx.fillStyle = 'hsla(' + particle.hue + ', 80%, 55%, 0.8)';
+                dfCtx.fill();
+            }
+
+            requestAnimationFrame(drawDf);
+        }
+
+        // Start when visible
+        var dfObserver = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting) {
+                drawDf();
+                setInterval(spawnDfParticle, 200);
+                dfObserver.unobserve(dfCanvas);
+            }
+        }, { threshold: 0.2 });
+        dfObserver.observe(dfCanvas);
+    }
+
+    // ============================================================
+    // API LIFECYCLE ANIMATION
+    // ============================================================
+    var apiStage = document.getElementById('apiLifecycleStage');
+    var apiTrack = document.getElementById('apiTrack');
+    var liveReqCode = document.getElementById('liveReqCode');
+    var liveResCode = document.getElementById('liveResCode');
+    var liveTiming = document.getElementById('liveTiming');
+
+    var apiEndpoints = [
+        { method: 'GET', url: '/api/v1/users', status: 200, latency: 23, resBody: '{\n  "data": [\n    { "id": 1, "name": "John Doe" },\n    { "id": 2, "name": "Jane Smith" }\n  ],\n  "total": 2\n}' },
+        { method: 'POST', url: '/api/v1/orders', status: 201, latency: 45, resBody: '{\n  "id": "ord_9f3a2b",\n  "status": "created",\n  "total": 149.99\n}' },
+        { method: 'GET', url: '/api/v1/products?page=1', status: 200, latency: 18, resBody: '{\n  "data": [\n    { "id": 1, "name": "Widget A", "price": 29.99 },\n    { "id": 2, "name": "Widget B", "price": 49.99 }\n  ],\n  "page": 1\n}' },
+        { method: 'PUT', url: '/api/v1/users/1', status: 200, latency: 31, resBody: '{\n  "id": 1,\n  "name": "John Updated",\n  "updated_at": "2026-05-28T10:30:00Z"\n}' },
+        { method: 'DELETE', url: '/api/v1/sessions/abc', status: 204, latency: 12, resBody: '' },
+        { method: 'GET', url: '/api/v1/analytics/summary', status: 200, latency: 67, resBody: '{\n  "requests_today": 12847,\n  "avg_latency_ms": 23,\n  "error_rate": 0.02\n}' },
+    ];
+
+    var apiNodeIds = ['nodeClient', 'nodeGateway', 'nodeBuilder', 'nodeDB', 'nodeResponse'];
+    var apiCycleIdx = 0;
+    var apiCycleTimer = null;
+
+    function spawnPacket(reverse) {
+        if (!apiTrack) return;
+        var dot = document.createElement('div');
+        dot.className = 'api-lifecycle__packet' + (reverse ? ' api-lifecycle__packet--response' : '');
+        apiTrack.appendChild(dot);
+        setTimeout(function() { dot.remove(); }, 2100);
+    }
+
+    function activateNode(idx) {
+        var nodes = apiStage ? apiStage.querySelectorAll('.api-lifecycle__node') : [];
+        nodes.forEach(function(n, i) {
+            n.classList.toggle('active', i <= idx);
+        });
+    }
+
+    function runApiCycle() {
+        var ep = apiEndpoints[apiCycleIdx % apiEndpoints.length];
+        apiCycleIdx++;
+
+        // Reset nodes
+        activateNode(-1);
+        if (liveReqCode) liveReqCode.innerHTML = '<span class="cursor-blink">|</span>';
+        if (liveResCode) liveResCode.innerHTML = '';
+        if (liveTiming) liveTiming.textContent = '';
+
+        // Animate request flowing through nodes
+        var steps = [
+            { delay: 200, node: 0, text: '<span class="req-method">' + ep.method + '</span> <span class="req-url">' + ep.url + '</span>\n<span class="req-key">Authorization:</span> <span class="req-val">Bearer eyJhbG...</span>\n<span class="req-key">Content-Type:</span> <span class="req-val">application/json</span>' },
+            { delay: 600, node: 1, text: null },
+            { delay: 1000, node: 2, text: null },
+            { delay: 1400, node: 3, text: null },
+        ];
+
+        steps.forEach(function(step) {
+            setTimeout(function() {
+                activateNode(step.node);
+                spawnPacket(false);
+                if (step.text && liveReqCode) {
+                    liveReqCode.innerHTML = step.text;
+                }
+            }, step.delay);
+        });
+
+        // Response flows back
+        setTimeout(function() {
+            activateNode(4);
+            spawnPacket(true);
+            if (liveResCode) {
+                if (ep.status === 204) {
+                    liveResCode.innerHTML = '<span class="res-status">' + ep.status + '</span> No Content';
+                } else {
+                    // Syntax highlight the JSON
+                    var highlighted = ep.resBody
+                        .replace(/"([^"]+)":/g, '<span class="res-key">"$1"</span>:')
+                        .replace(/: "([^"]+)"/g, ': <span class="res-str">"$1"</span>')
+                        .replace(/: (\d+\.?\d*)/g, ': <span class="res-num">$1</span>');
+                    liveResCode.innerHTML = '<span class="res-status">' + ep.status + ' ' + (ep.status === 200 ? 'OK' : ep.status === 201 ? 'Created' : 'OK') + '</span>\n' + highlighted;
+                }
+            }
+            if (liveTiming) {
+                liveTiming.textContent = ep.latency + 'ms';
+            }
+        }, 1800);
+    }
+
+    if (apiStage) {
+        var apiObserver = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting) {
+                runApiCycle();
+                apiCycleTimer = setInterval(runApiCycle, 4000);
+                apiObserver.unobserve(apiStage);
+            } else {
+                clearInterval(apiCycleTimer);
+            }
+        }, { threshold: 0.3 });
+        apiObserver.observe(apiStage);
+    }
+
+    // ============================================================
     // INTERACTIVE CLI TERMINAL
     // ============================================================
     var termBody = document.getElementById('terminalBody');
