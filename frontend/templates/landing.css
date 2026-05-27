@@ -912,6 +912,54 @@
     letter-spacing: 0.03em;
 }
 
+/* Bento card inline metrics */
+.bento__card-metrics {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.bento__metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    padding: 8px 0;
+}
+
+.bento__metric-val {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #f8fafc;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+}
+
+.bento__metric-plus {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #34d399;
+}
+
+.bento__metric-label {
+    font-size: 0.65rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+}
+
+.bento__metric-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(148, 163, 184, 0.08);
+}
+
 /* =============================================
    DEEP FEATURES (TABBED)
    ============================================= */
@@ -1029,8 +1077,21 @@
 }
 
 .deep__item-icon {
-    font-size: 1.5rem;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(52, 211, 153, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-bottom: 14px;
+    flex-shrink: 0;
+}
+
+.deep__item-icon svg {
+    width: 18px;
+    height: 18px;
+    color: #34d399;
 }
 
 .deep__item h4 {
@@ -1421,8 +1482,11 @@
     font-weight: 600;
 }
 
-.cli-section__feat-icon {
-    font-size: 1.1rem;
+.cli-section__feat svg {
+    width: 16px;
+    height: 16px;
+    color: #34d399;
+    flex-shrink: 0;
 }
 
 /* =============================================
@@ -1801,7 +1865,12 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 1rem;
+    color: #34d399;
+}
+
+.search-result__icon svg {
+    width: 18px;
+    height: 18px;
 }
 
 .search-result__text {
