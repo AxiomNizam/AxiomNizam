@@ -1297,16 +1297,55 @@
     // ---- Hero Parallax Orbs (mouse-reactive) ----
     var heroSection = document.getElementById('hero');
     var heroOrbs = document.querySelectorAll('.hero__orb');
-    if (heroSection && heroOrbs.length > 0) {
+    var heroLogoBg = document.getElementById('heroLogoBg');
+    var heroLogoInner = document.getElementById('heroLogoInner');
+
+    if (heroSection) {
         heroSection.addEventListener('mousemove', function(e) {
             var rect = heroSection.getBoundingClientRect();
             var x = (e.clientX - rect.left) / rect.width - 0.5;
             var y = (e.clientY - rect.top) / rect.height - 0.5;
 
+            // Orbs react to mouse
             heroOrbs.forEach(function(orb, i) {
                 var depth = (i + 1) * 8;
                 orb.style.transform = 'translate(' + (x * depth) + 'px, ' + (y * depth) + 'px)';
             });
+
+            // Logo reacts to mouse — 3D tilt effect
+            if (heroLogoInner) {
+                var logoX = x * 25;
+                var logoY = y * 25;
+                heroLogoInner.style.transform = 'translate(' + logoX + 'px, ' + logoY + 'px) perspective(600px) rotateY(' + (x * 8) + 'deg) rotateX(' + (-y * 8) + 'deg)';
+            }
+        });
+
+        // Reset logo on mouse leave
+        heroSection.addEventListener('mouseleave', function() {
+            if (heroLogoInner) {
+                heroLogoInner.style.transform = '';
+            }
+        });
+
+        // Logo parallax on scroll — fades and scales as you scroll down
+        var logoParallaxTicking = false;
+        window.addEventListener('scroll', function() {
+            if (!logoParallaxTicking) {
+                requestAnimationFrame(function() {
+                    var scrollY = window.pageYOffset;
+                    var heroH = heroSection.offsetHeight;
+                    var progress = Math.min(scrollY / heroH, 1);
+
+                    if (heroLogoBg) {
+                        var scale = 1 - progress * 0.4;
+                        var opacity = 1 - progress * 1.5;
+                        heroLogoBg.style.opacity = Math.max(opacity, 0);
+                        heroLogoBg.style.transform = 'translate(-50%, calc(-50% - ' + (progress * 80) + 'px)) scale(' + scale + ')';
+                    }
+                    logoParallaxTicking = false;
+                });
+                logoParallaxTicking = true;
+            }
         });
     }
 

@@ -329,6 +329,133 @@
     75% { transform: translate(15px, -10px) scale(1.03); }
 }
 
+/* Animated Logo Background */
+.hero__logo-bg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 480px;
+    height: 480px;
+    z-index: 0;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.hero__logo-glow {
+    position: absolute;
+    inset: -40px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 140, 99, 0.12) 0%, rgba(0, 140, 99, 0.04) 40%, transparent 70%);
+    animation: logoGlowPulse 4s ease-in-out infinite;
+}
+
+@keyframes logoGlowPulse {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.12); opacity: 1; }
+}
+
+.hero__logo-inner {
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease-out;
+}
+
+.hero__logo-svg {
+    width: 100%;
+    height: 100%;
+    opacity: 0.06;
+    animation: logoSpin 60s linear infinite;
+    filter: drop-shadow(0 0 30px rgba(0, 140, 99, 0.15));
+}
+
+@keyframes logoSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes logoBreathe {
+    0%, 100% { opacity: 0.06; }
+    50% { opacity: 0.08; }
+}
+
+/* Orbiting rings around the logo */
+.hero__logo-orbit {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: 50%;
+    border: 1px solid rgba(52, 211, 153, 0.06);
+    pointer-events: none;
+}
+
+.hero__logo-orbit--1 {
+    width: 520px;
+    height: 520px;
+    margin: -260px 0 0 -260px;
+    animation: orbitSpin 20s linear infinite;
+}
+
+.hero__logo-orbit--1::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.5);
+}
+
+.hero__logo-orbit--2 {
+    width: 580px;
+    height: 580px;
+    margin: -290px 0 0 -290px;
+    border-color: rgba(56, 189, 248, 0.04);
+    animation: orbitSpin 30s linear infinite reverse;
+}
+
+.hero__logo-orbit--2::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    margin: 0 0 -2px -2px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.hero__logo-orbit--3 {
+    width: 640px;
+    height: 640px;
+    margin: -320px 0 0 -320px;
+    border-color: rgba(167, 139, 250, 0.03);
+    animation: orbitSpin 40s linear infinite;
+}
+
+.hero__logo-orbit--3::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 4px;
+    height: 4px;
+    margin: -2px -2px 0 0;
+    border-radius: 50%;
+    background: #a78bfa;
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.3);
+}
+
+@keyframes orbitSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* Geometric shapes */
 .hero__shapes {
     position: absolute;
