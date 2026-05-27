@@ -27,7 +27,9 @@
         if (isAuthenticated()) {
             window.location.href = targetPath;
         } else {
-            window.location.href = '/signup';
+            // Save intended destination so login can redirect back
+            localStorage.setItem('returnTo', targetPath);
+            window.location.href = '/login';
         }
     };
 
@@ -361,18 +363,26 @@
             var active = searchResults.querySelector('.search-result.active');
             if (active) {
                 var href = active.getAttribute('href');
-                if (isAuthenticated() || href === '/signup' || href === '/login') {
-                    window.location.href = href;
-                } else {
-                    window.location.href = '/signup';
-                }
+                closeSearch();
+                requireAuth(href);
             }
             return;
         }
     });
 
-    // Event: result hover/click
+    // Event: result click (use requireAuth for proper redirect)
     if (searchResults) {
+        searchResults.addEventListener('click', function(e) {
+            var result = e.target.closest('.search-result');
+            if (result) {
+                e.preventDefault();
+                var href = result.getAttribute('href');
+                closeSearch();
+                requireAuth(href);
+            }
+        });
+
+        // Event: result hover
         searchResults.addEventListener('mouseover', function(e) {
             var result = e.target.closest('.search-result');
             if (result) {
@@ -459,7 +469,8 @@
         }
 
         if (cmd === 'version') {
-            termPrint('<span class="terminal__output-accent">axiomnizamctl</span> <span class="terminal__output-dim">v2.0.0</span>');
+            termPrint('<span class="terminal__output-accent">axiomnizamctl</span> <span class="terminal__output-dim">v0.2.0</span>');
+            termPrint('<span class="terminal__output-accent">AxiomNizam Platform</span> <span class="terminal__output-dim">v0.5.0</span>');
             termPrint('<span class="terminal__output-dim">Built: 2026-05-28 | Commit: baa1fff | Go: 1.24</span>');
             return;
         }
