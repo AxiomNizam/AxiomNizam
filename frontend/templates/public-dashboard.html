@@ -1,8 +1,13 @@
 {{ define "public-dashboard" }}
 <link rel="stylesheet" href="/static/landing.css?v=20260527-reimagine">
 
-<!-- Cursor glow follower -->
+<!-- Cursor system -->
 <div class="cursor-glow" id="cursorGlow"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+<div class="cursor-crosshair" id="cursorCrosshair">
+    <svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="12" stroke="rgba(52,211,153,0.3)" stroke-width="1"/><line x1="20" y1="4" x2="20" y2="14" stroke="rgba(52,211,153,0.4)" stroke-width="1"/><line x1="20" y1="26" x2="20" y2="36" stroke="rgba(52,211,153,0.4)" stroke-width="1"/><line x1="4" y1="20" x2="14" y2="20" stroke="rgba(52,211,153,0.4)" stroke-width="1"/><line x1="26" y1="20" x2="36" y2="20" stroke="rgba(52,211,153,0.4)" stroke-width="1"/></svg>
+</div>
+<canvas class="cursor-trail" id="cursorTrail"></canvas>
 
 <!-- Command Palette Search -->
 <div class="search-overlay" id="searchOverlay">
@@ -404,42 +409,42 @@
             <div class="deep__panel active" id="panel-data">
                 <div class="deep__grid">
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🧬</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
                         <h4>Data Sources</h4>
                         <p>Connect external databases, APIs, and data streams — test connectivity, manage connection pools, and federate queries.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">◈</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/></svg></div>
                         <h4>GraphQL Studio</h4>
                         <p>Interactive playground with schema introspection and automatic type generation from databases.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">⚡</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg></div>
                         <h4>Dynamic Queries</h4>
                         <p>SQL queries across connected databases with schema introspection, batch operations, and performance analysis.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🤖</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6"/><path d="M9 13h6"/><path d="M9 17h4"/><circle cx="17" cy="17" r="3" fill="none"/><path d="M20 20l2 2"/></svg></div>
                         <h4>SQL AI Assistant</h4>
                         <p>Natural language to SQL with AI-powered suggestions, schema-aware completion, and optimization recommendations.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📄</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></div>
                         <h4>CSV Upload & Transform</h4>
                         <p>Upload CSV files and auto-generate dashboards, GIS datasets, and API endpoints with transformation rules.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🔀</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></div>
                         <h4>ETL Pipelines</h4>
                         <p>Extract-Transform-Load with 20+ connector catalog, orchestration scheduling, blueprints, and observability.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📐</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/><path d="M12 6h4"/><path d="M12 18h4"/></svg></div>
                         <h4>Schema Registry</h4>
                         <p>Avro, Protobuf, and JSON schema management with compatibility checks and version tracking.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🧬</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
                         <h4>Feature Store</h4>
                         <p>Feature group management, online/offline serving, and feature lineage for ML/AI workloads.</p>
                     </div>
@@ -450,32 +455,32 @@
             <div class="deep__panel" id="panel-realtime">
                 <div class="deep__grid">
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🎵</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
                         <h4>Message Conductor</h4>
                         <p>RabbitMQ and Kafka management with producers, consumers, topic management, and real-time monitoring.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🌊</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
                         <h4>WebSocket Streaming</h4>
                         <p>Real-time data streaming via WebSockets and Server-Sent Events with subscription management.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🪝</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
                         <h4>Webhooks</h4>
                         <p>Event-driven integrations with delivery logging, exponential backoff retry, and status tracking.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📡</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/></svg></div>
                         <h4>Event Bus</h4>
                         <p>Publish/subscribe event streaming with topic management, DLQ support, and event replay.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🔎</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8v6"/><path d="M8 11h6"/></svg></div>
                         <h4>Distributed Tracing</h4>
                         <p>Trace ingestion, span correlation, service map visualization, and error analysis by service.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📡</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
                         <h4>OpenTelemetry</h4>
                         <p>OTLP trace propagation, request ID correlation, structured access logging with trace_id injection.</p>
                     </div>
@@ -486,32 +491,32 @@
             <div class="deep__panel" id="panel-security">
                 <div class="deep__grid">
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🛡️</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
                         <h4>CSRF Protection</h4>
                         <p>Double-submit cookie CSRF protection with token rotation and SameSite enforcement.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🔒</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg></div>
                         <h4>Security Headers</h4>
                         <p>HSTS, X-Content-Type-Options, X-Frame-Options, CSP, Referrer-Policy on every response.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🔐</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><path d="M12 16v-2"/><circle cx="12" cy="15" r="0.5" fill="currentColor"/></svg></div>
                         <h4>2FA / MFA (Gatekeeper)</h4>
                         <p>TOTP enrollment, backup codes, trusted devices, SMS/Email OTP, and risk scoring.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🏛️</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21h18"/><path d="M5 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 9h1"/><path d="M14 9h1"/></svg></div>
                         <h4>Governance Console</h4>
                         <p>Policy engine with access, admission, compliance, lifecycle, and quota policies.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📋</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg></div>
                         <h4>Audit & Compliance</h4>
                         <p>Complete audit trail with SOC2, HIPAA, PCI-DSS compliance scoring and risk assessment.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🔑</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
                         <h4>Encryption & Certs</h4>
                         <p>AES encryption/decryption, key management, certificate lifecycle with auto-renewal.</p>
                     </div>
@@ -522,32 +527,32 @@
             <div class="deep__panel" id="panel-infra">
                 <div class="deep__grid">
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🛠️</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/><path d="M10 6h4"/><path d="M10 18h4"/></svg></div>
                         <h4>Operations Center</h4>
                         <p>Incident management, operational monitoring, alerting, and job scheduling.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">⏰</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
                         <h4>Job Scheduler</h4>
                         <p>Cron-style scheduling with execution history, result logging, and resource limits.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🏢</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                         <h4>Multi-Tenancy</h4>
                         <p>Tenant CRUD, member management, quota management, and resource isolation.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🚀</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></div>
                         <h4>Deployment Controller</h4>
                         <p>Blue-green and canary deployments with health checks and automatic rollback.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🏥</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></div>
                         <h4>Trivy Scanner</h4>
                         <p>Integrated vulnerability scanning for container images, filesystems, and git repos.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🤖</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
                         <h4>Autopilot</h4>
                         <p>Automated cluster health evaluation with dead server cleanup and quorum management.</p>
                     </div>
@@ -558,32 +563,32 @@
             <div class="deep__panel" id="panel-advanced">
                 <div class="deep__grid">
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🎨</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M8 11h6"/></svg></div>
                         <h4>Vector Search</h4>
                         <p>Semantic search with vector embeddings, KNN search, and dimension reduction for AI queries.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🧠</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/><path d="M12 6h4"/><path d="M12 18h4"/></svg></div>
                         <h4>K8s Extensions</h4>
                         <p>Admission webhooks, CRD registry, scheduler with resource scoring, and policy evaluation.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🗺️</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
                         <h4>Data Lineage</h4>
                         <p>Column-level tracking, upstream/downstream flow, impact analysis, and graph visualization.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📌</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="4" x2="10" y2="20"/></svg></div>
                         <h4>Version Control</h4>
                         <p>Resource snapshots with rollback, version history, diff calculation, and semantic versioning.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">🤖</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-2 4-4 6-2-2-4-4.05-4-6a4 4 0 0 1 4-4z"/><circle cx="12" cy="14" r="3"/><path d="M12 17v5"/><path d="M8 22h8"/></svg></div>
                         <h4>ML Pipeline</h4>
                         <p>Model deployment, feature extraction, training workflows, and experiment tracking.</p>
                     </div>
                     <div class="deep__item" data-reveal>
-                        <div class="deep__item-icon">📊</div>
+                        <div class="deep__item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></div>
                         <h4>Prometheus Metrics</h4>
                         <p>Per-module metric collectors with /metrics endpoint and OpenMetrics support.</p>
                     </div>
@@ -628,6 +633,7 @@
         <div class="cli-section__header" data-reveal>
             <span class="cli-section__eyebrow">Developer Experience</span>
             <h2 class="cli-section__title">kubectl-style <span class="text-gradient">CLI.</span></h2>
+            <p class="cli-section__subtitle">Type commands below. Use <kbd>Tab</kbd> to autocomplete, <kbd>&uarr;&darr;</kbd> for history.</p>
         </div>
 
         <div class="cli-section__terminal" data-reveal>
@@ -636,38 +642,36 @@
                     <span class="terminal__dot terminal__dot--red"></span>
                     <span class="terminal__dot terminal__dot--yellow"></span>
                     <span class="terminal__dot terminal__dot--green"></span>
-                    <span class="terminal__title">axiomnizamctl</span>
+                    <span class="terminal__title">axiomnizamctl — interactive</span>
                 </div>
-                <div class="terminal__body">
-                    <div class="terminal__line"><span class="terminal__prompt">$</span> axiomnizamctl api create my-api --db postgres --table users</div>
-                    <div class="terminal__line terminal__line--output">api "my-api" created with 5 CRUD endpoints</div>
-                    <div class="terminal__line"><span class="terminal__prompt">$</span> axiomnizamctl api list</div>
-                    <div class="terminal__line terminal__line--output">NAME      ENDPOINTS  DATABASE   STATUS</div>
-                    <div class="terminal__line terminal__line--output">my-api    5          postgres   active</div>
-                    <div class="terminal__line"><span class="terminal__prompt">$</span> axiomnizamctl workflow run etl-pipeline --input data.csv</div>
-                    <div class="terminal__line terminal__line--output">workflow "etl-pipeline" started — 1,247 records processed</div>
-                    <div class="terminal__line"><span class="terminal__prompt">$</span> axiomnizamctl policy apply compliance.yaml</div>
-                    <div class="terminal__line terminal__line--output">policy "compliance" applied — 3 rules active</div>
-                    <div class="terminal__line terminal__line--cursor"><span class="terminal__prompt">$</span> <span class="terminal__cursor">|</span></div>
+                <div class="terminal__body" id="terminalBody">
+                    <div class="terminal__line terminal__line--welcome"><span class="terminal__output-dim">Welcome to axiomnizamctl v2.0 — Type </span><span class="terminal__output-accent">help</span><span class="terminal__output-dim"> to see available commands</span></div>
+                </div>
+                <div class="terminal__input-row">
+                    <span class="terminal__prompt">$</span>
+                    <div class="terminal__input-wrap">
+                        <input type="text" class="terminal__input" id="terminalInput" autocomplete="off" spellcheck="false" placeholder="type a command...">
+                        <div class="terminal__autocomplete" id="terminalAutocomplete"></div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="cli-section__features" data-reveal>
             <div class="cli-section__feat">
-                <span class="cli-section__feat-icon">⌨️</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/></svg>
                 <span>YAML-first GitOps</span>
             </div>
             <div class="cli-section__feat">
-                <span class="cli-section__feat-icon">🔐</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 <span>Multi-cluster Auth</span>
             </div>
             <div class="cli-section__feat">
-                <span class="cli-section__feat-icon">🔎</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span>API Discovery</span>
             </div>
             <div class="cli-section__feat">
-                <span class="cli-section__feat-icon">📊</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                 <span>Diff & Reconcile</span>
             </div>
         </div>
