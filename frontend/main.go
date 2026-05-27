@@ -630,20 +630,25 @@ func fetchHealth() (*HealthResponse, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	// Build candidate URLs: proxy, direct, and localhost→127.0.0.1 fallback.
+	// Build candidate URLs with automatic fallbacks for Docker networking.
 	seen := map[string]bool{}
 	var candidates []string
+	fallbacks := []string{"axiomnizam", "host.docker.internal", "127.0.0.1"}
 	for _, u := range []string{backendProxyURL, backendURL} {
 		if u != "" && !seen[u] {
 			seen[u] = true
 			candidates = append(candidates, u)
 		}
-		// If URL contains "localhost", also try with 127.0.0.1 (IPv4 fallback).
-		if strings.Contains(u, "localhost") {
-			fallback := strings.Replace(u, "localhost", "127.0.0.1", 1)
-			if !seen[fallback] {
-				seen[fallback] = true
-				candidates = append(candidates, fallback)
+		// Try Docker service name / host fallbacks when URL uses localhost.
+		if strings.Contains(u, "localhost") || strings.Contains(u, "127.0.0.1") {
+			for _, host := range fallbacks {
+				fallback := u
+				fallback = strings.Replace(fallback, "localhost", host, 1)
+				fallback = strings.Replace(fallback, "127.0.0.1", host, 1)
+				if !seen[fallback] {
+					seen[fallback] = true
+					candidates = append(candidates, fallback)
+				}
 			}
 		}
 	}
