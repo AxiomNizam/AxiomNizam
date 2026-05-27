@@ -623,30 +623,37 @@ func apiStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-// fetchHealth makes a request to the backend health endpoint
+// fetchHealth makes a request to the backend health endpoint.
+// Tries backendProxyURL first, falls back to backendURL if it fails.
 func fetchHealth() (*HealthResponse, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(fmt.Sprintf("%s/health", backendProxyURL))
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for _, baseURL := range []string{backendProxyURL, backendURL} {
+		resp, err := client.Get(fmt.Sprintf("%s/health", baseURL))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("status %d from %s", resp.StatusCode, baseURL)
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		var health HealthResponse
+		if err := json.Unmarshal(body, &health); err != nil {
+			return nil, err
+		}
+		return &health, nil
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var health HealthResponse
-	err = json.Unmarshal(body, &health)
-	if err != nil {
-		return nil, err
-	}
-
-	return &health, nil
+	return nil, lastErr
 }
 
 // fetchStatus makes a request to the backend status endpoint
