@@ -124,6 +124,17 @@ func (abm *APIBankManager) RemoveAPIFromBank(ctx context.Context, bankName, apiN
 	return nil
 }
 
+// DeleteBank removes a bank by name.
+func (abm *APIBankManager) DeleteBank(name string) error {
+	abm.mu.Lock()
+	defer abm.mu.Unlock()
+	if _, exists := abm.banks[name]; !exists {
+		return ErrBankNotFound
+	}
+	delete(abm.banks, name)
+	return nil
+}
+
 // GetAPIsByDataClass gets all APIs that expose a data class
 func (abm *APIBankManager) GetAPIsByDataClass(dataClass string) []APIReference {
 	abm.mu.RLock()

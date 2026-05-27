@@ -1241,6 +1241,17 @@ func main() {
 	router.GET("/api/v1/data-platform/overview", authMiddleware, cdcEtlHandler.GetPlatformOverview)
 
 	// ====================================
+	// API BANKS (standalone system with audit/metrics)
+	// ====================================
+	apiBankSystem := apibanks.NewSystem()
+	_ = apiBankSystem.Start(ctx)
+	apiBankHandler := apiBankSystem.Handler()
+	log.Println("✅ API Banks module started")
+
+	apiBanksAPI := router.Group("/api/v1/apibanks", authMiddleware)
+	apiBankHandler.RegisterRoutes(apiBanksAPI, adminOrSysMiddleware)
+
+	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
 	apiBuilderHandler := apibuilder.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
@@ -1832,6 +1843,9 @@ func main() {
 			apiBuilderSystem.SetKVStore(backendMgr.KV())
 			log.Println("✅ API Builder: Raft KV persistence wired (deferred)")
 
+			// Wire APIBanks audit persistence
+			apiBankSystem.SetKVStore(backendMgr.KV())
+
 			// Wire NetIntel audit + metrics persistence
 			netintelSystem.SetKVStore(backendMgr.KV())
 
@@ -2190,7 +2204,7 @@ func main() {
 		// APIBank reconciler
 		apiBankReconcilerStore := platformstore.NewStore[*apibanks.APIBankResource](backendMgr, "apibanks", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} })
 		apiBankReconciler := reconcilerpkg.NewInstrumented("apibanks",
-			apibanks.NewAPIBankReconciler(apiBankReconcilerStore, nil), reconcilerMetrics)
+			apibanks.NewAPIBankReconciler(apiBankReconcilerStore, apiBankSystem.Manager()), reconcilerMetrics)
 		reconcilerMetrics.Register("apibanks")
 		go genericctrl.NewGenericController("apibanks", apiBankReconcilerStore, apiBankReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ APIBank controller started")
