@@ -219,11 +219,6 @@
                 </div>
                 
                 <div class="nav-right" id="primary-actions">
-                    <div class="theme-switcher">
-                        <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="toggleTheme()" style="display: inline-flex; align-items: center; justify-content: center;">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="#60A5FA" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                        </button>
-                    </div>
                     {{ if .isAuth }}
                     <div class="user-info">
                         <span class="user-icon">
@@ -313,25 +308,8 @@
     <script src="/static/auth.js?v=20260504-refresh"></script>
     <script>
 
-        // Theme management
-        function initTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'dark';
-            setTheme(savedTheme);
-        }
-
-        function setTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            updateThemeButton(theme);
-        }
-
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-            const themes = ['dark', 'light', 'default'];
-            const currentIndex = themes.indexOf(currentTheme);
-            const nextTheme = themes[(currentIndex + 1) % themes.length];
-            setTheme(nextTheme);
-        }
+        // Permanent dark theme
+        document.documentElement.setAttribute('data-theme', 'dark');
 
         function isMobileNavViewport() {
             return window.matchMedia('(max-width: 1200px)').matches;
@@ -380,18 +358,6 @@
             });
         }
 
-        const THEME_ICONS = {
-            'light': '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>',
-            'dark': '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>',
-            'default': '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>'
-        };
-
-        function updateThemeButton(theme) {
-            const btn = document.getElementById('themeToggle');
-            if (btn) {
-                btn.innerHTML = THEME_ICONS[theme] || THEME_ICONS['dark'];
-            }
-        }
 
         function toggleNavMoreMenu(event) {
             if (event) {
@@ -596,7 +562,6 @@
 
         // Check authentication on page load
         window.addEventListener('DOMContentLoaded', function() {
-            initTheme();
             const token = localStorage.getItem('authToken');
             const currentPath = window.location.pathname;
             // Public pages: /, /signup, /login — don't redirect to login
