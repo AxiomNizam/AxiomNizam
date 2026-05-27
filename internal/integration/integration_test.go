@@ -90,6 +90,7 @@ func TestAPIBankIntegration(t *testing.T) {
 // TestComplianceIntegration tests compliance integration
 func TestComplianceIntegration(t *testing.T) {
 	ctx := context.Background()
+	auditor := NewComplianceAuditor(10000)
 
 	// Record operations
 	op := Operation{
@@ -101,12 +102,12 @@ func TestComplianceIntegration(t *testing.T) {
 		Status:       "success",
 	}
 
-	if err := GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+	if err := auditor.RecordOperation(ctx, op); err != nil {
 		t.Fatalf("Failed to record operation: %v", err)
 	}
 
 	// Generate report
-	report := GlobalComplianceAuditor.GenerateReport(AuditFilter{})
+	report := auditor.GenerateReport(AuditFilter{})
 
 	if report.TotalOperations == 0 {
 		t.Fatal("Expected operations in report")
@@ -152,7 +153,7 @@ func TestCatalogIntegration(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "CatalogTest", product)
 
 	// Get complete catalog
-	catalog := GlobalCatalogIntegration.GetCompleteDataCatalog()
+	catalog := NewCatalogIntegration().GetCompleteDataCatalog()
 
 	if catalog == nil {
 		t.Fatal("Expected catalog")
@@ -178,7 +179,7 @@ func TestDataQualityMonitoring(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "QualityTest", product)
 
 	// Check quality
-	quality := GlobalDataQualityMonitor.CheckProductQuality("QualityTest", "QualityTestProduct")
+	quality := NewDataQualityMonitor(mesh.GlobalDataMesh).CheckProductQuality("QualityTest", "QualityTestProduct")
 
 	if quality == nil {
 		t.Fatal("Expected quality report")
@@ -207,7 +208,7 @@ func TestDataLineageAnalysis(t *testing.T) {
 	mesh.GlobalDataMesh.CreateDataProduct(ctx, "LineageTest", product)
 
 	// Analyze lineage
-	analysis := GlobalDataLineageAnalyzer.AnalyzeDataFlow("LineageTest", "LineageTestProduct")
+	analysis := NewDataLineageAnalyzer().AnalyzeDataFlow("LineageTest", "LineageTestProduct")
 
 	if analysis == nil {
 		t.Fatal("Expected lineage analysis")
@@ -260,6 +261,7 @@ func TestPlatformMetrics(t *testing.T) {
 // TestFullIntegration performs comprehensive integration test
 func TestFullIntegration(t *testing.T) {
 	ctx := context.Background()
+	auditor := NewComplianceAuditor(10000)
 
 	// 1. Create domain
 	domain := &mesh.DataDomain{Name: "FullIntegrationTest", Owner: testOwnerInteg}
@@ -306,7 +308,7 @@ func TestFullIntegration(t *testing.T) {
 			Action:       "read",
 			Status:       "success",
 		}
-		if err := GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+		if err := auditor.RecordOperation(ctx, op); err != nil {
 			t.Fatalf("Failed to record operation: %v", err)
 		}
 	}
@@ -316,15 +318,15 @@ func TestFullIntegration(t *testing.T) {
 	health := GlobalHealthMonitor.CheckHealth(ctx)
 	t.Logf("✅ Health check: %s", health.Status)
 
-	complianceReport := GlobalComplianceAuditor.GenerateReport(AuditFilter{})
+	complianceReport := auditor.GenerateReport(AuditFilter{})
 	t.Logf("✅ Compliance report: %d operations, %.1f%% success",
 		complianceReport.TotalOperations,
 		float64(complianceReport.SuccessfulOps)*100/float64(complianceReport.TotalOperations))
 
-	qualityReport := GlobalDataQualityMonitor.GetQualityReport("FullIntegrationTest")
+	qualityReport := NewDataQualityMonitor(mesh.GlobalDataMesh).GetQualityReport("FullIntegrationTest")
 	t.Logf("✅ Quality report: avg score %v%%", qualityReport["averageQualityScore"])
 
-	lineageAnalysis := GlobalDataLineageAnalyzer.AnalyzeDataFlow("FullIntegrationTest", "IntegrationTestProduct")
+	lineageAnalysis := NewDataLineageAnalyzer().AnalyzeDataFlow("FullIntegrationTest", "IntegrationTestProduct")
 	t.Logf("✅ Lineage analysis: %v", lineageAnalysis["dataProduct"])
 
 	// 7. Collect metrics
@@ -354,7 +356,7 @@ func BenchmarkComplianceRecording(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = GlobalComplianceAuditor.RecordOperation(ctx, op)
+		_ = NewComplianceAuditor(10000).RecordOperation(ctx, op)
 	}
 	b.ReportAllocs()
 }
@@ -397,7 +399,7 @@ func TestConcurrentOperations(t *testing.T) {
 				Action:       "concurrent",
 				Status:       "success",
 			}
-			errChan <- GlobalComplianceAuditor.RecordOperation(ctx, op)
+			errChan <- NewComplianceAuditor(10000).RecordOperation(ctx, op)
 		}(i)
 	}
 
@@ -438,7 +440,7 @@ func TestSystemStability(t *testing.T) {
 			Status:       "success",
 		}
 
-		if err := GlobalComplianceAuditor.RecordOperation(ctx, op); err != nil {
+		if err := NewComplianceAuditor(10000).RecordOperation(ctx, op); err != nil {
 			errors++
 		}
 		operations++

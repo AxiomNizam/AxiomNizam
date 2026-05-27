@@ -1,9 +1,11 @@
 package integration
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 var (
 	persistenceMu         sync.RWMutex
 	globalPersistenceEtcd *clientv3.Client
+	globalPersistenceKV   platformstore.KVStore
 )
 
 func integrationEtcdClient() *clientv3.Client {
@@ -21,20 +24,26 @@ func integrationEtcdClient() *clientv3.Client {
 	return globalPersistenceEtcd
 }
 
+func integrationKVStore() platformstore.KVStore {
+	persistenceMu.RLock()
+	defer persistenceMu.RUnlock()
+	return globalPersistenceKV
+}
+
 func ConfigureGlobalPersistence(etcd *clientv3.Client) {
 	persistenceMu.Lock()
 	globalPersistenceEtcd = etcd
 	persistenceMu.Unlock()
 
-	if GlobalComplianceAuditor != nil {
-		GlobalComplianceAuditor.ConfigurePersistence(etcd)
-	}
-	if GlobalHealthMonitor != nil {
-		GlobalHealthMonitor.ConfigurePersistence(etcd)
-	}
-	if GlobalAlertManager != nil {
-		GlobalAlertManager.ConfigurePersistence(etcd)
-	}
+	// Phase 13: Global singletons removed.
+	// Consumers should call ConfigurePersistence on their own instances.
+}
+
+// ConfigureGlobalKVPersistence configures KVStore persistence for all integration sub-modules.
+func ConfigureGlobalKVPersistence(kv platformstore.KVStore) {
+	persistenceMu.Lock()
+	globalPersistenceKV = kv
+	persistenceMu.Unlock()
 }
 
 func loadStateFromEtcd(etcd *clientv3.Client, stateKey string, out interface{}) bool {
@@ -47,7 +56,7 @@ func loadStateFromEtcd(etcd *clientv3.Client, stateKey string, out interface{}) 
 
 	resp, err := etcd.Get(ctx, stateKey)
 	if err != nil {
-		log.Printf("integration: failed to load persisted state from etcd (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to load persisted state from etcd (%s): %v", stateKey, err))
 		return false
 	}
 	if len(resp.Kvs) == 0 {
@@ -55,7 +64,7 @@ func loadStateFromEtcd(etcd *clientv3.Client, stateKey string, out interface{}) 
 	}
 
 	if err := json.Unmarshal(resp.Kvs[0].Value, out); err != nil {
-		log.Printf("integration: failed to decode persisted state (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to decode persisted state (%s): %v", stateKey, err))
 		return false
 	}
 	return true
@@ -68,7 +77,7 @@ func saveStateToEtcd(etcd *clientv3.Client, stateKey string, payload interface{}
 
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("integration: failed to encode state (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to encode state (%s): %v", stateKey, err))
 		return
 	}
 
@@ -76,6 +85,47 @@ func saveStateToEtcd(etcd *clientv3.Client, stateKey string, payload interface{}
 	defer cancel()
 
 	if _, err := etcd.Put(ctx, stateKey, string(encoded)); err != nil {
-		log.Printf("integration: failed to persist state to etcd (%s): %v", stateKey, err)
+		logging.Z().Info(fmt.Sprintf("integration: failed to persist state to etcd (%s): %v", stateKey, err))
+	}
+}
+
+// loadStateFromKV loads state from a KVStore into out. Returns true on success.
+func loadStateFromKV(kv platformstore.KVStore, stateKey string, out interface{}) bool {
+	if kv == nil || stateKey == "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	val, err := kv.Get(ctx, stateKey)
+	if err != nil || val == "" {
+		return false // not found or empty
+	}
+
+	if err := json.Unmarshal([]byte(val), out); err != nil {
+		logging.Z().Info(fmt.Sprintf("integration: failed to decode persisted state (%s): %v", stateKey, err))
+		return false
+	}
+	return true
+}
+
+// saveStateToKV persists state to a KVStore.
+func saveStateToKV(kv platformstore.KVStore, stateKey string, payload interface{}) {
+	if kv == nil || stateKey == "" {
+		return
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		logging.Z().Info(fmt.Sprintf("integration: failed to encode state (%s): %v", stateKey, err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := kv.Put(ctx, stateKey, string(encoded)); err != nil {
+		logging.Z().Info(fmt.Sprintf("integration: failed to persist state to KV (%s): %v", stateKey, err))
 	}
 }

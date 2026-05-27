@@ -1,35 +1,32 @@
 package cache
 
 import (
+	cacheconfig "example.com/axiomnizam/internal/cache/config"
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
-	"time"
 )
 
 // Manager handles cache initialization and management
 type Manager struct {
 	cache   Cache
 	config  *CacheConfig
-	logger  *log.Logger
 	backend string
 }
 
 // NewCacheManager creates a new cache manager
 func NewCacheManager(config *CacheConfig) (*Manager, error) {
 	if config == nil {
+		cfg := cacheconfig.DefaultConfig()
 		config = &CacheConfig{
-			Type:       "memory",
-			DefaultTTL: 15 * time.Minute,
-			MaxSize:    1000,
+			Type:       cfg.Type,
+			DefaultTTL: cfg.DefaultTTL,
+			MaxSize:    cfg.MaxSize,
 		}
 	}
 
-	logger := log.New(log.Writer(), "[CACHE_MANAGER] ", log.LstdFlags)
 
 	manager := &Manager{
-		config: config,
-		logger: logger,
-	}
+		config: config,	}
 
 	// Initialize cache backend
 	if err := manager.initializeCache(); err != nil {
@@ -49,12 +46,12 @@ func (m *Manager) initializeCache() error {
 		}
 		m.cache = cache
 		m.backend = "Redis"
-		m.logger.Printf("Redis cache initialized: %s:%d", m.config.Host, m.config.Port)
+		logging.Z().Info(fmt.Sprintf("Redis cache initialized: %s:%d", m.config.Host, m.config.Port))
 
 	case "memory":
 		m.cache = NewMemoryCache(m.config.MaxSize)
 		m.backend = "Memory"
-		m.logger.Printf("Memory cache initialized (max size: %d)", m.config.MaxSize)
+		logging.Z().Info(fmt.Sprintf("Memory cache initialized (max size: %d)", m.config.MaxSize))
 
 	default:
 		return fmt.Errorf("unknown cache type: %s", m.config.Type)
@@ -96,11 +93,11 @@ func (m *Manager) SwitchBackend(cacheType string) error {
 
 	m.config.Type = cacheType
 	if err := m.initializeCache(); err != nil {
-		m.logger.Printf("Error switching to %s cache, keeping %s", cacheType, oldBackend)
+		logging.Z().Info(fmt.Sprintf("Error switching to %s cache, keeping %s", cacheType, oldBackend))
 		return err
 	}
 
-	m.logger.Printf("Switched from %s to %s cache", oldBackend, m.backend)
+	logging.Z().Info(fmt.Sprintf("Switched from %s to %s cache", oldBackend, m.backend))
 	return nil
 }
 
@@ -111,20 +108,22 @@ func (m *Manager) GetConfig() *CacheConfig {
 
 // DefaultCacheConfig returns a sensible default cache configuration
 func DefaultCacheConfig() *CacheConfig {
+	cfg := cacheconfig.DefaultConfig()
 	return &CacheConfig{
-		Type:       "memory",
-		DefaultTTL: 15 * time.Minute,
-		MaxSize:    1000,
+		Type:       cfg.Type,
+		DefaultTTL: cfg.DefaultTTL,
+		MaxSize:    cfg.MaxSize,
 	}
 }
 
 // RedisCacheConfig returns a Redis cache configuration with sensible defaults
 func RedisCacheConfig(host string, port int, password string) *CacheConfig {
+	cfg := cacheconfig.DefaultConfig()
 	if host == "" {
-		host = "localhost"
+		host = cfg.Host
 	}
 	if port == 0 {
-		port = 6379
+		port = cfg.Port
 	}
 
 	return &CacheConfig{
@@ -132,21 +131,22 @@ func RedisCacheConfig(host string, port int, password string) *CacheConfig {
 		Host:       host,
 		Port:       port,
 		Password:   password,
-		DB:         0,
-		DefaultTTL: 15 * time.Minute,
-		PoolSize:   10,
+		DB:         cfg.DB,
+		DefaultTTL: cfg.DefaultTTL,
+		PoolSize:   cfg.PoolSize,
 	}
 }
 
 // MemoryCacheConfig returns a memory cache configuration
 func MemoryCacheConfig(maxSize int) *CacheConfig {
+	cfg := cacheconfig.DefaultConfig()
 	if maxSize <= 0 {
-		maxSize = 1000
+		maxSize = cfg.MaxSize
 	}
 
 	return &CacheConfig{
 		Type:       "memory",
-		DefaultTTL: 15 * time.Minute,
+		DefaultTTL: cfg.DefaultTTL,
 		MaxSize:    maxSize,
 	}
 }

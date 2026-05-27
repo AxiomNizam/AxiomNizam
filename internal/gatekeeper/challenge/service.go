@@ -2,6 +2,8 @@ package challenge
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -18,6 +20,7 @@ type Service struct {
 	factorRepo    repositories.FactorRepository
 	totpSvc       TOTPValidator
 	clock         Clock
+	encryptionKey []byte
 }
 
 // TOTPValidator validates TOTP codes against a secret.
@@ -43,12 +46,13 @@ func NewRealClock() Clock {
 }
 
 // NewService creates a new challenge service.
-func NewService(cr repositories.ChallengeRepository, fr repositories.FactorRepository, tv TOTPValidator, c Clock) *Service {
+func NewService(cr repositories.ChallengeRepository, fr repositories.FactorRepository, tv TOTPValidator, c Clock, encKey []byte) *Service {
 	return &Service{
 		challengeRepo: cr,
 		factorRepo:    fr,
 		totpSvc:       tv,
 		clock:         c,
+		encryptionKey: encKey,
 	}
 }
 
@@ -144,8 +148,16 @@ func (s *Service) VerifyChallenge(ctx context.Context, req *VerifyRequest) (*mod
 		return nil, errors.New("factor not found")
 	}
 
+	// Decrypt the stored TOTP secret
+	secret, decErr := s.decryptSecret(factor.Spec.EncryptedSecret)
+	if decErr != nil {
+		ch.Phase = models.ChallengePhaseFailed
+		ch.ResolvedAt = ptrTime(s.clock.Now())
+		_, _ = s.challengeRepo.Update(ctx, ch)
+		return nil, errors.New("failed to decrypt factor secret")
+	}
+
 	// Validate OTP code against the factor's TOTP secret
-	secret := string(factor.Spec.EncryptedSecret)
 	valid, err := s.totpSvc.ValidateCode(ctx, secret, req.Code)
 	if err != nil || !valid {
 		// Max 3 attempts before lockout
@@ -199,6 +211,32 @@ func generateNonce() (string, error) {
 	num := uint32(bytes[0])<<16 | uint32(bytes[1])<<8 | uint32(bytes[2])
 	num = num % 1000000
 	return hex.EncodeToString(bytes), nil
+}
+
+// decryptSecret decrypts an AES-GCM encrypted TOTP secret.
+func (s *Service) decryptSecret(ciphertext []byte) (string, error) {
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return "", err
+	}
+
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonceSize := aesGCM.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return "", errors.New("ciphertext too short")
+	}
+
+	nonce, ct := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := aesGCM.Open(nil, nonce, ct, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return string(plaintext), nil
 }
 
 // ptrTime returns a pointer to time.Time.

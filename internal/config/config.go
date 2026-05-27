@@ -1,8 +1,8 @@
 package config
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -92,7 +92,7 @@ type FirebaseConfig struct {
 func LoadConfig() *Config {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("⚠️  No .env file found, using system environment variables")
+		logging.Z().Info(fmt.Sprint("⚠️  No .env file found, using system environment variables"))
 	}
 
 	return &Config{
@@ -202,7 +202,7 @@ func getEnvInt(key string, defaultValue int64) int64 {
 	}
 	intVal, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		log.Printf("⚠️  Invalid integer for %s: %v, using default: %d", key, err, defaultValue)
+		logging.Z().Info(fmt.Sprintf("⚠️  Invalid integer for %s: %v, using default: %d", key, err, defaultValue))
 		return defaultValue
 	}
 	return intVal
@@ -275,4 +275,15 @@ func (c *Config) GetIAMURL() string {
 // GetValkeyAddr returns Valkey address
 func (c *Config) GetValkeyAddr() string {
 	return fmt.Sprintf("%s:%s", c.Valkey.Host, c.Valkey.Port)
+}
+
+// LoadFromEnv is an alias for LoadConfig for pattern consistency.
+var LoadFromEnv = LoadConfig
+
+// Validate checks the configuration for invalid values.
+func (c *Config) Validate() error {
+	if c.API.Port == "" {
+		return fmt.Errorf("config: API port must not be empty")
+	}
+	return nil
 }

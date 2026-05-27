@@ -1,9 +1,10 @@
 package metrics
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,13 +85,13 @@ func (c *Collector) load() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, metricsKVKey)
-	if err != nil {
-		return // likely not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var state collectorState
 	if err := json.Unmarshal([]byte(val), &state); err != nil {
-		log.Printf("⚠️  storage metrics: failed to unmarshal state: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  storage metrics: failed to unmarshal state: %v", err))
 		return
 	}
 
@@ -107,7 +108,7 @@ func (c *Collector) load() {
 	c.totalErrors.Store(state.TotalErrors)
 	c.totalLatencyNs.Store(state.TotalLatencyNs)
 	c.startTime = state.StartTime
-	log.Printf("✅ storage metrics: loaded persistent state (requests=%d)", state.TotalRequests)
+	logging.Z().Info(fmt.Sprintf("✅ storage metrics: loaded persistent state (requests=%d)", state.TotalRequests))
 }
 
 func (c *Collector) save() {
@@ -136,7 +137,9 @@ func (c *Collector) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), metricsTimeout)
 	defer cancel()
-	_ = kv.Put(ctx, metricsKVKey, string(data))
+	if err := kv.Put(ctx, metricsKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("storage metrics: kv persist failed: %v", err))
+	}
 }
 
 func bKey(tenantID, bucket string) string {

@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -15,7 +15,6 @@ type RateLimiter struct {
 	maxTokens  float64
 	refillRate float64 // tokens per second
 	lastRefill time.Time
-	logger     *log.Logger
 }
 
 // NewRateLimiter creates a new rate limiter
@@ -29,7 +28,6 @@ func NewRateLimiter(tokensPerSecond float64, maxTokens float64) *RateLimiter {
 		maxTokens:  maxTokens,
 		refillRate: tokensPerSecond,
 		lastRefill: time.Now(),
-		logger:     log.New(log.Writer(), "[RATE_LIMITER] ", log.LstdFlags),
 	}
 }
 
@@ -86,7 +84,6 @@ type Throttler struct {
 	mu            sync.RWMutex
 	limiters      map[JobType]*RateLimiter
 	globalLimiter *RateLimiter
-	logger        *log.Logger
 }
 
 // NewThrottler creates a new throttler
@@ -94,7 +91,6 @@ func NewThrottler(globalJobsPerSecond float64) *Throttler {
 	return &Throttler{
 		limiters:      make(map[JobType]*RateLimiter),
 		globalLimiter: NewRateLimiter(globalJobsPerSecond, 0),
-		logger:        log.New(log.Writer(), "[THROTTLER] ", log.LstdFlags),
 	}
 }
 
@@ -104,7 +100,7 @@ func (t *Throttler) SetJobTypeLimit(jobType JobType, jobsPerSecond float64) {
 	defer t.mu.Unlock()
 
 	t.limiters[jobType] = NewRateLimiter(jobsPerSecond, 0)
-	t.logger.Printf("Rate limit set: %s = %.1f jobs/sec", jobType, jobsPerSecond)
+	logging.Z().Info(fmt.Sprintf("Rate limit set: %s = %.1f jobs/sec", jobType, jobsPerSecond))
 }
 
 // CanSubmit checks if a job can be submitted
@@ -152,7 +148,6 @@ type PriorityQueue struct {
 	mu             sync.RWMutex
 	jobs           map[JobPriority][]*Job
 	fairnessWeight map[JobPriority]float64
-	logger         *log.Logger
 }
 
 // NewPriorityQueue creates a new priority queue
@@ -165,7 +160,6 @@ func NewPriorityQueue() *PriorityQueue {
 			PriorityHigh:     0.4,
 			PriorityCritical: 0.2,
 		},
-		logger: log.New(log.Writer(), "[PRIORITY_QUEUE] ", log.LstdFlags),
 	}
 
 	return pq
@@ -220,7 +214,6 @@ type ConcurrencyLimiter struct {
 	mu      sync.RWMutex
 	limits  map[JobType]int // max concurrent jobs per type
 	running map[JobType]int // currently running
-	logger  *log.Logger
 }
 
 // NewConcurrencyLimiter creates a new concurrency limiter
@@ -228,7 +221,6 @@ func NewConcurrencyLimiter() *ConcurrencyLimiter {
 	return &ConcurrencyLimiter{
 		limits:  make(map[JobType]int),
 		running: make(map[JobType]int),
-		logger:  log.New(log.Writer(), "[CONCURRENCY_LIMITER] ", log.LstdFlags),
 	}
 }
 
@@ -238,7 +230,7 @@ func (cl *ConcurrencyLimiter) SetLimit(jobType JobType, limit int) {
 	defer cl.mu.Unlock()
 
 	cl.limits[jobType] = limit
-	cl.logger.Printf("Concurrency limit set: %s = %d", jobType, limit)
+	logging.Z().Info(fmt.Sprintf("Concurrency limit set: %s = %d", jobType, limit))
 }
 
 // CanRun checks if a job of type can run
@@ -288,7 +280,6 @@ type BackpressureHandler struct {
 	highWater int // Start backpressure at this size
 	lowWater  int // Stop backpressure at this size
 	isActive  bool
-	logger    *log.Logger
 }
 
 // NewBackpressureHandler creates a new backpressure handler
@@ -297,7 +288,6 @@ func NewBackpressureHandler(maxSize int) *BackpressureHandler {
 		maxSize:   maxSize,
 		highWater: int(float64(maxSize) * 0.8), // 80% full
 		lowWater:  int(float64(maxSize) * 0.5), // 50% full
-		logger:    log.New(log.Writer(), "[BACKPRESSURE] ", log.LstdFlags),
 	}
 }
 
@@ -311,10 +301,10 @@ func (bh *BackpressureHandler) UpdateQueueSize(size int) {
 
 	if size > bh.highWater && !bh.isActive {
 		bh.isActive = true
-		bh.logger.Printf("Backpressure ACTIVE: queue at %d/%d", size, bh.maxSize)
+		logging.Z().Info(fmt.Sprintf("Backpressure ACTIVE: queue at %d/%d", size, bh.maxSize))
 	} else if size < bh.lowWater && bh.isActive {
 		bh.isActive = false
-		bh.logger.Printf("Backpressure INACTIVE: queue at %d/%d", size, bh.maxSize)
+		logging.Z().Info(fmt.Sprintf("Backpressure INACTIVE: queue at %d/%d", size, bh.maxSize))
 	}
 
 	if wasActive != bh.isActive {
@@ -361,7 +351,6 @@ type AdaptiveThrottler struct {
 	throttler   *Throttler
 	queueSize   int
 	maxSize     int
-	logger      *log.Logger
 }
 
 // NewAdaptiveThrottler creates an adaptive throttler
@@ -371,7 +360,6 @@ func NewAdaptiveThrottler(baseJobsPerSecond float64, maxQueueSize int) *Adaptive
 		currentRate: baseJobsPerSecond,
 		throttler:   NewThrottler(baseJobsPerSecond),
 		maxSize:     maxQueueSize,
-		logger:      log.New(log.Writer(), "[ADAPTIVE_THROTTLER] ", log.LstdFlags),
 	}
 }
 
@@ -393,8 +381,8 @@ func (at *AdaptiveThrottler) UpdateQueueMetrics(queueSize int) {
 		at.currentRate = newRate
 		// Update throttler rate
 		at.throttler.globalLimiter = NewRateLimiter(newRate, 0)
-		at.logger.Printf("Adaptive throttle rate: %.1f jobs/sec (utilization: %.1f%%)",
-			newRate, utilization*100)
+		logging.Z().Info(fmt.Sprintf("Adaptive throttle rate: %.1f jobs/sec (utilization: %.1f%%)",
+			newRate, utilization*100))
 	}
 }
 

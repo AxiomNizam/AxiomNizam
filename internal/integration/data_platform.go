@@ -21,13 +21,18 @@ type DataPlatformIntegration struct {
 	metricsCollector *metrics.Metrics
 }
 
-// NewDataPlatformIntegration creates a new integration layer
-func NewDataPlatformIntegration() *DataPlatformIntegration {
+// NewDataPlatformIntegration creates a new integration layer.
+func NewDataPlatformIntegration(
+	bankMgr *apibanks.APIBankManager,
+	dataMesh *mesh.DataMesh,
+	eventRec events.EventRecorder,
+	metricsColl *metrics.Metrics,
+) *DataPlatformIntegration {
 	return &DataPlatformIntegration{
-		apiBankManager:   apibanks.GlobalAPIBankManager,
-		dataMesh:         mesh.GlobalDataMesh,
-		eventRecorder:    events.GlobalEventRecorder,
-		metricsCollector: metrics.GlobalMetrics,
+		apiBankManager:   bankMgr,
+		dataMesh:         dataMesh,
+		eventRecorder:    eventRec,
+		metricsCollector: metricsColl,
 	}
 }
 
@@ -261,14 +266,8 @@ func getTotalProducts(m *mesh.DataMesh) int {
 	return total
 }
 
-// GlobalDataPlatformIntegration is the package-level integration instance
-var GlobalDataPlatformIntegration = NewDataPlatformIntegration()
-
-// GlobalCatalogIntegration is the package-level catalog integration
-var GlobalCatalogIntegration = NewCatalogIntegration()
-
-// GlobalDataQualityMonitor is the package-level quality monitor
-var GlobalDataQualityMonitor = NewDataQualityMonitor(mesh.GlobalDataMesh)
-
-// GlobalDataLineageAnalyzer is the package-level lineage analyzer
-var GlobalDataLineageAnalyzer = NewDataLineageAnalyzer()
+// Phase 13: Global singletons removed. Use constructors to create instances:
+//   - NewDataPlatformIntegration()
+//   - NewCatalogIntegration()
+//   - NewDataQualityMonitor(mesh)
+//   - NewDataLineageAnalyzer()

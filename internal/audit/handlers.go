@@ -30,7 +30,7 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"status": "Pending", "tenantId": req.TenantID, "message": "audit policy resource created"})
+		c.JSON(http.StatusAccepted, MessageResponse{Status: "Pending", Message: "audit policy resource created", Name: req.TenantID})
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *AuditHandler) LogAction(c *gin.Context) {
 	}
 
 	if err := h.logger.LogAction(c.Request.Context(), log); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *AuditHandler) QueryLogs(c *gin.Context) {
 
 	logs, err := h.logger.QueryLogs(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -91,14 +91,14 @@ func (h *AuditHandler) QueryLogs(c *gin.Context) {
 func (h *AuditHandler) GetReport(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenantId required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "tenantId required"})
 		return
 	}
 
 	filter := &AuditFilter{TenantID: tenantID}
 	report, err := h.logger.GetReport(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -110,11 +110,11 @@ func (h *AuditHandler) DeleteOldLogs(c *gin.Context) {
 	var olderThanDays int = 90
 
 	if err := h.logger.DeleteOldLogs(c.Request.Context(), olderThanDays); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "old logs deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "old logs deleted"})
 }
 
 // RegisterAuditRoutes registers all audit routes

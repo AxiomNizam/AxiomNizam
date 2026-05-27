@@ -1,10 +1,10 @@
 package cache
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -14,7 +14,6 @@ import (
 // CacheMiddleware provides HTTP caching for GET requests
 type CacheMiddleware struct {
 	cache   Cache
-	logger  *log.Logger
 	ttl     time.Duration
 	enabled bool
 }
@@ -29,7 +28,6 @@ func NewCacheMiddleware(cache Cache, ttl time.Duration) *CacheMiddleware {
 		cache:   cache,
 		ttl:     ttl,
 		enabled: true,
-		logger:  log.New(log.Writer(), "[CACHE_MIDDLEWARE] ", log.LstdFlags),
 	}
 }
 
@@ -61,7 +59,7 @@ func (cm *CacheMiddleware) Middleware() gin.HandlerFunc {
 		// Try to get from cache
 		cached, err := cm.cache.Get(c.Request.Context(), cacheKey)
 		if err == nil {
-			cm.logger.Printf("Cache HIT for %s", c.Request.URL.Path)
+			logging.Z().Info(fmt.Sprintf("Cache HIT for %s", c.Request.URL.Path))
 			c.Data(http.StatusOK, "application/json", cached.([]byte))
 			c.Header("X-Cache", "HIT")
 			return
@@ -81,9 +79,9 @@ func (cm *CacheMiddleware) Middleware() gin.HandlerFunc {
 		if c.Writer.Status() == http.StatusOK {
 			// Store in cache
 			if err := cm.cache.Set(c.Request.Context(), cacheKey, writer.body, cm.ttl); err != nil {
-				cm.logger.Printf("Error caching response: %v", err)
+				logging.Z().Info(fmt.Sprintf("Error caching response: %v", err))
 			} else {
-				cm.logger.Printf("Cache SET for %s (TTL: %s)", c.Request.URL.Path, cm.ttl)
+				logging.Z().Info(fmt.Sprintf("Cache SET for %s (TTL: %s)", c.Request.URL.Path, cm.ttl))
 				c.Header("X-Cache", "MISS")
 			}
 		}
@@ -164,16 +162,16 @@ func ETag(c *gin.Context) {
 // SetCacheEnabled enables or disables caching
 func (cm *CacheMiddleware) SetCacheEnabled(enabled bool) {
 	cm.enabled = enabled
-	cm.logger.Printf("Cache middleware enabled: %v", enabled)
+	logging.Z().Info(fmt.Sprintf("Cache middleware enabled: %v", enabled))
 }
 
 // InvalidateCache removes a key from cache
 func (cm *CacheMiddleware) InvalidateCache(key string) error {
 	if err := cm.cache.Delete(nil, key); err != nil {
-		cm.logger.Printf("Error invalidating cache key %s: %v", key, err)
+		logging.Z().Info(fmt.Sprintf("Error invalidating cache key %s: %v", key, err))
 		return err
 	}
-	cm.logger.Printf("Cache invalidated: %s", key)
+	logging.Z().Info(fmt.Sprintf("Cache invalidated: %s", key))
 	return nil
 }
 
@@ -181,7 +179,7 @@ func (cm *CacheMiddleware) InvalidateCache(key string) error {
 // Note: This is a simple implementation. For Redis, you might want to use KEYS command
 func (cm *CacheMiddleware) InvalidatePattern(pattern string) error {
 	// For now, we'll just log this - actual implementation depends on cache backend
-	cm.logger.Printf("Invalidating cache pattern: %s", pattern)
+	logging.Z().Info(fmt.Sprintf("Invalidating cache pattern: %s", pattern))
 	return nil
 }
 

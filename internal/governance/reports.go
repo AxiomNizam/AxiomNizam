@@ -11,6 +11,8 @@ package governance
 import (
 	"fmt"
 	"time"
+
+	"example.com/axiomnizam/internal/governance/models"
 )
 
 // ReportFormat defines the output format.
@@ -24,7 +26,7 @@ const (
 // ComplianceReport is a point-in-time compliance audit report.
 type ComplianceReport struct {
 	Title           string                `json:"title"`
-	Framework       ComplianceFramework   `json:"framework"`
+	Framework       models.ComplianceFramework   `json:"framework"`
 	GeneratedAt     time.Time             `json:"generatedAt"`
 	Period          ReportPeriod          `json:"period"`
 	Summary         ReportSummary         `json:"summary"`
@@ -80,7 +82,7 @@ func NewReportGenerator() *ReportGenerator {
 }
 
 // Generate creates a compliance report from a set of policies.
-func (g *ReportGenerator) Generate(policies []*CompliancePolicyResource, framework ComplianceFramework) *ComplianceReport {
+func (g *ReportGenerator) Generate(policies []*models.CompliancePolicyResource, framework models.ComplianceFramework) *ComplianceReport {
 	now := time.Now()
 
 	report := &ComplianceReport{
@@ -94,9 +96,9 @@ func (g *ReportGenerator) Generate(policies []*CompliancePolicyResource, framewo
 	}
 
 	// Filter policies by framework.
-	var relevant []*CompliancePolicyResource
+	var relevant []*models.CompliancePolicyResource
 	for _, p := range policies {
-		if framework == "" || p.Spec.Framework == framework || framework == FrameworkCustom {
+		if framework == "" || p.Spec.Framework == framework || framework == models.FrameworkCustom {
 			relevant = append(relevant, p)
 		}
 	}
@@ -191,15 +193,15 @@ func (g *ReportGenerator) generateRecommendations(report *ComplianceReport) []st
 	return recs
 }
 
-func frameworkDisplayName(f ComplianceFramework) string {
+func frameworkDisplayName(f models.ComplianceFramework) string {
 	switch f {
-	case FrameworkGDPR:
+	case models.FrameworkGDPR:
 		return "GDPR"
-	case FrameworkHIPAA:
+	case models.FrameworkHIPAA:
 		return "HIPAA"
-	case FrameworkSOC2:
+	case models.FrameworkSOC2:
 		return "SOC2"
-	case FrameworkPCIDSS:
+	case models.FrameworkPCIDSS:
 		return "PCI-DSS"
 	default:
 		return "Compliance"

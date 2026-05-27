@@ -1,8 +1,9 @@
 package controller
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"time"
 
 	"example.com/axiomnizam/internal/gatekeeper/models"
@@ -120,7 +121,7 @@ func (r *FactorReconciler) reconcileUserFactors(ctx context.Context, userID stri
 	// Reconcile each factor
 	for _, factor := range factors {
 		if err := r.reconcileFactor(ctx, factor.ID); err != nil {
-			log.Printf("⚠️  Gatekeeper: factor reconcile error for %s: %v", factor.ID, err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Gatekeeper: factor reconcile error for %s: %v", factor.ID, err))
 			// Continue with other factors
 		}
 	}
@@ -148,7 +149,7 @@ func (r *FactorReconciler) ReconcileExpiredChallenges(ctx context.Context) error
 
 func (r *FactorReconciler) debugf(format string, args ...interface{}) {
 	if r.debugEnabled {
-		log.Printf("🔒 Gatekeeper: "+format, args...)
+		logging.Z().Info(fmt.Sprintf("🔒 Gatekeeper: "+format, args...))
 	}
 }
 

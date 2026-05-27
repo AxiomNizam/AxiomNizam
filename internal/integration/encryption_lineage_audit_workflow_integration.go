@@ -7,7 +7,6 @@ import (
 
 	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/encryption"
-	"example.com/axiomnizam/internal/handlers"
 	"example.com/axiomnizam/internal/lineage"
 	"example.com/axiomnizam/internal/workflows"
 
@@ -20,7 +19,7 @@ type Phase3Integration struct {
 	lineageMgr     *lineage.DataLineageTracker
 	auditMgr       *audit.AuditComplianceManager
 	workflowMgr    *workflows.MultiVersionWorkflowManager
-	handlers       *handlers.Phase3Handlers
+	handlers       *encryption.Phase3Handlers
 	mu             sync.RWMutex
 	initialized    bool
 	initialized_at time.Time
@@ -46,7 +45,7 @@ func (pi *Phase3Integration) Initialize() error {
 	}
 
 	// Create handlers
-	pi.handlers = handlers.NewPhase3Handlers(
+	pi.handlers = encryption.NewPhase3Handlers(
 		pi.encryptionMgr,
 		pi.lineageMgr,
 		pi.auditMgr,

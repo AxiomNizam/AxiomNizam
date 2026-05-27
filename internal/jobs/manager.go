@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -15,7 +15,6 @@ type SimpleScheduler struct {
 	mu        sync.RWMutex
 	scheduled map[string]*ScheduledJob
 	queue     Queue
-	logger    *log.Logger
 	running   bool
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -25,7 +24,6 @@ type SimpleScheduler struct {
 func NewSimpleScheduler() *SimpleScheduler {
 	return &SimpleScheduler{
 		scheduled: make(map[string]*ScheduledJob),
-		logger:    log.New(log.Writer(), "[SCHEDULER] ", log.LstdFlags),
 		running:   false,
 	}
 }
@@ -51,7 +49,7 @@ func (ss *SimpleScheduler) Schedule(jobType JobType, interval string, data map[s
 		NextRun:  time.Now().Add(duration),
 	}
 
-	ss.logger.Printf("Job scheduled: %s (interval: %s)", jobType, interval)
+	logging.Z().Info(fmt.Sprintf("Job scheduled: %s (interval: %s)", jobType, interval))
 	return nil
 }
 
@@ -66,7 +64,7 @@ func (ss *SimpleScheduler) Unschedule(jobType JobType, cronExpr string) error {
 	}
 
 	delete(ss.scheduled, key)
-	ss.logger.Printf("Scheduled job removed: %s", key)
+	logging.Z().Info(fmt.Sprintf("Scheduled job removed: %s", key))
 	return nil
 }
 
@@ -86,7 +84,7 @@ func (ss *SimpleScheduler) Start(ctx context.Context, queue Queue) error {
 	// Start scheduler loop
 	go ss.run()
 
-	ss.logger.Printf("Scheduler started")
+	logging.Z().Info(fmt.Sprintf("Scheduler started"))
 	return nil
 }
 
@@ -98,7 +96,7 @@ func (ss *SimpleScheduler) run() {
 	for {
 		select {
 		case <-ss.ctx.Done():
-			ss.logger.Printf("Scheduler stopping")
+			logging.Z().Info(fmt.Sprintf("Scheduler stopping"))
 			return
 		case <-ticker.C:
 			ss.checkAndSubmitJobs()
@@ -126,9 +124,9 @@ func (ss *SimpleScheduler) checkAndSubmitJobs() {
 		)
 
 		if err := ss.queue.Submit(ss.ctx, job); err != nil {
-			ss.logger.Printf("Error submitting scheduled job: %v", err)
+			logging.Z().Info(fmt.Sprintf("Error submitting scheduled job: %v", err))
 		} else {
-			ss.logger.Printf("Scheduled job submitted: %s", scheduled.Type)
+			logging.Z().Info(fmt.Sprintf("Scheduled job submitted: %s", scheduled.Type))
 
 			// Update next run time
 			duration, _ := time.ParseDuration(scheduled.CronExpr)
@@ -152,7 +150,7 @@ func (ss *SimpleScheduler) Stop() error {
 	ss.mu.Unlock()
 
 	ss.cancel()
-	ss.logger.Printf("Scheduler stopped")
+	logging.Z().Info(fmt.Sprintf("Scheduler stopped"))
 	return nil
 }
 
@@ -174,7 +172,6 @@ type JobManagerImpl struct {
 	queue      Queue
 	processor  Processor
 	scheduler  Scheduler
-	logger     *log.Logger
 	config     *JobConfig
 	emailQueue chan *Job
 	resultChan chan *JobResult
@@ -190,10 +187,9 @@ func NewJobManager(config *JobConfig) *JobManagerImpl {
 		queue:      NewMemoryQueue(config.MaxQueueSize),
 		processor:  NewMemoryProcessor(NewMemoryQueue(config.MaxQueueSize)),
 		scheduler:  NewSimpleScheduler(),
-		logger:     log.New(log.Writer(), "[JOB_MANAGER] ", log.LstdFlags),
 		config:     config,
-		emailQueue: make(chan *Job, 100),
-		resultChan: make(chan *JobResult, 100),
+		emailQueue: make(chan *Job, config.EmailQueueSize),
+		resultChan: make(chan *JobResult, config.ResultQueueSize),
 	}
 }
 
@@ -269,7 +265,7 @@ func (jm *JobManagerImpl) Health() error {
 		return err
 	}
 
-	if stats.Failed > 0 && float64(stats.Failed)/float64(stats.Total) > 0.5 {
+	if stats.Failed > 0 && float64(stats.Failed)/float64(stats.Total) > jm.config.HealthFailureRate {
 		return fmt.Errorf("high failure rate: %d/%d", stats.Failed, stats.Total)
 	}
 
@@ -282,4 +278,23 @@ func (jm *JobManagerImpl) GetResults() <-chan *JobResult {
 		return mp.GetResults()
 	}
 	return jm.resultChan
+}
+
+// Name returns the module identifier.
+func (jm *JobManagerImpl) Name() string { return "jobs" }
+
+// Start starts the job scheduler.
+func (jm *JobManagerImpl) Start(ctx context.Context) error {
+	if ss, ok := jm.scheduler.(*SimpleScheduler); ok {
+		return ss.Start(ctx, jm.queue)
+	}
+	return nil
+}
+
+// Stop stops the job scheduler and processor.
+func (jm *JobManagerImpl) Stop() error {
+	if ss, ok := jm.scheduler.(*SimpleScheduler); ok {
+		return ss.Stop()
+	}
+	return nil
 }

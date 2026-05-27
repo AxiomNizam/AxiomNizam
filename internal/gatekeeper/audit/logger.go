@@ -1,9 +1,10 @@
 package audit
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"time"
 
@@ -78,20 +79,20 @@ func (l *Logger) loadFromKV() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, gkAuditKVKey)
-	if err != nil {
-		return // not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var events []*Event
 	if err := json.Unmarshal([]byte(val), &events); err != nil {
-		log.Printf("⚠️  gatekeeper audit: failed to unmarshal events: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  gatekeeper audit: failed to unmarshal events: %v", err))
 		return
 	}
 
 	l.mu.Lock()
 	l.events = events
 	l.mu.Unlock()
-	log.Printf("✅ gatekeeper audit: loaded %d persistent events", len(events))
+	logging.Z().Info(fmt.Sprintf("✅ gatekeeper audit: loaded %d persistent events", len(events)))
 }
 
 func (l *Logger) saveToKV() {
@@ -116,7 +117,9 @@ func (l *Logger) saveToKV() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), gkAuditTTL)
 	defer cancel()
-	_ = kv.Put(ctx, gkAuditKVKey, string(data))
+	if err := kv.Put(ctx, gkAuditKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("gatekeeper audit: kv persist failed: %v", err))
+	}
 }
 
 // recordToBuffer adds an event to the in-memory buffer for KV persistence.

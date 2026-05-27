@@ -1,10 +1,10 @@
 package cdc
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -18,16 +18,8 @@ import (
 // =====================================================
 
 // --- Pipeline Models ---
-
-type PipelineStatus string
-
-const (
-	CDCActive  PipelineStatus = "active"
-	CDCPaused  PipelineStatus = "paused"
-	CDCStopped PipelineStatus = "stopped"
-	CDCFailed  PipelineStatus = "failed"
-	CDCCreated PipelineStatus = "created"
-)
+// PipelineStatus, CDCSource, CDCSink, CDCFilters are defined in
+// cdc/models and re-exported via cdc/types.go.
 
 type CDCPipeline struct {
 	ID          string                 `json:"id"`
@@ -47,26 +39,8 @@ type CDCPipeline struct {
 	Tags        []string               `json:"tags,omitempty"`
 }
 
-type CDCSource struct {
-	Type      string                 `json:"type"`      // mysql_binlog, pg_wal, mongo_oplog, polling, api_webhook
-	Connector string                 `json:"connector"` // mysql, postgres, mongodb, etc.
-	Config    map[string]interface{} `json:"config"`
-	Tables    []string               `json:"tables,omitempty"`
-}
-
-type CDCSink struct {
-	Type      string                 `json:"type"` // kafka, webhook, api, database, elasticsearch, s3
-	Connector string                 `json:"connector"`
-	Config    map[string]interface{} `json:"config"`
-	BatchSize int                    `json:"batch_size,omitempty"`
-}
-
-type CDCFilters struct {
-	Tables     []string `json:"tables,omitempty"`
-	Operations []string `json:"operations,omitempty"` // INSERT, UPDATE, DELETE
-	Schemas    []string `json:"schemas,omitempty"`
-	Exclude    []string `json:"exclude,omitempty"`
-}
+// CDCSource, CDCSink, CDCFilters are defined in cdc/models and
+// re-exported via cdc/types.go.
 
 // --- Source/Sink Types ---
 
@@ -151,7 +125,7 @@ func NewPipelineEngine(cdc *ChangeDataCapture, etcd ...*clientv3.Client) *Pipeli
 			LastUpdated:   time.Now(),
 		},
 		etcd:     etcdClient,
-		stateKey: "axiomnizam:cdc:pipelines:state",
+		stateKey: "cdc:pipelines:state",
 	}
 	pe.registerTypes()
 	if !pe.loadState() {
@@ -170,7 +144,7 @@ func (pe *PipelineEngine) loadState() bool {
 
 	resp, err := pe.etcd.Get(ctx, pe.stateKey)
 	if err != nil {
-		log.Printf("cdc-pipeline: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to load persisted state from etcd: %v", err))
 		return false
 	}
 	if len(resp.Kvs) == 0 {
@@ -179,7 +153,7 @@ func (pe *PipelineEngine) loadState() bool {
 
 	var state pipelineEngineState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("cdc-pipeline: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to decode persisted state: %v", err))
 		return false
 	}
 
@@ -190,7 +164,7 @@ func (pe *PipelineEngine) loadState() bool {
 		pe.observability = state.Observability
 	}
 	pe.sequence = state.Sequence
-	log.Printf("cdc-pipeline: restored state from etcd (%d pipelines)", len(pe.pipelines))
+	logging.Z().Info(fmt.Sprintf("cdc-pipeline: restored state from etcd (%d pipelines)", len(pe.pipelines)))
 	return true
 }
 
@@ -206,7 +180,7 @@ func (pe *PipelineEngine) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("cdc-pipeline: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to encode state: %v", err))
 		return
 	}
 
@@ -214,7 +188,7 @@ func (pe *PipelineEngine) persistStateLocked() {
 	defer cancel()
 
 	if _, err := pe.etcd.Put(ctx, pe.stateKey, string(payload)); err != nil {
-		log.Printf("cdc-pipeline: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-pipeline: failed to persist state to etcd: %v", err))
 	}
 }
 

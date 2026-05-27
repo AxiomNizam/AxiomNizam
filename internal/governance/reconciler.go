@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/governance/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/resilience"
 	"example.com/axiomnizam/internal/platform/store"
@@ -32,7 +33,7 @@ import (
 // AssetAuditor abstracts looking up catalog assets for compliance auditing.
 type AssetAuditor interface {
 	// ListAssetsInScope returns catalog assets matching the policy scope.
-	ListAssetsInScope(ctx context.Context, scope PolicyScope) ([]AuditableAsset, error)
+	ListAssetsInScope(ctx context.Context, scope models.PolicyScope) ([]AuditableAsset, error)
 }
 
 // AuditableAsset represents a catalog asset with metadata needed for compliance checks.
@@ -51,13 +52,13 @@ type AuditableAsset struct {
 
 // CompliancePolicyReconciler reconciles compliance policies.
 type CompliancePolicyReconciler struct {
-	store   store.ResourceStore[*CompliancePolicyResource]
+	store   store.ResourceStore[*models.CompliancePolicyResource]
 	auditor AssetAuditor
 }
 
 // NewCompliancePolicyReconciler creates a new reconciler.
 func NewCompliancePolicyReconciler(
-	s store.ResourceStore[*CompliancePolicyResource],
+	s store.ResourceStore[*models.CompliancePolicyResource],
 	auditor AssetAuditor,
 ) *CompliancePolicyReconciler {
 	return &CompliancePolicyReconciler{store: s, auditor: auditor}
@@ -65,7 +66,7 @@ func NewCompliancePolicyReconciler(
 
 // Reconcile implements reconciler.Reconciler.
 func (r *CompliancePolicyReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
-	policy, ok := obj.(*CompliancePolicyResource)
+	policy, ok := obj.(*models.CompliancePolicyResource)
 	if !ok {
 		return reconciler.ReconcileResult{Error: fmt.Errorf("governance: reconciler received non-CompliancePolicyResource")}
 	}
@@ -118,7 +119,7 @@ func (r *CompliancePolicyReconciler) Reconcile(ctx context.Context, obj reconcil
 	}
 
 	// Audit each asset against each rule.
-	var violations []ComplianceViolation
+	var violations []models.ComplianceViolation
 	compliantCount := 0
 	nonCompliantCount := 0
 
@@ -180,14 +181,14 @@ func (r *CompliancePolicyReconciler) Reconcile(ctx context.Context, obj reconcil
 }
 
 // auditAsset checks a single asset against all policy rules.
-func (r *CompliancePolicyReconciler) auditAsset(policy *CompliancePolicyResource, asset AuditableAsset, now time.Time) []ComplianceViolation {
-	var violations []ComplianceViolation
+func (r *CompliancePolicyReconciler) auditAsset(policy *models.CompliancePolicyResource, asset AuditableAsset, now time.Time) []models.ComplianceViolation {
+	var violations []models.ComplianceViolation
 
 	for _, rule := range policy.Spec.Rules {
 		switch rule.Type {
 		case "encryption":
 			if rule.Encryption != nil && rule.Encryption.RequireAtRest && !asset.EncryptedAtRest {
-				violations = append(violations, ComplianceViolation{
+				violations = append(violations, models.ComplianceViolation{
 					RuleID: rule.ID, RuleName: rule.Name, AssetRef: asset.Name,
 					Severity: "critical", DetectedAt: now,
 					Message:     fmt.Sprintf("asset '%s' is not encrypted at rest", asset.Name),
@@ -198,7 +199,7 @@ func (r *CompliancePolicyReconciler) auditAsset(policy *CompliancePolicyResource
 		case "retention":
 			if rule.Retention != nil && rule.Retention.MaxRetentionDays > 0 {
 				if asset.RetentionDays > rule.Retention.MaxRetentionDays || asset.RetentionDays == 0 {
-					violations = append(violations, ComplianceViolation{
+					violations = append(violations, models.ComplianceViolation{
 						RuleID: rule.ID, RuleName: rule.Name, AssetRef: asset.Name,
 						Severity: "warning", DetectedAt: now,
 						Message:     fmt.Sprintf("asset '%s' retention (%d days) exceeds maximum (%d days)", asset.Name, asset.RetentionDays, rule.Retention.MaxRetentionDays),
@@ -210,7 +211,7 @@ func (r *CompliancePolicyReconciler) auditAsset(policy *CompliancePolicyResource
 		case "masking":
 			if rule.Masking != nil && asset.HasPII {
 				// PII data should have masking configured.
-				violations = append(violations, ComplianceViolation{
+				violations = append(violations, models.ComplianceViolation{
 					RuleID: rule.ID, RuleName: rule.Name, AssetRef: asset.Name,
 					Severity: "warning", DetectedAt: now,
 					Message:     fmt.Sprintf("asset '%s' contains PII but no masking policy is applied", asset.Name),
@@ -220,7 +221,7 @@ func (r *CompliancePolicyReconciler) auditAsset(policy *CompliancePolicyResource
 
 		case "audit":
 			if !asset.HasAuditLog {
-				violations = append(violations, ComplianceViolation{
+				violations = append(violations, models.ComplianceViolation{
 					RuleID: rule.ID, RuleName: rule.Name, AssetRef: asset.Name,
 					Severity: "warning", DetectedAt: now,
 					Message:     fmt.Sprintf("asset '%s' does not have audit logging enabled", asset.Name),
@@ -234,7 +235,7 @@ func (r *CompliancePolicyReconciler) auditAsset(policy *CompliancePolicyResource
 				for _, forbidden := range rule.Access.ForbiddenRoles {
 					for _, role := range asset.AccessRoles {
 						if strings.EqualFold(role, forbidden) {
-							violations = append(violations, ComplianceViolation{
+							violations = append(violations, models.ComplianceViolation{
 								RuleID: rule.ID, RuleName: rule.Name, AssetRef: asset.Name,
 								Severity: "critical", DetectedAt: now,
 								Message:     fmt.Sprintf("asset '%s' is accessible by forbidden role '%s'", asset.Name, forbidden),

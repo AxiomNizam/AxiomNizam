@@ -1,31 +1,34 @@
 package conductor
 
-// Reconciler for ProducerResource and ConsumerResource.
+// Reconciler for models.ProducerResource and models.ConsumerResource.
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"example.com/axiomnizam/internal/conductor/models"
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/storeutil"
 	"example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/resources"
 )
 
-// ProducerReconciler reconciles ProducerResource objects.
+// ProducerReconciler reconciles models.ProducerResource objects.
 type ProducerReconciler struct {
-	store   store.ResourceStore[*ProducerResource]
+	store   store.ResourceStore[*models.ProducerResource]
 	manager *Manager
 }
 
 // NewProducerReconciler builds a reconciler.
-func NewProducerReconciler(rs store.ResourceStore[*ProducerResource], mgr *Manager) *ProducerReconciler {
+func NewProducerReconciler(rs store.ResourceStore[*models.ProducerResource], mgr *Manager) *ProducerReconciler {
 	return &ProducerReconciler{store: rs, manager: mgr}
 }
 
 // Reconcile implements `reconciler.Reconciler`.
 func (r *ProducerReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
-	res, ok := obj.(*ProducerResource)
+	res, ok := obj.(*models.ProducerResource)
 	if !ok {
 		return reconciler.ReconcileResult{Error: conductorErr("conductor: producer reconciler received wrong type")}
 	}
@@ -52,7 +55,9 @@ func (r *ProducerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 				Headers:     res.Spec.Headers,
 				Config:      res.Spec.Config,
 			}
-			_, _ = r.manager.CreateProducer(req)
+			if _, err := r.manager.CreateProducer(req); err != nil {
+				logging.Z().Info(fmt.Sprintf("conductor: create producer %s error: %v", res.Name, err))
+			}
 		}
 	}
 
@@ -71,20 +76,20 @@ func (r *ProducerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 	return reconciler.ReconcileResult{}
 }
 
-// ConsumerReconciler reconciles ConsumerResource objects.
+// ConsumerReconciler reconciles models.ConsumerResource objects.
 type ConsumerReconciler struct {
-	store   store.ResourceStore[*ConsumerResource]
+	store   store.ResourceStore[*models.ConsumerResource]
 	manager *Manager
 }
 
 // NewConsumerReconciler builds a reconciler.
-func NewConsumerReconciler(rs store.ResourceStore[*ConsumerResource], mgr *Manager) *ConsumerReconciler {
+func NewConsumerReconciler(rs store.ResourceStore[*models.ConsumerResource], mgr *Manager) *ConsumerReconciler {
 	return &ConsumerReconciler{store: rs, manager: mgr}
 }
 
 // Reconcile implements `reconciler.Reconciler`.
 func (r *ConsumerReconciler) Reconcile(ctx context.Context, obj reconciler.Resource) reconciler.ReconcileResult {
-	res, ok := obj.(*ConsumerResource)
+	res, ok := obj.(*models.ConsumerResource)
 	if !ok {
 		return reconciler.ReconcileResult{Error: conductorErr("conductor: consumer reconciler received wrong type")}
 	}
@@ -111,7 +116,9 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, obj reconciler.Resou
 				ConsumerGroup: res.Spec.ConsumerGroup,
 				Config:        res.Spec.Config,
 			}
-			_, _ = r.manager.CreateConsumer(req)
+			if _, err := r.manager.CreateConsumer(req); err != nil {
+				logging.Z().Info(fmt.Sprintf("conductor: create consumer %s error: %v", res.Name, err))
+			}
 		}
 	}
 

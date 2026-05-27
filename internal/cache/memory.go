@@ -1,10 +1,10 @@
 package cache
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -21,7 +21,6 @@ type MemoryCache struct {
 	mu      sync.RWMutex
 	data    map[string]*cacheEntry
 	maxSize int
-	logger  *log.Logger
 }
 
 // NewMemoryCache creates a new in-memory cache instance
@@ -33,7 +32,6 @@ func NewMemoryCache(maxSize int) *MemoryCache {
 	cache := &MemoryCache{
 		data:    make(map[string]*cacheEntry),
 		maxSize: maxSize,
-		logger:  log.New(log.Writer(), "[MEMORY_CACHE] ", log.LstdFlags),
 	}
 
 	// Start cleanup goroutine for expired entries
@@ -148,7 +146,7 @@ func (m *MemoryCache) GetJSON(ctx context.Context, key string, target interface{
 	// If value is already unmarshaled, try direct assignment
 	if jsonData, ok := val.(string); ok {
 		if err := json.Unmarshal([]byte(jsonData), target); err != nil {
-			m.logger.Printf("Error unmarshaling JSON for key %s: %v", key, err)
+			logging.Z().Info(fmt.Sprintf("Error unmarshaling JSON for key %s: %v", key, err))
 			return fmt.Errorf("failed to unmarshal JSON: %w", err)
 		}
 		return nil
@@ -157,12 +155,12 @@ func (m *MemoryCache) GetJSON(ctx context.Context, key string, target interface{
 	// If value is already an object, try to marshal and unmarshal
 	data, err := json.Marshal(val)
 	if err != nil {
-		m.logger.Printf("Error marshaling value for key %s: %v", key, err)
+		logging.Z().Info(fmt.Sprintf("Error marshaling value for key %s: %v", key, err))
 		return fmt.Errorf("failed to marshal value: %w", err)
 	}
 
 	if err := json.Unmarshal(data, target); err != nil {
-		m.logger.Printf("Error unmarshaling JSON for key %s: %v", key, err)
+		logging.Z().Info(fmt.Sprintf("Error unmarshaling JSON for key %s: %v", key, err))
 		return fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
@@ -173,7 +171,7 @@ func (m *MemoryCache) GetJSON(ctx context.Context, key string, target interface{
 func (m *MemoryCache) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
-		m.logger.Printf("Error marshaling JSON for key %s: %v", key, err)
+		logging.Z().Info(fmt.Sprintf("Error marshaling JSON for key %s: %v", key, err))
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
@@ -299,7 +297,7 @@ func (m *MemoryCache) evictOldest() {
 
 	if oldestKey != "" {
 		delete(m.data, oldestKey)
-		m.logger.Printf("Evicted oldest entry: %s", oldestKey)
+		logging.Z().Info(fmt.Sprintf("Evicted oldest entry: %s", oldestKey))
 	}
 }
 

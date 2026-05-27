@@ -10,9 +10,9 @@ package etl
 // =====================================================
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -77,7 +77,7 @@ func (c *PipelineController) Reconcile(ctx context.Context, obj reconciler.Resou
 		return reconciler.ReconcileResult{Error: fmt.Errorf("PipelineController: engine is nil")}
 	}
 
-	desired := pr.ToPipeline()
+	desired := ToPipeline(pr)
 
 	// Observe actual state inside the engine.
 	c.engine.mu.Lock()
@@ -171,7 +171,7 @@ func (c *PipelineController) Start(ctx context.Context) {
 			defer wg.Done()
 			w := workqueue.NewWorker(c.queue, process, 10)
 			if err := w.Run(wctx); err != nil {
-				log.Printf("[etl] pipeline worker exited: %v", err)
+				logging.Z().Info(fmt.Sprintf("[etl] pipeline worker exited: %v", err))
 			}
 		}()
 	}

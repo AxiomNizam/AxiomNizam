@@ -2,7 +2,6 @@ package antivirus
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -82,26 +81,7 @@ func (h *APIHandler) Status(c *gin.Context) {
 		avStatus = "stopped"
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":        avStatus,
-		"engineVersion": EngineVersion,
-		"sigDbVersion":  stats.SigDBVersion,
-		"layersEnabled": stats.LayersEnabled,
-		"layerCount":    len(stats.LayersEnabled),
-		"uptimeSeconds": stats.UptimeSeconds,
-		"scanCapacity": gin.H{
-			"workers":     h.engine.cfg.Workers,
-			"queueSize":   h.engine.cfg.QueueSize,
-			"maxFileSize": h.engine.cfg.MaxFileSize,
-		},
-		"features": gin.H{
-			"hashDB":    h.engine.cfg.HashDBEnabled,
-			"pattern":   h.engine.cfg.PatternEnabled,
-			"heuristic": h.engine.cfg.HeuristicEnabled,
-			"entropy":   h.engine.cfg.EntropyEnabled,
-			"yara":      h.engine.cfg.YARAEnabled,
-		},
-	})
+	c.JSON(http.StatusOK, StatusToResponse(avStatus, EngineVersion, stats, h.engine.cfg))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,23 +92,7 @@ func (h *APIHandler) Status(c *gin.Context) {
 // performance, and average scan times.
 func (h *APIHandler) ScanStats(c *gin.Context) {
 	stats := h.engine.Stats()
-
-	c.JSON(http.StatusOK, gin.H{
-		"totalScanned":  stats.TotalScanned,
-		"threatsFound":  stats.ThreatsFound,
-		"cleanFiles":    stats.CleanFiles,
-		"errorCount":    stats.ErrorCount,
-		"bytesScanned":  stats.BytesScanned,
-		"avgScanMs":     fmt.Sprintf("%.2f", stats.AvgScanMs),
-		"cache": gin.H{
-			"hits":    stats.CacheHits,
-			"misses":  stats.CacheMisses,
-			"hitRate": fmt.Sprintf("%.4f", stats.CacheHitRate),
-		},
-		"uptimeSeconds": stats.UptimeSeconds,
-		"engineVersion": stats.EngineVersion,
-		"sigDbVersion":  stats.SigDBVersion,
-	})
+	c.JSON(http.StatusOK, StatsToResponse(stats))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,17 +106,13 @@ func (h *APIHandler) ScanStats(c *gin.Context) {
 // Response: ScanResult JSON
 func (h *APIHandler) ManualScan(c *gin.Context) {
 	if !h.engine.IsRunning() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "antivirus engine is not running",
-		})
+		c.JSON(http.StatusServiceUnavailable, ErrorResponse{Error: "antivirus engine is not running"})
 		return
 	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "file upload required (form field: 'file'): " + err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "file upload required (form field: 'file'): " + err.Error()})
 		return
 	}
 	defer file.Close()
@@ -161,16 +121,11 @@ func (h *APIHandler) ManualScan(c *gin.Context) {
 	maxSize := h.engine.MaxFileSize()
 	content, err := io.ReadAll(io.LimitReader(file, maxSize+1))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to read uploaded file: " + err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "failed to read uploaded file: " + err.Error()})
 		return
 	}
 	if int64(len(content)) > maxSize {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{
-			"error":   "file exceeds maximum scan size",
-			"maxSize": maxSize,
-		})
+		c.JSON(http.StatusRequestEntityTooLarge, ErrorResponse{Error: "file exceeds maximum scan size", MaxSize: maxSize})
 		return
 	}
 
@@ -184,9 +139,7 @@ func (h *APIHandler) ManualScan(c *gin.Context) {
 
 	result, err := h.engine.Scan(ctx, content, filename)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "scan failed: " + err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "scan failed: " + err.Error()})
 		return
 	}
 
@@ -201,35 +154,7 @@ func (h *APIHandler) ManualScan(c *gin.Context) {
 // internal threat log. Supports ?limit=N query parameter (default: 50).
 func (h *APIHandler) ListThreats(c *gin.Context) {
 	threats := h.engine.RecentThreats()
-
-	// Convert to compact format.
-	records := make([]ThreatRecord, 0, len(threats))
-	for _, r := range threats {
-		names := make([]string, 0, len(r.Threats))
-		for _, t := range r.Threats {
-			names = append(names, t.Name)
-		}
-
-		severity := "unknown"
-		if hs := r.HighestSeverity(); hs != "" {
-			severity = string(hs)
-		}
-
-		records = append(records, ThreatRecord{
-			Filename:   r.Filename,
-			SHA256:     r.SHA256,
-			Verdict:    r.Verdict,
-			Threats:    names,
-			Severity:   severity,
-			ScannedAt:  r.ScannedAt,
-			DurationMs: r.DurationMs,
-		})
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"threats": records,
-		"count":   len(records),
-	})
+	c.JSON(http.StatusOK, ThreatsToResponse(threats))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,27 +163,7 @@ func (h *APIHandler) ListThreats(c *gin.Context) {
 
 // GetConfig returns the current engine configuration (read-only view).
 func (h *APIHandler) GetConfig(c *gin.Context) {
-	cfg := h.engine.cfg
-
-	c.JSON(http.StatusOK, gin.H{
-		"enabled":          cfg.Enabled,
-		"workers":          cfg.Workers,
-		"queueSize":        cfg.QueueSize,
-		"maxFileSize":      cfg.MaxFileSize,
-		"cacheSize":        cfg.CacheSize,
-		"cacheTTL":         cfg.CacheTTL.String(),
-		"updateURL":        redactURL(cfg.UpdateURL),
-		"updateInterval":   cfg.UpdateInterval.String(),
-		"sigDir":           cfg.SigDir,
-		"quarantineAction": cfg.QuarantineAction,
-		"layers": gin.H{
-			"hashDB":    cfg.HashDBEnabled,
-			"pattern":   cfg.PatternEnabled,
-			"heuristic": cfg.HeuristicEnabled,
-			"entropy":   cfg.EntropyEnabled,
-			"yara":      cfg.YARAEnabled,
-		},
-	})
+	c.JSON(http.StatusOK, ConfigToResponse(h.engine.cfg))
 }
 
 // redactURL masks sensitive parts of URLs for safe display.

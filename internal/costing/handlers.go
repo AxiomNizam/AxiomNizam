@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"example.com/axiomnizam/internal/costing/models"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/platform/validate"
@@ -19,14 +20,14 @@ import (
 
 // CostHandlers provides REST API handlers for cost attribution.
 type CostHandlers struct {
-	policyStore store.ResourceStore[*CostPolicyResource]
-	usageStore  store.ResourceStore[*UsageRecordResource]
+	policyStore store.ResourceStore[*models.CostPolicyResource]
+	usageStore  store.ResourceStore[*models.UsageRecordResource]
 }
 
 // NewCostHandlers creates new handlers.
 func NewCostHandlers(
-	policyStore store.ResourceStore[*CostPolicyResource],
-	usageStore store.ResourceStore[*UsageRecordResource],
+	policyStore store.ResourceStore[*models.CostPolicyResource],
+	usageStore store.ResourceStore[*models.UsageRecordResource],
 ) *CostHandlers {
 	return &CostHandlers{
 		policyStore: policyStore,
@@ -54,7 +55,7 @@ func (h *CostHandlers) ListPolicies(c *gin.Context) {
 	policies, err := h.policyStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListPolicies"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"policies": policies, "count": len(policies)})
@@ -68,7 +69,7 @@ func (h *CostHandlers) GetPolicy(c *gin.Context) {
 	}
 	policy, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, policy)
@@ -76,21 +77,21 @@ func (h *CostHandlers) GetPolicy(c *gin.Context) {
 
 // CreatePolicy creates a new cost policy.
 func (h *CostHandlers) CreatePolicy(c *gin.Context) {
-	var policy CostPolicyResource
+	var policy models.CostPolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	policy.Kind = CostPolicyKind
-	policy.APIVersion = CostPolicyAPIVersion
+	policy.Kind = models.CostPolicyKind
+	policy.APIVersion = models.CostPolicyAPIVersion
 	now := time.Now()
 	policy.CreatedAt = now
 	policy.Generation = 1
 	policy.Status.Phase = "Active"
 
 	if err := h.policyStore.Create(c.Request.Context(), &policy); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -105,13 +106,13 @@ func (h *CostHandlers) UpdatePolicy(c *gin.Context) {
 	}
 	existing, err := h.policyStore.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 
-	var updated CostPolicyResource
+	var updated models.CostPolicyResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -121,7 +122,7 @@ func (h *CostHandlers) UpdatePolicy(c *gin.Context) {
 
 	if err := h.policyStore.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdatePolicy"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -135,10 +136,10 @@ func (h *CostHandlers) DeletePolicy(c *gin.Context) {
 		return
 	}
 	if err := h.policyStore.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // GetUsage returns aggregated usage across all tenants.
@@ -146,7 +147,7 @@ func (h *CostHandlers) GetUsage(c *gin.Context) {
 	records, err := h.usageStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetUsage"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -178,7 +179,7 @@ func (h *CostHandlers) GetTenantUsage(c *gin.Context) {
 	records, err := h.usageStore.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetTenantUsage"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

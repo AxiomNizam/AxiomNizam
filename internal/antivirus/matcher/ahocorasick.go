@@ -24,8 +24,8 @@
 package matcher
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 
@@ -433,7 +433,7 @@ func (l *Layer) Scan(target *antivirus.ScanTarget) ([]antivirus.ThreatInfo, erro
 	}
 
 	if len(threats) > 0 {
-		log.Printf("🛡️  pattern: %d signature(s) matched in %q", len(threats), target.Filename)
+		logging.Z().Info(fmt.Sprintf("🛡️  pattern: %d signature(s) matched in %q", len(threats), target.Filename))
 	}
 
 	return threats, nil

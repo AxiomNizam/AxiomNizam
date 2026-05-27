@@ -167,7 +167,7 @@ var catalogSearchCmd = &cobra.Command{
 			return fmt.Errorf("provide a search query as argument or use --tag flag")
 		}
 
-		result := integration.GlobalCatalogIntegration.UnifiedSearch(tag)
+		result := integration.NewCatalogIntegration().UnifiedSearch(tag)
 
 		fmt.Printf("Search results for tag: %s\n\n", tag)
 
@@ -191,7 +191,7 @@ var catalogListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List complete data catalog",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		catalog := integration.GlobalCatalogIntegration.GetCompleteDataCatalog()
+		catalog := integration.NewCatalogIntegration().GetCompleteDataCatalog()
 
 		fmt.Println("=== Complete Data Catalog ===")
 		fmt.Println()
@@ -219,7 +219,7 @@ var complianceCheckCmd = &cobra.Command{
 	Short: "Check compliance status",
 	Long:  "Run compliance checks and display current compliance status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		report := integration.GlobalComplianceAuditor.GenerateReport(integration.AuditFilter{})
+		report := integration.NewComplianceAuditor(10000).GenerateReport(integration.AuditFilter{})
 
 		fmt.Println("=== Compliance Check ===")
 		fmt.Println()
@@ -248,7 +248,7 @@ var complianceReportCmd = &cobra.Command{
 	Use:   "report",
 	Short: "Generate compliance report",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		report := integration.GlobalComplianceAuditor.GenerateReport(integration.AuditFilter{})
+		report := integration.NewComplianceAuditor(10000).GenerateReport(integration.AuditFilter{})
 
 		fmt.Println("=== Compliance Report ===")
 		fmt.Println()
@@ -284,7 +284,7 @@ var complianceAuditCmd = &cobra.Command{
 			Operation: operation,
 		}
 
-		records := integration.GlobalComplianceAuditor.GetAuditLog(filter)
+		records := integration.NewComplianceAuditor(10000).GetAuditLog(filter)
 
 		if len(records) == 0 {
 			fmt.Println("No audit records found")
@@ -323,7 +323,7 @@ var qualityAnalyzeCmd = &cobra.Command{
 		// Analyze each known domain (use a sensible default)
 		domain, _ := cmd.Flags().GetString("domain")
 		if domain != "" {
-			report := integration.GlobalDataQualityMonitor.GetQualityReport(domain)
+			report := integration.NewDataQualityMonitor(nil).GetQualityReport(domain)
 			if errMsg, ok := report["error"]; ok {
 				fmt.Printf("⚠️  Domain '%s': %v\n", domain, errMsg)
 				return nil
@@ -350,7 +350,7 @@ var qualityCheckCmd = &cobra.Command{
 			return fmt.Errorf("--domain is required")
 		}
 
-		report := integration.GlobalDataQualityMonitor.GetQualityReport(domain)
+		report := integration.NewDataQualityMonitor(nil).GetQualityReport(domain)
 
 		if errMsg, ok := report["error"]; ok {
 			return fmt.Errorf("%v", errMsg)
@@ -406,7 +406,7 @@ var lineageTraceCmd = &cobra.Command{
 			return fmt.Errorf("provide resource as domain/product or use --domain and --product flags")
 		}
 
-		analysis := integration.GlobalDataLineageAnalyzer.AnalyzeDataFlow(domain, product)
+		analysis := integration.NewDataLineageAnalyzer().AnalyzeDataFlow(domain, product)
 
 		fmt.Printf("Data Lineage Analysis\n")
 		fmt.Printf("Data Product: %v\n\n", analysis["dataProduct"])

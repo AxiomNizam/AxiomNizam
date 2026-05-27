@@ -15,8 +15,8 @@
 package store
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -122,7 +122,7 @@ func (bm *BackendManager) KV() KVStore {
 }
 
 func (bm *BackendManager) initRaft(tableNames []string) error {
-	log.Println("📦 Initializing embedded Raft storage backend...")
+	logging.Z().Info("📦 Initializing embedded Raft storage backend...")
 
 	// Build a single go-memdb schema with all resource tables.
 	schema := NewMultiTableSchema(tableNames)
@@ -139,8 +139,8 @@ func (bm *BackendManager) initRaft(tableNames []string) error {
 	}
 
 	bm.RaftServer = server
-	log.Printf("  ✅ Raft server started (node=%s, addr=%s, leader=%v)",
-		cfg.NodeID, cfg.BindAddr, server.IsLeader())
+	logging.Z().Info(fmt.Sprintf("  ✅ Raft server started (node=%s, addr=%s, leader=%v)",
+		cfg.NodeID, cfg.BindAddr, server.IsLeader()))
 	return nil
 }
 
@@ -263,4 +263,44 @@ func (bm *BackendManager) RemoveRaftPeer(id string) error {
 		return fmt.Errorf("raft server not initialized")
 	}
 	return bm.RaftServer.RemovePeer(id)
+}
+
+// TriggerSnapshot forces an on-demand Raft snapshot (raft mode only).
+func (bm *BackendManager) TriggerSnapshot() error {
+	if bm.RaftServer == nil {
+		return fmt.Errorf("raft server not initialized")
+	}
+	return bm.RaftServer.TriggerSnapshot()
+}
+
+// SnapshotDir returns the snapshot directory (raft mode only).
+func (bm *BackendManager) SnapshotDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.SnapshotDir()
+}
+
+// DataDir returns the raft data directory (raft mode only).
+func (bm *BackendManager) DataDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.DataDir()
+}
+
+// LogDir returns the raft log directory (raft mode only).
+func (bm *BackendManager) LogDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.LogDir()
+}
+
+// StableDir returns the raft stable directory (raft mode only).
+func (bm *BackendManager) StableDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.StableDir()
 }

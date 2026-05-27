@@ -22,11 +22,24 @@ import (
 type Scanner struct {
 	maxDepth        int
 	maxDecompressed int64
+	maxRatio        float64
+	maxFiles        int
 }
 
 // NewScanner creates an ArchiveScanner with the given depth and size limits.
 func NewScanner(maxDepth int, maxDecompressed int64) *Scanner {
-	return &Scanner{maxDepth: maxDepth, maxDecompressed: maxDecompressed}
+	return &Scanner{maxDepth: maxDepth, maxDecompressed: maxDecompressed, maxRatio: 100, maxFiles: 10000}
+}
+
+// NewScannerWithLimits creates an ArchiveScanner with full configuration.
+func NewScannerWithLimits(maxDepth int, maxDecompressed int64, maxRatio float64, maxFiles int) *Scanner {
+	if maxRatio <= 0 {
+		maxRatio = 100
+	}
+	if maxFiles <= 0 {
+		maxFiles = 10000
+	}
+	return &Scanner{maxDepth: maxDepth, maxDecompressed: maxDecompressed, maxRatio: maxRatio, maxFiles: maxFiles}
 }
 
 func (s *Scanner) Name() string { return "archive_bomb_scanner" }
@@ -97,7 +110,7 @@ func (s *Scanner) analyzeZip(data []byte, depth int) ([]scanner.Finding, error) 
 
 		if f.CompressedSize64 > 0 {
 			ratio := float64(f.UncompressedSize64) / float64(f.CompressedSize64)
-			if ratio > 100 {
+			if ratio > s.maxRatio {
 				findings = append(findings, scanner.Finding{
 					Scanner: s.Name(), Severity: scanner.SeverityCritical,
 					Description: "Possible zip bomb detected",
@@ -143,7 +156,7 @@ func (s *Scanner) analyzeZip(data []byte, depth int) ([]scanner.Finding, error) 
 		}
 	}
 
-	if fileCount > 10000 {
+	if fileCount > s.maxFiles {
 		findings = append(findings, scanner.Finding{
 			Scanner: s.Name(), Severity: scanner.SeverityHigh,
 			Description: "Archive contains excessive files",
@@ -225,7 +238,7 @@ func (s *Scanner) analyzeTar(data []byte) []scanner.Finding {
 		})
 	}
 
-	if fileCount > 10000 {
+	if fileCount > s.maxFiles {
 		findings = append(findings, scanner.Finding{
 			Scanner: s.Name(), Severity: scanner.SeverityHigh,
 			Description: "TAR archive contains excessive files",

@@ -30,7 +30,7 @@ func (h *HTTPJobHandler) SubmitJob(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -44,7 +44,7 @@ func (h *HTTPJobHandler) SubmitJob(c *gin.Context) {
 
 	created, err := h.manager.SubmitJob(job)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -56,7 +56,7 @@ func (h *HTTPJobHandler) GetJob(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetJob(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "job not found"})
 		return
 	}
 
@@ -78,22 +78,22 @@ func (h *HTTPJobHandler) ListJobs(c *gin.Context) {
 
 	jobs, err := h.manager.ListJobs(filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"jobs": jobs, "count": len(jobs)})
+	c.JSON(http.StatusOK, JobListResponse{Jobs: jobs, Count: len(jobs)})
 }
 
 // CancelJob handles DELETE /api/v1/jobs/:id
 func (h *HTTPJobHandler) CancelJob(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.CancelJob(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "job cancelled"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "job cancelled"})
 }
 
 // GetJobProgress handles GET /api/v1/jobs/:id/progress
@@ -101,14 +101,14 @@ func (h *HTTPJobHandler) GetJobProgress(c *gin.Context) {
 	id := c.Param("id")
 	job, err := h.manager.GetJob(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "job not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":     job.ID,
-		"status": job.Status,
-		"data":   job.Data,
+	c.JSON(http.StatusOK, JobProgressResponse{
+		ID:     job.ID,
+		Status: job.Status,
+		Data:   job.Data,
 	})
 }
 
@@ -117,7 +117,7 @@ func (h *HTTPJobHandler) RetryJob(c *gin.Context) {
 	id := c.Param("id")
 	retried, err := h.manager.RetryJob(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -129,11 +129,11 @@ func (h *HTTPJobHandler) GetJobLogs(c *gin.Context) {
 	id := c.Param("id")
 	logs, err := h.manager.GetJobLogs(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "logs not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "logs not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"logs": logs})
+	c.JSON(http.StatusOK, JobLogsResponse{Logs: logs})
 }
 
 // RegisterJobRoutes registers all job routes

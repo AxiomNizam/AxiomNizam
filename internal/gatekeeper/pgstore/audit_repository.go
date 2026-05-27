@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -114,7 +115,9 @@ func (r *AuditRepository) QueryEvents(ctx context.Context, filters map[string]in
 		}
 
 		if metadataJSON != nil {
-			_ = json.Unmarshal(metadataJSON, &event.Metadata)
+			if err := json.Unmarshal(metadataJSON, &event.Metadata); err != nil {
+				return nil, fmt.Errorf("unmarshal event metadata: %w", err)
+			}
 		}
 
 		events = append(events, event)

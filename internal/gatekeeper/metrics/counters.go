@@ -1,9 +1,10 @@
 package metrics
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,13 +85,13 @@ func (c *Collector) load() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, mfaMetricsKVKey)
-	if err != nil {
-		return // likely not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var state mfaCollectorState
 	if err := json.Unmarshal([]byte(val), &state); err != nil {
-		log.Printf("⚠️  gatekeeper metrics: failed to unmarshal state: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  gatekeeper metrics: failed to unmarshal state: %v", err))
 		return
 	}
 
@@ -107,8 +108,8 @@ func (c *Collector) load() {
 	c.ActiveFactorsTotal.Set(float64(state.ActiveFactors))
 	c.HighRiskEvents.Set(float64(state.HighRiskCount))
 
-	log.Printf("✅ gatekeeper metrics: loaded persistent state (enrollments=%d, verifications=%d)",
-		state.TotalEnrollments, state.TotalVerifications)
+	logging.Z().Info(fmt.Sprintf("✅ gatekeeper metrics: loaded persistent state (enrollments=%d, verifications=%d)",
+		state.TotalEnrollments, state.TotalVerifications))
 }
 
 func (c *Collector) save() {
@@ -137,7 +138,9 @@ func (c *Collector) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), mfaMetricsTTL)
 	defer cancel()
-	_ = kv.Put(ctx, mfaMetricsKVKey, string(data))
+	if err := kv.Put(ctx, mfaMetricsKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("gatekeeper metrics: kv persist failed: %v", err))
+	}
 }
 
 // NewCollector creates a new metrics collector with Prometheus.
@@ -145,48 +148,48 @@ func NewCollector() *Collector {
 	return &Collector{
 		startTime: time.Now(),
 		EnrollmentsTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "enrollments_total",
 			Help:      "Total number of factor enrollments",
 		}),
 		VerificationsTotal: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "verifications_total",
 			Help:      "Total number of successful MFA verifications",
 		}),
 		VerificationFailures: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "verification_failures_total",
 			Help:      "Total number of failed MFA verifications",
 		}),
 		BackupCodesUsed: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "backup_codes_used_total",
 			Help:      "Total number of backup codes consumed",
 		}),
 		TrustedDevicesCreated: promauto.NewCounter(prometheus.CounterOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "trusted_devices_total",
 			Help:      "Total number of trusted devices created",
 		}),
 		ActiveFactorsTotal: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "active_factors",
 			Help:      "Number of active MFA factors",
 		}),
 		HighRiskEvents: promauto.NewGauge(prometheus.GaugeOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "high_risk_events",
 			Help:      "Number of high-risk authentication events",
 		}),
 		VerificationDuration: promauto.NewHistogram(prometheus.HistogramOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "verification_duration_seconds",
 			Help:      "Time taken to verify MFA code",
 			Buckets:   prometheus.DefBuckets,
 		}),
 		EnrollmentDuration: promauto.NewHistogram(prometheus.HistogramOpts{
-			Namespace: "mfa",
+			Namespace: "axiom_mfa",
 			Name:      "enrollment_duration_seconds",
 			Help:      "Time taken to complete MFA enrollment",
 			Buckets:   prometheus.DefBuckets,

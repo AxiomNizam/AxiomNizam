@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	iamconfig "example.com/axiomnizam/internal/iam/config"
 	"example.com/axiomnizam/internal/iam/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -101,9 +102,9 @@ func (s *Store) DeleteRealm(id string) error {
 	return s.db.Where("id = ?", id).Delete(&models.Realm{}).Error
 }
 
-// SeedDefaultRealm ensures the "axiomnizam" realm exists.
+// SeedDefaultRealm ensures the default realm exists.
 func (s *Store) SeedDefaultRealm() (*models.Realm, error) {
-	existing, err := s.GetRealmByName("axiomnizam")
+	existing, err := s.GetRealmByName(iamconfig.DefaultRealm)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func (s *Store) SeedDefaultRealm() (*models.Realm, error) {
 	}
 	r := &models.Realm{
 		ID:                    newID(),
-		Name:                  "axiomnizam",
+		Name:                  iamconfig.DefaultRealm,
 		DisplayName:           "AxiomNizam",
 		Enabled:               true,
 		LoginWithEmail:        true,

@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	iamconfig "example.com/axiomnizam/internal/iam/config"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -91,10 +92,11 @@ type Issuer struct {
 	RefreshTokenTTL time.Duration
 }
 
+// Default constants re-exported from config package.
 const (
-	defaultAccessTTL  = 15 * time.Minute
-	defaultRefreshTTL = 24 * time.Hour * 7 // 7 days
-	rsaKeyBits        = 2048
+	defaultAccessTTL  = iamconfig.DefaultAccessTokenTTL
+	defaultRefreshTTL = iamconfig.DefaultRefreshTokenTTL
+	rsaKeyBits        = iamconfig.DefaultRSAKeyBits
 )
 
 // NewIssuer creates a token issuer. It loads an RSA key from the environment

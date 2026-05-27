@@ -1,10 +1,10 @@
 package cdc
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -120,7 +120,7 @@ func NewChangeDataCapture(etcd ...*clientv3.Client) *ChangeDataCapture {
 		bufferSize:      1000,
 		maxEvents:       100000,
 		etcd:            etcdClient,
-		stateKey:        "axiomnizam:cdc:core:state",
+		stateKey:        "cdc:core:state",
 	}
 	cdc.loadState()
 	return cdc
@@ -136,7 +136,7 @@ func (cdc *ChangeDataCapture) loadState() {
 
 	resp, err := cdc.etcd.Get(ctx, cdc.stateKey)
 	if err != nil {
-		log.Printf("cdc-core: failed to load persisted state from etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-core: failed to load persisted state from etcd: %v", err))
 		return
 	}
 	if len(resp.Kvs) == 0 {
@@ -145,7 +145,7 @@ func (cdc *ChangeDataCapture) loadState() {
 
 	var state changeDataCaptureState
 	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("cdc-core: failed to decode persisted state: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-core: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -194,7 +194,7 @@ func (cdc *ChangeDataCapture) persistStateLocked() {
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("cdc-core: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-core: failed to encode state: %v", err))
 		return
 	}
 
@@ -202,7 +202,7 @@ func (cdc *ChangeDataCapture) persistStateLocked() {
 	defer cancel()
 
 	if _, err := cdc.etcd.Put(ctx, cdc.stateKey, string(payload)); err != nil {
-		log.Printf("cdc-core: failed to persist state to etcd: %v", err)
+		logging.Z().Info(fmt.Sprintf("cdc-core: failed to persist state to etcd: %v", err))
 	}
 }
 

@@ -1,9 +1,9 @@
 package utils
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 
@@ -26,7 +26,6 @@ type QueryBuilder struct {
 	distinct     bool
 	having       []string
 	cteQueries   map[string]string
-	logger       *log.Logger
 	lastQuery    string
 	lastParams   []interface{}
 }
@@ -43,7 +42,6 @@ func NewQueryBuilder(db *gorm.DB) *QueryBuilder {
 		aggregations: make([]*Aggregation, 0),
 		having:       make([]string, 0),
 		cteQueries:   make(map[string]string),
-		logger:       log.New(log.Writer(), "[QUERY_BUILDER] ", log.LstdFlags),
 		limit:        -1,
 		offset:       0,
 	}
@@ -432,7 +430,7 @@ func (qb *QueryBuilder) Execute() ([]map[string]interface{}, error) {
 		return nil, err
 	}
 
-	qb.logger.Printf("Executing query: %s with params: %v", query, params)
+	logging.Z().Info(fmt.Sprintf("Executing query: %s with params: %v", query, params))
 
 	var results []map[string]interface{}
 	rows, err := qb.db.Raw(query, params...).Rows()

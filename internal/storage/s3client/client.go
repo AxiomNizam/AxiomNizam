@@ -1,12 +1,12 @@
 package s3client
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,7 +36,7 @@ func NewClient(endpoint string, accessKey, secretKey, region string, useSSL bool
 		return nil, fmt.Errorf("storage: invalid endpoint %q: %w", endpoint, err)
 	}
 
-	log.Printf("✅ Storage: native S3 client connected to %s (ssl=%v, region=%s)", endpoint, useSSL, region)
+	logging.Z().Info(fmt.Sprintf("✅ Storage: native S3 client connected to %s (ssl=%v, region=%s)", endpoint, useSSL, region))
 
 	return &Client{
 		httpClient: &http.Client{Timeout: 5 * time.Minute},
@@ -139,7 +139,7 @@ func (c *Client) CreateBucket(ctx context.Context, name string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		log.Printf("✅ Storage: bucket %q created", name)
+		logging.Z().Info(fmt.Sprintf("✅ Storage: bucket %q created", name))
 		return nil
 	}
 	if resp.StatusCode == http.StatusConflict {
@@ -167,7 +167,7 @@ func (c *Client) DeleteBucket(ctx context.Context, name string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
-		log.Printf("✅ Storage: bucket %q deleted", name)
+		logging.Z().Info(fmt.Sprintf("✅ Storage: bucket %q deleted", name))
 		return nil
 	}
 	return parseS3Error(resp)
@@ -262,7 +262,7 @@ func (c *Client) SetBucketVersioning(ctx context.Context, bucket string, enabled
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
-		log.Printf("✅ Storage: versioning on %q set to %s", bucket, cfg.Status)
+		logging.Z().Info(fmt.Sprintf("✅ Storage: versioning on %q set to %s", bucket, cfg.Status))
 		return nil
 	}
 	return parseS3Error(resp)
@@ -361,7 +361,7 @@ func (c *Client) SetBucketLifecycle(ctx context.Context, bucket string, rules []
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
-		log.Printf("✅ Storage: lifecycle policy applied to %q (%d rules)", bucket, len(rules))
+		logging.Z().Info(fmt.Sprintf("✅ Storage: lifecycle policy applied to %q (%d rules)", bucket, len(rules)))
 		return nil
 	}
 	return parseS3Error(resp)
@@ -739,7 +739,7 @@ func (c *Client) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, d
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		log.Printf("✅ Storage: copied %s/%s → %s/%s", srcBucket, srcKey, dstBucket, dstKey)
+		logging.Z().Info(fmt.Sprintf("✅ Storage: copied %s/%s → %s/%s", srcBucket, srcKey, dstBucket, dstKey))
 		return nil
 	}
 	return parseS3Error(resp)

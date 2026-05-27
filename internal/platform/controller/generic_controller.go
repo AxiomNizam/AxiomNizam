@@ -9,9 +9,9 @@
 package controller
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	"example.com/axiomnizam/internal/metrics"
@@ -57,7 +57,7 @@ func NewGenericController[T store.Resource](
 		name:       name,
 		store:      s,
 		reconciler: r,
-		queue:      workqueue.NewSimpleQueue(nil),
+		queue:      workqueue.NewSimpleQueue(workqueue.DefaultControllerRateLimiter()),
 		workers:    workers,
 		shadowMode: shadowMode,
 		metrics:    m,
@@ -84,7 +84,7 @@ func (gc *GenericController[T]) Start(ctx context.Context) error {
 	if gc.shadowMode {
 		mode = "shadow"
 	}
-	log.Printf("controller %s: starting (%d workers, mode=%s)", gc.name, gc.workers, mode)
+	logging.Z().Info(fmt.Sprintf("controller %s: starting (%d workers, mode=%s)", gc.name, gc.workers, mode))
 
 	// Start the watch loop that feeds the queue.
 	go gc.watchLoop(ctx)
@@ -117,7 +117,7 @@ func (gc *GenericController[T]) Start(ctx context.Context) error {
 		gc.metrics.SetRunning(gc.name, false)
 	}
 
-	log.Printf("controller %s: stopped", gc.name)
+	logging.Z().Info(fmt.Sprintf("controller %s: stopped", gc.name))
 	return nil
 }
 
@@ -125,7 +125,7 @@ func (gc *GenericController[T]) Start(ctx context.Context) error {
 func (gc *GenericController[T]) watchLoop(ctx context.Context) {
 	ch, err := gc.store.Watch(ctx)
 	if err != nil {
-		log.Printf("controller %s: watch failed: %v", gc.name, err)
+		logging.Z().Info(fmt.Sprintf("controller %s: watch failed: %v", gc.name, err))
 		return
 	}
 
@@ -150,7 +150,7 @@ func (gc *GenericController[T]) watchLoop(ctx context.Context) {
 func (gc *GenericController[T]) initialSync(ctx context.Context) {
 	resources, err := gc.store.List(ctx, "")
 	if err != nil {
-		log.Printf("controller %s: initial sync failed: %v", gc.name, err)
+		logging.Z().Info(fmt.Sprintf("controller %s: initial sync failed: %v", gc.name, err))
 		return
 	}
 	for _, res := range resources {
@@ -160,7 +160,7 @@ func (gc *GenericController[T]) initialSync(ctx context.Context) {
 		}
 	}
 	if len(resources) > 0 {
-		log.Printf("controller %s: initial sync enqueued %d resources", gc.name, len(resources))
+		logging.Z().Info(fmt.Sprintf("controller %s: initial sync enqueued %d resources", gc.name, len(resources)))
 	}
 }
 
@@ -183,7 +183,7 @@ func (gc *GenericController[T]) processItem(ctx context.Context, key string) {
 	// Panic recovery — a crashing reconciler must not kill the worker.
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("controller %s: PANIC in reconciler for key=%s: %v", gc.name, key, r)
+			logging.Z().Info(fmt.Sprintf("controller %s: PANIC in reconciler for key=%s: %v", gc.name, key, r))
 			if gc.metrics != nil {
 				gc.metrics.RecordReconcile(gc.name, 0, false, false, fmt.Sprintf("panic: %v", r))
 			}

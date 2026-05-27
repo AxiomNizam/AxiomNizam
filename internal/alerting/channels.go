@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/axiomnizam/internal/alerting/models"
 	"example.com/axiomnizam/internal/platform/resilience"
 )
 
@@ -48,7 +49,7 @@ func NewChannelDispatcher() *ChannelDispatcher {
 }
 
 // Dispatch sends a notification through the specified channel with retry.
-func (d *ChannelDispatcher) Dispatch(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+func (d *ChannelDispatcher) Dispatch(ctx context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
 	return resilience.DoVoid(ctx, resilience.Config{
 		MaxAttempts:  3,
 		InitialDelay: 500 * time.Millisecond,
@@ -62,17 +63,17 @@ func (d *ChannelDispatcher) Dispatch(ctx context.Context, channel *NotificationC
 }
 
 // dispatchOnce sends a single notification attempt.
-func (d *ChannelDispatcher) dispatchOnce(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
-	switch ChannelType(channel.Spec.Type) {
-	case ChannelTypeSlack:
+func (d *ChannelDispatcher) dispatchOnce(ctx context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
+	switch models.ChannelType(channel.Spec.Type) {
+	case models.ChannelTypeSlack:
 		return d.sendSlack(ctx, channel, msg)
-	case ChannelTypeEmail:
+	case models.ChannelTypeEmail:
 		return d.sendEmail(ctx, channel, msg)
-	case ChannelTypeWebhook:
+	case models.ChannelTypeWebhook:
 		return d.sendWebhook(ctx, channel, msg)
-	case ChannelTypePagerDuty:
+	case models.ChannelTypePagerDuty:
 		return d.sendPagerDuty(ctx, channel, msg)
-	case ChannelTypeTeams:
+	case models.ChannelTypeTeams:
 		return d.sendTeams(ctx, channel, msg)
 	default:
 		return fmt.Errorf("unsupported channel type: %s", channel.Spec.Type)
@@ -80,7 +81,7 @@ func (d *ChannelDispatcher) dispatchOnce(ctx context.Context, channel *Notificat
 }
 
 // sendSlack sends a notification via Slack webhook.
-func (d *ChannelDispatcher) sendSlack(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+func (d *ChannelDispatcher) sendSlack(ctx context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
 	webhookURL := channel.Spec.Config["webhookUrl"]
 	if webhookURL == "" {
 		return fmt.Errorf("slack channel missing webhookUrl config")
@@ -124,7 +125,7 @@ func (d *ChannelDispatcher) sendSlack(ctx context.Context, channel *Notification
 }
 
 // sendEmail sends a notification via SMTP.
-func (d *ChannelDispatcher) sendEmail(_ context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+func (d *ChannelDispatcher) sendEmail(_ context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
 	host := channel.Spec.Config["smtpHost"]
 	port := channel.Spec.Config["smtpPort"]
 	from := channel.Spec.Config["from"]
@@ -157,7 +158,7 @@ func (d *ChannelDispatcher) sendEmail(_ context.Context, channel *NotificationCh
 }
 
 // sendWebhook sends a notification via HTTP POST.
-func (d *ChannelDispatcher) sendWebhook(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+func (d *ChannelDispatcher) sendWebhook(ctx context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
 	url := channel.Spec.Config["url"]
 	if url == "" {
 		return fmt.Errorf("webhook channel missing url config")
@@ -182,7 +183,7 @@ func (d *ChannelDispatcher) sendWebhook(ctx context.Context, channel *Notificati
 }
 
 // sendPagerDuty sends a notification via PagerDuty Events API v2.
-func (d *ChannelDispatcher) sendPagerDuty(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+func (d *ChannelDispatcher) sendPagerDuty(ctx context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
 	routingKey := channel.Spec.Config["routingKey"]
 	if routingKey == "" {
 		return fmt.Errorf("pagerduty channel missing routingKey config")
@@ -224,7 +225,7 @@ func (d *ChannelDispatcher) sendPagerDuty(ctx context.Context, channel *Notifica
 }
 
 // sendTeams sends a notification via Microsoft Teams webhook.
-func (d *ChannelDispatcher) sendTeams(ctx context.Context, channel *NotificationChannelResource, msg NotificationMessage) error {
+func (d *ChannelDispatcher) sendTeams(ctx context.Context, channel *models.NotificationChannelResource, msg NotificationMessage) error {
 	webhookURL := channel.Spec.Config["webhookUrl"]
 	if webhookURL == "" {
 		return fmt.Errorf("teams channel missing webhookUrl config")

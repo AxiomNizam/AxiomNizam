@@ -31,7 +31,7 @@ func NewStreamHandler(manager StreamManager) *StreamHandler {
 func (h *StreamHandler) HandleStream(c *gin.Context) {
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	defer conn.Close()
@@ -75,17 +75,17 @@ func (h *StreamHandler) HandleStream(c *gin.Context) {
 func (h *StreamHandler) CreateStreamRequest(c *gin.Context) {
 	var req StreamRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	stream, err := h.manager.CreateStream(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"streamId": stream.ID})
+	c.JSON(http.StatusCreated, StreamCreatedResponse{StreamID: stream.ID})
 }
 
 // GetStreamStatus handles GET /api/v1/streams/:id
@@ -93,7 +93,7 @@ func (h *StreamHandler) GetStreamStatus(c *gin.Context) {
 	id := c.Param("id")
 	stream, err := h.manager.GetStream(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "stream not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "stream not found"})
 		return
 	}
 
@@ -107,22 +107,22 @@ func (h *StreamHandler) ListStreams(c *gin.Context) {
 
 	streams, err := h.manager.ListStreams(tenantID, status)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"streams": streams, "count": len(streams)})
+	c.JSON(http.StatusOK, StreamListResponse{Streams: streams, Count: len(streams)})
 }
 
 // CancelStream handles DELETE /api/v1/streams/:id
 func (h *StreamHandler) CancelStream(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.CancelStream(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "stream cancelled"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "stream cancelled"})
 }
 
 // Subscribe handles POST /api/v1/subscriptions
@@ -135,7 +135,7 @@ func (h *StreamHandler) Subscribe(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *StreamHandler) Subscribe(c *gin.Context) {
 
 	created, err := h.manager.Subscribe(sub)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -160,11 +160,11 @@ func (h *StreamHandler) Subscribe(c *gin.Context) {
 func (h *StreamHandler) Unsubscribe(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.Unsubscribe(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "unsubscribed"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "unsubscribed"})
 }
 
 // RegisterStreamRoutes registers all streaming routes

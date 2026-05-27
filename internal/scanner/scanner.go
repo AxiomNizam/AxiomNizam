@@ -329,3 +329,12 @@ func (o *Orchestrator) Health(includeMetrics bool) HealthStatus {
 
 	return h
 }
+
+// Name returns the module identifier.
+func (o *Orchestrator) Name() string { return "scanner" }
+
+// Start is a no-op — the scanner is stateless and requires no background workers.
+func (o *Orchestrator) Start(ctx context.Context) error { return nil }
+
+// Stop is a no-op — the scanner has no resources to release.
+func (o *Orchestrator) Stop() error { return nil }

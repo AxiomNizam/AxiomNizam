@@ -21,7 +21,7 @@ func NewBulkHandler(manager BulkManager) *BulkHandler {
 func (h *BulkHandler) SubmitBulkOperation(c *gin.Context) {
 	var req BulkOperationRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
@@ -34,7 +34,7 @@ func (h *BulkHandler) SubmitBulkOperation(c *gin.Context) {
 				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "bulk operation resource created"})
+		c.JSON(http.StatusAccepted, ResourceCreatedResponse{Name: resource.Name, Status: "Pending", Message: "bulk operation resource created"})
 		return
 	}
 
@@ -49,12 +49,12 @@ func (h *BulkHandler) SubmitBulkOperation(c *gin.Context) {
 
 	created, err := h.manager.SubmitOperation(op)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
 	h.dualWriteOperation(created)
-	c.JSON(http.StatusAccepted, created)
+	c.JSON(http.StatusAccepted, BulkOpToResponse(created))
 }
 
 // GetOperation handles GET /api/v1/bulk/operations/:id
@@ -62,11 +62,11 @@ func (h *BulkHandler) GetOperation(c *gin.Context) {
 	id := c.Param("id")
 	op, err := h.manager.GetOperation(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "operation not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "operation not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, op)
+	c.JSON(http.StatusOK, BulkOpToResponse(op))
 }
 
 // ListOperations handles GET /api/v1/bulk/operations
@@ -76,11 +76,15 @@ func (h *BulkHandler) ListOperations(c *gin.Context) {
 
 	ops, err := h.manager.ListOperations(tenantID, status)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"operations": ops, "count": len(ops)})
+	list := make([]BulkOpResponse, len(ops))
+	for i, op := range ops {
+		list[i] = BulkOpToResponse(op)
+	}
+	c.JSON(http.StatusOK, BulkOpListResponse{Operations: list, Count: len(list)})
 }
 
 // GetProgress handles GET /api/v1/bulk/operations/:id/progress
@@ -88,30 +92,22 @@ func (h *BulkHandler) GetProgress(c *gin.Context) {
 	id := c.Param("id")
 	op, err := h.manager.GetOperation(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "operation not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "operation not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":       op.ID,
-		"status":   op.Status,
-		"progress": float64(op.SuccessCount+op.FailureCount) / float64(op.TotalItems) * 100,
-		"total":    op.TotalItems,
-		"success":  op.SuccessCount,
-		"failed":   op.FailureCount,
-		"skipped":  op.SkippedCount,
-	})
+	c.JSON(http.StatusOK, BulkOpToProgressResponse(op))
 }
 
 // CancelOperation handles DELETE /api/v1/bulk/operations/:id
 func (h *BulkHandler) CancelOperation(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.CancelOperation(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "operation cancelled"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "operation cancelled"})
 }
 
 // RetryFailed handles POST /api/v1/bulk/operations/:id/retry-failed
@@ -119,11 +115,11 @@ func (h *BulkHandler) RetryFailed(c *gin.Context) {
 	id := c.Param("id")
 	retried, err := h.manager.RetryFailed(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, retried)
+	c.JSON(http.StatusOK, BulkOpToResponse(retried))
 }
 
 // GetResults handles GET /api/v1/bulk/operations/:id/results
@@ -131,7 +127,7 @@ func (h *BulkHandler) GetResults(c *gin.Context) {
 	id := c.Param("id")
 	results, err := h.manager.GetResults(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "results not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "results not found"})
 		return
 	}
 

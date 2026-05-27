@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -48,7 +48,6 @@ type DependencyManager struct {
 	dependencies map[string][]*JobDependency // job_id -> dependencies
 	pipelines    map[string]*JobPipeline
 	conditionals map[string]*ConditionalJob
-	logger       *log.Logger
 	queue        Queue
 	repository   JobRepository
 }
@@ -59,7 +58,6 @@ func NewDependencyManager(queue Queue, repo JobRepository) *DependencyManager {
 		dependencies: make(map[string][]*JobDependency),
 		pipelines:    make(map[string]*JobPipeline),
 		conditionals: make(map[string]*ConditionalJob),
-		logger:       log.New(log.Writer(), "[DEPENDENCY_MGR] ", log.LstdFlags),
 		queue:        queue,
 		repository:   repo,
 	}
@@ -83,7 +81,7 @@ func (dm *DependencyManager) AddDependency(ctx context.Context, jobID string, de
 	}
 
 	dm.dependencies[jobID] = append(dm.dependencies[jobID], dep)
-	dm.logger.Printf("Dependency added: %s depends on %s (mode: %s)", jobID, dependsOnJobID, failureMode)
+	logging.Z().Info(fmt.Sprintf("Dependency added: %s depends on %s (mode: %s)", jobID, dependsOnJobID, failureMode))
 
 	return nil
 }
@@ -138,7 +136,7 @@ func (dm *DependencyManager) CreatePipeline(ctx context.Context, pipeline *JobPi
 	dm.pipelines[pipeline.ID] = pipeline
 	dm.mu.Unlock()
 
-	dm.logger.Printf("Pipeline created: %s with %d jobs", pipeline.ID, len(pipeline.Jobs))
+	logging.Z().Info(fmt.Sprintf("Pipeline created: %s with %d jobs", pipeline.ID, len(pipeline.Jobs)))
 	return nil
 }
 
@@ -174,12 +172,12 @@ func (dm *DependencyManager) SubmitPipeline(ctx context.Context, pipelineID stri
 		if err := dm.queue.Submit(ctx, job); err != nil {
 			pipeline.Status = "failed"
 			pipeline.FailedJobs = append(pipeline.FailedJobs, jobID)
-			dm.logger.Printf("Error submitting pipeline job: %v", err)
+			logging.Z().Info(fmt.Sprintf("Error submitting pipeline job: %v", err))
 			return err
 		}
 	}
 
-	dm.logger.Printf("Pipeline %s submitted with %d jobs", pipelineID, len(pipeline.Jobs))
+	logging.Z().Info(fmt.Sprintf("Pipeline %s submitted with %d jobs", pipelineID, len(pipeline.Jobs)))
 	return nil
 }
 
@@ -224,14 +222,12 @@ func (dm *DependencyManager) GetPipelineStatus(ctx context.Context, pipelineID s
 // ConditionalJobHandler handles conditional job execution
 type ConditionalJobHandler struct {
 	manager *DependencyManager
-	logger  *log.Logger
 }
 
 // NewConditionalJobHandler creates a conditional job handler
 func NewConditionalJobHandler(manager *DependencyManager) *ConditionalJobHandler {
 	return &ConditionalJobHandler{
 		manager: manager,
-		logger:  log.New(log.Writer(), "[CONDITIONAL_JOB] ", log.LstdFlags),
 	}
 }
 
@@ -245,7 +241,7 @@ func (cjh *ConditionalJobHandler) RegisterConditionalJob(parentJobID string, con
 	cjh.manager.conditionals[condJob.ID] = condJob
 	cjh.manager.mu.Unlock()
 
-	cjh.logger.Printf("Conditional job registered: %s (depends on %s)", condJob.ID, parentJobID)
+	logging.Z().Info(fmt.Sprintf("Conditional job registered: %s (depends on %s)", condJob.ID, parentJobID))
 	return nil
 }
 
@@ -277,10 +273,10 @@ func (cjh *ConditionalJobHandler) EvaluateAndSubmit(ctx context.Context, parentJ
 
 		if shouldExecute {
 			if err := cjh.manager.queue.Submit(ctx, condJob.Job); err != nil {
-				cjh.logger.Printf("Error submitting conditional job: %v", err)
+				logging.Z().Info(fmt.Sprintf("Error submitting conditional job: %v", err))
 				return err
 			}
-			cjh.logger.Printf("Conditional job submitted: %s", condJob.ID)
+			logging.Z().Info(fmt.Sprintf("Conditional job submitted: %s", condJob.ID))
 		}
 	}
 
@@ -365,7 +361,6 @@ func (jd *JobDAG) GetReadyJobs(ctx context.Context, repository JobRepository) ([
 type BatchJobSubmitter struct {
 	manager   *DependencyManager
 	batchSize int
-	logger    *log.Logger
 }
 
 // NewBatchJobSubmitter creates a batch job submitter
@@ -377,7 +372,6 @@ func NewBatchJobSubmitter(manager *DependencyManager, batchSize int) *BatchJobSu
 	return &BatchJobSubmitter{
 		manager:   manager,
 		batchSize: batchSize,
-		logger:    log.New(log.Writer(), "[BATCH_SUBMITTER] ", log.LstdFlags),
 	}
 }
 
@@ -395,7 +389,7 @@ func (bjs *BatchJobSubmitter) SubmitBatch(ctx context.Context, jobs []*Job, depe
 		// Submit batch
 		for _, job := range batch {
 			if err := bjs.manager.queue.Submit(ctx, job); err != nil {
-				bjs.logger.Printf("Error submitting job %s: %v", job.ID, err)
+				logging.Z().Info(fmt.Sprintf("Error submitting job %s: %v", job.ID, err))
 				return err
 			}
 
@@ -407,7 +401,7 @@ func (bjs *BatchJobSubmitter) SubmitBatch(ctx context.Context, jobs []*Job, depe
 			}
 		}
 
-		bjs.logger.Printf("Submitted batch of %d jobs", len(batch))
+		logging.Z().Info(fmt.Sprintf("Submitted batch of %d jobs", len(batch)))
 		time.Sleep(100 * time.Millisecond) // Rate limit
 	}
 
@@ -417,14 +411,12 @@ func (bjs *BatchJobSubmitter) SubmitBatch(ctx context.Context, jobs []*Job, depe
 // ParallelJobRunner submits jobs that can run in parallel
 type ParallelJobRunner struct {
 	manager *DependencyManager
-	logger  *log.Logger
 }
 
 // NewParallelJobRunner creates a parallel job runner
 func NewParallelJobRunner(manager *DependencyManager) *ParallelJobRunner {
 	return &ParallelJobRunner{
 		manager: manager,
-		logger:  log.New(log.Writer(), "[PARALLEL_RUNNER] ", log.LstdFlags),
 	}
 }
 
@@ -434,7 +426,7 @@ func (pjr *ParallelJobRunner) SubmitParallel(ctx context.Context, parentJobID st
 
 	for _, job := range parallelJobs {
 		if err := pjr.manager.queue.Submit(ctx, job); err != nil {
-			pjr.logger.Printf("Error submitting parallel job: %v", err)
+			logging.Z().Info(fmt.Sprintf("Error submitting parallel job: %v", err))
 			return jobIDs, err
 		}
 
@@ -446,6 +438,6 @@ func (pjr *ParallelJobRunner) SubmitParallel(ctx context.Context, parentJobID st
 		jobIDs = append(jobIDs, job.ID)
 	}
 
-	pjr.logger.Printf("Submitted %d parallel jobs", len(parallelJobs))
+	logging.Z().Info(fmt.Sprintf("Submitted %d parallel jobs", len(parallelJobs)))
 	return jobIDs, nil
 }

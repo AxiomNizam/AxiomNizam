@@ -19,16 +19,10 @@ func NewTenantHandler(manager TenantManager) *TenantHandler {
 
 // CreateTenant handles POST /api/v1/tenants
 func (h *TenantHandler) CreateTenant(c *gin.Context) {
-	var req struct {
-		Name           string          `json:"name" binding:"required"`
-		DisplayName    string          `json:"displayName"`
-		Owner          string          `json:"owner" binding:"required"`
-		Tier           TenantTier      `json:"tier"`
-		IsolationLevel TenantIsolation `json:"isolationLevel"`
-	}
+	var req CreateTenantRequest
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
@@ -41,7 +35,7 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "tenant resource created"})
+		c.JSON(http.StatusAccepted, TenantCreatedResponse{Name: resource.Name, Status: "Pending", Message: "tenant resource created"})
 		return
 	}
 
@@ -55,12 +49,12 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 
 	created, err := h.manager.CreateTenant(c.Request.Context(), tenant, req.Owner)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
 	h.dualWriteTenant(created)
-	c.JSON(http.StatusCreated, created)
+	c.JSON(http.StatusCreated, TenantToResponse(created))
 }
 
 // GetTenant handles GET /api/v1/tenants/:id
@@ -68,11 +62,11 @@ func (h *TenantHandler) GetTenant(c *gin.Context) {
 	id := c.Param("id")
 	tenant, err := h.manager.GetTenant(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "tenant not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, tenant)
+	c.JSON(http.StatusOK, TenantToResponse(tenant))
 }
 
 // UpdateTenant handles PATCH /api/v1/tenants/:id
@@ -81,23 +75,23 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	var updates map[string]interface{}
 
 	if err := c.BindJSON(&updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
 	tenant, err := h.manager.GetTenant(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "tenant not found"})
 		return
 	}
 
 	tenant.UpdatedAt = time.Now()
 	if err := h.manager.UpdateTenant(c.Request.Context(), tenant); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, tenant)
+	c.JSON(http.StatusOK, TenantToResponse(tenant))
 }
 
 // ListTenants handles GET /api/v1/tenants
@@ -105,40 +99,37 @@ func (h *TenantHandler) ListTenants(c *gin.Context) {
 	ownerID := c.Query("owner")
 	tenants, err := h.manager.ListTenants(c.Request.Context(), ownerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"tenants": tenants, "count": len(tenants)})
+	c.JSON(http.StatusOK, TenantListResponse{Tenants: tenants, Count: len(tenants)})
 }
 
 // DeleteTenant handles DELETE /api/v1/tenants/:id
 func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.DeleteTenant(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "tenant deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "tenant deleted"})
 }
 
 // AddMember handles POST /api/v1/tenants/:id/members
 func (h *TenantHandler) AddMember(c *gin.Context) {
 	tenantID := c.Param("id")
-	var req struct {
-		UserID string     `json:"userId" binding:"required"`
-		Role   MemberRole `json:"role" binding:"required"`
-	}
+	var req AddMemberRequest
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
 	member, err := h.manager.AddMember(c.Request.Context(), tenantID, req.UserID, req.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
@@ -151,11 +142,11 @@ func (h *TenantHandler) RemoveMember(c *gin.Context) {
 	userID := c.Param("userId")
 
 	if err := h.manager.RemoveMember(c.Request.Context(), tenantID, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "member removed"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "member removed"})
 }
 
 // GetQuota handles GET /api/v1/tenants/:id/quota
@@ -163,7 +154,7 @@ func (h *TenantHandler) GetQuota(c *gin.Context) {
 	id := c.Param("id")
 	quota, err := h.manager.GetQuota(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "quota not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "quota not found"})
 		return
 	}
 
@@ -173,22 +164,19 @@ func (h *TenantHandler) GetQuota(c *gin.Context) {
 // CheckQuota handles POST /api/v1/tenants/:id/quota/check
 func (h *TenantHandler) CheckQuota(c *gin.Context) {
 	id := c.Param("id")
-	var req struct {
-		Resource string `json:"resource" binding:"required"`
-		Amount   int64  `json:"amount" binding:"required"`
-	}
+	var req CheckQuotaRequest
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
 	if err := h.manager.CheckQuota(c.Request.Context(), id, req.Resource, req.Amount); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"allowed": true})
+	c.JSON(http.StatusOK, QuotaCheckResponse{Allowed: true})
 }
 
 // RegisterTenantRoutes registers all tenant routes

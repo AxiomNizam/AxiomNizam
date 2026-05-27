@@ -2,6 +2,46 @@ package rbac
 
 import (
 	"time"
+
+	"example.com/axiomnizam/internal/rbac/models"
+)
+
+// Re-export shared primitives so existing rbac-package callers keep compiling.
+type (
+	RoleType     = models.RoleType
+	Condition    = models.Condition
+	Permission   = models.Permission
+	PrincipalType = models.PrincipalType
+)
+
+const (
+	RoleTypeSystem = models.RoleTypeSystem
+	RoleTypeCustom = models.RoleTypeCustom
+	RoleTypeTenant = models.RoleTypeTenant
+)
+
+const (
+	PrincipalTypeUser    = models.PrincipalTypeUser
+	PrincipalTypeService = models.PrincipalTypeService
+	PrincipalTypeTeam    = models.PrincipalTypeTeam
+	PrincipalTypeRole    = models.PrincipalTypeRole
+)
+
+// Re-export Resource types and constants.
+type (
+	RoleSpec                   = models.RoleSpec
+	RoleResourceStatus         = models.RoleResourceStatus
+	RoleResource               = models.RoleResource
+	RoleBindingSpec            = models.RoleBindingSpec
+	RoleBindingResourceStatus  = models.RoleBindingResourceStatus
+	RoleBindingResource        = models.RoleBindingResource
+)
+
+const (
+	RoleKind              = models.RoleKind
+	RoleAPIVersion        = models.RoleAPIVersion
+	RoleBindingKind       = models.RoleBindingKind
+	RoleBindingAPIVersion = models.RoleBindingAPIVersion
 )
 
 // Role represents a role in the system
@@ -23,38 +63,6 @@ type Role struct {
 	LastUsedAt      time.Time              `json:"lastUsedAt"`
 	Metadata        map[string]interface{} `json:"metadata"`
 	Tags            []string               `json:"tags"`
-}
-
-// RoleType represents role classification
-type RoleType string
-
-const (
-	RoleTypeSystem RoleType = "SYSTEM" // Built-in
-	RoleTypeCustom RoleType = "CUSTOM" // User-defined
-	RoleTypeTenant RoleType = "TENANT" // Tenant-scoped
-)
-
-// Permission represents capability/action
-type Permission struct {
-	ID           string                 `json:"id"`
-	TenantID     string                 `json:"tenantId,omitempty"` // Empty = system permission
-	Name         string                 `json:"name"`               // e.g., "resources.create"
-	Description  string                 `json:"description"`
-	Resource     string                 `json:"resource"`             // What it applies to
-	Action       string                 `json:"action"`               // create, read, update, delete, execute
-	Scope        string                 `json:"scope"`                // "global", "tenant", "own"
-	Conditions   []Condition            `json:"conditions,omitempty"` // When permission applies
-	CreatedAt    time.Time              `json:"createdAt"`
-	IsDeprecated bool                   `json:"isDeprecated"`
-	Metadata     map[string]interface{} `json:"metadata"`
-}
-
-// Condition represents when permission applies
-type Condition struct {
-	Type     string      `json:"type"`     // "field", "attribute", "time", "ip", "mfa"
-	Key      string      `json:"key"`      // Field name
-	Value    interface{} `json:"value"`    // Condition value
-	Operator string      `json:"operator"` // "eq", "ne", "lt", "gt", "in", "matches"
 }
 
 // RoleBinding binds role to principal
@@ -79,16 +87,6 @@ type RoleBinding struct {
 	Justification string                 `json:"justification"`
 	Metadata      map[string]interface{} `json:"metadata"`
 }
-
-// PrincipalType represents type of principal
-type PrincipalType string
-
-const (
-	PrincipalTypeUser    PrincipalType = "USER"
-	PrincipalTypeService PrincipalType = "SERVICE"
-	PrincipalTypeTeam    PrincipalType = "TEAM"
-	PrincipalTypeRole    PrincipalType = "ROLE"
-)
 
 // PolicyBinding represents fine-grained access policy
 type PolicyBinding struct {

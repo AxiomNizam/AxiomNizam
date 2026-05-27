@@ -1,11 +1,10 @@
 package storage
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	"example.com/axiomnizam/internal/antivirus"
@@ -27,10 +26,11 @@ import (
 	"example.com/axiomnizam/internal/scanner/mimetype"
 	nativeav "example.com/axiomnizam/internal/scanner/native"
 	"example.com/axiomnizam/internal/scanner/svg"
+	storageConfig "example.com/axiomnizam/internal/storage/config"
 	"example.com/axiomnizam/internal/storage/access"
 	"example.com/axiomnizam/internal/storage/admin"
 	"example.com/axiomnizam/internal/storage/controller"
-	"example.com/axiomnizam/internal/storage/events"
+	"example.com/axiomnizam/internal/storage/audit"
 	storageMetrics "example.com/axiomnizam/internal/storage/metrics"
 	"example.com/axiomnizam/internal/storage/models"
 	"example.com/axiomnizam/internal/storage/native"
@@ -52,7 +52,7 @@ type System struct {
 	Access     *access.Controller
 	Handler    *admin.Handler
 	Metrics    *storageMetrics.Collector
-	AuditLog   *events.AuditLog
+	AuditLog   *audit.AuditLog
 	Config     Config
 
 	// Antivirus engine for malware scanning on uploads.
@@ -92,32 +92,14 @@ func (s *System) SetKVStore(kv platformstore.KVStore) {
 	if s.AuditLog != nil {
 		s.AuditLog.ConfigureKVPersistence(kv)
 	}
-	log.Println("✅ Storage: KVStore persistence configured (Raft mode)")
+	logging.Z().Info("✅ Storage: KVStore persistence configured (Raft mode)")
 }
 
-// Config holds configuration for the native object storage backend.
-type Config struct {
-	DataDir       string `json:"dataDir"`       // filesystem root for object data
-	BucketPrefix  string `json:"bucketPrefix"`  // e.g., "axiom-"
-	PresignSecret string `json:"presignSecret"` // HMAC key for presign tokens
-}
+// Config re-exports the storage config type from the config sub-package.
+type Config = storageConfig.Config
 
-// DefaultConfig returns configuration populated from environment variables
-// with sensible defaults for a local native storage backend.
-func DefaultConfig() Config {
-	return Config{
-		DataDir:       getEnv("STORAGE_DATA_DIR", "/data/storage"),
-		BucketPrefix:  getEnv("STORAGE_BUCKET_PREFIX", "axiom-"),
-		PresignSecret: getEnv("STORAGE_PRESIGN_SECRET", "axiom-native-storage-default-key"),
-	}
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
+// DefaultConfig re-exports the default config constructor.
+var DefaultConfig = storageConfig.DefaultConfig
 
 // NewSystem initialises the complete object storage system.
 // Uses the built-in native filesystem backend — no external service required.
@@ -133,11 +115,15 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 	bucketStore := store.NewBucketStore()
 	bucketStore.ConfigurePersistence(etcdClient)
 	tenantMgr := tenant.NewManager(cfg.BucketPrefix, bucketStore)
-	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint)
+	bucketCtrl := controller.NewBucketController(bucketStore, backend, endpoint, cfg.ControllerResyncInterval, cfg.ControllerDebug)
 	policyCtrl := policy.NewController()
 	metricsCollector := storageMetrics.NewCollector()
-	auditLog := events.NewAuditLog(10000)
-	accessCtrl := access.NewController(auditLog)
+	auditLog := audit.NewAuditLog(cfg.MaxAuditEvents)
+	accessCtrl := access.NewController(auditLog, access.ControllerConfig{
+		DefaultReadRateLimit:  cfg.ObjectReadRateLimit,
+		DefaultWriteRateLimit: cfg.ObjectWriteRateLimit,
+		EtcdTimeout:           cfg.EtcdTimeout,
+	})
 	accessCtrl.SetBucketStore(bucketStore)
 	accessCtrl.ConfigurePersistence(etcdClient)
 	// ── Antivirus engine ────────────────────────────────────────────
@@ -189,7 +175,7 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 		mimetype.NewScanner(scannerCfg.AllowedMIMETypes),
 		svg.NewScanner(),
 		macro.NewScanner(),
-		archivescan.NewScanner(scannerCfg.ArchiveMaxDepth, scannerCfg.ArchiveMaxDecompressedSize),
+		archivescan.NewScannerWithLimits(scannerCfg.ArchiveMaxDepth, scannerCfg.ArchiveMaxDecompressedSize, scannerCfg.ArchiveCompressionRatioLimit, scannerCfg.ArchiveMaxFiles),
 		nativeav.NewScanner(avEngine),
 	)
 
@@ -218,14 +204,8 @@ func NewSystem(cfg Config, issuer *token.Issuer, revokedStore *iamStorage.EtcdRe
 // RegisterRoutes mounts all object storage endpoints on the provided router group.
 // When an IAM issuer is configured, the storage route group is wrapped with JWTAuth
 // middleware so that downstream handlers can extract iam_claims for access control.
-func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
-	presignedLimit := 0
-	if raw := os.Getenv("STORAGE_PRESIGN_RATE_LIMIT_PER_MINUTE"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			presignedLimit = parsed
-		}
-	}
-	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, presignedLimit)
+func (s *System) RegisterRoutes(rg *gin.RouterGroup) error {
+	ConfigurePresignedMiddleware(s.Access.ResolveAccessKey, s.Config.PresignRateLimitPerMinute)
 
 	// JWT auth is resolved at request time (not route-registration time)
 	// so that the IAM issuer can be set after routes are registered
@@ -256,9 +236,10 @@ func (s *System) RegisterRoutes(rg *gin.RouterGroup) {
 	})
 
 	if s.iamIssuer != nil {
-		log.Println("✅ Storage: secure presigned/IAM middleware attached to storage routes")
+		logging.Z().Info("✅ Storage: secure presigned/IAM middleware attached to storage routes")
 	}
 	s.Handler.RegisterRoutes(rg)
+	return nil
 }
 
 type sigV4PresignSigner struct{}
@@ -267,12 +248,15 @@ func (sigV4PresignSigner) Generate(method, bucket, objectKey string, expiry time
 	return GeneratePresignedURLWithHost(method, bucket, objectKey, expiry, accessKey, secretKey, host)
 }
 
+// Name returns the module identifier.
+func (s *System) Name() string { return "storage" }
+
 // Start begins the reconciliation controller.
-func (s *System) Start(ctx context.Context) {
+func (s *System) Start(ctx context.Context) error {
 	// Initialize antivirus signature database.
 	if s.AVSigDB != nil {
 		if _, err := s.AVSigDB.Init(); err != nil {
-			log.Printf("⚠️  Storage: antivirus sigdb init error: %v", err)
+			logging.Z().Info(fmt.Sprintf("⚠️  Storage: antivirus sigdb init error: %v", err))
 		}
 	}
 
@@ -282,16 +266,18 @@ func (s *System) Start(ctx context.Context) {
 	}
 
 	s.Controller.Start(ctx)
-	log.Println("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)")
+	logging.Z().Info(fmt.Sprint("✅ Storage: module started (native backend, IAM-integrated, antivirus-enabled)"))
+	return nil
 }
 
 // Stop gracefully shuts down the storage module.
-func (s *System) Stop() {
+func (s *System) Stop() error {
 	// Shutdown antivirus engine.
 	if s.AVEngine != nil {
 		s.AVEngine.Shutdown(context.Background())
 	}
 
 	s.Controller.Stop()
-	log.Println("✅ Storage: module stopped")
+	logging.Z().Info("✅ Storage: module stopped")
+	return nil
 }

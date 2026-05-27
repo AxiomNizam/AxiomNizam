@@ -1,50 +1,16 @@
 package jobs
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/jobs/config"
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"errors"
-	"log"
 	"time"
 )
 
-// JobStatus represents the status of a job
-type JobStatus string
-
-const (
-	JobStatusPending   JobStatus = "pending"
-	JobStatusRunning   JobStatus = "running"
-	JobStatusCompleted JobStatus = "completed"
-	JobStatusFailed    JobStatus = "failed"
-	JobStatusCancelled JobStatus = "cancelled"
-	JobStatusRetrying  JobStatus = "retrying"
-)
-
-// JobPriority represents job priority level
-type JobPriority int
-
-const (
-	PriorityLow      JobPriority = 1
-	PriorityNormal   JobPriority = 5
-	PriorityHigh     JobPriority = 10
-	PriorityCritical JobPriority = 20
-)
-
-// JobType represents the type of job
-type JobType string
-
-// Common job types
-const (
-	JobTypeEmail           JobType = "email"
-	JobTypeReport          JobType = "report"
-	JobTypeDataCleanup     JobType = "data_cleanup"
-	JobTypeDataMigration   JobType = "data_migration"
-	JobTypeNotification    JobType = "notification"
-	JobTypeWebhook         JobType = "webhook"
-	JobTypeImageProcessing JobType = "image_processing"
-	JobTypeBackup          JobType = "backup"
-	JobTypeExport          JobType = "export"
-	JobTypeImport          JobType = "import"
-)
+// JobStatus, JobPriority, JobType and their constants are defined in
+// jobs/models and re-exported via jobs/resource.go type aliases.
 
 // Job represents a background job
 type Job struct {
@@ -178,41 +144,21 @@ var (
 	ErrJobTimeout     = errors.New("job timeout")
 )
 
-// JobConfig contains job configuration
-type JobConfig struct {
-	// Max size of queue
-	MaxQueueSize int
+// JobConfig re-exports the config type from the config subpackage.
+type JobConfig = config.Config
 
-	// Max retries for failed jobs
-	MaxRetries int
-
-	// Default timeout for jobs
-	DefaultTimeout time.Duration
-
-	// Default job priority
-	DefaultPriority JobPriority
-
-	// Number of worker goroutines
-	NumWorkers int
-
-	// Enable persistence
-	PersistResults bool
-
-	// Log level
-	LogLevel string
-}
+// defaultCfg holds the package-level default configuration.
+var defaultCfg = config.DefaultConfig()
 
 // DefaultJobConfig returns a default configuration
 func DefaultJobConfig() *JobConfig {
-	return &JobConfig{
-		MaxQueueSize:    10000,
-		MaxRetries:      3,
-		DefaultTimeout:  30 * time.Minute,
-		DefaultPriority: PriorityNormal,
-		NumWorkers:      10,
-		PersistResults:  true,
-		LogLevel:        "info",
-	}
+	cfg := defaultCfg
+	return &cfg
+}
+
+// SetDefaultConfig updates the package-level default configuration.
+func SetDefaultConfig(cfg JobConfig) {
+	defaultCfg = cfg
 }
 
 // JobResult represents the result of a job execution
@@ -228,49 +174,47 @@ type JobResult struct {
 
 // JobLogger provides logging for jobs
 type JobLogger struct {
-	logger *log.Logger
 }
 
 // NewJobLogger creates a new job logger
 func NewJobLogger() *JobLogger {
 	return &JobLogger{
-		logger: log.New(log.Writer(), "[JOBS] ", log.LstdFlags),
 	}
 }
 
 // LogJobStart logs job start
 func (jl *JobLogger) LogJobStart(job *Job) {
-	jl.logger.Printf("Job started: %s (type: %s, id: %s)", job.Type, job.Type, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job started: %s (type: %s, id: %s)", job.Type, job.Type, job.ID))
 }
 
 // LogJobComplete logs job completion
 func (jl *JobLogger) LogJobComplete(job *Job, duration time.Duration) {
-	jl.logger.Printf("Job completed: %s (duration: %s, id: %s)", job.Type, duration, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job completed: %s (duration: %s, id: %s)", job.Type, duration, job.ID))
 }
 
 // LogJobFailed logs job failure
 func (jl *JobLogger) LogJobFailed(job *Job, err error) {
-	jl.logger.Printf("Job failed: %s (error: %v, id: %s, retries: %d/%d)", job.Type, err, job.ID, job.Retries, job.MaxRetries)
+	logging.Z().Info(fmt.Sprintf("Job failed: %s (error: %v, id: %s, retries: %d/%d)", job.Type, err, job.ID, job.Retries, job.MaxRetries))
 }
 
 // LogJobRetry logs job retry
 func (jl *JobLogger) LogJobRetry(job *Job) {
-	jl.logger.Printf("Job retrying: %s (attempt: %d/%d, id: %s)", job.Type, job.Retries+1, job.MaxRetries, job.ID)
+	logging.Z().Info(fmt.Sprintf("Job retrying: %s (attempt: %d/%d, id: %s)", job.Type, job.Retries+1, job.MaxRetries, job.ID))
 }
 
-// CreateJob creates a new job
+// CreateJob creates a new job using the package-level default config.
 func CreateJob(jobType JobType, data map[string]interface{}) *Job {
 	return &Job{
 		ID:         generateJobID(),
 		Type:       jobType,
 		Status:     JobStatusPending,
-		Priority:   PriorityNormal,
+		Priority:   JobPriority(defaultCfg.DefaultPriority),
 		Data:       data,
 		Result:     make(map[string]interface{}),
 		Retries:    0,
-		MaxRetries: 3,
+		MaxRetries: defaultCfg.MaxRetries,
 		CreatedAt:  time.Now(),
-		Timeout:    30 * time.Minute,
+		Timeout:    defaultCfg.DefaultTimeout,
 		Tags:       []string{},
 	}
 }

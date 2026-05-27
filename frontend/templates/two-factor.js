@@ -93,7 +93,7 @@
             // Load factors
             mfaFetch('/factors/' + uid).then(function (data) {
                 enrolledFactors = data.factors || [];
-                var active = enrolledFactors.filter(function (f) { return (f.status || f.Status || {}).phase === 'Active'; });
+                var active = enrolledFactors.filter(function (f) { return (f.phase || (f.status || f.Status || {}).phase) === 'Active'; });
                 document.getElementById('tfaFactorCount').textContent = active.length;
                 renderFactorsTable(enrolledFactors);
             }).catch(function (err) {
@@ -131,24 +131,24 @@
         factors.forEach(function (f) {
             var spec = f.spec || f.Spec || {};
             var status = f.status || f.Status || {};
-            var phase = status.phase || status.Phase || 'Unknown';
+            var phase = f.phase || status.phase || status.Phase || 'Unknown';
             var badgeClass = 'tfa-badge-' + phase.toLowerCase();
-            var type = spec.type || spec.Type || 'totp';
-            var label = spec.label || spec.Label || '-';
-            var issuer = spec.issuer || spec.Issuer || '-';
+            var type = f.factor_type || spec.type || spec.Type || 'totp';
+            var label = f.label || spec.label || spec.Label || '-';
+            var issuer = f.issuer || spec.issuer || spec.Issuer || '-';
             var created = f.created_at || f.CreatedAt || '';
-            var lastVerified = status.last_verified_at || status.LastVerifiedAt || '';
+            var activatedAt = f.activated_at || status.activated_at || status.ActivatedAt || '';
             var factorId = f.id || f.ID || '';
             if (created) created = new Date(created).toLocaleDateString();
-            if (lastVerified) lastVerified = new Date(lastVerified).toLocaleString();
-            else lastVerified = 'Never';
+            if (activatedAt) activatedAt = new Date(activatedAt).toLocaleString();
+            else activatedAt = 'Never';
             html += '<tr>';
             html += '<td>' + escapeHTML(label) + '</td>';
             html += '<td>' + escapeHTML(type.toUpperCase()) + '</td>';
             html += '<td><span class="tfa-badge ' + badgeClass + '">' + escapeHTML(phase) + '</span></td>';
             html += '<td>' + escapeHTML(issuer) + '</td>';
             html += '<td>' + escapeHTML(created) + '</td>';
-            html += '<td>' + escapeHTML(lastVerified) + '</td>';
+            html += '<td>' + escapeHTML(activatedAt) + '</td>';
             html += '<td>';
             if (phase === 'Active' || phase === 'Pending' || phase === 'Disabled') {
                 html += '<button class="tfa-btn tfa-btn-danger tfa-btn-sm" onclick="tfaDeleteFactor(\'' + factorId + '\')" title="Permanently delete this factor">Delete</button>';
@@ -301,7 +301,7 @@
         resolveUserId().then(function (uid) {
             mfaFetch('/factors/' + uid).then(function (data) {
                 var factors = (data.factors || []).filter(function (f) {
-                    return (f.status || f.Status || {}).phase === 'Active';
+                    return (f.phase || (f.status || f.Status || {}).phase) === 'Active';
                 });
                 var selects = ['tfaVerifyFactorId', 'tfaBackupFactorId'];
                 selects.forEach(function (selId) {
@@ -311,9 +311,9 @@
                     sel.innerHTML = '<option value="">-- Select a factor --</option>';
                     factors.forEach(function (f) {
                         var spec = f.spec || f.Spec || {};
-                        var label = spec.label || spec.Label || '';
-                        var typeName = (spec.type || spec.Type || 'TOTP').toUpperCase();
-                        var display = label ? typeName + ' — ' + label : typeName + ' — ' + (spec.issuer || spec.Issuer || 'Unknown');
+                        var label = f.label || spec.label || spec.Label || '';
+                        var typeName = (f.factor_type || spec.type || spec.Type || 'TOTP').toUpperCase();
+                        var display = label ? typeName + ' — ' + label : typeName + ' — ' + (f.issuer || spec.issuer || spec.Issuer || 'Unknown');
                         var opt = document.createElement('option');
                         opt.value = f.id || f.ID;
                         opt.textContent = display;
@@ -460,10 +460,10 @@
             // Fetch factors for per-factor stats
             return mfaFetch('/factors/' + uid).then(function (fData) {
                 var factors = fData.factors || [];
-                var active = factors.filter(function (f) { return (f.status || f.Status || {}).phase === 'Active'; });
-                var pending = factors.filter(function (f) { return (f.status || f.Status || {}).phase === 'Pending'; });
+                var active = factors.filter(function (f) { return (f.phase || (f.status || f.Status || {}).phase) === 'Active'; });
+                var pending = factors.filter(function (f) { return (f.phase || (f.status || f.Status || {}).phase) === 'Pending'; });
                 var disabled = factors.filter(function (f) {
-                    var p = (f.status || f.Status || {}).phase;
+                    var p = f.phase || (f.status || f.Status || {}).phase;
                     return p === 'Disabled' || p === 'Revoked' || p === 'Failed';
                 });
 
@@ -487,22 +487,22 @@
                         var status = f.status || f.Status || {};
                         var conditions = status.conditions || status.Conditions || [];
                         var condStr = conditions.map(function (c) { return c.type + '=' + c.status; }).join(', ') || '-';
-                        var phase = status.phase || status.Phase || '-';
+                        var phase = f.phase || status.phase || status.Phase || '-';
                         var badgeClass = 'tfa-badge-' + phase.toLowerCase();
-                        var label = spec.label || spec.Label || '-';
+                        var label = f.label || spec.label || spec.Label || '-';
                         var created = f.created_at || f.CreatedAt || '';
                         if (created) created = new Date(created).toLocaleString();
-                        var lastVer = status.last_verified_at || status.LastVerifiedAt || '';
-                        if (lastVer) lastVer = new Date(lastVer).toLocaleString();
-                        else lastVer = 'Never';
+                        var activatedAt = f.activated_at || status.activated_at || status.ActivatedAt || '';
+                        if (activatedAt) activatedAt = new Date(activatedAt).toLocaleString();
+                        else activatedAt = 'Never';
                         html += '<tr>';
                         html += '<td><code style="font-size:0.78rem">' + escapeHTML((f.id || f.ID || '').substring(0, 8)) + '...</code></td>';
                         html += '<td>' + escapeHTML(label) + '</td>';
-                        html += '<td>' + escapeHTML((spec.type || spec.Type || 'totp').toUpperCase()) + '</td>';
+                        html += '<td>' + escapeHTML((f.factor_type || spec.type || spec.Type || 'totp').toUpperCase()) + '</td>';
                         html += '<td><span class="tfa-badge ' + badgeClass + '">' + escapeHTML(phase) + '</span></td>';
-                        html += '<td>' + escapeHTML(spec.issuer || spec.Issuer || '-') + '</td>';
+                        html += '<td>' + escapeHTML(f.issuer || spec.issuer || spec.Issuer || '-') + '</td>';
                         html += '<td>' + escapeHTML(created) + '</td>';
-                        html += '<td>' + escapeHTML(lastVer) + '</td>';
+                        html += '<td>' + escapeHTML(activatedAt) + '</td>';
                         html += '<td style="font-size:0.78rem">' + escapeHTML(condStr) + '</td>';
                         html += '</tr>';
                     });

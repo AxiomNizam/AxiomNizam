@@ -1,9 +1,9 @@
 package conductor
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -41,7 +41,7 @@ func (r *RabbitMQBackend) Connect() error {
 		return fmt.Errorf("rabbitmq connect: %w", err)
 	}
 	r.conn = conn
-	log.Printf("[conductor/rabbitmq] connected to %s", r.url)
+	logging.Z().Info(fmt.Sprintf("[conductor/rabbitmq] connected to %s", r.url))
 	return nil
 }
 
@@ -227,7 +227,7 @@ func (r *RabbitMQBackend) StartConsumer(c *Consumer, handler func(*Message) erro
 		}
 	}()
 
-	log.Printf("[conductor/rabbitmq] consumer %s started on queue %s", c.ID, c.Queue)
+	logging.Z().Info(fmt.Sprintf("[conductor/rabbitmq] consumer %s started on queue %s", c.ID, c.Queue))
 	return nil
 }
 

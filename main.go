@@ -2,50 +2,42 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"example.com/axiomnizam/internal/alerting"
-	"example.com/axiomnizam/internal/anonymization"
-	"example.com/axiomnizam/internal/antivirus"
 	"example.com/axiomnizam/internal/apibanks"
 	"example.com/axiomnizam/internal/apiscanner"
 	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/auth"
-	"example.com/axiomnizam/internal/autopilot"
-	"example.com/axiomnizam/internal/blocking"
-	"example.com/axiomnizam/internal/bootstrapsecrets"
 	"example.com/axiomnizam/internal/bulk"
-	"example.com/axiomnizam/internal/catalog"
 	"example.com/axiomnizam/internal/cdc"
 	"example.com/axiomnizam/internal/conductor"
 	"example.com/axiomnizam/internal/config"
 	"example.com/axiomnizam/internal/contracts"
-	"example.com/axiomnizam/internal/costing"
 	"example.com/axiomnizam/internal/database"
 	datasourceresource "example.com/axiomnizam/internal/datasource"
-	"example.com/axiomnizam/internal/deployment"
 	"example.com/axiomnizam/internal/encryption"
 	"example.com/axiomnizam/internal/etl"
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
-	"example.com/axiomnizam/internal/federation"
-	"example.com/axiomnizam/internal/featurestore"
 	"example.com/axiomnizam/internal/gatekeeper"
-	"example.com/axiomnizam/internal/governance"
-	"example.com/axiomnizam/internal/handlers"
-	"example.com/axiomnizam/internal/heartbeat"
+	analyticspkg "example.com/axiomnizam/internal/analytics"
+	gispkg "example.com/axiomnizam/internal/gis"
+	graphqlpkg "example.com/axiomnizam/internal/graphql"
+	healthpkg "example.com/axiomnizam/internal/health"
+	apibuilder "example.com/axiomnizam/internal/apibuilder"
+	authn "example.com/axiomnizam/internal/iam/authn"
+	netintelpkg "example.com/axiomnizam/internal/netintel"
+	notificationpkg "example.com/axiomnizam/internal/notification"
+	transformpkg "example.com/axiomnizam/internal/transform"
 	iampkg "example.com/axiomnizam/internal/iam"
 	iamstorage "example.com/axiomnizam/internal/iam/storage"
 	iamtoken "example.com/axiomnizam/internal/iam/token"
@@ -56,38 +48,37 @@ import (
 	"example.com/axiomnizam/internal/kubeplus/crd"
 	"example.com/axiomnizam/internal/kubeplus/scheduler"
 	"example.com/axiomnizam/internal/lineage"
+	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/metrics"
-	"example.com/axiomnizam/internal/migrations"
-	"example.com/axiomnizam/internal/mlpipeline"
+	"example.com/axiomnizam/internal/observability"
 	"example.com/axiomnizam/internal/models"
 	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/platform"
 	genericctrl "example.com/axiomnizam/internal/platform/controller"
+	"example.com/axiomnizam/internal/platform/gc"
+	snapshothandler "example.com/axiomnizam/internal/platform/snapshot"
+	querypkg "example.com/axiomnizam/internal/query"
+	resourcespkg "example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/platform/featureflags"
 	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/policies"
-	"example.com/axiomnizam/internal/ratelimit"
 	"example.com/axiomnizam/internal/rbac"
 	reconcilerpkg "example.com/axiomnizam/internal/reconciler"
 	"example.com/axiomnizam/internal/reviewflow"
 	"example.com/axiomnizam/internal/runtime"
-	"example.com/axiomnizam/internal/schemaregistry"
-	"example.com/axiomnizam/internal/serviceregistry"
-	"example.com/axiomnizam/internal/slo"
+	"example.com/axiomnizam/internal/server"
+	securitypkg "example.com/axiomnizam/internal/security"
 	"example.com/axiomnizam/internal/storage"
-	"example.com/axiomnizam/internal/stream"
-	"example.com/axiomnizam/internal/streamanalytics"
 	"example.com/axiomnizam/internal/streaming"
 	"example.com/axiomnizam/internal/tenant"
 	"example.com/axiomnizam/internal/tracing"
-	"example.com/axiomnizam/internal/trivy"
 	"example.com/axiomnizam/internal/vectorplus"
+	"example.com/axiomnizam/internal/waitx"
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
 	"example.com/axiomnizam/internal/workflows"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"gorm.io/gorm"
 )
 
@@ -116,9 +107,12 @@ func main() {
 		log.Fatalf("Failed to initialize runtime: %v", err)
 	}
 
+	// Module registry — collects all modules for uniform lifecycle management.
+	var modules []contracts.Module
+
 	// Load configuration
 	cfg := config.LoadConfig()
-	applySecurityGuardrails(cfg)
+	server.ApplySecurityGuardrails(cfg)
 	iamOnlyAuthRaw := strings.TrimSpace(os.Getenv("IAM_ONLY_AUTH"))
 	iamOnlyAuth := true
 	if iamOnlyAuthRaw != "" {
@@ -232,7 +226,7 @@ func main() {
 	// When using etcd (default), they run immediately.
 	earlyStorageBackend := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_BACKEND")))
 	if earlyStorageBackend != "raft" {
-		if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
+		if _, secretErr := server.EnsureSharedDemoJWTSecret(conns.PostgreSQL, conns.Etcd, nil); secretErr != nil {
 			log.Printf("⚠️  DEMO_JWT_SECRET synchronization failed: %v", secretErr)
 		} else {
 			log.Println("✅ DEMO_JWT_SECRET synchronized for replica-safe token validation")
@@ -244,7 +238,7 @@ func main() {
 		integration.ConfigureGlobalPersistence(conns.Etcd)
 	} else {
 		// Raft mode: JWT secret from env or postgres only (KVStore not ready yet).
-		if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, nil); secretErr != nil {
+		if _, secretErr := server.EnsureSharedDemoJWTSecret(conns.PostgreSQL, nil, nil); secretErr != nil {
 			log.Printf("ℹ️  DEMO_JWT_SECRET deferred to Raft backend init: %v", secretErr)
 		} else {
 			log.Println("✅ DEMO_JWT_SECRET synchronized (postgres/env)")
@@ -253,7 +247,7 @@ func main() {
 	}
 
 	// Create tables
-	createTables(conns)
+	server.CreateTables(conns)
 
 	// NOTE: Legacy train / bd-train GIS PostgreSQL connections and their
 	// handlers (GISTrainHandler, GISBDTrainHandler) were removed as part of
@@ -285,8 +279,42 @@ func main() {
 		log.Println("✅ IAM system initialized")
 	}
 
+	// Initialize OpenTelemetry tracing (no-op if OTEL_EXPORTER_OTLP_ENDPOINT not set)
+	otelShutdown, otelErr := observability.InitTracer(ctx, "axiomnizam")
+	if otelErr != nil {
+		log.Printf("⚠️  OTel tracer init failed: %v (tracing disabled)", otelErr)
+	} else {
+		defer otelShutdown(context.Background())
+	}
+
+	// Initialize structured logging
+	logEnv := os.Getenv("LOG_ENV")
+	if logEnv == "" {
+		logEnv = "production"
+	}
+	logging.Init(logEnv)
+
 	// Create Gin router
 	router := gin.Default()
+
+	// Trust proxies for X-Forwarded-For / X-Real-IP.
+	// Set TRUSTED_PROXIES env to comma-separated CIDRs (e.g. "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16").
+	// Defaults to private Docker/K8s CIDRs. Set to "0.0.0.0/0" to trust all, or "*" to trust none.
+	trustedProxiesEnv := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if trustedProxiesEnv == "" {
+		trustedProxiesEnv = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+	}
+	var trustedProxies []string
+	if trustedProxiesEnv == "*" {
+		trustedProxies = []string{} // trust none
+	} else {
+		for _, cidr := range strings.Split(trustedProxiesEnv, ",") {
+			if trimmed := strings.TrimSpace(cidr); trimmed != "" {
+				trustedProxies = append(trustedProxies, trimmed)
+			}
+		}
+	}
+	_ = router.SetTrustedProxies(trustedProxies)
 
 	allowedOriginSet := make(map[string]struct{})
 	addAllowedOrigin := func(raw string) {
@@ -342,20 +370,32 @@ func main() {
 		c.Next()
 	})
 
+	// Observability middleware — request ID, trace context, structured access logs
+	router.Use(observability.RequestIDMiddleware())
+	router.Use(observability.AccessLogMiddleware())
+
+	// Security headers + request body size limits + CSRF
+	router.Use(observability.SecurityHeadersMiddleware())
+	router.Use(observability.RequestValidationMiddleware(observability.DefaultRequestValidationConfig()))
+	router.Use(observability.CSRFMiddleware(observability.DefaultCSRFConfig()))
+
+	// Prometheus /metrics endpoint
+	metrics.RegisterMetricsEndpoint(router)
+
 	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware
-	apiMetricsTracker := handlers.NewAPIMetricsTracker(conns.Valkey)
-	router.Use(handlers.MetricsMiddleware(apiMetricsTracker))
+	apiMetricsTracker := metrics.NewAPIMetricsTracker(conns.Valkey)
+	router.Use(metrics.MetricsMiddleware(apiMetricsTracker))
 
 	// Initialize Rate Limiter
 	// Max calls and token validity from config (.env)
 	rateLimiter := auth.NewRateLimiter(cfg.RateLimiting.MaxCallsPerToken, cfg.RateLimiting.TokenValidityMinutes)
 
 	// Initialize Query Logger with Valkey/Redis
-	queryLogger := handlers.NewQueryLogger(conns.Valkey, "/data/query_logs")
+	queryLogger := querypkg.NewQueryLogger(conns.Valkey, "/data/query_logs")
 
 	// Initialize all handlers
-	healthHandler := handlers.NewHealthHandler(conns)
+	healthHandler := healthpkg.NewHandler(conns)
 
 	// Admin handler for database and table creation
 	// Only include SQL databases (MongoDB and Firebase don't support SQL DDL operations)
@@ -366,21 +406,21 @@ func main() {
 		"percona":  conns.Percona,
 		"oracle":   conns.Oracle,
 	}
-	adminHandler := handlers.NewAdminHandler(dbConnections, conns.PostgreSQL)
+	adminHandler := database.NewHandler(dbConnections, conns.PostgreSQL)
 
 	// User management handler
-	platformUserHandler := handlers.NewPlatformUserHandler(conns.Etcd)
+	platformUserHandler := iamusers.NewPlatformUserHandler(conns.Etcd)
 
 	// Dynamic Query handlers for each database
-	mysqlDynamicHandler := handlers.NewDynamicQueryHandler(conns.MySQL, queryLogger)
-	mariadbDynamicHandler := handlers.NewDynamicQueryHandler(conns.MariaDB, queryLogger)
-	postgresDynamicHandler := handlers.NewDynamicQueryHandler(conns.PostgreSQL, queryLogger)
-	perconaDynamicHandler := handlers.NewDynamicQueryHandler(conns.Percona, queryLogger)
-	oracleDynamicHandler := handlers.NewDynamicQueryHandler(conns.Oracle, queryLogger)
+	mysqlDynamicHandler := querypkg.NewHandler(conns.MySQL, queryLogger)
+	mariadbDynamicHandler := querypkg.NewHandler(conns.MariaDB, queryLogger)
+	postgresDynamicHandler := querypkg.NewHandler(conns.PostgreSQL, queryLogger)
+	perconaDynamicHandler := querypkg.NewHandler(conns.Percona, queryLogger)
+	oracleDynamicHandler := querypkg.NewHandler(conns.Oracle, queryLogger)
 
 	// Notification handler
 	discordWebhookURL := cfg.Discord.WebhookURL
-	notificationHandler := handlers.NewNotificationHandler(discordWebhookURL, dbConnections)
+	notificationHandler := notificationpkg.NewHandler(discordWebhookURL, dbConnections)
 
 	// GraphQL handler (prefer PostgreSQL for schema introspection; fallback to available SQL engines)
 	graphQLDB := conns.PostgreSQL
@@ -396,7 +436,7 @@ func main() {
 	if graphQLDB == nil {
 		graphQLDB = conns.Oracle
 	}
-	graphQLHandler := handlers.NewGraphQLHandler(graphQLDB)
+	graphQLHandler := graphqlpkg.NewHandler(graphQLDB)
 
 	// Context enrichment helper - populates database name and user info for logging
 	enrichRequestContext := func(c *gin.Context) {
@@ -579,7 +619,7 @@ func main() {
 	})
 
 	// Authentication endpoints (no auth required for login/refresh)
-	authHandler := handlers.NewAuthHandler()
+	authHandler := authn.NewAuthHandler()
 	authHandler.SetRateLimiter(rateLimiter)
 	authHandler.SetPlatformUserHandler(platformUserHandler)
 	if iamSystem != nil && iamSystem.PGStore != nil {
@@ -718,7 +758,7 @@ func main() {
 	// DATA TRANSFORMATION ENDPOINTS (Auth Required)
 	// ====================================
 
-	transformHandler := handlers.NewTransformationHandler()
+	transformHandler := transformpkg.NewHandler()
 
 	// Rule Management endpoints
 	router.POST("/api/transform/rules", authMiddleware, transformHandler.RegisterRule)
@@ -743,7 +783,7 @@ func main() {
 	// ====================================
 	// ADMIN OPERATIONS (Admin Only)
 	// ====================================
-	certificateHandler := handlers.NewCertificateHandler()
+	certificateHandler := securitypkg.NewHandler()
 
 	// Database management endpoints (admin only)
 	router.POST("/api/admin/database/create", adminOrSysMiddleware, adminHandler.CreateDatabase)
@@ -794,7 +834,7 @@ func main() {
 	// ====================================
 	// CLI AUTHENTICATION ENDPOINTS
 	// ====================================
-	cliAuth := handlers.NewCLIAuthHandler()
+	cliAuth := authn.NewCLIAuthHandler()
 	router.POST("/api/v1/auth/login", cliAuth.Login)
 	router.POST("/api/v1/auth/logout", authHandler.Logout)
 	router.GET("/api/v1/auth/verify", cliAuth.Verify)
@@ -803,7 +843,7 @@ func main() {
 	// ====================================
 	// KUBERNETES-STYLE RESOURCE ENDPOINTS
 	// ====================================
-	resourceHandler := handlers.NewResourceHandler(conns.Etcd)
+	resourceHandler := resourcespkg.NewGenericResourceHandler(conns.Etcd)
 
 	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
 	nsAPI := router.Group("/api/v1/namespaces")
@@ -841,7 +881,7 @@ func main() {
 			}
 		}
 
-		if err := ensureWorkflowRegistered(c.Request.Context(), resourceHandler, workflowName); err != nil {
+		if err := server.EnsureWorkflowRegistered(c.Request.Context(), resourceHandler, workflowName); err != nil {
 			if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) == nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 				return
@@ -913,7 +953,7 @@ func main() {
 	})
 
 	// DataSource endpoints
-	dsHandler := handlers.NewDataSourceHandler(conns.Etcd)
+	dsHandler := datasourceresource.NewDataSourceHandler(conns.Etcd)
 	router.POST("/api/v1/datasources", adminOrSysMiddleware, dsHandler.Create)
 	router.GET("/api/v1/datasources", authMiddleware, dsHandler.List)
 	router.GET("/api/v1/datasources/:name", authMiddleware, dsHandler.Get)
@@ -922,7 +962,7 @@ func main() {
 	router.POST("/api/v1/datasources/:name/test", adminOrSysMiddleware, dsHandler.Test)
 
 	// Job endpoints
-	jobHandler := handlers.NewJobHandler(conns.Etcd)
+	jobHandler := jobs.NewLegacyJobHandler(conns.Etcd)
 	router.POST("/api/v1/jobs", adminOrSysMiddleware, jobHandler.Create)
 	router.GET("/api/v1/jobs", authMiddleware, jobHandler.List)
 	router.GET("/api/v1/jobs/schedules", authMiddleware, jobHandler.ListSchedules)
@@ -1022,13 +1062,7 @@ func main() {
 	}
 
 	// Conductor (RabbitMQ / Kafka producer & consumer management)
-	conductorCfg := conductor.Config{
-		RabbitMQURL:  os.Getenv("RABBITMQ_URL"),
-		KafkaBrokers: strings.Split(os.Getenv("KAFKA_BROKERS"), ","),
-	}
-	if conductorCfg.KafkaBrokers[0] == "" {
-		conductorCfg.KafkaBrokers = nil
-	}
+	conductorCfg := conductor.LoadConfigFromEnv()
 	conductorMgr := conductor.NewManager(conductorCfg)
 	conductorMgr.InitPersistence(conns.PostgreSQL)
 	conductor.RegisterRoutes(router, conductorMgr, authMiddleware, adminOrSysMiddleware)
@@ -1113,7 +1147,7 @@ func main() {
 	// ====================================
 	// GIS DASHBOARD ENDPOINTS
 	// ====================================
-	gisHandler := handlers.NewGISHandler()
+	gisHandler := apibuilder.NewGISHandler()
 	gisAPI := router.Group("/api/v1/gis", authMiddleware)
 	{
 		gisAPI.GET("/summary", gisHandler.GetSummary)
@@ -1141,7 +1175,9 @@ func main() {
 	}
 
 	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
-	gisSpecHandler := handlers.NewGISSpecializedHandler()
+	gisSystem := gispkg.NewSystem()
+	gisSpecHandler := gisSystem.Handler()
+	_ = gisSystem.Start(ctx)
 	gisSpecAPI := router.Group("/api/v1/gis/dashboards", authMiddleware)
 	{
 		gisSpecAPI.GET("", gisSpecHandler.ListDashboardTypes)
@@ -1155,7 +1191,7 @@ func main() {
 	// the API Builder using DataSource resources.
 
 	// Analytics dashboards (charts, graphs, tables, KPI, heatmap, export)
-	analyticsHandler := handlers.NewAnalyticsHandler()
+	analyticsHandler := apibuilder.NewAnalyticsHandler()
 	analyticsAPI := router.Group("/api/v1/analytics", authMiddleware)
 	{
 		analyticsAPI.GET("/dashboards", analyticsHandler.ListDashboards)
@@ -1169,28 +1205,21 @@ func main() {
 	// ====================================
 	// CDC & ETL DATA PLATFORM ENDPOINTS
 	// ====================================
-	cdcEtlHandler := handlers.NewCDCETLHandler(conns.Etcd)
+	cdcSystem := cdc.NewSystem(conns.Etcd)
+	cdcEtlHandler := cdcSystem.Handler()
+	_ = cdcSystem.Start(ctx)
+	log.Println("✅ CDC module started")
 
-	// ETL Pipeline Management
+	// ETL System (standalone with audit/metrics/KV persistence)
+	etlEngine := etl.NewEngine(conns.Etcd)
+	etlSystem := etl.NewSystem(etlEngine)
+	_ = etlSystem.Start(ctx)
+	etlHandler := etlSystem.Handler()
+	log.Println("✅ ETL module started")
+
+	// ETL Pipeline Management (standalone handler with typed DTOs + audit + metrics)
 	etlAPI := router.Group("/api/v1/etl", authMiddleware)
-	{
-		etlAPI.GET("/pipelines", cdcEtlHandler.ListETLPipelines)
-		etlAPI.GET("/pipelines/:id", cdcEtlHandler.GetETLPipeline)
-		etlAPI.POST("/pipelines", adminOrSysMiddleware, cdcEtlHandler.CreateETLPipeline)
-		etlAPI.PUT("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLPipeline)
-		etlAPI.DELETE("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLPipeline)
-		etlAPI.POST("/pipelines/:id/run", adminOrSysMiddleware, cdcEtlHandler.RunETLPipeline)
-		etlAPI.GET("/runs", cdcEtlHandler.ListETLRuns)
-		etlAPI.GET("/runs/:id", cdcEtlHandler.GetETLRun)
-		etlAPI.POST("/connectors", adminOrSysMiddleware, cdcEtlHandler.CreateETLConnector)
-		etlAPI.PUT("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateETLConnector)
-		etlAPI.DELETE("/connectors/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteETLConnector)
-		etlAPI.GET("/connectors", cdcEtlHandler.GetETLConnectors)
-		etlAPI.GET("/connectors/catalog", cdcEtlHandler.GetETLConnectorCatalog)
-		etlAPI.GET("/orchestration/capabilities", cdcEtlHandler.GetETLOrchestrationCapabilities)
-		etlAPI.GET("/blueprints", cdcEtlHandler.GetETLBlueprints)
-		etlAPI.GET("/observability", cdcEtlHandler.GetETLObservability)
-	}
+	etlHandler.RegisterRoutes(etlAPI, adminOrSysMiddleware)
 
 	// CDC Pipeline Management
 	cdcAPI := router.Group("/api/v1/cdc", authMiddleware)
@@ -1212,9 +1241,23 @@ func main() {
 	router.GET("/api/v1/data-platform/overview", authMiddleware, cdcEtlHandler.GetPlatformOverview)
 
 	// ====================================
+	// API BANKS (standalone system with audit/metrics)
+	// ====================================
+	apiBankSystem := apibanks.NewSystem()
+	_ = apiBankSystem.Start(ctx)
+	apiBankHandler := apiBankSystem.Handler()
+	log.Println("✅ API Banks module started")
+
+	apiBanksAPI := router.Group("/api/v1/apibanks", authMiddleware)
+	apiBankHandler.RegisterRoutes(apiBanksAPI, adminOrSysMiddleware)
+
+	// ====================================
 	// API BUILDER, CSV DASHBOARD & CONVERSION
 	// ====================================
-	apiBuilderHandler := handlers.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
+	apiBuilderHandler := apibuilder.NewAPIBuilderHandler(analyticsHandler, gisHandler, dbConnections, conns.Etcd, nil)
+	apiBuilderSystem := apibuilder.NewSystem(apiBuilderHandler)
+	_ = apiBuilderSystem.Start(ctx)
+	log.Println("✅ API Builder module started")
 
 	builderAPI := router.Group("/api/v1/builder", authMiddleware)
 	{
@@ -1270,8 +1313,9 @@ func main() {
 	// ====================================
 	// NETWORK INTELLIGENCE ENDPOINTS
 	// ====================================
-	netIntelHandler := handlers.NewNetIntelHandler()
-	modeManager := modes.NewManager()
+	netintelSystem := netintelpkg.NewSystem()
+	netIntelHandler := netintelSystem.Handler()
+	modeManager := netintelSystem.ModesManager()
 
 	// ====================================
 	// NEWLY ADDED FEATURE MODULES
@@ -1288,84 +1332,42 @@ func main() {
 
 	netintelAPI := router.Group("/api/v1/netintel", authMiddleware)
 	{
-		// Summary & Observability
-		netintelAPI.GET("/summary", netIntelHandler.GetSummary)
-		netintelAPI.GET("/observability", netIntelHandler.GetObservability)
-		netintelAPI.GET("/log-types", netIntelHandler.GetLogTypes)
+		// Register all core netintel routes via the handler
+		netIntelHandler.RegisterRoutes(netintelAPI)
 
-		// Parser CRUD
-		netintelAPI.GET("/parsers", netIntelHandler.ListParsers)
-		netintelAPI.GET("/parsers/:id", netIntelHandler.GetParser)
-		netintelAPI.POST("/parsers", adminOrSysMiddleware, netIntelHandler.CreateParser)
-		netintelAPI.PUT("/parsers/:id", adminOrSysMiddleware, netIntelHandler.UpdateParser)
-		netintelAPI.DELETE("/parsers/:id", adminOrSysMiddleware, netIntelHandler.DeleteParser)
-
-		// Log Entries
-		netintelAPI.GET("/logs", netIntelHandler.ListEntries)
-		netintelAPI.POST("/logs", adminOrSysMiddleware, netIntelHandler.IngestLog)
-		netintelAPI.GET("/logs/stats", netIntelHandler.GetEntryStats)
-
-		// Topology
-		netintelAPI.GET("/topology", netIntelHandler.GetTopology)
-		netintelAPI.GET("/topology/nodes/:id", netIntelHandler.GetTopologyNode)
-		netintelAPI.PUT("/topology/nodes/:id", adminOrSysMiddleware, netIntelHandler.UpdateTopologyNode)
-
-		// Heatmaps & Trends
-		netintelAPI.GET("/heatmap", netIntelHandler.GetHeatmap)
-		netintelAPI.GET("/trends", netIntelHandler.GetTrends)
-
-		// Predictions & Tracks
-		netintelAPI.GET("/predictions", netIntelHandler.GetPredictions)
-		netintelAPI.GET("/tracks", netIntelHandler.ListTracks)
-		netintelAPI.GET("/tracks/:mac", netIntelHandler.GetTrack)
-
-		// Anomalies
-		netintelAPI.GET("/anomalies", netIntelHandler.ListAnomalies)
-		netintelAPI.POST("/anomalies/:id/acknowledge", adminOrSysMiddleware, netIntelHandler.AcknowledgeAnomaly)
-		netintelAPI.POST("/anomalies/:id/resolve", adminOrSysMiddleware, netIntelHandler.ResolveAnomaly)
-
-		// Alerts
-		netintelAPI.GET("/alerts", netIntelHandler.ListAlerts)
-		netintelAPI.POST("/alerts/:id/acknowledge", adminOrSysMiddleware, netIntelHandler.AcknowledgeAlert)
-		netintelAPI.POST("/alerts/:id/resolve", adminOrSysMiddleware, netIntelHandler.ResolveAlert)
-
-		// Forecasts
-		netintelAPI.GET("/forecasts", netIntelHandler.ListForecasts)
-		netintelAPI.GET("/forecasts/:metric", netIntelHandler.GetForecast)
-
-		// Modes (new module-backed endpoints)
+		// Modes endpoints (inline — modes manager is separate from handler)
 		netintelAPI.GET("/modes", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"modes": modeManager.List()})
+			c.JSON(http.StatusOK, netintelpkg.ModesListResponse{Status: "success", Modes: modeManager.List()})
 		})
 		netintelAPI.PUT("/modes/:name", adminOrSysMiddleware, func(c *gin.Context) {
 			var cfg modes.ModeConfig
 			if err := c.ShouldBindJSON(&cfg); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
 				return
 			}
 			cfg.Name = modes.Mode(strings.ToLower(strings.TrimSpace(c.Param("name"))))
 			if cfg.Name == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "mode name is required"})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: "mode name is required"})
 				return
 			}
 			modeManager.Upsert(cfg)
-			c.JSON(http.StatusOK, gin.H{"message": "mode upserted", "mode": cfg})
+			c.JSON(http.StatusOK, netintelpkg.ModesUpsertResponse{Message: "mode upserted", Mode: cfg})
 		})
 		netintelAPI.POST("/modes/events", adminOrSysMiddleware, func(c *gin.Context) {
 			var ev modes.ModeEvent
 			if err := c.ShouldBindJSON(&ev); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
 				return
 			}
 			if ev.Timestamp.IsZero() {
 				ev.Timestamp = time.Now().UTC()
 			}
 			modeManager.Record(ev)
-			c.JSON(http.StatusOK, gin.H{"message": "event recorded"})
+			c.JSON(http.StatusOK, netintelpkg.MessageResponse{Message: "event recorded"})
 		})
 		netintelAPI.GET("/modes/:name/events", func(c *gin.Context) {
 			name := modes.Mode(strings.ToLower(strings.TrimSpace(c.Param("name"))))
-			c.JSON(http.StatusOK, gin.H{"events": modeManager.FindByMode(name)})
+			c.JSON(http.StatusOK, netintelpkg.ModesEventsResponse{Status: "success", Events: modeManager.FindByMode(name)})
 		})
 		netintelAPI.POST("/modes/detect", func(c *gin.Context) {
 			var body struct {
@@ -1373,7 +1375,7 @@ func main() {
 				Samples  []float64 `json:"samples"`
 			}
 			if err := c.ShouldBindJSON(&body); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
 				return
 			}
 			var score float64
@@ -1389,7 +1391,7 @@ func main() {
 			default:
 				score = modes.Detector001(body.Samples)
 			}
-			c.JSON(http.StatusOK, gin.H{"detector": body.Detector, "score": score})
+			c.JSON(http.StatusOK, netintelpkg.ModesDetectResponse{Detector: body.Detector, Score: score})
 		})
 	}
 
@@ -1669,8 +1671,8 @@ func main() {
 	} else {
 		storageAPI := router.Group("/api/v1")
 		storageSys.RegisterRoutes(storageAPI)
-		storageSys.Start(ctx)
-		log.Println("✅ Object Storage module started (native backend, data:", storageCfg.DataDir, ")")
+		modules = append(modules, storageSys)
+		log.Println("✅ Object Storage module registered (native backend, data:", storageCfg.DataDir, ")")
 
 		// Wire antivirus engine to API builder scanner pipeline.
 		if storageSys.AVEngine != nil {
@@ -1687,8 +1689,17 @@ func main() {
 	} else {
 		mfaAPI := router.Group("/api/v1/mfa", authMiddleware)
 		gkSystem.RegisterRoutes(mfaAPI)
-		gkSystem.StartControllers(ctx)
-		log.Println("✅ Gatekeeper 2FA module started")
+		modules = append(modules, gkSystem)
+		log.Println("✅ Gatekeeper 2FA module registered")
+	}
+
+	// Start all registered modules.
+	for _, m := range modules {
+		if err := m.Start(ctx); err != nil {
+			log.Printf("⚠️  Module %s failed to start: %v", m.Name(), err)
+		} else {
+			log.Printf("✅ Module %s started", m.Name())
+		}
 	}
 
 	// ====================================
@@ -1709,9 +1720,7 @@ func main() {
 	// ====================================
 	// Note: InMemorySecretsManager is used directly; the SecretsManager
 	// interface has a signature mismatch that will be unified in a follow-up.
-	encryptionMgr := encryption.NewInMemorySecretsManager()
 	encryptionHandler := encryption.NewEncryptionHandler(nil)
-	_ = encryptionMgr // reconciler uses this directly
 	encryptionAPI := router.Group("/api/v1/encryption", authMiddleware)
 	{
 		encryptionAPI.POST("/keys", adminOrSysMiddleware, encryptionHandler.CreateKey)
@@ -1725,13 +1734,6 @@ func main() {
 		encryptionAPI.GET("/policies", encryptionHandler.ListPolicies)
 	}
 	log.Println("✅ Encryption routes registered")
-
-	// ====================================
-	// JOBS OBSERVABILITY (previously unwired)
-	// ====================================
-	jobMetricsCollector := jobs.NewMetricsCollector("axiom_nizam")
-	_ = jobMetricsCollector // available for observability handler when job manager is wired
-	log.Println("✅ Jobs metrics collector initialized")
 
 	// ====================================
 	// RECONCILER CONTROLLERS (P2 — AxiomNizam architecture)
@@ -1776,7 +1778,7 @@ func main() {
 			}
 
 			// Re-attempt JWT secret with KVStore.
-			if _, secretErr := ensureSharedDemoJWTSecret(conns.PostgreSQL, nil, backendMgr.KV()); secretErr != nil {
+			if _, secretErr := server.EnsureSharedDemoJWTSecret(conns.PostgreSQL, nil, backendMgr.KV()); secretErr != nil {
 				log.Printf("⚠️  DEMO_JWT_SECRET synchronization via Raft KV failed: %v", secretErr)
 			} else {
 				log.Println("✅ DEMO_JWT_SECRET synchronized via Raft KV store")
@@ -1827,6 +1829,34 @@ func main() {
 				gkSystem.SetKVStore(backendMgr.KV())
 				log.Println("✅ Gatekeeper: Raft KV persistence wired (deferred)")
 			}
+
+			// Wire CDC audit persistence
+			cdcSystem.SetKVStore(backendMgr.KV())
+
+			// Wire ETL audit + metrics persistence
+			etlSystem.SetKVStore(backendMgr.KV())
+
+			// Wire GIS audit persistence
+			gisSystem.SetKVStore(backendMgr.KV())
+
+			// Wire API Builder audit persistence
+			apiBuilderSystem.SetKVStore(backendMgr.KV())
+			log.Println("✅ API Builder: Raft KV persistence wired (deferred)")
+
+			// Wire APIBanks audit persistence
+			apiBankSystem.SetKVStore(backendMgr.KV())
+
+			// Wire NetIntel audit + metrics persistence
+			netintelSystem.SetKVStore(backendMgr.KV())
+
+			// Wire remaining modules to KV persistence in Raft mode.
+			workflows.ConfigureGlobalKVPersistence(backendMgr.KV())
+			workflows.GlobalWorkflowEngine.RegisterBuiltinHandlers()
+			modes.ConfigureGlobalKVPersistence(backendMgr.KV())
+			vectorplus.ConfigureGlobalKVPersistence(backendMgr.KV())
+			reviewflow.ConfigureGlobalKVPersistence(backendMgr.KV())
+			integration.ConfigureGlobalKVPersistence(backendMgr.KV())
+			log.Println("✅ Workflows/Modes/VectorPlus/ReviewFlow/Integration: Raft KV persistence wired")
 
 			log.Println("  ℹ️  Module persistence: Raft KV available via backendMgr.KV()")
 		}
@@ -1888,6 +1918,15 @@ func main() {
 				c.JSON(http.StatusOK, models.Response{Status: "ok", Message: fmt.Sprintf("peer %s removed", id)})
 			})
 			log.Println("  ✅ Raft cluster management API registered (/api/v1/raft/peers)")
+		}
+
+		// Snapshot backup/restore (raft mode only)
+		if backendMgr.IsRaft() {
+			snapshotH := snapshothandler.NewHandler(backendMgr)
+			sysAPI := router.Group("/api/v1/system", authMiddleware)
+			sysAPI.GET("/snapshot", snapshotH.Download)
+			sysAPI.POST("/snapshot/restore", adminOrSysMiddleware, snapshotH.Restore)
+			log.Println("  ✅ Snapshot backup/restore endpoints registered (/api/v1/system/snapshot)")
 		}
 
 		log.Printf("🔄 Initializing reconciler controllers (backend=%s)...", storageBackend)
@@ -2121,46 +2160,88 @@ func main() {
 		// ====================================
 		// PHASE 6 P2: GIS resource controller
 		// ====================================
-		gisStore := platformstore.NewStore[*handlers.GISResource](backendMgr, "gis", func() *handlers.GISResource { return &handlers.GISResource{} })
+		gisStore := platformstore.NewStore[*gispkg.GISResource](backendMgr, "gis", func() *gispkg.GISResource { return &gispkg.GISResource{} })
 		gisReconciler := reconcilerpkg.NewInstrumented("gis",
-			handlers.NewGISReconciler(gisStore), reconcilerMetrics)
+			gispkg.NewGISReconciler(gisStore), reconcilerMetrics)
 		reconcilerMetrics.Register("gis")
 		go genericctrl.NewGenericController("gis", gisStore, gisReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ GIS controller started (Phase 6 P2)")
 
 		// Analytics Dashboard controller
-		analyticsStore := platformstore.NewStore[*handlers.AnalyticsDashboardResource](backendMgr, "analytics-dashboards", func() *handlers.AnalyticsDashboardResource { return &handlers.AnalyticsDashboardResource{} })
+		analyticsStore := platformstore.NewStore[*analyticspkg.DashboardResource](backendMgr, "analytics-dashboards", func() *analyticspkg.DashboardResource { return &analyticspkg.DashboardResource{} })
 		analyticsReconciler := reconcilerpkg.NewInstrumented("analytics",
-			handlers.NewAnalyticsDashboardReconciler(analyticsStore), reconcilerMetrics)
+			analyticspkg.NewDashboardReconciler(analyticsStore), reconcilerMetrics)
 		reconcilerMetrics.Register("analytics")
 		go genericctrl.NewGenericController("analytics", analyticsStore, analyticsReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ Analytics Dashboard controller started (Phase 6 P2)")
 
 		// Transform Rule controller
-		transformStore := platformstore.NewStore[*handlers.TransformRuleResource](backendMgr, "transform-rules", func() *handlers.TransformRuleResource { return &handlers.TransformRuleResource{} })
+		transformStore := platformstore.NewStore[*transformpkg.RuleResource](backendMgr, "transform-rules", func() *transformpkg.RuleResource { return &transformpkg.RuleResource{} })
 		transformReconciler := reconcilerpkg.NewInstrumented("transform",
-			handlers.NewTransformRuleReconciler(transformStore), reconcilerMetrics)
+			transformpkg.NewRuleReconciler(transformStore), reconcilerMetrics)
 		reconcilerMetrics.Register("transform")
 		go genericctrl.NewGenericController("transform", transformStore, transformReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ Transform Rule controller started (Phase 6 P2)")
 
 		// Notification Channel controller
-		notificationStore := platformstore.NewStore[*handlers.NotificationChannelResource](backendMgr, "notification-channels", func() *handlers.NotificationChannelResource { return &handlers.NotificationChannelResource{} })
+		notificationStore := platformstore.NewStore[*notificationpkg.ChannelResource](backendMgr, "notification-channels", func() *notificationpkg.ChannelResource { return &notificationpkg.ChannelResource{} })
 		notificationReconciler := reconcilerpkg.NewInstrumented("notification",
-			handlers.NewNotificationChannelReconciler(notificationStore), reconcilerMetrics)
+			notificationpkg.NewChannelReconciler(notificationStore), reconcilerMetrics)
 		reconcilerMetrics.Register("notification")
 		go genericctrl.NewGenericController("notification", notificationStore, notificationReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ Notification Channel controller started (Phase 6 P2)")
 
 		// NetIntel Config controller
-		netintelStore := platformstore.NewStore[*handlers.NetIntelConfigResource](backendMgr, "netintel-configs", func() *handlers.NetIntelConfigResource { return &handlers.NetIntelConfigResource{} })
+		netintelStore := platformstore.NewStore[*netintelpkg.ConfigResource](backendMgr, "netintel-configs", func() *netintelpkg.ConfigResource { return &netintelpkg.ConfigResource{} })
 		netintelReconciler := reconcilerpkg.NewInstrumented("netintel",
-			handlers.NewNetIntelConfigReconciler(netintelStore), reconcilerMetrics)
+			netintelpkg.NewConfigReconciler(netintelStore), reconcilerMetrics)
 		reconcilerMetrics.Register("netintel")
 		go genericctrl.NewGenericController("netintel", netintelStore, netintelReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ NetIntel Config controller started (Phase 6 P2)")
 
 		log.Println("🔄 Phase 6 P2: +5 controllers started (gis, analytics, transform, notification, netintel)")
+
+		// APIBank reconciler
+		apiBankReconcilerStore := platformstore.NewStore[*apibanks.APIBankResource](backendMgr, "apibanks", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} })
+		apiBankReconciler := reconcilerpkg.NewInstrumented("apibanks",
+			apibanks.NewAPIBankReconciler(apiBankReconcilerStore, apiBankSystem.Manager()), reconcilerMetrics)
+		reconcilerMetrics.Register("apibanks")
+		go genericctrl.NewGenericController("apibanks", apiBankReconcilerStore, apiBankReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ APIBank controller started")
+
+		// WaitCheck reconciler
+		waitCheckStore := platformstore.NewStore[*waitx.WaitCheckResource](backendMgr, "wait-checks", func() *waitx.WaitCheckResource { return &waitx.WaitCheckResource{} })
+		waitCheckReconciler := reconcilerpkg.NewInstrumented("waitx",
+			waitx.NewWaitCheckReconciler(), reconcilerMetrics)
+		reconcilerMetrics.Register("waitx")
+		go genericctrl.NewGenericController("waitx", waitCheckStore, waitCheckReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ WaitX controller started")
+
+		// API Builder reconciler
+		customAPIStore := platformstore.NewStore[*apibuilder.CustomAPIResource](backendMgr, "custom-apis", func() *apibuilder.CustomAPIResource { return &apibuilder.CustomAPIResource{} })
+		customAPIReconciler := reconcilerpkg.NewInstrumented("apibuilder",
+			apibuilder.NewCustomAPIReconciler(apiBuilderHandler), reconcilerMetrics)
+		reconcilerMetrics.Register("apibuilder")
+		go genericctrl.NewGenericController("apibuilder", customAPIStore, customAPIReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
+		log.Println("  ✅ API Builder controller started")
+
+		// ====================================
+		// GARBAGE COLLECTOR (owner-reference cascade + finalizer gating)
+		// ====================================
+		garbageCollector := gc.NewGarbageCollector(30 * time.Second)
+		garbageCollector.Register("etl-pipelines", gc.NewStoreAdapter(etlStore, func() *etl.PipelineResource { return &etl.PipelineResource{} }))
+		garbageCollector.Register("cdc-pipelines", gc.NewStoreAdapter(cdcStore, func() *cdc.CDCPipelineResource { return &cdc.CDCPipelineResource{} }))
+		garbageCollector.Register("bulkoperations", gc.NewStoreAdapter(bulkStore, func() *bulk.BulkOperationResource { return &bulk.BulkOperationResource{} }))
+		garbageCollector.Register("jobs", gc.NewStoreAdapter(jobsStore, func() *jobs.JobResource { return &jobs.JobResource{} }))
+		garbageCollector.Register("exportjobs", gc.NewStoreAdapter(exportStore, func() *exportpkg.ExportJobResource { return &exportpkg.ExportJobResource{} }))
+		garbageCollector.Register("streams", gc.NewStoreAdapter(streamStore, func() *streaming.StreamResource { return &streaming.StreamResource{} }))
+		garbageCollector.Register("webhooks", gc.NewStoreAdapter(webhookStore, func() *webhooks.WebhookResource { return &webhooks.WebhookResource{} }))
+		garbageCollector.Register("analytics-dashboards", gc.NewStoreAdapter(analyticsStore, func() *analyticspkg.DashboardResource { return &analyticspkg.DashboardResource{} }))
+		garbageCollector.Register("custom-apis", gc.NewStoreAdapter(customAPIStore, func() *apibuilder.CustomAPIResource { return &apibuilder.CustomAPIResource{} }))
+		garbageCollector.Register("api-scans", gc.NewStoreAdapter(apiScannerStore, func() *apiscanner.APIScanResource { return &apiscanner.APIScanResource{} }))
+		garbageCollector.Register("gis", gc.NewStoreAdapter(gisStore, func() *gispkg.GISResource { return &gispkg.GISResource{} }))
+		go garbageCollector.Start(ctx)
+		log.Println("  ✅ Garbage collector started (11 stores, 30s interval)")
 
 		// Phase 0.4: etcd key-space monitoring
 		etcdPrefixes := []string{
@@ -2203,527 +2284,22 @@ func main() {
 		log.Println("⚠️  etcd not available — reconciler controllers skipped")
 	}
 
-	// ====================================
-	// MIGRATIONS (previously unwired)
-	// ====================================
-	if conns.PostgreSQL != nil {
-		if migrationErr := migrations.RunMigrations(conns.PostgreSQL); migrationErr != nil {
-			log.Printf("⚠️  Database migrations failed: %v", migrationErr)
-		} else {
-			log.Println("✅ Database migrations completed successfully")
-		}
-	}
+	// Wire previously-unwired modules (migrations, heartbeat, service registry, etc.)
+	server.WireUnwiredModules(conns, cfg, router, authMiddleware, adminOrSysMiddleware, backendMgr, platformManagers, storageSys)
 
-	// ====================================
-	// BLOCKING QUERY NOTIFIER (previously unwired)
-	// ====================================
-	blockingNotifier := blocking.NewNotifier()
-	_ = blockingNotifier // available for long-poll list endpoints
-	log.Println("✅ Blocking query notifier initialized")
+	// WaitX — service readiness checks (TCP, HTTP, DNS, gRPC, Redis, MySQL, PostgreSQL, MongoDB, Kafka, RabbitMQ)
+	waitxSystem := waitx.NewSystem()
+	waitxSystem.SetKVStore(backendMgr.KV())
+	_ = waitxSystem.Start(ctx)
+	waitxSystem.Handler().RegisterRoutes(router.Group("/api/v1", authMiddleware))
+	log.Println("✅ WaitX module started")
 
-	// ====================================
-	// HEARTBEAT TRACKER (previously unwired)
-	// ====================================
-	heartbeatTracker := heartbeat.New(func(id string) {
-		log.Printf("⚠️  Heartbeat expired for entity: %s", id)
-	})
-	heartbeatTracker.ReapInterval = 5 * time.Second
-	heartbeatTracker.Start()
-	log.Println("✅ Heartbeat tracker started")
+	// Print startup banner
+	server.PrintStartupBanner(cfg, iamOnlyAuth)
 
-	// ====================================
-	// SERVICE REGISTRY (previously unwired)
-	// ====================================
-	svcRegistry := serviceregistry.New()
-	log.Println("✅ Service registry started")
-
-	// ====================================
-	// AUTOPILOT (previously unwired)
-	// ====================================
-	autopilotInstance := autopilot.New(autopilot.Config{
-		MaxTrailingLogs:      250,
-		LastContactThreshold: 200 * time.Millisecond,
-		DeadServerCleanup:    true,
-		MinQuorum:            3,
-	})
-	_ = autopilotInstance // available for cluster health evaluation
-	log.Println("✅ Autopilot initialized")
-
-	// ====================================
-	// TRIVY VULNERABILITY SCANNER (previously unwired)
-	// ====================================
-	trivyBinaryPath := strings.TrimSpace(os.Getenv("TRIVY_BINARY_PATH"))
-	if trivyBinaryPath == "" {
-		trivyBinaryPath = "trivy"
-	}
-	trivyEngine := trivy.NewEngine(trivyBinaryPath)
-	log.Printf("✅ Trivy vulnerability scanner initialized (binary: %s)", trivyBinaryPath)
-
-	// ====================================
-	// API BANKS (previously unwired)
-	// ====================================
-	apiBankManager := apibanks.NewAPIBankManager()
-	apiBankCatalog := apibanks.NewAPIBankCatalog(apiBankManager)
-	_ = apiBankCatalog // available for API discovery
-
-	// APIBank reconciler (storage-backed)
-	if backendMgr != nil {
-		apiBankStore := platformstore.NewStore[*apibanks.APIBankResource](backendMgr, "apibanks", func() *apibanks.APIBankResource { return &apibanks.APIBankResource{} })
-		apiBankReconciler := apibanks.NewAPIBankReconciler(apiBankStore, apiBankManager)
-		_ = apiBankReconciler
-		metrics.GlobalReconcilerMetrics.Register("apibanks")
-		log.Println("  ✅ APIBank reconciler initialized")
-	}
-	log.Println("✅ API Banks module initialized")
-
-	// ====================================
-	// API BANKS ROUTES
-	// ====================================
-	apiBankAPI := router.Group("/api/v1/apibanks", authMiddleware)
-	{
-		apiBankAPI.POST("", adminOrSysMiddleware, func(c *gin.Context) {
-			var bank apibanks.APIBank
-			if err := c.ShouldBindJSON(&bank); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if err := apiBankManager.CreateBank(c.Request.Context(), &bank); err != nil {
-				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusCreated, gin.H{"message": "bank created", "bank": bank})
-		})
-		apiBankAPI.GET("", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"banks": apiBankManager.ListBanks()})
-		})
-		apiBankAPI.GET("/:name", func(c *gin.Context) {
-			bank := apiBankManager.GetBank(strings.TrimSpace(c.Param("name")))
-			if bank == nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "bank not found"})
-				return
-			}
-			c.JSON(http.StatusOK, bank)
-		})
-		apiBankAPI.POST("/:name/apis", adminOrSysMiddleware, func(c *gin.Context) {
-			var api apibanks.APIReference
-			if err := c.ShouldBindJSON(&api); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if err := apiBankManager.AddAPIToBank(c.Request.Context(), strings.TrimSpace(c.Param("name")), api); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"message": "API added to bank"})
-		})
-		apiBankAPI.DELETE("/:name/apis/:apiName", adminOrSysMiddleware, func(c *gin.Context) {
-			if err := apiBankManager.RemoveAPIFromBank(c.Request.Context(), strings.TrimSpace(c.Param("name")), strings.TrimSpace(c.Param("apiName"))); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"message": "API removed from bank"})
-		})
-		apiBankAPI.GET("/search/data-class", func(c *gin.Context) {
-			dataClass := strings.TrimSpace(c.Query("class"))
-			c.JSON(http.StatusOK, gin.H{"apis": apiBankCatalog.SearchByDataClass(dataClass)})
-		})
-		apiBankAPI.GET("/search/owner", func(c *gin.Context) {
-			owner := strings.TrimSpace(c.Query("owner"))
-			c.JSON(http.StatusOK, gin.H{"banks": apiBankCatalog.SearchByOwner(owner)})
-		})
-		apiBankAPI.GET("/search/tag", func(c *gin.Context) {
-			tag := strings.TrimSpace(c.Query("tag"))
-			c.JSON(http.StatusOK, gin.H{"banks": apiBankCatalog.SearchByTag(tag)})
-		})
-	}
-
-	// ====================================
-	// TRIVY SCANNER ROUTES
-	// ====================================
-	trivyAPI := router.Group("/api/v1/trivy", authMiddleware)
-	{
-		trivyAPI.POST("/scan", adminOrSysMiddleware, func(c *gin.Context) {
-			var req trivy.ScanRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			req.UseExternal = true
-			result, err := trivyEngine.Scan(c.Request.Context(), req)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, result)
-		})
-	}
-
-	// ====================================
-	// DEPLOYMENT CONTROLLER ROUTES
-	// ====================================
-	deploymentControllers := make(map[string]*deployment.Controller)
-	var deploymentMu sync.Mutex
-
-	deploymentAPI := router.Group("/api/v1/deployments", authMiddleware)
-	{
-		deploymentAPI.POST("", adminOrSysMiddleware, func(c *gin.Context) {
-			var spec deployment.Spec
-			if err := c.ShouldBindJSON(&spec); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if strings.TrimSpace(spec.JobID) == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is required"})
-				return
-			}
-			deploymentMu.Lock()
-			ctrl := deployment.NewController(spec)
-			deploymentControllers[spec.JobID] = ctrl
-			deploymentMu.Unlock()
-			c.JSON(http.StatusCreated, gin.H{"message": "deployment created", "jobId": spec.JobID, "state": ctrl.State()})
-		})
-		deploymentAPI.GET("/:jobId", func(c *gin.Context) {
-			jobID := strings.TrimSpace(c.Param("jobId"))
-			deploymentMu.Lock()
-			ctrl, ok := deploymentControllers[jobID]
-			deploymentMu.Unlock()
-			if !ok {
-				c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found"})
-				return
-			}
-			c.JSON(http.StatusOK, ctrl.State())
-		})
-		deploymentAPI.POST("/:jobId/promote", adminOrSysMiddleware, func(c *gin.Context) {
-			jobID := strings.TrimSpace(c.Param("jobId"))
-			deploymentMu.Lock()
-			ctrl, ok := deploymentControllers[jobID]
-			deploymentMu.Unlock()
-			if !ok {
-				c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found"})
-				return
-			}
-			if !ctrl.Promote() {
-				c.JSON(http.StatusConflict, gin.H{"error": "promotion not available — canaries may not be healthy or deployment not in running phase"})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"message": "deployment promoted", "state": ctrl.State()})
-		})
-		deploymentAPI.POST("/:jobId/fail", adminOrSysMiddleware, func(c *gin.Context) {
-			jobID := strings.TrimSpace(c.Param("jobId"))
-			var body struct {
-				Reason string `json:"reason"`
-			}
-			_ = c.ShouldBindJSON(&body)
-			if strings.TrimSpace(body.Reason) == "" {
-				body.Reason = "manual rollback"
-			}
-			deploymentMu.Lock()
-			ctrl, ok := deploymentControllers[jobID]
-			deploymentMu.Unlock()
-			if !ok {
-				c.JSON(http.StatusNotFound, gin.H{"error": "deployment not found"})
-				return
-			}
-			decision := ctrl.Fail(body.Reason)
-			c.JSON(http.StatusOK, gin.H{"message": "deployment failed", "decision": decision, "state": ctrl.State()})
-		})
-	}
-
-	// ====================================
-	// SERVICE REGISTRY ROUTES
-	// ====================================
-	svcRegistryAPI := router.Group("/api/v1/service-registry", authMiddleware)
-	{
-		svcRegistryAPI.POST("/services", adminOrSysMiddleware, func(c *gin.Context) {
-			var svc serviceregistry.Service
-			if err := c.ShouldBindJSON(&svc); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if strings.TrimSpace(svc.ID) == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "service id is required"})
-				return
-			}
-			if svc.Checks == nil {
-				svc.Checks = make(map[string]*serviceregistry.Check)
-			}
-			svcRegistry.Register(&svc)
-			c.JSON(http.StatusCreated, gin.H{"message": "service registered", "id": svc.ID})
-		})
-		svcRegistryAPI.DELETE("/services/:id", adminOrSysMiddleware, func(c *gin.Context) {
-			svcRegistry.Deregister(strings.TrimSpace(c.Param("id")))
-			c.JSON(http.StatusOK, gin.H{"message": "service deregistered"})
-		})
-		svcRegistryAPI.GET("/services/:id", func(c *gin.Context) {
-			svc, ok := svcRegistry.Get(strings.TrimSpace(c.Param("id")))
-			if !ok {
-				c.JSON(http.StatusNotFound, gin.H{"error": "service not found"})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"service": svc, "status": svc.Rollup()})
-		})
-		svcRegistryAPI.GET("/services", func(c *gin.Context) {
-			name := strings.TrimSpace(c.Query("name"))
-			if name != "" {
-				c.JSON(http.StatusOK, gin.H{"services": svcRegistry.ByName(name)})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"services": svcRegistry.ByName("")})
-		})
-		svcRegistryAPI.PUT("/services/:id/checks/:checkId", adminOrSysMiddleware, func(c *gin.Context) {
-			var body struct {
-				Status string `json:"status"`
-				Notes  string `json:"notes"`
-			}
-			if err := c.ShouldBindJSON(&body); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if err := svcRegistry.UpdateCheck(strings.TrimSpace(c.Param("id")), strings.TrimSpace(c.Param("checkId")), serviceregistry.Status(body.Status), body.Notes); err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"message": "check updated"})
-		})
-	}
-
-	// ====================================
-	// HEARTBEAT ROUTES
-	// ====================================
-	heartbeatAPI := router.Group("/api/v1/heartbeat", authMiddleware)
-	{
-		heartbeatAPI.POST("/beat", func(c *gin.Context) {
-			var body struct {
-				ID  string `json:"id"`
-				TTL int    `json:"ttl"` // seconds
-			}
-			if err := c.ShouldBindJSON(&body); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if strings.TrimSpace(body.ID) == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
-				return
-			}
-			ttl := time.Duration(body.TTL) * time.Second
-			if ttl <= 0 {
-				ttl = 30 * time.Second
-			}
-			heartbeatTracker.Beat(body.ID, ttl)
-			c.JSON(http.StatusOK, gin.H{"message": "heartbeat recorded", "id": body.ID, "ttl_seconds": int(ttl.Seconds())})
-		})
-		heartbeatAPI.GET("/alive/:id", func(c *gin.Context) {
-			id := strings.TrimSpace(c.Param("id"))
-			c.JSON(http.StatusOK, gin.H{"id": id, "alive": heartbeatTracker.IsAlive(id)})
-		})
-		heartbeatAPI.GET("/expired", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"expired": heartbeatTracker.Expired()})
-		})
-		heartbeatAPI.DELETE("/:id", adminOrSysMiddleware, func(c *gin.Context) {
-			heartbeatTracker.Delete(strings.TrimSpace(c.Param("id")))
-			c.JSON(http.StatusOK, gin.H{"message": "heartbeat entry deleted"})
-		})
-	}
-
-	// ====================================
-	// AUTOPILOT ROUTES
-	// ====================================
-	router.POST("/api/v1/autopilot/evaluate", adminOrSysMiddleware, func(c *gin.Context) {
-		var body struct {
-			Peers       []autopilot.Server `json:"peers"`
-			LeaderIndex uint64             `json:"leaderIndex"`
-		}
-		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		decisions := autopilotInstance.Evaluate(c.Request.Context(), body.Peers, body.LeaderIndex)
-		c.JSON(http.StatusOK, gin.H{"decisions": decisions})
-	})
-
-	// ====================================
-	// ANTIVIRUS MANAGEMENT API (uses existing engine from storage module)
-	// ====================================
-	if storageSys != nil && storageSys.AVEngine != nil {
-		avHandler := antivirus.NewAPIHandler(storageSys.AVEngine)
-		avHandler.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Antivirus management API registered (reusing storage engine)")
-	} else {
-		log.Println("⚠️  Antivirus engine not available — management API skipped")
-	}
-
-	// ====================================
-	// RATE LIMITING (previously unwired)
-	// ====================================
-	quotaMgr := ratelimit.NewQuotaManager()
-	rlMiddleware := ratelimit.NewRateLimitMiddleware(quotaMgr)
-	quotaHandler := ratelimit.NewQuotaHandler(quotaMgr)
-	router.Use(rlMiddleware.Handler())
-	quotaAPI := router.Group("/api/v1/quotas", authMiddleware)
-	{
-		quotaAPI.GET("", quotaHandler.ListQuotas)
-		quotaAPI.GET("/:userID", quotaHandler.GetQuota)
-		quotaAPI.POST("/:userID", adminOrSysMiddleware, quotaHandler.SetUserQuota)
-		quotaAPI.DELETE("/:userID", adminOrSysMiddleware, quotaHandler.ResetQuota)
-		quotaAPI.POST("/endpoint", adminOrSysMiddleware, quotaHandler.SetEndpointLimit)
-	}
-	log.Println("✅ Rate limiting module started")
-
-	// ====================================
-	// STREAM BROKER (previously unwired)
-	// ====================================
-	streamBroker := stream.NewBroker(10000)
-	streamHTTP := stream.HTTPHandler(streamBroker)
-	router.Any("/api/v1/stream", func(c *gin.Context) {
-		streamHTTP.ServeHTTP(c.Writer, c.Request)
-	})
-	log.Println("✅ Stream broker started")
-
-	// ====================================
-	// FEATURE MODULES (storage-backed)
-	// ====================================
-	if backendMgr != nil {
-		// Alerting
-		alertRuleStore := platformstore.NewStore[*alerting.AlertRuleResource](backendMgr, "alert-rules", func() *alerting.AlertRuleResource { return &alerting.AlertRuleResource{} })
-		alertIncidentStore := platformstore.NewStore[*alerting.AlertIncidentResource](backendMgr, "alert-incidents", func() *alerting.AlertIncidentResource { return &alerting.AlertIncidentResource{} })
-		alertChannelStore := platformstore.NewStore[*alerting.NotificationChannelResource](backendMgr, "alert-channels", func() *alerting.NotificationChannelResource { return &alerting.NotificationChannelResource{} })
-		alertHandlers := alerting.NewAlertHandlers(alertRuleStore, alertIncidentStore, alertChannelStore)
-		alertHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Alerting module started")
-
-		// Governance
-		complianceStore := platformstore.NewStore[*governance.CompliancePolicyResource](backendMgr, "compliance-policies", func() *governance.CompliancePolicyResource { return &governance.CompliancePolicyResource{} })
-		retentionStore := platformstore.NewStore[*governance.RetentionPolicyResource](backendMgr, "retention-policies", func() *governance.RetentionPolicyResource { return &governance.RetentionPolicyResource{} })
-		accessReqStore := platformstore.NewStore[*governance.AccessRequestResource](backendMgr, "access-requests", func() *governance.AccessRequestResource { return &governance.AccessRequestResource{} })
-		govHandlers := governance.NewGovernanceHandlers(complianceStore, retentionStore, accessReqStore)
-		govHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Governance module started")
-
-		// SLO
-		sloStore := platformstore.NewStore[*slo.SLOResource](backendMgr, "slos", func() *slo.SLOResource { return &slo.SLOResource{} })
-		sloHandlers := slo.NewSLOHandlers(sloStore)
-		sloHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ SLO module started")
-
-		// Catalog
-		assetStore := platformstore.NewStore[*catalog.CatalogAssetResource](backendMgr, "catalog-assets", func() *catalog.CatalogAssetResource { return &catalog.CatalogAssetResource{} })
-		collectionStore := platformstore.NewStore[*catalog.CatalogCollectionResource](backendMgr, "catalog-collections", func() *catalog.CatalogCollectionResource { return &catalog.CatalogCollectionResource{} })
-		catalogHandlers := catalog.NewCatalogHandlers(assetStore, collectionStore, nil)
-		catalogHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Catalog module started")
-
-		// Costing
-		costPolicyStore := platformstore.NewStore[*costing.CostPolicyResource](backendMgr, "cost-policies", func() *costing.CostPolicyResource { return &costing.CostPolicyResource{} })
-		usageStore := platformstore.NewStore[*costing.UsageRecordResource](backendMgr, "usage-records", func() *costing.UsageRecordResource { return &costing.UsageRecordResource{} })
-		costHandlers := costing.NewCostHandlers(costPolicyStore, usageStore)
-		costHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Costing module started")
-
-		// Contracts
-		contractStore := platformstore.NewStore[*contracts.DataContractResource](backendMgr, "data-contracts", func() *contracts.DataContractResource { return &contracts.DataContractResource{} })
-		contractHandlers := contracts.NewContractHandlers(contractStore)
-		contractHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Contracts module started")
-
-		// Schema Registry
-		schemaStore := platformstore.NewStore[*schemaregistry.SchemaResource](backendMgr, "schemas", func() *schemaregistry.SchemaResource { return &schemaregistry.SchemaResource{} })
-		subjectStore := platformstore.NewStore[*schemaregistry.SchemaSubjectResource](backendMgr, "schema-subjects", func() *schemaregistry.SchemaSubjectResource { return &schemaregistry.SchemaSubjectResource{} })
-		schemaChecker := schemaregistry.NewJSONSchemaCompatibilityChecker()
-		schemaHandlers := schemaregistry.NewSchemaRegistryHandlers(schemaStore, subjectStore, schemaChecker)
-		schemaHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Schema Registry module started")
-
-		// Anonymization
-		anonymPolicyStore := platformstore.NewStore[*anonymization.AnonymizationPolicyResource](backendMgr, "anonymization-policies", func() *anonymization.AnonymizationPolicyResource { return &anonymization.AnonymizationPolicyResource{} })
-		anonymHandlers := anonymization.NewAnonymizationHandlers(anonymPolicyStore)
-		anonymHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Anonymization module started")
-
-		// Stream Analytics
-		streamJobStore := platformstore.NewStore[*streamanalytics.StreamJobResource](backendMgr, "stream-jobs", func() *streamanalytics.StreamJobResource { return &streamanalytics.StreamJobResource{} })
-		streamHandlers := streamanalytics.NewStreamAnalyticsHandlers(streamJobStore)
-		streamHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Stream Analytics module started")
-
-		// Feature Store
-		featureGroupStore := platformstore.NewStore[*featurestore.FeatureGroupResource](backendMgr, "feature-groups", func() *featurestore.FeatureGroupResource { return &featurestore.FeatureGroupResource{} })
-		featureHandlers := featurestore.NewFeatureStoreHandlers(featureGroupStore)
-		featureHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Feature Store module started")
-
-		// Federation
-		vtStore := platformstore.NewStore[*federation.VirtualTableResource](backendMgr, "virtual-tables", func() *federation.VirtualTableResource { return &federation.VirtualTableResource{} })
-		fedQueryStore := platformstore.NewStore[*federation.FederatedQueryResource](backendMgr, "federated-queries", func() *federation.FederatedQueryResource { return &federation.FederatedQueryResource{} })
-		fedHandlers := federation.NewFederationHandlers(vtStore, fedQueryStore, nil)
-		fedHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ Federation module started")
-
-		// ML Pipeline
-		mlPipelineStore := platformstore.NewStore[*mlpipeline.MLPipelineResource](backendMgr, "ml-pipelines", func() *mlpipeline.MLPipelineResource { return &mlpipeline.MLPipelineResource{} })
-		modelDeployStore := platformstore.NewStore[*mlpipeline.ModelDeploymentResource](backendMgr, "model-deployments", func() *mlpipeline.ModelDeploymentResource { return &mlpipeline.ModelDeploymentResource{} })
-		mlHandlers := mlpipeline.NewMLPipelineHandlers(mlPipelineStore, modelDeployStore)
-		mlHandlers.RegisterRoutes(router.Group("/api/v1", authMiddleware))
-		log.Println("✅ ML Pipeline module started")
-	} else {
-		log.Println("⚠️  Storage backend not available — feature modules (alerting, governance, slo, catalog, costing, contracts, schemaregistry, anonymization, streamanalytics, featurestore, federation, mlpipeline) skipped")
-	}
-
-	apiPort := cfg.API.Port
 	apiHost := cfg.API.Host
+	apiPort := cfg.API.Port
 
-	fmt.Printf("📡 API Server running on http://%s:%s\n", apiHost, apiPort)
-	fmt.Println("\n🔐 RBAC Security Model:")
-	fmt.Println("  ✅ READ  operations (GET)     - Allowed for all authenticated users")
-	fmt.Println("  ❌ WRITE operations (POST/PUT/DELETE) - Allowed ONLY for users with 'admin' role")
-	fmt.Println()
-	fmt.Println("Available endpoints:")
-	fmt.Println("  GET  /health                  - Health check (no auth)")
-	fmt.Println("  GET  /status                  - Check all connections (no auth)")
-	fmt.Println("  ANY  /api/custom/*path        - Execute API Builder runtime APIs")
-	fmt.Println()
-	fmt.Println("Admin endpoints (admin role required):")
-	fmt.Println("  POST /api/admin/database/create       - Create a new database")
-	fmt.Println("  GET  /api/admin/database/list         - List all databases")
-	fmt.Println("  GET  /api/admin/database/servers      - List default and connected DB servers")
-	fmt.Println("  POST /api/admin/database/connect      - Connect a new DB server")
-	fmt.Println("  PUT  /api/admin/database/servers/:key - Update a custom DB server")
-	fmt.Println("  DELETE /api/admin/database/servers/:key - Delete a custom DB server")
-	fmt.Println("  POST /api/admin/table/create          - Create a new table")
-	fmt.Println("  GET  /api/admin/table/list            - List all tables")
-	fmt.Println()
-	if !iamOnlyAuth {
-		fmt.Println("User Management endpoints (admin only):")
-		fmt.Println("  GET    /api/v1/users            - List all platform users")
-		fmt.Println("  GET    /api/v1/users/:id        - Get a platform user")
-		fmt.Println("  POST   /api/v1/users            - Create a platform user")
-		fmt.Println("  PUT    /api/v1/users/:id        - Update a platform user")
-		fmt.Println("  DELETE /api/v1/users/:id        - Delete a platform user")
-		fmt.Println()
-	}
-	fmt.Println("Dynamic Query endpoints:")
-	fmt.Println("  GET  /api/{db}/query            - Execute SELECT queries with parameters")
-	fmt.Println("       Example: /api/mysql/query?q=SELECT * FROM users&params=1")
-	fmt.Println("  POST /api/{db}/query            - Execute query body (admin/system-manager only)")
-	fmt.Println("       Body: {\"query\": \"SQL_QUERY\", \"params\": [\"value1\", \"value2\"]}")
-	fmt.Println("  POST /api/{db}/query/batch      - Execute multiple queries at once (admin/system-manager only)")
-	fmt.Println("       Body: [{\"query\": \"SQL_QUERY\", \"params\": []}]")
-	fmt.Println("  GET  /api/{db}/schema           - Get table schema")
-	fmt.Println("       Example: /api/mysql/schema?table=users")
-	fmt.Println("  Available databases: mysql, mariadb, postgres, percona, oracle")
-	fmt.Println()
-	fmt.Println("Notification endpoints (authenticated users):")
-	fmt.Println("  POST /api/notifications/send    - Send custom notification to Discord")
-	fmt.Println("  POST /api/notifications/health  - Send health check notification")
-	fmt.Println("  POST /api/notifications/status  - Send status report notification")
-	fmt.Println("  GET  /api/notifications/status  - Get notification service status (no auth)")
-	fmt.Println()
-	fmt.Println("Kubernetes-style API endpoints:")
-	fmt.Println("  POST /api/v1/{namespace}/{kind}              - Create resource")
-	fmt.Println("  GET  /api/v1/{namespace}/{kind}/{name}       - Get resource")
-	fmt.Println("  PUT  /api/v1/{namespace}/{kind}/{name}       - Update resource")
-	fmt.Println("  DELETE /api/v1/{namespace}/{kind}/{name}     - Delete resource")
-	fmt.Println("  GET  /api/v1/{namespace}/{kind}              - List resources")
-	fmt.Println("  Supported kinds: workloads, pipelines, schedules")
 	fmt.Println()
 
 	runtimeHost := strings.TrimSpace(os.Getenv("RUNTIME_HOST"))
@@ -2776,564 +2352,18 @@ func main() {
 		log.Printf("Runtime stop error: %v", err)
 	}
 
-	// Stop object storage module
-	if storageSys != nil {
-		storageSys.Stop()
+	// Stop all registered modules (reverse order).
+	for i := len(modules) - 1; i >= 0; i-- {
+		if err := modules[i].Stop(); err != nil {
+			log.Printf("⚠️  Module %s stop error: %v", modules[i].Name(), err)
+		} else {
+			log.Printf("✅ Module %s stopped", modules[i].Name())
+		}
 	}
 
 	// Flush conductor stats to DB before exit
 	conductorMgr.Close()
 
-	// Stop heartbeat tracker
-	heartbeatTracker.Stop()
-
-	// Stop service registry
-	svcRegistry.Close()
-
 	cancel()
 	log.Println("✅ AxiomNizam stopped")
-}
-
-// Create tables on all databases
-func createTables(conns *database.Connections) {
-	if conns.MySQL != nil {
-		conns.MySQL.AutoMigrate(&models.User{})
-		log.Println("✅ MySQL table created/migrated")
-	}
-	if conns.MariaDB != nil {
-		conns.MariaDB.AutoMigrate(&models.User{})
-		log.Println("✅ MariaDB table created/migrated")
-	}
-	if conns.PostgreSQL != nil {
-		conns.PostgreSQL.AutoMigrate(&models.User{})
-		log.Println("✅ PostgreSQL table created/migrated")
-	}
-	if conns.Percona != nil {
-		conns.Percona.AutoMigrate(&models.User{})
-		log.Println("✅ Percona table created/migrated")
-	}
-	if conns.Oracle != nil {
-		conns.Oracle.AutoMigrate(&models.User{})
-		log.Println("✅ Oracle table created/migrated")
-	}
-}
-
-const (
-	demoJWTSecretStoreKey = "demo-jwt-secret"
-	demoJWTSecretEtcdKey  = "iam:bootstrap:demo-jwt-secret"
-)
-
-func ensureSharedDemoJWTSecret(pg *gorm.DB, etcd *clientv3.Client, kv platformstore.KVStore) (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")); configured != "" {
-		if pg != nil {
-			resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
-				return configured, nil
-			})
-			if err != nil {
-				log.Printf("⚠️  failed to seed DEMO_JWT_SECRET into postgres bootstrap store: %v", err)
-			} else if resolved != configured {
-				log.Printf("⚠️  postgres bootstrap DEMO_JWT_SECRET differs from env value; keeping env for current runtime")
-			}
-		}
-		auth.SetDemoJWTSecret(configured)
-		return configured, nil
-	}
-
-	if pg != nil {
-		resolved, err := bootstrapsecrets.Ensure(pg, demoJWTSecretStoreKey, func() (string, error) {
-			return generateBootstrapSecret(48)
-		})
-		if err == nil {
-			if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
-				return "", fmt.Errorf("setting DEMO_JWT_SECRET from postgres: %w", err)
-			}
-			auth.SetDemoJWTSecret(resolved)
-			return resolved, nil
-		}
-		log.Printf("⚠️  postgres bootstrap for DEMO_JWT_SECRET failed, falling back to KV store: %v", err)
-	}
-
-	resolved, err := ensureSharedDemoJWTSecretFromKV(kv, etcd)
-	if err != nil {
-		return "", err
-	}
-	if err := os.Setenv("DEMO_JWT_SECRET", resolved); err != nil {
-		return "", fmt.Errorf("setting DEMO_JWT_SECRET from KV store: %w", err)
-	}
-	auth.SetDemoJWTSecret(resolved)
-	return resolved, nil
-}
-
-// ensureSharedDemoJWTSecretFromKV uses the KVStore abstraction (works
-// with both etcd and Raft backends).  Falls back to raw etcd if KV is nil.
-func ensureSharedDemoJWTSecretFromKV(kv platformstore.KVStore, etcd *clientv3.Client) (string, error) {
-	if kv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		candidate, err := generateBootstrapSecret(48)
-		if err != nil {
-			return "", err
-		}
-
-		resolved, _, err := kv.CAS(ctx, demoJWTSecretEtcdKey, candidate)
-		if err != nil {
-			return "", fmt.Errorf("persisting demo token secret via KV store: %w", err)
-		}
-		if resolved == "" {
-			return "", fmt.Errorf("demo token secret CAS returned empty value")
-		}
-		return resolved, nil
-	}
-
-	// Fallback to raw etcd client.
-	return ensureSharedDemoJWTSecretFromEtcd(etcd)
-}
-
-func ensureSharedDemoJWTSecretFromEtcd(etcd *clientv3.Client) (string, error) {
-
-	if etcd == nil {
-		return "", fmt.Errorf("DEMO_JWT_SECRET is not set and neither postgres nor etcd bootstrap store is available")
-	}
-
-	getCtx, getCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	resp, err := etcd.Get(getCtx, demoJWTSecretEtcdKey)
-	getCancel()
-	if err != nil {
-		return "", fmt.Errorf("reading demo token secret from etcd: %w", err)
-	}
-	if len(resp.Kvs) > 0 {
-		secret := strings.TrimSpace(string(resp.Kvs[0].Value))
-		if secret != "" {
-			return secret, nil
-		}
-	}
-
-	candidate, err := generateBootstrapSecret(48)
-	if err != nil {
-		return "", err
-	}
-
-	txnCtx, txnCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	txnResp, err := etcd.Txn(txnCtx).
-		If(clientv3.Compare(clientv3.Version(demoJWTSecretEtcdKey), "=", 0)).
-		Then(clientv3.OpPut(demoJWTSecretEtcdKey, candidate)).
-		Else(clientv3.OpGet(demoJWTSecretEtcdKey)).
-		Commit()
-	txnCancel()
-	if err != nil {
-		return "", fmt.Errorf("persisting demo token secret in etcd: %w", err)
-	}
-
-	resolved := candidate
-	if !txnResp.Succeeded {
-		resolved = ""
-		if len(txnResp.Responses) > 0 {
-			rangeResp := txnResp.Responses[0].GetResponseRange()
-			if rangeResp != nil && len(rangeResp.Kvs) > 0 {
-				resolved = strings.TrimSpace(string(rangeResp.Kvs[0].Value))
-			}
-		}
-		if resolved == "" {
-			return "", fmt.Errorf("demo token secret exists in etcd but value is empty")
-		}
-	}
-
-	return resolved, nil
-}
-
-func generateBootstrapSecret(size int) (string, error) {
-	if size <= 0 {
-		size = 48
-	}
-	random := make([]byte, size)
-	if _, err := rand.Read(random); err != nil {
-		return "", fmt.Errorf("generating bootstrap secret: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(random), nil
-}
-
-func resolveSecurityEnvironment() string {
-	candidates := []string{
-		strings.TrimSpace(os.Getenv("AXIOMNIZAM_ENV")),
-		strings.TrimSpace(os.Getenv("APP_ENV")),
-		strings.TrimSpace(os.Getenv("ENVIRONMENT")),
-		strings.TrimSpace(os.Getenv("GO_ENV")),
-	}
-	for _, c := range candidates {
-		if c != "" {
-			return strings.ToLower(c)
-		}
-	}
-	return "development"
-}
-
-func isProductionEnvironment(env string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(env))
-	return normalized == "production" || normalized == "prod"
-}
-
-func resolveSecurityGuardrailMode(env string) string {
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("SECURITY_GUARDRAILS_MODE")))
-	switch mode {
-	case "off", "audit", "enforce":
-		return mode
-	case "":
-		if isProductionEnvironment(env) {
-			return "audit"
-		}
-		return "off"
-	default:
-		log.Printf("⚠️  Unknown SECURITY_GUARDRAILS_MODE=%q, defaulting to audit", mode)
-		return "audit"
-	}
-}
-
-func applySecurityGuardrails(cfg *config.Config) {
-	if cfg == nil {
-		return
-	}
-
-	env := resolveSecurityEnvironment()
-	mode := resolveSecurityGuardrailMode(env)
-	if mode == "off" {
-		return
-	}
-
-	blocking := make([]string, 0)
-	warnings := make([]string, 0)
-	addBlocking := func(msg string) {
-		if strings.TrimSpace(msg) != "" {
-			blocking = append(blocking, msg)
-		}
-	}
-	addWarning := func(msg string) {
-		if strings.TrimSpace(msg) != "" {
-			warnings = append(warnings, msg)
-		}
-	}
-
-	isDefault := func(value string, defaults ...string) bool {
-		trimmed := strings.ToLower(strings.TrimSpace(value))
-		for _, d := range defaults {
-			if trimmed == strings.ToLower(strings.TrimSpace(d)) {
-				return true
-			}
-		}
-		return false
-	}
-
-	if isDefault(cfg.IAM.SysadminPassword, "", "change-me", "changeme", "default", "password", "admin") {
-		addBlocking("IAM_SYSADMIN_PASSWORD is empty or default-like")
-	}
-	if strings.TrimSpace(os.Getenv("DEMO_JWT_SECRET")) == "" {
-		addBlocking("DEMO_JWT_SECRET is not set")
-	}
-	if strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS")) == "" {
-		addBlocking("CORS_ALLOWED_ORIGINS is empty")
-	}
-
-	if isDefault(cfg.MySQL.Password, "root", "password") {
-		addWarning("MYSQL_PASSWORD appears to be a default credential")
-	}
-	if isDefault(cfg.PostgreSQL.Password, "postgres", "password") {
-		addWarning("POSTGRES_PASSWORD appears to be a default credential")
-	}
-	if isDefault(cfg.Oracle.Password, "oracle123", "password") {
-		addWarning("ORACLE_PASSWORD appears to be a default credential")
-	}
-
-	for _, w := range warnings {
-		log.Printf("⚠️  Security guardrail warning: %s", w)
-	}
-
-	if len(blocking) == 0 {
-		if mode == "audit" {
-			log.Printf("✅ Security guardrails check passed (env=%s, mode=%s)", env, mode)
-		}
-		return
-	}
-
-	for _, b := range blocking {
-		log.Printf("🚨 Security guardrail issue: %s", b)
-	}
-
-	if mode == "enforce" && isProductionEnvironment(env) {
-		log.Fatalf("❌ Security guardrails blocked startup in production (mode=%s)", mode)
-		return
-	}
-
-	log.Printf("⚠️  Security guardrails detected %d blocking issue(s) but startup continues (env=%s, mode=%s)", len(blocking), env, mode)
-}
-
-func ensureWorkflowRegistered(ctx context.Context, resourceHandler *handlers.ResourceHandler, workflowName string) error {
-	if resourceHandler == nil {
-		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
-			return nil
-		}
-		return fmt.Errorf("workflow %q not found", workflowName)
-	}
-
-	resource, found := resourceHandler.FindResourceByKindAndName("workflow", workflowName)
-	if !found {
-		if workflows.GlobalWorkflowEngine.GetWorkflow(workflowName) != nil {
-			return nil
-		}
-		return fmt.Errorf("workflow %q not found", workflowName)
-	}
-
-	workflowDef, err := workflowFromResource(resource)
-	if err != nil {
-		return err
-	}
-
-	return workflows.AddWorkflow(ctx, workflowDef)
-}
-
-func workflowFromResource(resource *handlers.GenericResource) (*workflows.Workflow, error) {
-	if resource == nil {
-		return nil, fmt.Errorf("workflow definition is nil")
-	}
-
-	name := strings.TrimSpace(resource.Metadata.Name)
-	if name == "" {
-		return nil, fmt.Errorf("workflow metadata.name is required")
-	}
-
-	steps, err := workflowStepsFromSpec(name, resource.Spec)
-	if err != nil {
-		return nil, err
-	}
-
-	enabled := true
-	if v, ok := boolFromAny(resource.Spec["enabled"]); ok {
-		enabled = v
-	}
-	if schedule, ok := resource.Spec["schedule"].(map[string]interface{}); ok {
-		if v, ok := boolFromAny(schedule["enabled"]); ok {
-			enabled = v
-		}
-	}
-
-	version := strings.TrimSpace(stringFromAny(resource.Spec["version"]))
-	if version == "" {
-		version = "v1"
-	}
-
-	namespace := strings.TrimSpace(resource.Metadata.Namespace)
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	return &workflows.Workflow{
-		Name:        name,
-		Namespace:   namespace,
-		Version:     version,
-		Description: stringFromAny(resource.Spec["description"]),
-		Triggers:    workflowTriggersFromSpec(resource.Spec),
-		Steps:       steps,
-		Enabled:     enabled,
-		Labels:      resource.Metadata.Labels,
-		Annotations: resource.Metadata.Annotations,
-	}, nil
-}
-
-func workflowTriggersFromSpec(spec map[string]interface{}) []workflows.WorkflowTrigger {
-	triggers := make([]workflows.WorkflowTrigger, 0)
-
-	if raw, ok := spec["triggers"].([]interface{}); ok {
-		for _, item := range raw {
-			triggerMap, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			triggerType := strings.TrimSpace(stringFromAny(triggerMap["type"]))
-			if triggerType == "" {
-				continue
-			}
-
-			condition := make(map[string]interface{})
-			if condMap, ok := triggerMap["condition"].(map[string]interface{}); ok {
-				for k, v := range condMap {
-					condition[k] = v
-				}
-			}
-
-			triggers = append(triggers, workflows.WorkflowTrigger{
-				Type:      triggerType,
-				Condition: condition,
-			})
-		}
-	}
-
-	if schedule, ok := spec["schedule"].(map[string]interface{}); ok {
-		condition := make(map[string]interface{}, len(schedule))
-		for k, v := range schedule {
-			condition[k] = v
-		}
-		triggers = append(triggers, workflows.WorkflowTrigger{Type: "schedule", Condition: condition})
-	}
-
-	if len(triggers) == 0 {
-		triggers = append(triggers, workflows.WorkflowTrigger{Type: "manual", Condition: map[string]interface{}{"source": "api"}})
-	}
-
-	return triggers
-}
-
-func workflowStepsFromSpec(workflowName string, spec map[string]interface{}) ([]workflows.WorkflowStep, error) {
-	rawSteps, ok := spec["steps"].([]interface{})
-	if !ok || len(rawSteps) == 0 {
-		return nil, fmt.Errorf("workflow %q must define at least one step", workflowName)
-	}
-
-	steps := make([]workflows.WorkflowStep, 0, len(rawSteps))
-	for i, rawStep := range rawSteps {
-		stepMap, ok := rawStep.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		stepID := strings.TrimSpace(stringFromAny(stepMap["id"]))
-		if stepID == "" {
-			stepID = fmt.Sprintf("%s-step-%d", workflowName, i+1)
-		}
-
-		stepName := strings.TrimSpace(stringFromAny(stepMap["name"]))
-		if stepName == "" {
-			stepName = stepID
-		}
-
-		stepType := strings.TrimSpace(stringFromAny(stepMap["type"]))
-		if stepType == "" {
-			stepType = "http"
-		}
-
-		action := strings.TrimSpace(stringFromAny(stepMap["action"]))
-		if action == "" {
-			action = stepType
-		}
-
-		config := make(map[string]interface{})
-		if rawConfig, ok := stepMap["config"].(map[string]interface{}); ok {
-			for k, v := range rawConfig {
-				config[k] = v
-			}
-		}
-
-		for k, v := range stepMap {
-			switch k {
-			case "id", "name", "type", "action", "retry", "timeout", "config":
-				continue
-			default:
-				config[k] = v
-			}
-		}
-
-		if _, exists := config["action"]; !exists && action != "" {
-			config["action"] = action
-		}
-		if stepType == "http" {
-			if _, exists := config["method"]; !exists {
-				method := strings.ToUpper(strings.TrimSpace(stringFromAny(stepMap["method"])))
-				if method == "" {
-					method = "GET"
-				}
-				config["method"] = method
-			}
-		}
-
-		steps = append(steps, workflows.WorkflowStep{
-			ID:      stepID,
-			Name:    stepName,
-			Type:    stepType,
-			Action:  action,
-			Config:  config,
-			Timeout: durationFromAny(stepMap["timeout"]),
-			Retry:   intFromAny(stepMap["retry"]),
-		})
-	}
-
-	if len(steps) == 0 {
-		return nil, fmt.Errorf("workflow %q has invalid steps", workflowName)
-	}
-
-	return steps, nil
-}
-
-func stringFromAny(value interface{}) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case fmt.Stringer:
-		return v.String()
-	case int:
-		return strconv.Itoa(v)
-	case int32:
-		return strconv.FormatInt(int64(v), 10)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		return ""
-	}
-}
-
-func boolFromAny(value interface{}) (bool, bool) {
-	switch v := value.(type) {
-	case bool:
-		return v, true
-	case string:
-		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
-		if err == nil {
-			return parsed, true
-		}
-	}
-	return false, false
-}
-
-func intFromAny(value interface{}) int {
-	switch v := value.(type) {
-	case int:
-		return v
-	case int32:
-		return int(v)
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	case string:
-		parsed, err := strconv.Atoi(strings.TrimSpace(v))
-		if err == nil {
-			return parsed
-		}
-	}
-	return 0
-}
-
-func durationFromAny(value interface{}) time.Duration {
-	switch v := value.(type) {
-	case time.Duration:
-		return v
-	case string:
-		parsed, err := time.ParseDuration(strings.TrimSpace(v))
-		if err == nil {
-			return parsed
-		}
-	case int:
-		if v > 0 {
-			return time.Duration(v) * time.Second
-		}
-	case int64:
-		if v > 0 {
-			return time.Duration(v) * time.Second
-		}
-	case float64:
-		if v > 0 {
-			return time.Duration(v * float64(time.Second))
-		}
-	}
-	return 0
 }

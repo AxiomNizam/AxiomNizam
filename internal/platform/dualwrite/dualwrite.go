@@ -5,8 +5,9 @@
 package dualwrite
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"time"
 
 	"example.com/axiomnizam/internal/platform/featureflags"
@@ -30,7 +31,7 @@ func Write[T store.Resource](module string, s store.ResourceStore[T], obj T) {
 			err = s.Update(ctx, obj)
 		}
 		if err != nil {
-			log.Printf("dualwrite module=%s key=%s err=%q", module, obj.GetKey(), err.Error())
+			logging.Z().Info(fmt.Sprintf("dualwrite module=%s key=%s err=%q", module, obj.GetKey(), err.Error()))
 		}
 	}()
 }

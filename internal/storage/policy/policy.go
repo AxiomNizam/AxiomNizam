@@ -1,9 +1,9 @@
 package policy
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 
@@ -79,7 +79,7 @@ func (pc *Controller) GeneratePolicy(tenantID, userID, bucketName string, role m
 	pc.policies[policyKey(tenantID, userID, bucketName)] = tp
 	pc.mu.Unlock()
 
-	log.Printf("✅ Storage: policy generated for tenant=%s user=%s bucket=%s role=%s", tenantID, userID, bucketName, role)
+	logging.Z().Info(fmt.Sprintf("✅ Storage: policy generated for tenant=%s user=%s bucket=%s role=%s", tenantID, userID, bucketName, role))
 	return tp, nil
 }
 

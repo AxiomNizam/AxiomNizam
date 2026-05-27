@@ -1,8 +1,9 @@
 package matcher
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"encoding/hex"
-	"log"
 
 	"example.com/axiomnizam/internal/antivirus"
 )
@@ -296,11 +297,11 @@ func RegisterBuiltinPatterns(b *Builder) int {
 	for _, bp := range builtinPatterns {
 		patternBytes, err := hex.DecodeString(bp.hexPattern)
 		if err != nil {
-			log.Printf("⚠️  matcher: invalid builtin pattern %q: %v", bp.id, err)
+			logging.Z().Info(fmt.Sprintf("⚠️  matcher: invalid builtin pattern %q: %v", bp.id, err))
 			continue
 		}
 		if len(patternBytes) < 4 {
-			log.Printf("⚠️  matcher: builtin pattern %q too short (%d bytes)", bp.id, len(patternBytes))
+			logging.Z().Info(fmt.Sprintf("⚠️  matcher: builtin pattern %q too short (%d bytes)", bp.id, len(patternBytes)))
 			continue
 		}
 

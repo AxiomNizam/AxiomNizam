@@ -1,9 +1,9 @@
 package services
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 
 	"example.com/axiomnizam/internal/models"
 	"example.com/axiomnizam/internal/repositories"
@@ -35,7 +35,6 @@ type AuthService interface {
 type authService struct {
 	*BaseService
 	userRepo repositories.UserRepository
-	logger   *log.Logger
 }
 
 // NewAuthService creates a new auth service
@@ -43,7 +42,6 @@ func NewAuthService(userRepo repositories.UserRepository, validator *utils.Input
 	return &authService{
 		BaseService: NewBaseService(validator, sqlProtection),
 		userRepo:    userRepo,
-		logger:      log.New(log.Writer(), "[AUTH_SERVICE] ", log.LstdFlags),
 	}
 }
 
@@ -66,10 +64,10 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 	}
 
 	// Get user by email (username is treated as email)
-	user, err := s.userRepo.GetByEmail(ctx, username)
+	_, err := s.userRepo.GetByEmail(ctx, username)
 	if err != nil {
 		if err == repositories.ErrNotFound {
-			s.logger.Printf("LOGIN_ATTEMPT_FAILED: email=%s, reason=not_found", username)
+			logging.Z().Info(fmt.Sprintf("LOGIN_ATTEMPT_FAILED: email=%s, reason=not_found", username))
 			// Don't reveal if user exists
 			return nil, "", ErrUnauthorized
 		}
@@ -77,19 +75,11 @@ func (s *authService) Login(ctx context.Context, username string, password strin
 		return nil, "", ErrInternalServer
 	}
 
-	// TODO: Verify password hash
-	// This should use bcrypt or similar to compare hashed passwords
-	// if !VerifyPasswordHash(user.PasswordHash, password) {
-	//     s.logger.Printf("LOGIN_ATTEMPT_FAILED: username=%s, reason=invalid_password", username)
-	//     return nil, "", ErrUnauthorized
-	// }
-
-	// Generate JWT token
-	// TODO: Implement JWT token generation
-	token := "jwt-token-placeholder"
-
-	s.logger.Printf("LOGIN_SUCCESS: username=%s, user_id=%s", username, user.ID)
-	return user, token, nil
+	// Password verification — defer to IAM system.
+	// This service is not used in production; main.go uses IAM directly.
+	// Returning an error to prevent insecure placeholder tokens.
+	s.LogError("Login", fmt.Errorf("auth_service.Login is deprecated — use IAM system"))
+	return nil, "", ErrInternalServer
 }
 
 // Register registers a new user with validation
@@ -127,7 +117,7 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrInternalServer
 	}
 	if existsByEmail {
-		s.logger.Printf("REGISTER_FAILED: email=%s, reason=already_exists", user.Email)
+		logging.Z().Info(fmt.Sprintf("REGISTER_FAILED: email=%s, reason=already_exists", user.Email))
 		return nil, ErrDuplicateEntry
 	}
 
@@ -145,31 +135,20 @@ func (s *authService) Register(ctx context.Context, user *models.User, password 
 		return nil, ErrInternalServer
 	}
 
-	s.logger.Printf("REGISTER_SUCCESS: email=%s, name=%s, user_id=%d", user.Email, user.Name, user.ID)
+	logging.Z().Info(fmt.Sprintf("REGISTER_SUCCESS: email=%s, name=%s, user_id=%d", user.Email, user.Name, user.ID))
 	return user, nil
 }
 
 // ValidateToken validates an authentication token
 func (s *authService) ValidateToken(ctx context.Context, token string) (bool, error) {
-	if token == "" {
-		return false, ErrInvalidInput
-	}
-
-	// TODO: Implement JWT token validation
-	// This should verify the token signature and expiration
-	// For now, just check if token is not empty
-	return token != "", nil
+	// Deprecated — defer to IAM system for token validation.
+	return false, fmt.Errorf("auth_service.ValidateToken is deprecated — use IAM system")
 }
 
 // RefreshToken refreshes an authentication token
 func (s *authService) RefreshToken(ctx context.Context, token string) (string, error) {
-	if token == "" {
-		return "", ErrInvalidInput
-	}
-
-	// TODO: Implement JWT token refresh
-	// This should verify the current token and return a new one
-	return "new-jwt-token", nil
+	// Deprecated — defer to IAM system for token refresh.
+	return "", fmt.Errorf("auth_service.RefreshToken is deprecated — use IAM system")
 }
 
 // Logout logs out a user

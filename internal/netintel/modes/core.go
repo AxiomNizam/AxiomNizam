@@ -1,9 +1,11 @@
 package modes
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"context"
 	"encoding/json"
-	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -44,6 +46,7 @@ type Manager struct {
 	configs  map[Mode]ModeConfig
 	events   []ModeEvent
 	etcd     *clientv3.Client
+	kvStore  platformstore.KVStore
 	stateKey string
 }
 
@@ -55,7 +58,9 @@ type managerState struct {
 var (
 	globalEtcdMu     sync.RWMutex
 	globalEtcdClient *clientv3.Client
-	defaultStateKey  = "axiomnizam:netintel:modes:state"
+	globalKVMu       sync.RWMutex
+	globalKVStore    platformstore.KVStore
+	defaultStateKey  = "netintel:modes:state"
 )
 
 func NewManager(etcd ...*clientv3.Client) *Manager {
@@ -68,10 +73,15 @@ func NewManager(etcd ...*clientv3.Client) *Manager {
 		globalEtcdMu.RUnlock()
 	}
 
+	globalKVMu.RLock()
+	kv := globalKVStore
+	globalKVMu.RUnlock()
+
 	mgr := &Manager{
 		configs:  map[Mode]ModeConfig{},
 		events:   make([]ModeEvent, 0, 1024),
 		etcd:     etcdClient,
+		kvStore:  kv,
 		stateKey: defaultStateKey,
 	}
 	mgr.loadState()
@@ -84,32 +94,57 @@ func ConfigureGlobalPersistence(etcd *clientv3.Client) {
 	globalEtcdMu.Unlock()
 }
 
+// ConfigureGlobalKVPersistence configures KVStore persistence for the global modes manager.
+func ConfigureGlobalKVPersistence(kv platformstore.KVStore) {
+	globalKVMu.Lock()
+	globalKVStore = kv
+	globalKVMu.Unlock()
+}
+
+// ConfigureKVPersistence sets a KVStore for Raft-mode persistence.
+func (m *Manager) ConfigureKVPersistence(kv platformstore.KVStore) {
+	m.mu.Lock()
+	m.kvStore = kv
+	m.mu.Unlock()
+	m.loadState()
+}
+
 func (m *Manager) loadState() {
-	etcdClient := m.etcd
-	if etcdClient == nil {
-		globalEtcdMu.RLock()
-		etcdClient = globalEtcdClient
-		globalEtcdMu.RUnlock()
-	}
-	if etcdClient == nil {
-		return
-	}
+	var data []byte
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := etcdClient.Get(ctx, m.stateKey)
-	if err != nil {
-		log.Printf("netintel-modes: failed to load persisted state from etcd: %v", err)
-		return
-	}
-	if len(resp.Kvs) == 0 {
-		return
+	if m.kvStore != nil {
+		val, err := m.kvStore.Get(ctx, m.stateKey)
+		if err != nil || val == "" {
+			return
+		}
+		data = []byte(val)
+	} else {
+		etcdClient := m.etcd
+		if etcdClient == nil {
+			globalEtcdMu.RLock()
+			etcdClient = globalEtcdClient
+			globalEtcdMu.RUnlock()
+		}
+		if etcdClient == nil {
+			return
+		}
+		resp, err := etcdClient.Get(ctx, m.stateKey)
+		if err != nil {
+			logging.Z().Info(fmt.Sprintf("netintel-modes: failed to load persisted state from etcd: %v", err))
+			return
+		}
+		if len(resp.Kvs) == 0 {
+			return
+		}
+		data = resp.Kvs[0].Value
 	}
 
 	var state managerState
-	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("netintel-modes: failed to decode persisted state: %v", err)
+	if err := json.Unmarshal(data, &state); err != nil {
+		logging.Z().Info(fmt.Sprintf("netintel-modes: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -121,34 +156,39 @@ func (m *Manager) loadState() {
 	if state.Events != nil {
 		m.events = state.Events
 	}
+	logging.Z().Info(fmt.Sprintf("✅ netintel-modes: loaded persistent state (configs=%d, events=%d)", len(m.configs), len(m.events)))
 }
 
 func (m *Manager) persistStateLocked() {
-	etcdClient := m.etcd
-	if etcdClient == nil {
-		globalEtcdMu.RLock()
-		etcdClient = globalEtcdClient
-		globalEtcdMu.RUnlock()
-	}
-	if etcdClient == nil {
-		return
-	}
-
 	state := managerState{
 		Configs: m.configs,
 		Events:  m.events,
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("netintel-modes: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("netintel-modes: failed to encode state: %v", err))
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := etcdClient.Put(ctx, m.stateKey, string(payload)); err != nil {
-		log.Printf("netintel-modes: failed to persist state to etcd: %v", err)
+	if m.kvStore != nil {
+		if err := m.kvStore.Put(ctx, m.stateKey, string(payload)); err != nil {
+			logging.Z().Info(fmt.Sprintf("netintel-modes: failed to persist state to KV: %v", err))
+		}
+	} else {
+		etcdClient := m.etcd
+		if etcdClient == nil {
+			globalEtcdMu.RLock()
+			etcdClient = globalEtcdClient
+			globalEtcdMu.RUnlock()
+		}
+		if etcdClient != nil {
+			if _, err := etcdClient.Put(ctx, m.stateKey, string(payload)); err != nil {
+				logging.Z().Info(fmt.Sprintf("netintel-modes: failed to persist state to etcd: %v", err))
+			}
+		}
 	}
 }
 

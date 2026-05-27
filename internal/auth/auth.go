@@ -1,13 +1,13 @@
 package auth
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -248,7 +248,7 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 		if key.Kty == "RSA" {
 			pubKey, err := decodeRSAPublicKey(key)
 			if err != nil {
-				log.Printf("⚠️  Failed to decode RSA key %s: %v", key.Kid, err)
+				logging.Z().Info(fmt.Sprintf("⚠️  Failed to decode RSA key %s: %v", key.Kid, err))
 				continue
 			}
 			tv.publicKeys[key.Kid] = pubKey
@@ -256,7 +256,7 @@ func (tv *TokenValidator) refreshPublicKeys() error {
 	}
 
 	tv.lastFetch = time.Now()
-	log.Printf("✅ Loaded %d public keys from IAM/OIDC JWKS", len(tv.publicKeys))
+	logging.Z().Info(fmt.Sprintf("✅ Loaded %d public keys from IAM/OIDC JWKS", len(tv.publicKeys)))
 	return nil
 }
 
@@ -273,12 +273,12 @@ func loadDemoJWTSecret() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err == nil {
 		generated := base64.RawURLEncoding.EncodeToString(b)
-		log.Printf("⚠️  DEMO_JWT_SECRET is not set, using generated ephemeral demo token secret")
+		logging.Z().Info(fmt.Sprintf("⚠️  DEMO_JWT_SECRET is not set, using generated ephemeral demo token secret"))
 		return generated
 	}
 
 	fallback := fmt.Sprintf("ephemeral-demo-secret-%d", time.Now().UnixNano())
-	log.Printf("⚠️  DEMO_JWT_SECRET generation failed, falling back to process-ephemeral secret")
+	logging.Z().Info(fmt.Sprintf("⚠️  DEMO_JWT_SECRET generation failed, falling back to process-ephemeral secret"))
 	return fallback
 }
 
@@ -392,7 +392,7 @@ func (tv *TokenValidator) ValidateToken(tokenString string) (*Claims, error) {
 	if err != nil {
 		// Check if it's a demo token (no kid header)
 		if demoClaims, demoErr := tv.ValidateDemoToken(tokenString); demoErr == nil {
-			log.Printf("✅ Demo token validated for user: %s (roles: %v)", demoClaims.PreferredUsername, demoClaims.RealmAccess.Roles)
+			logging.Z().Info(fmt.Sprintf("✅ Demo token validated for user: %s (roles: %v)", demoClaims.PreferredUsername, demoClaims.RealmAccess.Roles))
 			return demoClaims, nil
 		}
 		return nil, fmt.Errorf("failed to parse token: %w", err)

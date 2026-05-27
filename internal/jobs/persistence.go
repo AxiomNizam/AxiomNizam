@@ -1,10 +1,10 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -14,7 +14,6 @@ import (
 type PersistentQueue struct {
 	memoryQueue *MemoryQueue
 	repository  JobRepository
-	logger      *log.Logger
 	syncTicker  *time.Ticker
 	stopChan    chan bool
 }
@@ -26,7 +25,6 @@ func NewPersistentQueue(db *gorm.DB, maxSize int) *PersistentQueue {
 	pq := &PersistentQueue{
 		memoryQueue: NewMemoryQueue(maxSize),
 		repository:  repo,
-		logger:      log.New(log.Writer(), "[PERSISTENT_QUEUE] ", log.LstdFlags),
 		stopChan:    make(chan bool),
 	}
 
@@ -64,7 +62,7 @@ func (pq *PersistentQueue) syncToDB(ctx context.Context) error {
 
 	for _, job := range jobsCopy {
 		if err := pq.repository.Update(ctx, job); err != nil {
-			pq.logger.Printf("Error syncing job %s: %v", job.ID, err)
+			logging.Z().Info(fmt.Sprintf("Error syncing job %s: %v", job.ID, err))
 		}
 	}
 
@@ -175,11 +173,11 @@ func (pq *PersistentQueue) RecoverPendingJobs(ctx context.Context) (int, error) 
 
 		// Add to memory queue
 		if err := pq.memoryQueue.Submit(ctx, job); err != nil {
-			pq.logger.Printf("Error recovering job %s: %v", job.ID, err)
+			logging.Z().Info(fmt.Sprintf("Error recovering job %s: %v", job.ID, err))
 		}
 	}
 
-	pq.logger.Printf("Recovered %d pending jobs from database", len(pendingJobs))
+	logging.Z().Info(fmt.Sprintf("Recovered %d pending jobs from database", len(pendingJobs)))
 	return len(pendingJobs), nil
 }
 
@@ -203,21 +201,21 @@ func (pq *PersistentQueue) CleanupOldJobs(ctx context.Context, retentionDays int
 	if err != nil {
 		return err
 	}
-	pq.logger.Printf("Deleted %d old completed jobs", deleted)
+	logging.Z().Info(fmt.Sprintf("Deleted %d old completed jobs", deleted))
 
 	// Delete old failed jobs
 	deleted, err = pq.repository.DeleteFailed(ctx, retention)
 	if err != nil {
 		return err
 	}
-	pq.logger.Printf("Deleted %d old failed jobs", deleted)
+	logging.Z().Info(fmt.Sprintf("Deleted %d old failed jobs", deleted))
 
 	// Clear expired jobs
 	deleted, err = pq.repository.ClearExpired(ctx)
 	if err != nil {
 		return err
 	}
-	pq.logger.Printf("Deleted %d expired jobs", deleted)
+	logging.Z().Info(fmt.Sprintf("Deleted %d expired jobs", deleted))
 
 	return nil
 }
@@ -309,14 +307,12 @@ func (PersistentEvent) TableName() string {
 // PostgresEventRepository implements EventRepository using PostgreSQL
 type PostgresEventRepository struct {
 	db     *gorm.DB
-	logger *log.Logger
 }
 
 // NewPostgresEventRepository creates a new PostgreSQL event repository
 func NewPostgresEventRepository(db *gorm.DB) *PostgresEventRepository {
 	repo := &PostgresEventRepository{
 		db:     db,
-		logger: log.New(log.Writer(), "[EVENT_REPOSITORY] ", log.LstdFlags),
 	}
 
 	repo.migrateSchema()
@@ -326,7 +322,7 @@ func NewPostgresEventRepository(db *gorm.DB) *PostgresEventRepository {
 // migrateSchema creates the events table
 func (per *PostgresEventRepository) migrateSchema() {
 	if err := per.db.AutoMigrate(&PersistentEvent{}); err != nil {
-		per.logger.Printf("Error migrating schema: %v", err)
+		logging.Z().Info(fmt.Sprintf("Error migrating schema: %v", err))
 	}
 
 	per.db.Exec(`
@@ -336,7 +332,7 @@ func (per *PostgresEventRepository) migrateSchema() {
 		CREATE INDEX IF NOT EXISTS idx_events_correlation_id ON events(correlation_id);
 	`)
 
-	per.logger.Printf("Event schema migration completed")
+	logging.Z().Info(fmt.Sprintf("Event schema migration completed"))
 }
 
 // StoreEvent saves an event
@@ -356,7 +352,7 @@ func (per *PostgresEventRepository) StoreEvent(ctx context.Context, event *Event
 	}
 
 	if err := per.db.WithContext(ctx).Create(pe).Error; err != nil {
-		per.logger.Printf("Error storing event: %v", err)
+		logging.Z().Info(fmt.Sprintf("Error storing event: %v", err))
 		return err
 	}
 

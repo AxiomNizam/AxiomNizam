@@ -1,10 +1,10 @@
 package events
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -88,7 +88,6 @@ type MemoryBus struct {
 	allHandlers  []EventHandler
 	history      []*Event
 	maxHistory   int
-	logger       *log.Logger
 	stats        *BusStats
 	asyncMode    bool
 	errorHandler func(error)
@@ -105,7 +104,6 @@ func NewMemoryBus(maxHistory int) *MemoryBus {
 		allHandlers: make([]EventHandler, 0),
 		history:     make([]*Event, 0),
 		maxHistory:  maxHistory,
-		logger:      log.New(log.Writer(), "[EVENT_BUS] ", log.LstdFlags),
 		stats: &BusStats{
 			EventsByType: make(map[EventType]int64),
 		},
@@ -159,7 +157,7 @@ func (mb *MemoryBus) Publish(ctx context.Context, event *Event) error {
 
 	mb.mu.Unlock()
 
-	mb.logger.Printf("Event published: %s (id: %s)", event.Type, event.ID)
+	logging.Z().Info(fmt.Sprintf("Event published: %s (id: %s)", event.Type, event.ID))
 
 	// Execute handlers
 	if mb.asyncMode {
@@ -179,7 +177,7 @@ func (mb *MemoryBus) executeHandlers(ctx context.Context, event *Event, handlers
 		}
 
 		if err := handler(ctx, event); err != nil {
-			mb.logger.Printf("Handler error for event %s: %v", event.Type, err)
+			logging.Z().Info(fmt.Sprintf("Handler error for event %s: %v", event.Type, err))
 
 			mb.mu.Lock()
 			mb.stats.HandlerErrors++
@@ -202,7 +200,7 @@ func (mb *MemoryBus) Subscribe(eventType EventType, handler EventHandler) error 
 	defer mb.mu.Unlock()
 
 	mb.handlers[eventType] = append(mb.handlers[eventType], handler)
-	mb.logger.Printf("Handler subscribed to event type: %s", eventType)
+	logging.Z().Info(fmt.Sprintf("Handler subscribed to event type: %s", eventType))
 
 	return nil
 }
@@ -222,7 +220,7 @@ func (mb *MemoryBus) SubscribeAll(handler EventHandler) error {
 	defer mb.mu.Unlock()
 
 	mb.allHandlers = append(mb.allHandlers, handler)
-	mb.logger.Printf("Handler subscribed to all events")
+	logging.Z().Info(fmt.Sprintf("Handler subscribed to all events"))
 
 	return nil
 }

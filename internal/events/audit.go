@@ -360,20 +360,21 @@ func generateAuditID() string {
 	return fmt.Sprintf("audit-%d", time.Now().UnixNano())
 }
 
-// GlobalAuditLogger is the package-level audit logger
-var GlobalAuditLogger = NewAuditLogger()
-
-// LogApply logs via global audit logger
+// LogApply creates a temporary audit logger and logs an apply event.
+// For persistent logging, create an AuditLogger instance and use it directly.
 func LogApply(ctx context.Context, user string, kind, name, namespace string, status string, err error) {
-	GlobalAuditLogger.LogApply(ctx, user, kind, name, namespace, status, err)
+	logger := NewAuditLogger()
+	logger.LogApply(ctx, user, kind, name, namespace, status, err)
 }
 
-// LogDelete logs via global audit logger
+// LogDelete creates a temporary audit logger and logs a delete event.
 func LogDelete(ctx context.Context, user string, kind, name, namespace string, reason string) {
-	GlobalAuditLogger.LogDelete(ctx, user, kind, name, namespace, reason)
+	logger := NewAuditLogger()
+	logger.LogDelete(ctx, user, kind, name, namespace, reason)
 }
 
-// LogAuthenticationFailure logs via global audit logger
+// LogAuthenticationFailure creates a temporary audit logger and logs an auth failure.
 func LogAuthenticationFailure(ctx context.Context, user string, sourceIP string, reason string) {
-	GlobalAuditLogger.LogAuthenticationFailure(ctx, user, sourceIP, reason)
+	logger := NewAuditLogger()
+	logger.LogAuthenticationFailure(ctx, user, sourceIP, reason)
 }

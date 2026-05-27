@@ -59,6 +59,7 @@ type SetupResponse struct {
 }
 
 // SetupFactor initiates factor enrollment by creating a Pending factor and generating a secret.
+// If the user already has an active or pending factor of the same type, it is disabled first.
 func (s *Service) SetupFactor(ctx context.Context, req *SetupRequest) (*SetupResponse, error) {
 	if req.UserID == uuid.Nil {
 		return nil, errors.New("user_id is required")
@@ -68,9 +69,26 @@ func (s *Service) SetupFactor(ctx context.Context, req *SetupRequest) (*SetupRes
 		return nil, errors.New("factor_type is required")
 	}
 
+	// Deactivate any existing active/pending factor of the same type for this user
+	existing, err := s.factorRepo.GetByUserID(ctx, req.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list existing factors: %w", err)
+	}
+	now := time.Now().UTC()
+	for _, f := range existing {
+		if f.Spec.Type == req.FactorType && (f.Status.Phase == models.FactorPhaseActive || f.Status.Phase == models.FactorPhasePending) {
+			f.Status.Phase = models.FactorPhaseDisabled
+			f.Status.DisabledAt = &now
+			if _, err := s.factorRepo.Update(ctx, f); err != nil {
+				return nil, fmt.Errorf("failed to disable existing factor %s: %w", f.ID, err)
+			}
+			// Clean up backup codes for the old factor
+			_ = s.backupCodeRepo.DeleteByFactorID(ctx, f.ID)
+		}
+	}
+
 	// Generate secret for TOTP
 	var secret, qrCodeURI string
-	var err error
 
 	if req.FactorType == models.FactorTypeTOTP {
 		secret, qrCodeURI, err = s.totpSvc.GenerateSecret(ctx, req.UserID, req.UserID.String(), req.Issuer)

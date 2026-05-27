@@ -337,3 +337,21 @@ func (s *Server) RemovePeer(id string) error {
 	f := s.raft.RemoveServer(hraft.ServerID(id), 0, 10*time.Second)
 	return f.Error()
 }
+
+// TriggerSnapshot forces an on-demand Raft snapshot. Blocks until complete.
+func (s *Server) TriggerSnapshot() error {
+	f := s.raft.Snapshot()
+	return f.Error()
+}
+
+// DataDir returns the root data directory for Raft state.
+func (s *Server) DataDir() string { return s.config.DataDir }
+
+// SnapshotDir returns the snapshot directory path.
+func (s *Server) SnapshotDir() string { return s.config.SnapshotDir() }
+
+// LogDir returns the log store directory path.
+func (s *Server) LogDir() string { return s.config.LogDir() }
+
+// StableDir returns the stable store directory path.
+func (s *Server) StableDir() string { return s.config.StableDir() }

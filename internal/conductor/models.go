@@ -1,6 +1,10 @@
 package conductor
 
-import "time"
+import (
+	"time"
+
+	"example.com/axiomnizam/internal/conductor/models"
+)
 
 // Backend types for message brokers.
 const (
@@ -23,62 +27,40 @@ const (
 
 // Producer publishes messages to a backend exchange/topic.
 type Producer struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Backend      string            `json:"backend"` // "rabbitmq", "kafka", "memory"
-	Exchange     string            `json:"exchange,omitempty"`
-	RoutingKey   string            `json:"routingKey,omitempty"`
-	Topic        string            `json:"topic,omitempty"` // Kafka topic
-	ContentType  string            `json:"contentType"`
-	Headers      map[string]string `json:"headers,omitempty"`
-	Status       string            `json:"status"`
-	CreatedAt    time.Time         `json:"createdAt"`
-	UpdatedAt    time.Time         `json:"updatedAt"`
-	MessagesSent int64             `json:"messagesSent"`
-	LastSentAt   time.Time         `json:"lastSentAt,omitempty"`
-	Config       ProducerConfig    `json:"config"`
-}
-
-// ProducerConfig holds tunables for a producer.
-type ProducerConfig struct {
-	Persistent    bool `json:"persistent"`
-	Mandatory     bool `json:"mandatory"`
-	Immediate     bool `json:"immediate"`
-	BatchSize     int  `json:"batchSize,omitempty"`
-	FlushInterval int  `json:"flushIntervalMs,omitempty"` // ms
+	ID           string                `json:"id"`
+	Name         string                `json:"name"`
+	Backend      string                `json:"backend"` // "rabbitmq", "kafka", "memory"
+	Exchange     string                `json:"exchange,omitempty"`
+	RoutingKey   string                `json:"routingKey,omitempty"`
+	Topic        string                `json:"topic,omitempty"` // Kafka topic
+	ContentType  string                `json:"contentType"`
+	Headers      map[string]string     `json:"headers,omitempty"`
+	Status       string                `json:"status"`
+	CreatedAt    time.Time             `json:"createdAt"`
+	UpdatedAt    time.Time             `json:"updatedAt"`
+	MessagesSent int64                 `json:"messagesSent"`
+	LastSentAt   time.Time             `json:"lastSentAt,omitempty"`
+	Config       models.ProducerConfig `json:"config"`
 }
 
 // Consumer reads messages from a backend queue/topic.
 type Consumer struct {
-	ID               string         `json:"id"`
-	Name             string         `json:"name"`
-	Backend          string         `json:"backend"`
-	Queue            string         `json:"queue,omitempty"`
-	Exchange         string         `json:"exchange,omitempty"`
-	RoutingKey       string         `json:"routingKey,omitempty"`
-	Topic            string         `json:"topic,omitempty"` // Kafka topic
-	ConsumerGroup    string         `json:"consumerGroup,omitempty"`
-	Status           string         `json:"status"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	UpdatedAt        time.Time      `json:"updatedAt"`
-	MessagesReceived int64          `json:"messagesReceived"`
-	MessagesAcked    int64          `json:"messagesAcked"`
-	MessagesFailed   int64          `json:"messagesFailed"`
-	LastReceivedAt   time.Time      `json:"lastReceivedAt,omitempty"`
-	Config           ConsumerConfig `json:"config"`
-}
-
-// ConsumerConfig holds tunables for a consumer.
-type ConsumerConfig struct {
-	AutoAck        bool   `json:"autoAck"`
-	PrefetchCount  int    `json:"prefetchCount"`
-	MaxRetries     int    `json:"maxRetries"`
-	RetryDelayMs   int    `json:"retryDelayMs"`
-	DLQEnabled     bool   `json:"dlqEnabled"`
-	DLQExchange    string `json:"dlqExchange,omitempty"`
-	DLQRoutingKey  string `json:"dlqRoutingKey,omitempty"`
-	DLQTopic       string `json:"dlqTopic,omitempty"`
-	MaxConcurrency int    `json:"maxConcurrency"`
+	ID               string               `json:"id"`
+	Name             string               `json:"name"`
+	Backend          string               `json:"backend"`
+	Queue            string               `json:"queue,omitempty"`
+	Exchange         string               `json:"exchange,omitempty"`
+	RoutingKey       string               `json:"routingKey,omitempty"`
+	Topic            string               `json:"topic,omitempty"` // Kafka topic
+	ConsumerGroup    string               `json:"consumerGroup,omitempty"`
+	Status           string               `json:"status"`
+	CreatedAt        time.Time            `json:"createdAt"`
+	UpdatedAt        time.Time            `json:"updatedAt"`
+	MessagesReceived int64                `json:"messagesReceived"`
+	MessagesAcked    int64                `json:"messagesAcked"`
+	MessagesFailed   int64                `json:"messagesFailed"`
+	LastReceivedAt   time.Time            `json:"lastReceivedAt,omitempty"`
+	Config           models.ConsumerConfig `json:"config"`
 }
 
 // ---------------------------------------------------------------
@@ -132,26 +114,26 @@ type PublishRequest struct {
 
 // CreateProducerRequest is the REST body for creating a producer.
 type CreateProducerRequest struct {
-	Name        string            `json:"name" binding:"required"`
-	Backend     string            `json:"backend" binding:"required"`
-	Exchange    string            `json:"exchange,omitempty"`
-	RoutingKey  string            `json:"routingKey,omitempty"`
-	Topic       string            `json:"topic,omitempty"`
-	ContentType string            `json:"contentType,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Config      ProducerConfig    `json:"config"`
+	Name        string                `json:"name" binding:"required"`
+	Backend     string                `json:"backend" binding:"required"`
+	Exchange    string                `json:"exchange,omitempty"`
+	RoutingKey  string                `json:"routingKey,omitempty"`
+	Topic       string                `json:"topic,omitempty"`
+	ContentType string                `json:"contentType,omitempty"`
+	Headers     map[string]string     `json:"headers,omitempty"`
+	Config      models.ProducerConfig `json:"config"`
 }
 
 // CreateConsumerRequest is the REST body for creating a consumer.
 type CreateConsumerRequest struct {
-	Name          string         `json:"name" binding:"required"`
-	Backend       string         `json:"backend" binding:"required"`
-	Queue         string         `json:"queue,omitempty"`
-	Exchange      string         `json:"exchange,omitempty"`
-	RoutingKey    string         `json:"routingKey,omitempty"`
-	Topic         string         `json:"topic,omitempty"`
-	ConsumerGroup string         `json:"consumerGroup,omitempty"`
-	Config        ConsumerConfig `json:"config"`
+	Name          string               `json:"name" binding:"required"`
+	Backend       string               `json:"backend" binding:"required"`
+	Queue         string               `json:"queue,omitempty"`
+	Exchange      string               `json:"exchange,omitempty"`
+	RoutingKey    string               `json:"routingKey,omitempty"`
+	Topic         string               `json:"topic,omitempty"`
+	ConsumerGroup string               `json:"consumerGroup,omitempty"`
+	Config        models.ConsumerConfig `json:"config"`
 }
 
 // ConductorStats aggregate metrics.

@@ -1,9 +1,9 @@
 package serverboot
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -81,7 +81,7 @@ func Run(port int, environment string) error {
 		fmt.Println("\n🎯 Ready to accept requests...")
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			logging.Z().Fatal(fmt.Sprintf("Server error: %v", err))
 		}
 	}()
 
@@ -95,12 +95,12 @@ func Run(port int, environment string) error {
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		logging.Z().Info(fmt.Sprintf("Server shutdown error: %v", err))
 	}
 	fmt.Println("  ✓ API server stopped")
 
 	if err := controllerManager.Stop(shutdownCtx); err != nil {
-		log.Printf("Controller manager stop error: %v", err)
+		logging.Z().Info(fmt.Sprintf("Controller manager stop error: %v", err))
 	}
 	fmt.Println("  ✓ Controllers stopped")
 

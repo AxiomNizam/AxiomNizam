@@ -1,9 +1,9 @@
 package controllers
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"example.com/axiomnizam/internal/apiserver"
@@ -91,7 +91,7 @@ func NewResourceController(
 
 // Start starts the controller
 func (rc *ResourceController) Start(ctx context.Context) error {
-	log.Printf("Starting controller %s", rc.name)
+	logging.Z().Info(fmt.Sprintf("Starting controller %s", rc.name))
 
 	// Start workers
 	for i := 0; i < rc.maxConcurrent; i++ {
@@ -102,7 +102,7 @@ func (rc *ResourceController) Start(ctx context.Context) error {
 	go rc.resyncPeriodically(ctx)
 
 	<-ctx.Done()
-	log.Printf("Stopping controller %s", rc.name)
+	logging.Z().Info(fmt.Sprintf("Stopping controller %s", rc.name))
 	return rc.workQueue.Shutdown()
 }
 
@@ -131,7 +131,7 @@ func (rc *ResourceController) processItem(ctx context.Context, workerID int, ite
 	// Parse the item key (format: namespace/name)
 	parts := parseKey(item.Key)
 	if len(parts) != 2 {
-		log.Printf("Invalid key: %s", item.Key)
+		logging.Z().Info(fmt.Sprintf("Invalid key: %s", item.Key))
 		return
 	}
 
@@ -140,7 +140,7 @@ func (rc *ResourceController) processItem(ctx context.Context, workerID int, ite
 	// Get the resource
 	resource, err := rc.store.Get(namespace, name)
 	if err != nil {
-		log.Printf("Worker %d: Failed to get resource %s/%s: %v", workerID, namespace, name, err)
+		logging.Z().Info(fmt.Sprintf("Worker %d: Failed to get resource %s/%s: %v", workerID, namespace, name, err))
 		rc.workQueue.AddRateLimited(item.Key)
 		return
 	}
@@ -148,7 +148,7 @@ func (rc *ResourceController) processItem(ctx context.Context, workerID int, ite
 	// Handle deletion if marked
 	if resource.GetObjectMeta().DeletedAt != nil {
 		if err := rc.handleDeletion(ctx, resource); err != nil {
-			log.Printf("Worker %d: Failed to finalize resource: %v", workerID, err)
+			logging.Z().Info(fmt.Sprintf("Worker %d: Failed to finalize resource: %v", workerID, err))
 			rc.workQueue.AddRateLimited(item.Key)
 		}
 		return
@@ -162,7 +162,7 @@ func (rc *ResourceController) processItem(ctx context.Context, workerID int, ite
 	})
 
 	if err != nil {
-		log.Printf("Worker %d: Reconciliation failed for %s/%s: %v", workerID, namespace, name, err)
+		logging.Z().Info(fmt.Sprintf("Worker %d: Reconciliation failed for %s/%s: %v", workerID, namespace, name, err))
 		rc.workQueue.AddRateLimited(item.Key)
 		return
 	}
@@ -183,14 +183,14 @@ func (rc *ResourceController) handleDeletion(ctx context.Context, resource resou
 	// If finalizer exists, run finalization
 	if meta.HasFinalizer(rc.finalizerName) {
 		if err := rc.reconciler.Finalize(ctx, resource); err != nil {
-			log.Printf("Error finalizing resource: %v", err)
+			logging.Z().Info(fmt.Sprintf("Error finalizing resource: %v", err))
 			return err
 		}
 
 		// Remove finalizer
 		meta.RemoveFinalizer(rc.finalizerName)
 		if err := rc.store.Update(resource); err != nil {
-			log.Printf("Error removing finalizer: %v", err)
+			logging.Z().Info(fmt.Sprintf("Error removing finalizer: %v", err))
 			return err
 		}
 	}
@@ -208,7 +208,7 @@ func (rc *ResourceController) resyncPeriodically(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			log.Printf("Controller %s: Resyncing all resources", rc.name)
+			logging.Z().Info(fmt.Sprintf("Controller %s: Resyncing all resources", rc.name))
 			rc.lastResyncTime = time.Now()
 			// In a real implementation, would resync all resources
 		}
@@ -264,14 +264,14 @@ func (wr *WorkloadReconciler) Reconcile(ctx context.Context, req ReconcileReques
 		return ReconcileResult{Requeue: true}, err
 	}
 
-	log.Printf("Workload %s/%s is now running", req.Namespace, req.Name)
+	logging.Z().Info(fmt.Sprintf("Workload %s/%s is now running", req.Namespace, req.Name))
 	return ReconcileResult{Requeue: false}, nil
 }
 
 // Finalize cleans up workload resources
 func (wr *WorkloadReconciler) Finalize(ctx context.Context, resource resources.Resource) error {
 	workload := resource.(*resources.WorkloadResource)
-	log.Printf("Finalizing workload %s/%s", workload.ObjectMeta.Namespace, workload.ObjectMeta.Name)
+	logging.Z().Info(fmt.Sprintf("Finalizing workload %s/%s", workload.ObjectMeta.Namespace, workload.ObjectMeta.Name))
 	return nil
 }
 
@@ -310,7 +310,7 @@ func (pr *PipelineReconciler) Reconcile(ctx context.Context, req ReconcileReques
 			return ReconcileResult{Requeue: true}, err
 		}
 
-		log.Printf("Pipeline %s/%s executing", req.Namespace, req.Name)
+		logging.Z().Info(fmt.Sprintf("Pipeline %s/%s executing", req.Namespace, req.Name))
 		return ReconcileResult{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -320,7 +320,7 @@ func (pr *PipelineReconciler) Reconcile(ctx context.Context, req ReconcileReques
 // Finalize cleans up pipeline resources
 func (pr *PipelineReconciler) Finalize(ctx context.Context, resource resources.Resource) error {
 	pipeline := resource.(*resources.PipelineResource)
-	log.Printf("Finalizing pipeline %s/%s", pipeline.ObjectMeta.Namespace, pipeline.ObjectMeta.Name)
+	logging.Z().Info(fmt.Sprintf("Finalizing pipeline %s/%s", pipeline.ObjectMeta.Namespace, pipeline.ObjectMeta.Name))
 	return nil
 }
 
@@ -358,13 +358,13 @@ func (sr *ScheduleReconciler) Reconcile(ctx context.Context, req ReconcileReques
 		return ReconcileResult{Requeue: true}, err
 	}
 
-	log.Printf("Schedule %s/%s is %s", req.Namespace, req.Name, status.Phase)
+	logging.Z().Info(fmt.Sprintf("Schedule %s/%s is %s", req.Namespace, req.Name, status.Phase))
 	return ReconcileResult{Requeue: true, RequeueAfter: timing.DefaultRequeueAfter}, nil
 }
 
 // Finalize cleans up schedule resources
 func (sr *ScheduleReconciler) Finalize(ctx context.Context, resource resources.Resource) error {
 	schedule := resource.(*resources.ScheduleResource)
-	log.Printf("Finalizing schedule %s/%s", schedule.ObjectMeta.Namespace, schedule.ObjectMeta.Name)
+	logging.Z().Info(fmt.Sprintf("Finalizing schedule %s/%s", schedule.ObjectMeta.Namespace, schedule.ObjectMeta.Name))
 	return nil
 }

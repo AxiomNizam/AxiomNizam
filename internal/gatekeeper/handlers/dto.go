@@ -45,8 +45,8 @@ type BeginChallengeResponse struct {
 
 // VerifyChallengeRequest is the API request for verifying an MFA challenge.
 type VerifyChallengeRequest struct {
-	ChallengeID uuid.UUID `json:"challenge_id" binding:"required"`
-	Code        string    `json:"code" binding:"required"`
+	ChallengeID string `json:"challenge_id" binding:"required"`
+	Code        string `json:"code" binding:"required"`
 }
 
 // VerifyChallengeResponse is the API response for challenge verification.

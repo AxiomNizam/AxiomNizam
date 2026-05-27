@@ -116,7 +116,7 @@ func main() {
 	// Get browser-facing backend URL from environment or use default.
 	backendURL = trimTrailingSlash(os.Getenv("BACKEND_URL"))
 	if backendURL == "" {
-		backendURL = "http://localhost:8000"
+		backendURL = "http://127.0.0.1:8000"
 	}
 
 	// Backend proxy URL is used by frontend server-side routes (/api/health, /api/status).
@@ -593,13 +593,17 @@ func faviconHandler(c *gin.Context) {
 	c.String(http.StatusOK, `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>`)
 }
 
-// apiHealthHandler fetches and returns health status as JSON
+// apiHealthHandler fetches and returns health status as JSON.
+// Returns 200 when both frontend and backend are healthy.
+// Returns 502 when the backend is unreachable (bad gateway).
 func apiHealthHandler(c *gin.Context) {
 	health, err := fetchHealth()
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":  "error",
-			"message": fmt.Sprintf("Failed to fetch health from %s: %v", backendProxyURL, err),
+		c.JSON(http.StatusBadGateway, gin.H{
+			"status":   "error",
+			"code":     "backend_unreachable",
+			"message":  fmt.Sprintf("Backend unreachable: %v", err),
+			"frontend": "ok",
 		})
 		return
 	}
@@ -619,30 +623,60 @@ func apiStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-// fetchHealth makes a request to the backend health endpoint
+// fetchHealth makes a request to the backend health endpoint.
+// Tries backendProxyURL first, falls back to backendURL, then to 127.0.0.1.
 func fetchHealth() (*HealthResponse, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(fmt.Sprintf("%s/health", backendProxyURL))
-	if err != nil {
-		return nil, err
+	// Build candidate URLs with automatic fallbacks for Docker networking.
+	seen := map[string]bool{}
+	var candidates []string
+	fallbacks := []string{"axiomnizam", "host.docker.internal", "127.0.0.1"}
+	for _, u := range []string{backendProxyURL, backendURL} {
+		if u != "" && !seen[u] {
+			seen[u] = true
+			candidates = append(candidates, u)
+		}
+		// Try Docker service name / host fallbacks when URL uses localhost.
+		if strings.Contains(u, "localhost") || strings.Contains(u, "127.0.0.1") {
+			for _, host := range fallbacks {
+				fallback := u
+				fallback = strings.Replace(fallback, "localhost", host, 1)
+				fallback = strings.Replace(fallback, "127.0.0.1", host, 1)
+				if !seen[fallback] {
+					seen[fallback] = true
+					candidates = append(candidates, fallback)
+				}
+			}
+		}
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for _, baseURL := range candidates {
+		resp, err := client.Get(fmt.Sprintf("%s/health", baseURL))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("status %d from %s", resp.StatusCode, baseURL)
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		var health HealthResponse
+		if err := json.Unmarshal(body, &health); err != nil {
+			return nil, err
+		}
+		return &health, nil
 	}
-
-	var health HealthResponse
-	err = json.Unmarshal(body, &health)
-	if err != nil {
-		return nil, err
-	}
-
-	return &health, nil
+	return nil, lastErr
 }
 
 // fetchStatus makes a request to the backend status endpoint

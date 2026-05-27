@@ -70,7 +70,7 @@ func (h *SchemaRegistryHandlers) ListSubjects(c *gin.Context) {
 	subjects, err := h.subjectStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListSubjects"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list subjects"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list subjects"})
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *SchemaRegistryHandlers) ListVersions(c *gin.Context) {
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListVersions"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list schemas"})
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *SchemaRegistryHandlers) ListVersions(c *gin.Context) {
 	}
 
 	if len(versions) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "subject not found", "subject": subject})
+		c.JSON(http.StatusNotFound, SubjectNotFoundResponse{Error: "subject not found", Subject: subject})
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
 	} else {
 		v, err := strconv.Atoi(versionStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version number"})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid version number"})
 			return
 		}
 		targetVersion = v
@@ -139,7 +139,7 @@ func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetSchemaByVersion"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list schemas"})
 		return
 	}
 
@@ -159,17 +159,17 @@ func (h *SchemaRegistryHandlers) GetSchemaByVersion(c *gin.Context) {
 	}
 
 	if found == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "schema not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "schema not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"subject":    found.Spec.Subject,
-		"version":    found.Status.Version,
-		"id":         found.Status.SchemaID,
-		"schemaType": found.Spec.SchemaType,
-		"schema":     found.Spec.Schema,
-		"references": found.Spec.References,
+	c.JSON(http.StatusOK, SchemaDetailResponse{
+		Subject:    found.Spec.Subject,
+		Version:    found.Status.Version,
+		ID:         found.Status.SchemaID,
+		SchemaType: string(found.Spec.SchemaType),
+		Schema:     found.Spec.Schema,
+		References: found.Spec.References,
 	})
 }
 
@@ -186,12 +186,12 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 		References []SchemaReference `json:"references,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "detail": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid request body: " + err.Error()})
 		return
 	}
 
 	if req.Schema == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "schema field is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "schema field is required"})
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 		}
 		if createErr := h.subjectStore.Create(ctx, subj); createErr != nil {
 			logging.Z().Warn("handler error", zap.String("op", "RegisterSchema.createSubject"), zap.Error(createErr))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create subject", "detail": createErr.Error()})
+			c.JSON(http.StatusInternalServerError, DetailErrorResponse{Error: "failed to create subject", Detail: createErr.Error()})
 			return
 		}
 	}
@@ -256,15 +256,15 @@ func (h *SchemaRegistryHandlers) RegisterSchema(c *gin.Context) {
 	// Create schema resource — reconciler will validate compatibility.
 	if err := h.schemaStore.Create(ctx, schema); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "RegisterSchema"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register schema", "detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to register schema: " + err.Error()})
 		return
 	}
 
 	// Return 202 — reconciler will process compatibility.
-	c.JSON(http.StatusAccepted, gin.H{
-		"name":    schemaName,
-		"subject": subject,
-		"message": "schema submitted for compatibility validation",
+	c.JSON(http.StatusAccepted, SchemaRegisteredResponse{
+		Name:    schemaName,
+		Subject: subject,
+		Message: "schema submitted for compatibility validation",
 	})
 }
 
@@ -282,14 +282,14 @@ func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
 
 	version, err := strconv.Atoi(versionStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version number"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid version number"})
 		return
 	}
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "DeleteSchemaVersion"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list schemas"})
 		return
 	}
 
@@ -297,15 +297,15 @@ func (h *SchemaRegistryHandlers) DeleteSchemaVersion(c *gin.Context) {
 		if s.Spec.Subject == subject && s.Status.Version == version {
 			if err := h.schemaStore.Delete(ctx, s.Name); err != nil {
 				logging.Z().Warn("handler error", zap.String("op", "DeleteSchemaVersion.delete"), zap.Error(err))
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete schema"})
+				c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to delete schema"})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"version": version, "deleted": true})
+			c.JSON(http.StatusOK, VersionDeletedResponse{Version: version, Deleted: true})
 			return
 		}
 	}
 
-	c.JSON(http.StatusNotFound, gin.H{"error": "schema version not found"})
+	c.JSON(http.StatusNotFound, MessageResponse{Error: "schema version not found"})
 }
 
 // GetSchemaByID returns a schema by its global ID.
@@ -318,30 +318,30 @@ func (h *SchemaRegistryHandlers) GetSchemaByID(c *gin.Context) {
 
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid schema ID"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid schema ID"})
 		return
 	}
 
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetSchemaByID"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search schemas"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to search schemas"})
 		return
 	}
 
 	for _, s := range schemas {
 		if s.Status.SchemaID == id {
-			c.JSON(http.StatusOK, gin.H{
-				"schema":     s.Spec.Schema,
-				"schemaType": s.Spec.SchemaType,
-				"subject":    s.Spec.Subject,
-				"version":    s.Status.Version,
+			c.JSON(http.StatusOK, SchemaByIDResponse{
+				Schema:     s.Spec.Schema,
+				SchemaType: string(s.Spec.SchemaType),
+				Subject:    s.Spec.Subject,
+				Version:    s.Status.Version,
 			})
 			return
 		}
 	}
 
-	c.JSON(http.StatusNotFound, gin.H{"error": "schema not found", "id": id})
+	c.JSON(http.StatusNotFound, SchemaIDNotFoundResponse{Error: "schema not found", ID: id})
 }
 
 // SetSubjectCompatibility updates the compatibility mode for a subject.
@@ -356,13 +356,13 @@ func (h *SchemaRegistryHandlers) SetSubjectCompatibility(c *gin.Context) {
 		Compatibility string `json:"compatibility"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid request body"})
 		return
 	}
 
 	subj, err := h.subjectStore.Get(ctx, subject)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "subject not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "subject not found"})
 		return
 	}
 
@@ -372,11 +372,11 @@ func (h *SchemaRegistryHandlers) SetSubjectCompatibility(c *gin.Context) {
 
 	if err := h.subjectStore.Update(ctx, subj); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "SetSubjectCompatibility"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update subject"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to update subject"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"compatibility": req.Compatibility})
+	c.JSON(http.StatusOK, CompatibilityResponse{Compatibility: req.Compatibility})
 }
 
 // GetSubjectCompatibility returns the compatibility mode for a subject.
@@ -389,12 +389,12 @@ func (h *SchemaRegistryHandlers) GetSubjectCompatibility(c *gin.Context) {
 
 	subj, err := h.subjectStore.Get(ctx, subject)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "subject not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "subject not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"compatibility": subj.Spec.Compatibility,
+	c.JSON(http.StatusOK, CompatibilityResponse{
+		Compatibility: string(subj.Spec.Compatibility),
 	})
 }
 
@@ -415,7 +415,7 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 		Schema     string `json:"schema"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid request body"})
 		return
 	}
 
@@ -426,7 +426,7 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 	} else {
 		v, err := strconv.Atoi(versionStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid version"})
+			c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid version"})
 			return
 		}
 		targetVersion = v
@@ -435,7 +435,7 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 	schemas, err := h.schemaStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "CheckCompatibility"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list schemas"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list schemas"})
 		return
 	}
 
@@ -455,7 +455,7 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 	}
 
 	if target == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "target schema version not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "target schema version not found"})
 		return
 	}
 
@@ -474,8 +474,8 @@ func (h *SchemaRegistryHandlers) CheckCompatibility(c *gin.Context) {
 
 	errors := h.checker.CheckCompatibility(req.Schema, target.Spec.Schema, schemaType, compatMode)
 
-	c.JSON(http.StatusOK, gin.H{
-		"is_compatible": len(errors) == 0,
-		"errors":        errors,
+	c.JSON(http.StatusOK, CompatibilityCheckResponse{
+		IsCompatible: len(errors) == 0,
+		Errors:       errors,
 	})
 }

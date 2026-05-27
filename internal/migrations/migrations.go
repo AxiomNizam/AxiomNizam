@@ -53,8 +53,11 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
-	// Tracing migrations
-	if err := db.AutoMigrate(&models.TraceModel{}, &models.SpanModel{}, &models.ServiceMetricsModel{}); err != nil {
+	// Tracing migrations (traces before spans due to FK constraint)
+	if err := db.AutoMigrate(&models.TraceModel{}); err != nil {
+		return err
+	}
+	if err := db.AutoMigrate(&models.SpanModel{}, &models.ServiceMetricsModel{}); err != nil {
 		return err
 	}
 

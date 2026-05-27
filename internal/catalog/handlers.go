@@ -89,7 +89,7 @@ func (h *CatalogHandlers) ListAssets(c *gin.Context) {
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListAssets"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list assets", "detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list assets: " + err.Error()})
 		return
 	}
 
@@ -116,10 +116,7 @@ func (h *CatalogHandlers) ListAssets(c *gin.Context) {
 		filtered = append(filtered, asset)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"items": filtered,
-		"total": len(filtered),
-	})
+	c.JSON(http.StatusOK, AssetListResponse{Items: filtered, Total: len(filtered)})
 }
 
 // GetAsset returns a specific catalog asset.
@@ -132,7 +129,7 @@ func (h *CatalogHandlers) GetAsset(c *gin.Context) {
 
 	asset, err := h.assetStore.Get(ctx, name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "asset not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "asset not found", Name: name})
 		return
 	}
 
@@ -143,7 +140,7 @@ func (h *CatalogHandlers) GetAsset(c *gin.Context) {
 func (h *CatalogHandlers) CreateAsset(c *gin.Context) {
 	var asset CatalogAssetResource
 	if err := c.ShouldBindJSON(&asset); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "detail": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid request body: " + err.Error()})
 		return
 	}
 
@@ -163,7 +160,7 @@ func (h *CatalogHandlers) CreateAsset(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if err := h.assetStore.Create(ctx, &asset); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "asset already exists or creation failed", "detail": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: "asset already exists or creation failed: " + err.Error()})
 		return
 	}
 
@@ -180,13 +177,13 @@ func (h *CatalogHandlers) UpdateAsset(c *gin.Context) {
 
 	existing, err := h.assetStore.Get(ctx, name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "asset not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "asset not found", Name: name})
 		return
 	}
 
 	var update CatalogAssetSpec
 	if err := c.ShouldBindJSON(&update); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "detail": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid request body: " + err.Error()})
 		return
 	}
 
@@ -196,7 +193,7 @@ func (h *CatalogHandlers) UpdateAsset(c *gin.Context) {
 
 	if err := h.assetStore.Update(ctx, existing); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateAsset"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update asset", "detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to update asset: " + err.Error()})
 		return
 	}
 
@@ -212,18 +209,18 @@ func (h *CatalogHandlers) DeleteAsset(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if err := h.assetStore.Delete(ctx, name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "asset not found or delete failed", "detail": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "asset not found or delete failed: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "asset deleted", "name": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: "asset deleted", Name: name})
 }
 
 // SearchAssets performs full-text search across catalog assets.
 func (h *CatalogHandlers) SearchAssets(c *gin.Context) {
 	query := c.Query("q")
 	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'q' is required"})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "query parameter 'q' is required"})
 		return
 	}
 
@@ -231,7 +228,7 @@ func (h *CatalogHandlers) SearchAssets(c *gin.Context) {
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "SearchAssets"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search assets"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to search assets"})
 		return
 	}
 
@@ -243,11 +240,7 @@ func (h *CatalogHandlers) SearchAssets(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"query":   query,
-		"results": results,
-		"total":   len(results),
-	})
+	c.JSON(http.StatusOK, CatalogSearchResponse{Query: query, Results: results, Total: len(results)})
 }
 
 // ScanDataSource triggers a discovery scan of a datasource.
@@ -258,7 +251,7 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 	}
 
 	if h.scanner == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "catalog scanner not configured"})
+		c.JSON(http.StatusServiceUnavailable, MessageResponse{Error: "catalog scanner not configured"})
 		return
 	}
 
@@ -279,7 +272,7 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 	result, err := h.scanner.Scan(ctx, req)
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ScanDataSource"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "scan failed", "detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "scan failed: " + err.Error()})
 		return
 	}
 
@@ -347,19 +340,19 @@ func (h *CatalogHandlers) ScanDataSource(c *gin.Context) {
 		}
 	}
 
-	response := gin.H{
-		"dataSourceRef":  result.DataSourceRef,
-		"assetsFound":    result.AssetsFound,
-		"assetsCreated":  result.AssetsCreated,
-		"assetsUpdated":  result.AssetsUpdated,
-		"duration":       result.Duration.String(),
+	response := ScanResultResponse{
+		DataSourceRef: result.DataSourceRef,
+		AssetsFound:   result.AssetsFound,
+		AssetsCreated: result.AssetsCreated,
+		AssetsUpdated: result.AssetsUpdated,
+		Duration:      result.Duration.String(),
 	}
 	if len(scanErrors) > 0 {
-		response["errors"] = scanErrors
-		response["partialFailure"] = true
+		response.Errors = scanErrors
+		response.PartialFailure = true
 	}
 	if len(result.Errors) > 0 {
-		response["scanErrors"] = result.Errors
+		response.ScanErrors = result.Errors
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -371,7 +364,7 @@ func (h *CatalogHandlers) ListDomains(c *gin.Context) {
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListDomains"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list assets"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list assets"})
 		return
 	}
 
@@ -392,7 +385,7 @@ func (h *CatalogHandlers) ListDomains(c *gin.Context) {
 		domains = append(domains, DomainInfo{Name: name, AssetCount: count})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"domains": domains, "total": len(domains)})
+	c.JSON(http.StatusOK, DomainListResponse{Domains: domains, Total: len(domains)})
 }
 
 // GetStatistics returns platform-wide catalog statistics.
@@ -401,7 +394,7 @@ func (h *CatalogHandlers) GetStatistics(c *gin.Context) {
 	assets, err := h.assetStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "GetStatistics"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to compute statistics"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to compute statistics"})
 		return
 	}
 
@@ -455,17 +448,17 @@ func (h *CatalogHandlers) ListCollections(c *gin.Context) {
 	collections, err := h.collectionStore.List(ctx, "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListCollections"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list collections"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: "failed to list collections"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": collections, "total": len(collections)})
+	c.JSON(http.StatusOK, CollectionListResponse{Items: collections, Total: len(collections)})
 }
 
 // CreateCollection creates a new catalog collection.
 func (h *CatalogHandlers) CreateCollection(c *gin.Context) {
 	var collection CatalogCollectionResource
 	if err := c.ShouldBindJSON(&collection); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "detail": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: "invalid request body: " + err.Error()})
 		return
 	}
 
@@ -485,7 +478,7 @@ func (h *CatalogHandlers) CreateCollection(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if err := h.collectionStore.Create(ctx, &collection); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "collection already exists", "detail": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: "collection already exists: " + err.Error()})
 		return
 	}
 
@@ -502,7 +495,7 @@ func (h *CatalogHandlers) GetCollection(c *gin.Context) {
 
 	collection, err := h.collectionStore.Get(ctx, name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "collection not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "collection not found", Name: name})
 		return
 	}
 

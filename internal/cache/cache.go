@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"example.com/axiomnizam/internal/cache/config"
 	"context"
 	"errors"
 	"time"
@@ -60,32 +61,8 @@ type Cache interface {
 	Close() error
 }
 
-// CacheConfig contains cache configuration
-type CacheConfig struct {
-	// Type is the cache backend type (redis, memory, etc.)
-	Type string
-
-	// Host is the cache server host (for Redis)
-	Host string
-
-	// Port is the cache server port (for Redis)
-	Port int
-
-	// Password is the cache server password (for Redis)
-	Password string
-
-	// DB is the cache database number (for Redis)
-	DB int
-
-	// DefaultTTL is the default time-to-live for cache entries
-	DefaultTTL time.Duration
-
-	// MaxSize is the maximum size of in-memory cache
-	MaxSize int
-
-	// PoolSize is the connection pool size (for Redis)
-	PoolSize int
-}
+// CacheConfig re-exports the config type from the config subpackage.
+type CacheConfig = config.Config
 
 // CacheKeyBuilder provides consistent key naming
 type CacheKeyBuilder struct {

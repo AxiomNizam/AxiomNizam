@@ -7,21 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	platformstore "example.com/axiomnizam/internal/platform/store"
 	"example.com/axiomnizam/internal/gatekeeper/models"
 	"example.com/axiomnizam/internal/gatekeeper/repositories"
 )
 
 // ChallengeRepository implements repositories.ChallengeRepository using PostgreSQL.
-// Supports optional KVStore persistence for Raft mode.
 type ChallengeRepository struct {
-	db      *sql.DB
-	kvStore platformstore.KVStore
-}
-
-// ConfigureKVPersistence sets the KV store for optional Raft persistence.
-func (r *ChallengeRepository) ConfigureKVPersistence(kv platformstore.KVStore) {
-	r.kvStore = kv
+	db *sql.DB
 }
 
 // NewChallengeRepository creates a new PostgreSQL-backed challenge repository.

@@ -5,8 +5,9 @@ package metrics
 // This is Phase 0.4 of the migration plan.
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -106,14 +107,14 @@ func (m *EtcdKeySpaceMonitor) poll(ctx context.Context) {
 			m.stats[prefix] = s
 		}
 		if err != nil {
-			log.Printf("etcd-keyspace module=%s err=%q", prefix, err.Error())
+			logging.Z().Info(fmt.Sprintf("etcd-keyspace module=%s err=%q", prefix, err.Error()))
 		} else {
 			s.KeyCount = resp.Count
 			s.LastCheck = time.Now()
 
 			// Alert threshold: log warning if any prefix exceeds 10,000 keys.
 			if resp.Count > 10000 {
-				log.Printf("⚠️  etcd-keyspace prefix=%s count=%d exceeds 10000 threshold", prefix, resp.Count)
+				logging.Z().Info(fmt.Sprintf("⚠️  etcd-keyspace prefix=%s count=%d exceeds 10000 threshold", prefix, resp.Count))
 			}
 		}
 		m.mu.Unlock()

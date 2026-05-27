@@ -18,9 +18,9 @@
 package sigdb
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -110,7 +110,7 @@ func (db *Database) Init() (*Version, error) {
 		n := matcher.RegisterBuiltinPatterns(b)
 		patternCount += n
 		db.matcherLayer.Reload(b.Build())
-		log.Printf("🛡️  sigdb: loaded %d built-in patterns", n)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: loaded %d built-in patterns", n))
 	}
 
 	// Built-in YARA rules.
@@ -119,7 +119,7 @@ func (db *Database) Init() (*Version, error) {
 		n := yara.RegisterBuiltinRules(rs)
 		yaraCount += n
 		db.yaraLayer.Reload(rs)
-		log.Printf("🛡️  sigdb: loaded %d built-in YARA rules", n)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: loaded %d built-in YARA rules", n))
 	}
 
 	// ── 2. Load on-disk signatures ───────────────────────────────────
@@ -141,8 +141,8 @@ func (db *Database) Init() (*Version, error) {
 	}
 	db.lastReload = time.Now()
 
-	log.Printf("🛡️  sigdb: initialized — hashes=%d patterns=%d yara=%d (v%s)",
-		hashCount, patternCount, yaraCount, db.version.Version)
+	logging.Z().Info(fmt.Sprintf("🛡️  sigdb: initialized — hashes=%d patterns=%d yara=%d (v%s)",
+		hashCount, patternCount, yaraCount, db.version.Version))
 
 	return &db.version, nil
 }
@@ -151,7 +151,7 @@ func (db *Database) Init() (*Version, error) {
 // Returns counts of loaded items per type.
 func (db *Database) loadDiskSignatures() (hashes, patterns, yaraRules int) {
 	if _, err := os.Stat(db.sigDir); os.IsNotExist(err) {
-		log.Printf("🛡️  sigdb: signature directory %q does not exist, using built-in only", db.sigDir)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: signature directory %q does not exist, using built-in only", db.sigDir))
 		return 0, 0, 0
 	}
 
@@ -204,7 +204,7 @@ func (db *Database) loadHashDir(dir string) (int, []error) {
 	}
 	loaded, errs := hashdb.LoadFromDir(db.hashDB, dir)
 	if loaded > 0 {
-		log.Printf("🛡️  sigdb: loaded %d hashes from %s", loaded, dir)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: loaded %d hashes from %s", loaded, dir))
 	}
 	return loaded, errs
 }
@@ -219,7 +219,7 @@ func (db *Database) loadPatternDir(dir string) (int, []error) {
 	loaded, errs := matcher.LoadFromDir(b, dir)
 	if loaded > 0 {
 		db.matcherLayer.Reload(b.Build())
-		log.Printf("🛡️  sigdb: loaded %d patterns from %s", loaded, dir)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: loaded %d patterns from %s", loaded, dir))
 	}
 	return loaded, errs
 }
@@ -234,7 +234,7 @@ func (db *Database) loadYARADir(dir string) (int, []error) {
 	loaded, errs := yara.LoadFromDir(rs, dir)
 	if loaded > 0 {
 		db.yaraLayer.Reload(rs)
-		log.Printf("🛡️  sigdb: loaded %d YARA rules from %s", loaded, dir)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: loaded %d YARA rules from %s", loaded, dir))
 	}
 	return loaded, errs
 }
@@ -281,8 +281,8 @@ func (db *Database) loadCustomDir(dir string) (hashes, patterns, yaraRules int) 
 	}
 
 	if hashes+patterns+yaraRules > 0 {
-		log.Printf("🛡️  sigdb: loaded custom sigs — hashes=%d patterns=%d yara=%d",
-			hashes, patterns, yaraRules)
+		logging.Z().Info(fmt.Sprintf("🛡️  sigdb: loaded custom sigs — hashes=%d patterns=%d yara=%d",
+			hashes, patterns, yaraRules))
 	}
 	return hashes, patterns, yaraRules
 }
@@ -347,8 +347,8 @@ func (db *Database) Reload() (*Version, error) {
 	db.lastReload = time.Now()
 	db.reloadCount++
 
-	log.Printf("🛡️  sigdb: reloaded — hashes=%d patterns=%d yara=%d (reload #%d)",
-		hashCount, patternCount, yaraCount, db.reloadCount)
+	logging.Z().Info(fmt.Sprintf("🛡️  sigdb: reloaded — hashes=%d patterns=%d yara=%d (reload #%d)",
+		hashCount, patternCount, yaraCount, db.reloadCount))
 
 	return &db.version, nil
 }

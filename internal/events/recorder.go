@@ -1,9 +1,9 @@
 package events
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -198,7 +198,7 @@ func (ser *SimpleEventRecorder) RecordRelated(ctx context.Context, resource reso
 		ser.events[key] = ser.events[key][1:]
 	}
 
-	log.Printf("recorded related event: %s/%s %s with %d related objects", meta.Namespace, meta.Name, reason, len(relatedObjects))
+	logging.Z().Info(fmt.Sprintf("recorded related event: %s/%s %s with %d related objects", meta.Namespace, meta.Name, reason, len(relatedObjects)))
 }
 
 // GetEvents returns recorded events for a resource

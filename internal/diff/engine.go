@@ -221,22 +221,11 @@ func getNestedMap(m map[string]interface{}, key string) map[string]interface{} {
 	return make(map[string]interface{})
 }
 
-// GlobalDiffEngine is the package-level diff engine
-var GlobalDiffEngine *DiffEngine
-
-// SetDiffEngine sets the global diff engine
-func SetDiffEngine(de *DiffEngine) {
-	GlobalDiffEngine = de
-}
-
-// Diff computes diff via global engine
+// Diff computes a basic diff without policy/workflow info.
+// For full diff capabilities, create a DiffEngine instance directly.
 func Diff(ctx context.Context, kind, name string, old, new map[string]interface{}) (*ResourceDiff, error) {
-	if GlobalDiffEngine == nil {
-		// Return basic diff without policy/workflow info
-		engine := NewDiffEngine(nil, nil)
-		return engine.Compute(ctx, kind, name, old, new)
-	}
-	return GlobalDiffEngine.Compute(ctx, kind, name, old, new)
+	engine := NewDiffEngine(nil, nil)
+	return engine.Compute(ctx, kind, name, old, new)
 }
 
 // PrintDiff prints a diff in human-readable format

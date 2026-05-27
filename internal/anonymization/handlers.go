@@ -35,10 +35,10 @@ func (h *AnonymizationHandlers) ListPolicies(c *gin.Context) {
 	policies, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListPolicies"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"policies": policies, "count": len(policies)})
+	c.JSON(http.StatusOK, ListPoliciesResponse{Policies: policies, Count: len(policies)})
 }
 
 func (h *AnonymizationHandlers) GetPolicy(c *gin.Context) {
@@ -48,7 +48,7 @@ func (h *AnonymizationHandlers) GetPolicy(c *gin.Context) {
 	}
 	policy, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, policy)
@@ -57,7 +57,7 @@ func (h *AnonymizationHandlers) GetPolicy(c *gin.Context) {
 func (h *AnonymizationHandlers) CreatePolicy(c *gin.Context) {
 	var policy AnonymizationPolicyResource
 	if err := c.ShouldBindJSON(&policy); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	policy.Kind = AnonymizationPolicyKind
@@ -67,7 +67,7 @@ func (h *AnonymizationHandlers) CreatePolicy(c *gin.Context) {
 	policy.Generation = 1
 	policy.Status.Phase = "Pending"
 	if err := h.store.Create(c.Request.Context(), &policy); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, policy)
@@ -80,12 +80,12 @@ func (h *AnonymizationHandlers) UpdatePolicy(c *gin.Context) {
 	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 	var updated AnonymizationPolicyResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 	updated.ObjectMeta = existing.ObjectMeta
@@ -93,7 +93,7 @@ func (h *AnonymizationHandlers) UpdatePolicy(c *gin.Context) {
 	updated.Status = existing.Status
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdatePolicy"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -105,10 +105,10 @@ func (h *AnonymizationHandlers) DeletePolicy(c *gin.Context) {
 		return
 	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 func (h *AnonymizationHandlers) TriggerRun(c *gin.Context) {
@@ -118,10 +118,10 @@ func (h *AnonymizationHandlers) TriggerRun(c *gin.Context) {
 	}
 	policy, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "policy not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "policy not found", Name: name})
 		return
 	}
 	policy.Generation++
 	_ = h.store.Update(c.Request.Context(), policy)
-	c.JSON(http.StatusAccepted, gin.H{"message": "anonymization run triggered", "policy": name})
+	c.JSON(http.StatusAccepted, MessageResponse{Message: "anonymization run triggered", Policy: name})
 }

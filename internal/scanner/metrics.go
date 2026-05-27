@@ -1,10 +1,10 @@
 package scanner
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -155,13 +155,13 @@ func (m *Metrics) load() {
 	defer cancel()
 
 	val, err := kv.Get(ctx, scannerMetricsKVKey)
-	if err != nil {
-		return // not found
+	if err != nil || val == "" {
+		return // not found or empty
 	}
 
 	var state metricsState
 	if err := json.Unmarshal([]byte(val), &state); err != nil {
-		log.Printf("⚠️  scanner metrics: failed to unmarshal state: %v", err)
+		logging.Z().Info(fmt.Sprintf("⚠️  scanner metrics: failed to unmarshal state: %v", err))
 		return
 	}
 
@@ -189,7 +189,7 @@ func (m *Metrics) load() {
 	m.scannerTimeouts = state.ScannerTimeouts
 	m.scannerTotalMs = state.ScannerTotalMs
 
-	log.Printf("✅ scanner metrics: loaded persistent state (scans=%d)", state.TotalScans)
+	logging.Z().Info(fmt.Sprintf("✅ scanner metrics: loaded persistent state (scans=%d)", state.TotalScans))
 }
 
 func (m *Metrics) save() {
@@ -229,7 +229,9 @@ func (m *Metrics) save() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), scannerMetricsTimeout)
 	defer cancel()
-	_ = kv.Put(ctx, scannerMetricsKVKey, string(data))
+	if err := kv.Put(ctx, scannerMetricsKVKey, string(data)); err != nil {
+		logging.Z().Error(fmt.Sprintf("scanner metrics: kv persist failed: %v", err))
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

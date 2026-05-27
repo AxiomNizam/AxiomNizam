@@ -27,7 +27,7 @@ func (h *EncryptionHandler) CreateKey(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *EncryptionHandler) CreateKey(c *gin.Context) {
 	}
 
 	if err := h.manager.CreateKey(key); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -54,7 +54,7 @@ func (h *EncryptionHandler) GetKey(c *gin.Context) {
 	id := c.Param("id")
 	key, err := h.manager.GetKey(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "key not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "key not found"})
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *EncryptionHandler) ListKeys(c *gin.Context) {
 	tenantID := c.Query("tenantId")
 	keys, err := h.manager.ListKeys(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *EncryptionHandler) ListKeys(c *gin.Context) {
 		key.KeyMaterial = ""
 	}
 
-	c.JSON(http.StatusOK, gin.H{"keys": keys, "count": len(keys)})
+	c.JSON(http.StatusOK, KeyListResponse{Keys: keys, Count: len(keys)})
 }
 
 // RotateKey handles POST /api/v1/encryption/keys/:id/rotate
@@ -85,7 +85,7 @@ func (h *EncryptionHandler) RotateKey(c *gin.Context) {
 	id := c.Param("id")
 	rotated, err := h.manager.RotateKey(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -96,24 +96,24 @@ func (h *EncryptionHandler) RotateKey(c *gin.Context) {
 func (h *EncryptionHandler) DeleteKey(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.DeleteKey(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "key revoked"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "key revoked"})
 }
 
 // Encrypt handles POST /api/v1/encryption/encrypt
 func (h *EncryptionHandler) Encrypt(c *gin.Context) {
 	var req EncryptionRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
 	field, err := h.manager.Encrypt(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *EncryptionHandler) Encrypt(c *gin.Context) {
 func (h *EncryptionHandler) Decrypt(c *gin.Context) {
 	var req DecryptionRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *EncryptionHandler) Decrypt(c *gin.Context) {
 			if encVal, ok := val.(*EncryptedField); ok {
 				decrypted, err := h.manager.Decrypt(encVal)
 				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 					return
 				}
 				resp.Data[field] = decrypted
@@ -161,7 +161,7 @@ func (h *EncryptionHandler) CreatePolicy(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -181,7 +181,7 @@ func (h *EncryptionHandler) CreatePolicy(c *gin.Context) {
 // ListPolicies handles GET /api/v1/encryption/policies
 func (h *EncryptionHandler) ListPolicies(c *gin.Context) {
 	// Retrieve policies (to be implemented)
-	c.JSON(http.StatusOK, gin.H{"policies": []interface{}{}, "count": 0})
+	c.JSON(http.StatusOK, PolicyListResponse{Policies: []interface{}{}, Count: 0})
 }
 
 // RegisterEncryptionRoutes registers all encryption routes

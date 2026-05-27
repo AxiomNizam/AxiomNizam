@@ -21,7 +21,7 @@ func NewWebhookHandler(manager WebhookManager) *WebhookHandler {
 func (h *WebhookHandler) CreateWebhook(c *gin.Context) {
 	var req WebhookCreateRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
@@ -34,7 +34,7 @@ func (h *WebhookHandler) CreateWebhook(c *gin.Context) {
 				_ = h.dualWriteStore.Update(c.Request.Context(), resource)
 			}
 		}
-		c.JSON(http.StatusAccepted, gin.H{"name": resource.Name, "status": "Pending", "message": "webhook resource created"})
+		c.JSON(http.StatusAccepted, ResourceCreatedResponse{Name: resource.Name, Status: "Pending", Message: "webhook resource created"})
 		return
 	}
 
@@ -44,7 +44,7 @@ func (h *WebhookHandler) CreateWebhook(c *gin.Context) {
 	}
 	created, err := h.manager.CreateWebhook(webhook)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 	h.dualWriteWebhook(created)
@@ -56,7 +56,7 @@ func (h *WebhookHandler) GetWebhook(c *gin.Context) {
 	id := c.Param("id")
 	webhook, err := h.manager.GetWebhook(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "webhook not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "webhook not found"})
 		return
 	}
 
@@ -70,11 +70,11 @@ func (h *WebhookHandler) ListWebhooks(c *gin.Context) {
 
 	webhooks, err := h.manager.ListWebhooks(tenantID, eventType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"webhooks": webhooks, "count": len(webhooks)})
+	c.JSON(http.StatusOK, WebhookListResponse{Webhooks: webhooks, Count: len(webhooks)})
 }
 
 // UpdateWebhook handles PATCH /api/v1/webhooks/:id
@@ -83,20 +83,20 @@ func (h *WebhookHandler) UpdateWebhook(c *gin.Context) {
 	var req map[string]interface{}
 
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 
 	webhook, err := h.manager.GetWebhook(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "webhook not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "webhook not found"})
 		return
 	}
 
 	webhook.UpdatedAt = time.Now()
 	updated, err := h.manager.UpdateWebhook(webhook)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
@@ -107,11 +107,11 @@ func (h *WebhookHandler) UpdateWebhook(c *gin.Context) {
 func (h *WebhookHandler) DeleteWebhook(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.manager.DeleteWebhook(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "webhook deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "webhook deleted"})
 }
 
 // TestWebhook handles POST /api/v1/webhooks/:id/test
@@ -119,13 +119,13 @@ func (h *WebhookHandler) TestWebhook(c *gin.Context) {
 	id := c.Param("id")
 	webhook, err := h.manager.GetWebhook(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "webhook not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "webhook not found"})
 		return
 	}
 
 	result, err := h.manager.TestWebhook(webhook)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 
@@ -137,11 +137,11 @@ func (h *WebhookHandler) GetDeliveryLogs(c *gin.Context) {
 	id := c.Param("id")
 	logs, err := h.manager.GetDeliveryLogs(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "logs not found"})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: "logs not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"deliveries": logs})
+	c.JSON(http.StatusOK, DeliveryLogListResponse{Deliveries: logs})
 }
 
 // RegisterWebhookRoutes registers all webhook routes

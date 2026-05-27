@@ -1,11 +1,11 @@
 package sigdb
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -92,7 +92,7 @@ func (u *Updater) Start(ctx context.Context) {
 	u.running = true
 
 	go u.loop(childCtx)
-	log.Printf("🛡️  updater: started (interval=%s, url=%s)", u.interval, u.url)
+	logging.Z().Info(fmt.Sprintf("🛡️  updater: started (interval=%s, url=%s)", u.interval, u.url))
 }
 
 // Stop halts the background update loop.
@@ -108,7 +108,7 @@ func (u *Updater) Stop() {
 		u.cancel()
 	}
 	u.running = false
-	log.Printf("🛡️  updater: stopped")
+	logging.Z().Info(fmt.Sprintf("🛡️  updater: stopped"))
 }
 
 // loop is the main update polling loop.
@@ -151,12 +151,12 @@ func (u *Updater) checkForUpdate(ctx context.Context) {
 	// 2. Compare with local.
 	localVer := u.db.Stats().Version.Version
 	if remote.Version == localVer {
-		log.Printf("🛡️  updater: signatures up to date (v%s)", localVer)
+		logging.Z().Info(fmt.Sprintf("🛡️  updater: signatures up to date (v%s)", localVer))
 		u.clearError()
 		return
 	}
 
-	log.Printf("🛡️  updater: new version available: %s → %s", localVer, remote.Version)
+	logging.Z().Info(fmt.Sprintf("🛡️  updater: new version available: %s → %s", localVer, remote.Version))
 
 	// 3. Download files.
 	downloaded := 0
@@ -192,8 +192,8 @@ func (u *Updater) checkForUpdate(ctx context.Context) {
 	u.mu.Unlock()
 	u.clearError()
 
-	log.Printf("🛡️  updater: updated to v%s (hashes=%d patterns=%d yara=%d)",
-		ver.Version, ver.HashCount, ver.PatternCount, ver.YARACount)
+	logging.Z().Info(fmt.Sprintf("🛡️  updater: updated to v%s (hashes=%d patterns=%d yara=%d)",
+		ver.Version, ver.HashCount, ver.PatternCount, ver.YARACount))
 }
 
 // fetchVersion retrieves the remote version manifest.
@@ -277,7 +277,7 @@ func (u *Updater) downloadFile(ctx context.Context, f RemoteFile) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 
-	log.Printf("🛡️  updater: downloaded %s (%d bytes)", f.Name, written)
+	logging.Z().Info(fmt.Sprintf("🛡️  updater: downloaded %s (%d bytes)", f.Name, written))
 	return nil
 }
 
@@ -286,7 +286,7 @@ func (u *Updater) setError(msg string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.lastError = msg
-	log.Printf("⚠️  updater: %s", msg)
+	logging.Z().Info(fmt.Sprintf("⚠️  updater: %s", msg))
 }
 
 // clearError clears the last error.

@@ -1,9 +1,9 @@
 package jobs
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -16,7 +16,6 @@ type AdvancedScheduler struct {
 	scheduler cron.Cron
 	schedules map[string]*ScheduleConfig
 	queue     Queue
-	logger    *log.Logger
 	running   bool
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -49,7 +48,6 @@ func NewAdvancedScheduler(location *time.Location) *AdvancedScheduler {
 	return &AdvancedScheduler{
 		scheduler: *cron.New(cron.WithLocation(location)),
 		schedules: make(map[string]*ScheduleConfig),
-		logger:    log.New(log.Writer(), "[ADVANCED_SCHEDULER] ", log.LstdFlags),
 		running:   false,
 		location:  location,
 	}
@@ -85,7 +83,7 @@ func (as *AdvancedScheduler) Schedule(config *ScheduleConfig) error {
 	as.schedules[config.ID] = config
 	as.mu.Unlock()
 
-	as.logger.Printf("Job scheduled: %s (cron: %s, next: %v)", config.ID, config.CronExpr, config.NextRun)
+	logging.Z().Info(fmt.Sprintf("Job scheduled: %s (cron: %s, next: %v)", config.ID, config.CronExpr, config.NextRun))
 	return nil
 }
 
@@ -105,7 +103,7 @@ func (as *AdvancedScheduler) submitScheduledJob(config *ScheduleConfig) {
 	}
 
 	if err := as.queue.Submit(ctx, job); err != nil {
-		as.logger.Printf("Error submitting scheduled job %s: %v", config.ID, err)
+		logging.Z().Info(fmt.Sprintf("Error submitting scheduled job %s: %v", config.ID, err))
 		return
 	}
 
@@ -116,7 +114,7 @@ func (as *AdvancedScheduler) submitScheduledJob(config *ScheduleConfig) {
 	config.LastRun = &now
 	as.mu.Unlock()
 
-	as.logger.Printf("Scheduled job submitted: %s (run #%d)", config.ID, config.RunCount)
+	logging.Z().Info(fmt.Sprintf("Scheduled job submitted: %s (run #%d)", config.ID, config.RunCount))
 }
 
 // Start starts the advanced scheduler
@@ -133,7 +131,7 @@ func (as *AdvancedScheduler) Start(ctx context.Context, queue Queue) error {
 	as.mu.Unlock()
 
 	as.scheduler.Start()
-	as.logger.Printf("Advanced scheduler started")
+	logging.Z().Info(fmt.Sprintf("Advanced scheduler started"))
 	return nil
 }
 
@@ -153,7 +151,7 @@ func (as *AdvancedScheduler) Stop() error {
 		as.cancel()
 	}
 
-	as.logger.Printf("Advanced scheduler stopped")
+	logging.Z().Info(fmt.Sprintf("Advanced scheduler stopped"))
 	return nil
 }
 
@@ -189,7 +187,7 @@ func (as *AdvancedScheduler) RemoveSchedule(scheduleID string) error {
 	}
 
 	as.scheduler.Remove(config.EntryID)
-	as.logger.Printf("Schedule removed: %s", scheduleID)
+	logging.Z().Info(fmt.Sprintf("Schedule removed: %s", scheduleID))
 	return nil
 }
 
@@ -230,7 +228,7 @@ func (as *AdvancedScheduler) EnableSchedule(scheduleID string) error {
 	}
 
 	config.Enabled = true
-	as.logger.Printf("Schedule enabled: %s", scheduleID)
+	logging.Z().Info(fmt.Sprintf("Schedule enabled: %s", scheduleID))
 	return nil
 }
 
@@ -245,7 +243,7 @@ func (as *AdvancedScheduler) DisableSchedule(scheduleID string) error {
 	}
 
 	config.Enabled = false
-	as.logger.Printf("Schedule disabled: %s", scheduleID)
+	logging.Z().Info(fmt.Sprintf("Schedule disabled: %s", scheduleID))
 	return nil
 }
 
@@ -260,7 +258,7 @@ func (as *AdvancedScheduler) TriggerNow(scheduleID string) error {
 	}
 
 	as.submitScheduledJob(config)
-	as.logger.Printf("Schedule triggered manually: %s", scheduleID)
+	logging.Z().Info(fmt.Sprintf("Schedule triggered manually: %s", scheduleID))
 	return nil
 }
 

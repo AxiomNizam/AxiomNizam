@@ -3,9 +3,11 @@ package conductor
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
+
+	"example.com/axiomnizam/internal/conductor/models"
+	"example.com/axiomnizam/internal/logging"
 
 	"github.com/IBM/sarama"
 )
@@ -118,7 +120,7 @@ func (k *KafkaBackend) Publish(p *Producer, msg *Message) error {
 type consumerGroupHandler struct {
 	consumerID string
 	handler    func(*Message) error
-	cfg        ConsumerConfig
+	cfg        models.ConsumerConfig
 }
 
 func (h *consumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error   { return nil }
@@ -204,14 +206,14 @@ func (k *KafkaBackend) StartConsumer(c *Consumer, handler func(*Message) error) 
 				return
 			default:
 				if err := cg.Consume(nil, []string{topic}, gh); err != nil {
-					log.Printf("[conductor/kafka] consumer %s error: %v", c.ID, err)
+					logging.Z().Info(fmt.Sprintf("[conductor/kafka] consumer %s error: %v", c.ID, err))
 					time.Sleep(2 * time.Second)
 				}
 			}
 		}
 	}()
 
-	log.Printf("[conductor/kafka] consumer %s started on topic %s (group %s)", c.ID, topic, group)
+	logging.Z().Info(fmt.Sprintf("[conductor/kafka] consumer %s started on topic %s (group %s)", c.ID, topic, group))
 	return nil
 }
 

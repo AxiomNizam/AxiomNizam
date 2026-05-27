@@ -1,12 +1,12 @@
 package matcher
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"bufio"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,8 +116,8 @@ func LoadNDB(b *Builder, r io.Reader, source string) (int, error) {
 	}
 
 	if skipped > 0 {
-		log.Printf("🛡️  matcher: skipped %d incompatible signatures in %s (wildcards/too-short/invalid-hex)",
-			skipped, source)
+		logging.Z().Info(fmt.Sprintf("🛡️  matcher: skipped %d incompatible signatures in %s (wildcards/too-short/invalid-hex)",
+			skipped, source))
 	}
 
 	return loaded, nil
@@ -229,7 +229,7 @@ func LoadFromDir(b *Builder, dir string) (loaded int, errs []error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("🛡️  matcher: signature directory %q does not exist, skipping", dir)
+			logging.Z().Info(fmt.Sprintf("🛡️  matcher: signature directory %q does not exist, skipping", dir))
 			return 0, nil
 		}
 		return 0, []error{fmt.Errorf("read directory %q: %w", dir, err)}
@@ -261,7 +261,7 @@ func LoadFromDir(b *Builder, dir string) (loaded int, errs []error) {
 		}
 
 		loaded += count
-		log.Printf("🛡️  matcher: loaded %d patterns from %s", count, entry.Name())
+		logging.Z().Info(fmt.Sprintf("🛡️  matcher: loaded %d patterns from %s", count, entry.Name()))
 	}
 
 	return loaded, errs

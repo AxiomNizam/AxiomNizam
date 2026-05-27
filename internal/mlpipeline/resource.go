@@ -1,186 +1,25 @@
 package mlpipeline
 
-// =====================================================
-// WS-7.4 — ML Pipeline Orchestration as declarative resources
-//
-// MLPipelineResource defines a multi-step ML workflow (data prep,
-// train, evaluate, deploy, A/B test). ModelDeploymentResource
-// manages model serving with traffic splitting.
-// =====================================================
+// Re-export domain types from models sub-package for backward compatibility.
+import "example.com/axiomnizam/internal/mlpipeline/models"
 
-import (
-	"time"
-
-	"example.com/axiomnizam/internal/resources"
-)
-
+// --- Constants ---
 const (
-	MLPipelineKind       = "MLPipeline"
-	MLPipelineAPIVersion = "ml.axiomnizam.io/v1"
+	MLPipelineKind       = models.MLPipelineKind
+	MLPipelineAPIVersion = models.MLPipelineAPIVersion
 
-	ModelDeploymentKind       = "ModelDeployment"
-	ModelDeploymentAPIVersion = "ml.axiomnizam.io/v1"
+	ModelDeploymentKind       = models.ModelDeploymentKind
+	ModelDeploymentAPIVersion = models.ModelDeploymentAPIVersion
 )
 
-// --- ML Step ---
-
-type MLStep struct {
-	Name      string                 `json:"name"`
-	Type      string                 `json:"type"`      // data_prep, train, evaluate, deploy, ab_test
-	Config    map[string]interface{} `json:"config"`
-	DependsOn []string               `json:"dependsOn,omitempty"`
-	Timeout   string                 `json:"timeout,omitempty"`
-}
-
-// --- MLPipelineSpec ---
-
-type MLPipelineSpec struct {
-	DisplayName   string   `json:"displayName"`
-	Description   string   `json:"description,omitempty"`
-	Steps         []MLStep `json:"steps"`
-	Schedule      string   `json:"schedule,omitempty"`
-	FeatureGroups []string `json:"featureGroups,omitempty"`
-	ModelRegistry string   `json:"modelRegistry,omitempty"`
-	Notifications []string `json:"notifications,omitempty"`
-	Enabled       bool     `json:"enabled"`
-}
-
-// --- Step Status ---
-
-type StepStatus struct {
-	Name      string     `json:"name"`
-	Status    string     `json:"status"` // pending, running, completed, failed, skipped
-	StartedAt *time.Time `json:"startedAt,omitempty"`
-	EndedAt   *time.Time `json:"endedAt,omitempty"`
-	Duration  string     `json:"duration,omitempty"`
-	Error     string     `json:"error,omitempty"`
-	Output    map[string]string `json:"output,omitempty"`
-}
-
-// --- MLPipelineResourceStatus ---
-
-type MLPipelineResourceStatus struct {
-	resources.ObjectStatus `json:",inline"`
-
-	PipelineStatus string       `json:"pipelineStatus"` // pending, running, completed, failed
-	CurrentStep    string       `json:"currentStep,omitempty"`
-	StepStatuses   []StepStatus `json:"stepStatuses,omitempty"`
-	RunCount       int64        `json:"runCount"`
-	LastRunAt      *time.Time   `json:"lastRunAt,omitempty"`
-	LastRunDuration string      `json:"lastRunDuration,omitempty"`
-	LastModelRef   string       `json:"lastModelRef,omitempty"`
-}
-
-// --- MLPipelineResource ---
-
-type MLPipelineResource struct {
-	resources.TypeMeta   `json:",inline"`
-	resources.ObjectMeta `json:"metadata"`
-
-	Spec   MLPipelineSpec           `json:"spec"`
-	Status MLPipelineResourceStatus `json:"status"`
-}
-
-func (r *MLPipelineResource) GetObjectMeta() *resources.ObjectMeta { return &r.ObjectMeta }
-func (r *MLPipelineResource) GetTypeMeta() *resources.TypeMeta     { return &r.TypeMeta }
-func (r *MLPipelineResource) GetStatus() *resources.ObjectStatus   { return &r.Status.ObjectStatus }
-func (r *MLPipelineResource) SetStatus(s *resources.ObjectStatus) {
-	if s != nil {
-		r.Status.ObjectStatus = *s
-	}
-}
-func (r *MLPipelineResource) DeepCopy() resources.Resource {
-	cp := *r
-	if len(r.Spec.Steps) > 0 {
-		cp.Spec.Steps = make([]MLStep, len(r.Spec.Steps))
-		copy(cp.Spec.Steps, r.Spec.Steps)
-	}
-	return &cp
-}
-func (r *MLPipelineResource) GetKey() string {
-	if r.Namespace == "" {
-		return r.Name
-	}
-	return r.Namespace + "/" + r.Name
-}
-func (r *MLPipelineResource) GetGeneration() int64         { return r.Generation }
-func (r *MLPipelineResource) GetObservedGeneration() int64 { return r.Status.ObservedGeneration }
-
-// =====================================================
-// ModelDeploymentResource
-// =====================================================
-
-type AutoScaleConfig struct {
-	MinReplicas    int     `json:"minReplicas"`
-	MaxReplicas    int     `json:"maxReplicas"`
-	TargetCPU      float64 `json:"targetCpu,omitempty"`
-	TargetMemory   float64 `json:"targetMemory,omitempty"`
-	TargetLatencyMs int64  `json:"targetLatencyMs,omitempty"`
-}
-
-type CanaryConfig struct {
-	Steps          []int  `json:"steps"`          // Traffic percentages: [5, 25, 50, 100]
-	StepDuration   string `json:"stepDuration"`   // Time per step: "15m"
-	SuccessMetric  string `json:"successMetric"`  // Metric to evaluate
-	SuccessThreshold float64 `json:"successThreshold"`
-	RollbackOnFail bool   `json:"rollbackOnFail"`
-}
-
-type ModelDeploymentSpec struct {
-	ModelRef     string         `json:"modelRef"`
-	Version      string         `json:"version"`
-	Endpoint     string         `json:"endpoint"`
-	Replicas     int            `json:"replicas"`
-	TrafficSplit map[string]int `json:"trafficSplit,omitempty"` // version -> percentage
-	AutoScale    *AutoScaleConfig `json:"autoScale,omitempty"`
-	Canary       *CanaryConfig    `json:"canary,omitempty"`
-	Enabled      bool           `json:"enabled"`
-}
-
-type ModelDeploymentResourceStatus struct {
-	resources.ObjectStatus `json:",inline"`
-
-	DeploymentStatus string     `json:"deploymentStatus"` // pending, deploying, serving, failed
-	ActiveVersion    string     `json:"activeVersion"`
-	ReadyReplicas    int        `json:"readyReplicas"`
-	TotalRequests    int64      `json:"totalRequests"`
-	AvgLatencyMs     float64    `json:"avgLatencyMs"`
-	ErrorRate        float64    `json:"errorRate"`
-	DeployedAt       *time.Time `json:"deployedAt,omitempty"`
-	CanaryProgress   int        `json:"canaryProgress,omitempty"` // Current canary step
-}
-
-type ModelDeploymentResource struct {
-	resources.TypeMeta   `json:",inline"`
-	resources.ObjectMeta `json:"metadata"`
-
-	Spec   ModelDeploymentSpec           `json:"spec"`
-	Status ModelDeploymentResourceStatus `json:"status"`
-}
-
-func (r *ModelDeploymentResource) GetObjectMeta() *resources.ObjectMeta { return &r.ObjectMeta }
-func (r *ModelDeploymentResource) GetTypeMeta() *resources.TypeMeta     { return &r.TypeMeta }
-func (r *ModelDeploymentResource) GetStatus() *resources.ObjectStatus   { return &r.Status.ObjectStatus }
-func (r *ModelDeploymentResource) SetStatus(s *resources.ObjectStatus) {
-	if s != nil {
-		r.Status.ObjectStatus = *s
-	}
-}
-func (r *ModelDeploymentResource) DeepCopy() resources.Resource {
-	cp := *r
-	if len(r.Spec.TrafficSplit) > 0 {
-		cp.Spec.TrafficSplit = make(map[string]int, len(r.Spec.TrafficSplit))
-		for k, v := range r.Spec.TrafficSplit {
-			cp.Spec.TrafficSplit[k] = v
-		}
-	}
-	return &cp
-}
-func (r *ModelDeploymentResource) GetKey() string {
-	if r.Namespace == "" {
-		return r.Name
-	}
-	return r.Namespace + "/" + r.Name
-}
-func (r *ModelDeploymentResource) GetGeneration() int64         { return r.Generation }
-func (r *ModelDeploymentResource) GetObservedGeneration() int64 { return r.Status.ObservedGeneration }
+// --- Type aliases for backward compatibility ---
+type MLStep = models.MLStep
+type MLPipelineSpec = models.MLPipelineSpec
+type StepStatus = models.StepStatus
+type MLPipelineResourceStatus = models.MLPipelineResourceStatus
+type MLPipelineResource = models.MLPipelineResource
+type AutoScaleConfig = models.AutoScaleConfig
+type CanaryConfig = models.CanaryConfig
+type ModelDeploymentSpec = models.ModelDeploymentSpec
+type ModelDeploymentResourceStatus = models.ModelDeploymentResourceStatus
+type ModelDeploymentResource = models.ModelDeploymentResource

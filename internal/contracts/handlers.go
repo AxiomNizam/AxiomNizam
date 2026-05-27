@@ -47,7 +47,7 @@ func (h *ContractHandlers) ListContracts(c *gin.Context) {
 	contracts, err := h.store.List(c.Request.Context(), "")
 	if err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ListContracts"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *ContractHandlers) GetContract(c *gin.Context) {
 	}
 	contract, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "contract not found", Name: name})
 		return
 	}
 	c.JSON(http.StatusOK, contract)
@@ -97,7 +97,7 @@ func (h *ContractHandlers) GetContract(c *gin.Context) {
 func (h *ContractHandlers) CreateContract(c *gin.Context) {
 	var contract DataContractResource
 	if err := c.ShouldBindJSON(&contract); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *ContractHandlers) CreateContract(c *gin.Context) {
 	contract.Status.Phase = "Pending"
 
 	if err := h.store.Create(c.Request.Context(), &contract); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -131,13 +131,13 @@ func (h *ContractHandlers) UpdateContract(c *gin.Context) {
 	}
 	existing, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "contract not found", Name: name})
 		return
 	}
 
 	var updated DataContractResource
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *ContractHandlers) UpdateContract(c *gin.Context) {
 
 	if err := h.store.Update(c.Request.Context(), &updated); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "UpdateContract"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 
@@ -161,10 +161,10 @@ func (h *ContractHandlers) DeleteContract(c *gin.Context) {
 		return
 	}
 	if err := h.store.Delete(c.Request.Context(), name); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "contract not found", Name: name})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": name})
+	c.JSON(http.StatusOK, MessageResponse{Message: name})
 }
 
 // GetViolations returns current violations for a contract.
@@ -175,7 +175,7 @@ func (h *ContractHandlers) GetViolations(c *gin.Context) {
 	}
 	contract, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "contract not found", Name: name})
 		return
 	}
 
@@ -195,7 +195,7 @@ func (h *ContractHandlers) ValidateContract(c *gin.Context) {
 	}
 	contract, err := h.store.Get(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contract not found", "name": name})
+		c.JSON(http.StatusNotFound, MessageResponse{Error: "contract not found", Name: name})
 		return
 	}
 
@@ -203,7 +203,7 @@ func (h *ContractHandlers) ValidateContract(c *gin.Context) {
 	contract.Generation++
 	if err := h.store.Update(c.Request.Context(), contract); err != nil {
 		logging.Z().Warn("handler error", zap.String("op", "ValidateContract"), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Error: err.Error()})
 		return
 	}
 

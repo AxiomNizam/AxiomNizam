@@ -41,7 +41,7 @@ func NewHandler(mgr *Manager) *Handler {
 func (h *Handler) CreateProducer(c *gin.Context) {
 	var req CreateProducerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 	p, err := h.mgr.CreateProducer(&req)
@@ -50,7 +50,7 @@ func (h *Handler) CreateProducer(c *gin.Context) {
 		if isConfigError(err) {
 			status = http.StatusBadRequest
 		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		c.JSON(status, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, p)
@@ -58,14 +58,14 @@ func (h *Handler) CreateProducer(c *gin.Context) {
 
 // ListProducers GET /api/v1/conductor/producers
 func (h *Handler) ListProducers(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"producers": h.mgr.ListProducers()})
+	c.JSON(http.StatusOK, ProducerListResponse{Producers: h.mgr.ListProducers()})
 }
 
 // GetProducer GET /api/v1/conductor/producers/:id
 func (h *Handler) GetProducer(c *gin.Context) {
 	p, err := h.mgr.GetProducer(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, p)
@@ -75,12 +75,12 @@ func (h *Handler) GetProducer(c *gin.Context) {
 func (h *Handler) UpdateProducer(c *gin.Context) {
 	var req CreateProducerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 	p, err := h.mgr.UpdateProducer(c.Param("id"), &req)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, p)
@@ -89,17 +89,17 @@ func (h *Handler) UpdateProducer(c *gin.Context) {
 // DeleteProducer DELETE /api/v1/conductor/producers/:id
 func (h *Handler) DeleteProducer(c *gin.Context) {
 	if err := h.mgr.DeleteProducer(c.Param("id")); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "producer deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "producer deleted"})
 }
 
 // PauseProducer POST /api/v1/conductor/producers/:id/pause
 func (h *Handler) PauseProducer(c *gin.Context) {
 	p, err := h.mgr.PauseProducer(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, p)
@@ -109,7 +109,7 @@ func (h *Handler) PauseProducer(c *gin.Context) {
 func (h *Handler) ResumeProducer(c *gin.Context) {
 	p, err := h.mgr.ResumeProducer(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, p)
@@ -123,7 +123,7 @@ func (h *Handler) ResumeProducer(c *gin.Context) {
 func (h *Handler) CreateConsumer(c *gin.Context) {
 	var req CreateConsumerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 	cons, err := h.mgr.CreateConsumer(&req)
@@ -132,7 +132,7 @@ func (h *Handler) CreateConsumer(c *gin.Context) {
 		if isConfigError(err) {
 			status = http.StatusBadRequest
 		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		c.JSON(status, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, cons)
@@ -140,14 +140,14 @@ func (h *Handler) CreateConsumer(c *gin.Context) {
 
 // ListConsumers GET /api/v1/conductor/consumers
 func (h *Handler) ListConsumers(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"consumers": h.mgr.ListConsumers()})
+	c.JSON(http.StatusOK, ConsumerListResponse{Consumers: h.mgr.ListConsumers()})
 }
 
 // GetConsumer GET /api/v1/conductor/consumers/:id
 func (h *Handler) GetConsumer(c *gin.Context) {
 	cons, err := h.mgr.GetConsumer(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, cons)
@@ -156,22 +156,22 @@ func (h *Handler) GetConsumer(c *gin.Context) {
 // DeleteConsumer DELETE /api/v1/conductor/consumers/:id
 func (h *Handler) DeleteConsumer(c *gin.Context) {
 	if err := h.mgr.DeleteConsumer(c.Param("id")); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "consumer deleted"})
+	c.JSON(http.StatusOK, MessageResponse{Message: "consumer deleted"})
 }
 
 // UpdateConsumer PATCH /api/v1/conductor/consumers/:id
 func (h *Handler) UpdateConsumer(c *gin.Context) {
 	var req CreateConsumerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 	cons, err := h.mgr.UpdateConsumer(c.Param("id"), &req)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, cons)
@@ -181,7 +181,7 @@ func (h *Handler) UpdateConsumer(c *gin.Context) {
 func (h *Handler) PauseConsumer(c *gin.Context) {
 	cons, err := h.mgr.PauseConsumer(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, cons)
@@ -191,7 +191,7 @@ func (h *Handler) PauseConsumer(c *gin.Context) {
 func (h *Handler) ResumeConsumer(c *gin.Context) {
 	cons, err := h.mgr.ResumeConsumer(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, cons)
@@ -205,12 +205,12 @@ func (h *Handler) ResumeConsumer(c *gin.Context) {
 func (h *Handler) Publish(c *gin.Context) {
 	var req PublishRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
 	msg, err := h.mgr.Publish(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: err.Error()})
 		return
 	}
 	c.JSON(http.StatusAccepted, msg)
@@ -228,22 +228,22 @@ func (h *Handler) ListMessages(c *gin.Context) {
 			limit = n
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"messages": h.mgr.ListMessages(limit)})
+	c.JSON(http.StatusOK, MessageListResponse{Messages: h.mgr.ListMessages(limit)})
 }
 
 // ListDLQ GET /api/v1/conductor/dlq
 func (h *Handler) ListDLQ(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"dlq": h.mgr.ListDLQ()})
+	c.JSON(http.StatusOK, DLQListResponse{DLQ: h.mgr.ListDLQ()})
 }
 
 // ReplayDLQ POST /api/v1/conductor/dlq/:id/replay
 func (h *Handler) ReplayDLQ(c *gin.Context) {
 	msg, err := h.mgr.ReplayDLQ(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, MessageResponse{Message: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "replayed", "msg": msg})
+	c.JSON(http.StatusOK, ReplayResponse{Message: "replayed", Msg: msg})
 }
 
 // ---------------------------------------------------------------
@@ -264,7 +264,7 @@ func (h *Handler) GetConnections(c *gin.Context) {
 func (h *Handler) ConnectBackend(c *gin.Context) {
 	var req ConnectBackendRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: "Invalid request: " + err.Error()})
 		return
 	}
 	conn, err := h.mgr.ConnectBackend(&req)
@@ -274,20 +274,20 @@ func (h *Handler) ConnectBackend(c *gin.Context) {
 			c.JSON(status, gin.H{"error": err.Error(), "connection": conn})
 			return
 		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		c.JSON(status, MessageResponse{Message: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": req.Type + " connected successfully", "connection": conn})
+	c.JSON(http.StatusOK, MessageResponse{Message: req.Type + " connected successfully"})
 }
 
 // DisconnectBackend DELETE /api/v1/conductor/connections/:type
 func (h *Handler) DisconnectBackend(c *gin.Context) {
 	backendType := c.Param("type")
 	if err := h.mgr.DisconnectBackend(backendType); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, MessageResponse{Message: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": backendType + " disconnected"})
+	c.JSON(http.StatusOK, MessageResponse{Message: backendType + " disconnected"})
 }
 
 // ---------------------------------------------------------------
@@ -303,7 +303,7 @@ func (h *Handler) StreamSSE(c *gin.Context) {
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: "streaming not supported"})
 		return
 	}
 

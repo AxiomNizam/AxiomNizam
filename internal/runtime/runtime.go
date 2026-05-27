@@ -1,9 +1,9 @@
 package runtime
 
 import (
+	"example.com/axiomnizam/internal/logging"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	"example.com/axiomnizam/internal/apiserver"
@@ -76,7 +76,7 @@ func (cm *ControllerManager) RegisterWorkloadController() error {
 	}
 	cm.mu.Unlock()
 
-	log.Println("Registered workload controller")
+	logging.Z().Info("Registered workload controller")
 	return nil
 }
 
@@ -101,7 +101,7 @@ func (cm *ControllerManager) RegisterPipelineController() error {
 	}
 	cm.mu.Unlock()
 
-	log.Println("Registered pipeline controller")
+	logging.Z().Info("Registered pipeline controller")
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (cm *ControllerManager) RegisterScheduleController() error {
 	}
 	cm.mu.Unlock()
 
-	log.Println("Registered schedule controller")
+	logging.Z().Info("Registered schedule controller")
 	return nil
 }
 
@@ -155,11 +155,11 @@ func (cm *ControllerManager) Start(ctx context.Context) error {
 		if cm.elector == nil {
 			return fmt.Errorf("leader election enabled but no LeaderElector registered")
 		}
-		log.Println("leader election enabled, waiting to acquire lease...")
+		logging.Z().Info(fmt.Sprint("leader election enabled, waiting to acquire lease..."))
 		if err := cm.elector.Acquire(ctx); err != nil {
 			return fmt.Errorf("acquire leadership: %w", err)
 		}
-		log.Println("leadership acquired, starting controllers")
+		logging.Z().Info(fmt.Sprint("leadership acquired, starting controllers"))
 		defer func() { _ = cm.elector.Resign(context.Background()) }()
 	}
 
@@ -174,7 +174,7 @@ func (cm *ControllerManager) Start(ctx context.Context) error {
 		return fmt.Errorf("no controllers registered")
 	}
 
-	log.Printf("Starting %d controllers", len(controllers))
+	logging.Z().Info(fmt.Sprintf("Starting %d controllers", len(controllers)))
 
 	// Start all controllers
 	var wg sync.WaitGroup
@@ -269,7 +269,7 @@ func NewRuntime(version string) *Runtime {
 
 // Initialize sets up all components
 func (r *Runtime) Initialize(ctx context.Context) error {
-	log.Printf("Initializing runtime version %s", r.version)
+	logging.Z().Info(fmt.Sprintf("Initializing runtime version %s", r.version))
 
 	// Register all controllers
 	if err := r.controllerMgr.RegisterWorkloadController(); err != nil {
@@ -295,12 +295,12 @@ func (r *Runtime) Start(ctx context.Context, apiAddr string) error {
 	r.running = true
 	r.mu.Unlock()
 
-	log.Printf("Starting runtime on %s", apiAddr)
+	logging.Z().Info(fmt.Sprintf("Starting runtime on %s", apiAddr))
 
 	// Start API server in background
 	go func() {
 		if err := r.apiServer.Run(apiAddr); err != nil {
-			log.Printf("API server error: %v", err)
+			logging.Z().Info(fmt.Sprintf("API server error: %v", err))
 		}
 	}()
 
@@ -325,7 +325,7 @@ func (r *Runtime) Stop() error {
 	}
 
 	r.running = false
-	log.Println("Runtime stopped")
+	logging.Z().Info("Runtime stopped")
 
 	return nil
 }

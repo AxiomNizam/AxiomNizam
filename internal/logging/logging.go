@@ -69,3 +69,9 @@ func FromContext(ctx context.Context) *logger.Logger {
 func With(fields ...zap.Field) *zap.Logger {
 	return Z().With(fields...)
 }
+
+// For returns a named logger for a specific module/component.
+// Example: logging.For("storage") produces a logger tagged "[storage]".
+func For(module string) *zap.Logger {
+	return Z().Named(module)
+}

@@ -1,8 +1,9 @@
 package controller
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
 	"context"
-	"log"
 	"sync"
 	"time"
 )
@@ -36,7 +37,7 @@ func (m *Manager) Start(ctx context.Context) {
 	m.stopCh = make(chan struct{})
 	m.mu.Unlock()
 
-	log.Println("✅ Gatekeeper: Controller manager started")
+	logging.Z().Info("✅ Gatekeeper: Controller manager started")
 
 	// Start periodic reconciliation
 	go m.runReconcileLoop(ctx)
@@ -51,7 +52,7 @@ func (m *Manager) Stop() {
 	}
 	close(m.stopCh)
 	m.running = false
-	log.Println("✅ Gatekeeper: Controller manager stopped")
+	logging.Z().Info("✅ Gatekeeper: Controller manager stopped")
 }
 
 func (m *Manager) runReconcileLoop(ctx context.Context) {
@@ -68,7 +69,7 @@ func (m *Manager) runReconcileLoop(ctx context.Context) {
 			// Periodic reconciliation of expired challenges
 			if m.factorCtrl != nil {
 				if err := m.factorCtrl.ReconcileExpiredChallenges(ctx); err != nil {
-					log.Printf("⚠️  Gatekeeper: expired challenge cleanup failed: %v", err)
+					logging.Z().Info(fmt.Sprintf("⚠️  Gatekeeper: expired challenge cleanup failed: %v", err))
 				}
 			}
 		}

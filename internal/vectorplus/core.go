@@ -1,9 +1,11 @@
 package vectorplus
 
 import (
+	"fmt"
+	"example.com/axiomnizam/internal/logging"
+	platformstore "example.com/axiomnizam/internal/platform/store"
 	"context"
 	"encoding/json"
-	"log"
 	"math"
 	"sort"
 	"sync"
@@ -31,6 +33,7 @@ type Index struct {
 	dim      int
 	records  map[string]Record
 	etcd     *clientv3.Client
+	kvStore  platformstore.KVStore
 	stateKey string
 }
 
@@ -42,7 +45,9 @@ type indexState struct {
 var (
 	globalEtcdMu     sync.RWMutex
 	globalEtcdClient *clientv3.Client
-	defaultStateKey  = "axiomnizam:vectorplus:index:state"
+	globalKVMu       sync.RWMutex
+	globalKVStore    platformstore.KVStore
+	defaultStateKey  = "vectorplus:index:state"
 )
 
 func NewIndex(dim int, etcd ...*clientv3.Client) *Index {
@@ -59,14 +64,27 @@ func NewIndex(dim int, etcd ...*clientv3.Client) *Index {
 		globalEtcdMu.RUnlock()
 	}
 
+	globalKVMu.RLock()
+	kv := globalKVStore
+	globalKVMu.RUnlock()
+
 	idx := &Index{
 		dim:      dim,
 		records:  make(map[string]Record),
 		etcd:     etcdClient,
+		kvStore:  kv,
 		stateKey: defaultStateKey,
 	}
 	idx.loadState()
 	return idx
+}
+
+// ConfigureKVPersistence sets a KVStore for Raft-mode persistence.
+func (idx *Index) ConfigureKVPersistence(kv platformstore.KVStore) {
+	idx.mu.Lock()
+	idx.kvStore = kv
+	idx.mu.Unlock()
+	idx.loadState()
 }
 
 func ConfigureGlobalPersistence(etcd *clientv3.Client) {
@@ -75,32 +93,49 @@ func ConfigureGlobalPersistence(etcd *clientv3.Client) {
 	globalEtcdMu.Unlock()
 }
 
+// ConfigureGlobalKVPersistence configures KVStore persistence for the global vectorplus index.
+func ConfigureGlobalKVPersistence(kv platformstore.KVStore) {
+	globalKVMu.Lock()
+	globalKVStore = kv
+	globalKVMu.Unlock()
+}
+
 func (idx *Index) loadState() {
-	etcdClient := idx.etcd
-	if etcdClient == nil {
-		globalEtcdMu.RLock()
-		etcdClient = globalEtcdClient
-		globalEtcdMu.RUnlock()
-	}
-	if etcdClient == nil {
-		return
-	}
+	var data []byte
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := etcdClient.Get(ctx, idx.stateKey)
-	if err != nil {
-		log.Printf("vectorplus: failed to load persisted state from etcd: %v", err)
-		return
-	}
-	if len(resp.Kvs) == 0 {
-		return
+	if idx.kvStore != nil {
+		val, err := idx.kvStore.Get(ctx, idx.stateKey)
+		if err != nil {
+			return
+		}
+		data = []byte(val)
+	} else {
+		etcdClient := idx.etcd
+		if etcdClient == nil {
+			globalEtcdMu.RLock()
+			etcdClient = globalEtcdClient
+			globalEtcdMu.RUnlock()
+		}
+		if etcdClient == nil {
+			return
+		}
+		resp, err := etcdClient.Get(ctx, idx.stateKey)
+		if err != nil {
+			logging.Z().Info(fmt.Sprintf("vectorplus: failed to load persisted state from etcd: %v", err))
+			return
+		}
+		if len(resp.Kvs) == 0 {
+			return
+		}
+		data = resp.Kvs[0].Value
 	}
 
 	var state indexState
-	if err := json.Unmarshal(resp.Kvs[0].Value, &state); err != nil {
-		log.Printf("vectorplus: failed to decode persisted state: %v", err)
+	if err := json.Unmarshal(data, &state); err != nil {
+		logging.Z().Info(fmt.Sprintf("vectorplus: failed to decode persisted state: %v", err))
 		return
 	}
 
@@ -112,31 +147,37 @@ func (idx *Index) loadState() {
 	if state.Records != nil {
 		idx.records = state.Records
 	}
+	logging.Z().Info(fmt.Sprintf("✅ vectorplus: loaded persistent state (records=%d)", len(idx.records)))
 }
 
 func (idx *Index) persistStateLocked() {
-	etcdClient := idx.etcd
-	if etcdClient == nil {
-		globalEtcdMu.RLock()
-		etcdClient = globalEtcdClient
-		globalEtcdMu.RUnlock()
-	}
-	if etcdClient == nil {
-		return
-	}
-
 	state := indexState{Dim: idx.dim, Records: idx.records}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		log.Printf("vectorplus: failed to encode state: %v", err)
+		logging.Z().Info(fmt.Sprintf("vectorplus: failed to encode state: %v", err))
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := etcdClient.Put(ctx, idx.stateKey, string(payload)); err != nil {
-		log.Printf("vectorplus: failed to persist state to etcd: %v", err)
+	if idx.kvStore != nil {
+		if err := idx.kvStore.Put(ctx, idx.stateKey, string(payload)); err != nil {
+			logging.Z().Info(fmt.Sprintf("vectorplus: failed to persist state to KV: %v", err))
+		}
+	} else {
+		etcdClient := idx.etcd
+		if etcdClient == nil {
+			globalEtcdMu.RLock()
+			etcdClient = globalEtcdClient
+			globalEtcdMu.RUnlock()
+		}
+		if etcdClient == nil {
+			return
+		}
+		if _, err := etcdClient.Put(ctx, idx.stateKey, string(payload)); err != nil {
+			logging.Z().Info(fmt.Sprintf("vectorplus: failed to persist state to etcd: %v", err))
+		}
 	}
 }
 
