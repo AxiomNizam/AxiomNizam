@@ -55,6 +55,8 @@ import (
 	"example.com/axiomnizam/internal/netintel/modes"
 	"example.com/axiomnizam/internal/platform"
 	genericctrl "example.com/axiomnizam/internal/platform/controller"
+	"example.com/axiomnizam/internal/platform/gc"
+	snapshothandler "example.com/axiomnizam/internal/platform/snapshot"
 	querypkg "example.com/axiomnizam/internal/query"
 	resourcespkg "example.com/axiomnizam/internal/resources"
 	"example.com/axiomnizam/internal/platform/featureflags"
@@ -1904,6 +1906,15 @@ func main() {
 			log.Println("  ✅ Raft cluster management API registered (/api/v1/raft/peers)")
 		}
 
+		// Snapshot backup/restore (raft mode only)
+		if backendMgr.IsRaft() {
+			snapshotH := snapshothandler.NewHandler(backendMgr)
+			sysAPI := router.Group("/api/v1/system", authMiddleware)
+			sysAPI.GET("/snapshot", snapshotH.Download)
+			sysAPI.POST("/snapshot/restore", adminOrSysMiddleware, snapshotH.Restore)
+			log.Println("  ✅ Snapshot backup/restore endpoints registered (/api/v1/system/snapshot)")
+		}
+
 		log.Printf("🔄 Initializing reconciler controllers (backend=%s)...", storageBackend)
 		reconcilerMetrics := metrics.GlobalReconcilerMetrics
 
@@ -2199,6 +2210,24 @@ func main() {
 		reconcilerMetrics.Register("apibuilder")
 		go genericctrl.NewGenericController("apibuilder", customAPIStore, customAPIReconciler, 1, shadowMode, reconcilerMetrics).Start(ctx)
 		log.Println("  ✅ API Builder controller started")
+
+		// ====================================
+		// GARBAGE COLLECTOR (owner-reference cascade + finalizer gating)
+		// ====================================
+		garbageCollector := gc.NewGarbageCollector(30 * time.Second)
+		garbageCollector.Register("etl-pipelines", gc.NewStoreAdapter(etlStore, func() *etl.PipelineResource { return &etl.PipelineResource{} }))
+		garbageCollector.Register("cdc-pipelines", gc.NewStoreAdapter(cdcStore, func() *cdc.CDCPipelineResource { return &cdc.CDCPipelineResource{} }))
+		garbageCollector.Register("bulkoperations", gc.NewStoreAdapter(bulkStore, func() *bulk.BulkOperationResource { return &bulk.BulkOperationResource{} }))
+		garbageCollector.Register("jobs", gc.NewStoreAdapter(jobsStore, func() *jobs.JobResource { return &jobs.JobResource{} }))
+		garbageCollector.Register("exportjobs", gc.NewStoreAdapter(exportStore, func() *exportpkg.ExportJobResource { return &exportpkg.ExportJobResource{} }))
+		garbageCollector.Register("streams", gc.NewStoreAdapter(streamStore, func() *streaming.StreamResource { return &streaming.StreamResource{} }))
+		garbageCollector.Register("webhooks", gc.NewStoreAdapter(webhookStore, func() *webhooks.WebhookResource { return &webhooks.WebhookResource{} }))
+		garbageCollector.Register("analytics-dashboards", gc.NewStoreAdapter(analyticsStore, func() *analyticspkg.DashboardResource { return &analyticspkg.DashboardResource{} }))
+		garbageCollector.Register("custom-apis", gc.NewStoreAdapter(customAPIStore, func() *apibuilder.CustomAPIResource { return &apibuilder.CustomAPIResource{} }))
+		garbageCollector.Register("api-scans", gc.NewStoreAdapter(apiScannerStore, func() *apiscanner.APIScanResource { return &apiscanner.APIScanResource{} }))
+		garbageCollector.Register("gis", gc.NewStoreAdapter(gisStore, func() *gispkg.GISResource { return &gispkg.GISResource{} }))
+		go garbageCollector.Start(ctx)
+		log.Println("  ✅ Garbage collector started (11 stores, 30s interval)")
 
 		// Phase 0.4: etcd key-space monitoring
 		etcdPrefixes := []string{

@@ -264,3 +264,43 @@ func (bm *BackendManager) RemoveRaftPeer(id string) error {
 	}
 	return bm.RaftServer.RemovePeer(id)
 }
+
+// TriggerSnapshot forces an on-demand Raft snapshot (raft mode only).
+func (bm *BackendManager) TriggerSnapshot() error {
+	if bm.RaftServer == nil {
+		return fmt.Errorf("raft server not initialized")
+	}
+	return bm.RaftServer.TriggerSnapshot()
+}
+
+// SnapshotDir returns the snapshot directory (raft mode only).
+func (bm *BackendManager) SnapshotDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.SnapshotDir()
+}
+
+// DataDir returns the raft data directory (raft mode only).
+func (bm *BackendManager) DataDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.DataDir()
+}
+
+// LogDir returns the raft log directory (raft mode only).
+func (bm *BackendManager) LogDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.LogDir()
+}
+
+// StableDir returns the raft stable directory (raft mode only).
+func (bm *BackendManager) StableDir() string {
+	if bm.RaftServer == nil {
+		return ""
+	}
+	return bm.RaftServer.StableDir()
+}
