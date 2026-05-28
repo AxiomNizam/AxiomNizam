@@ -1597,6 +1597,15 @@
     font-weight: 800;
     color: #f8fafc;
     letter-spacing: -0.02em;
+    margin-bottom: 8px;
+}
+
+.api-lifecycle__subtitle {
+    font-size: 0.95rem;
+    color: #64748b;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
 }
 
 /* Pipeline */
@@ -2717,7 +2726,7 @@
 
 @media (max-width: 768px) {
     .hero {
-        padding: 100px 20px 60px;
+        padding: 80px 16px 50px;
         min-height: auto;
     }
 
@@ -2730,42 +2739,78 @@
     }
 
     .hero__aurora {
-        opacity: 0.3;
+        opacity: 0.2;
     }
 
-    .dataflow__node {
-        display: none;
+    .hero__logo-bg {
+        width: 300px;
+        height: 300px;
     }
 
-    .api-lifecycle__nodes {
-        gap: 8px;
+    .hero__content {
+        padding: 0 4px;
     }
 
-    .api-lifecycle__arrow {
-        width: 24px;
+    .hero__badge {
+        font-size: 0.7rem;
+        padding: 6px 14px;
+        margin-bottom: 20px;
     }
 
-    .api-lifecycle__live {
-        grid-template-columns: 1fr;
-        height: auto;
+    .hero__title {
+        font-size: 2rem;
+        margin-bottom: 16px;
     }
 
-    .api-lifecycle__live-req,
-    .api-lifecycle__live-res {
-        height: 280px;
+    .hero__subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 28px;
     }
 
-    .api-lifecycle__node {
-        min-width: 70px;
-        padding: 10px 12px;
+    .hero__actions {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 32px;
+    }
+
+    .hero__actions .btn {
+        width: 100%;
+        max-width: 280px;
+        justify-content: center;
     }
 
     .hero__stats {
-        gap: 20px;
+        gap: 16px;
+        flex-wrap: wrap;
+        justify-content: center;
     }
 
     .hero__stat-divider {
         display: none;
+    }
+
+    .hero__stat-num {
+        font-size: 1.5rem;
+    }
+
+    .hero__scroll-hint {
+        display: none;
+    }
+
+    /* Marquee */
+    .marquee__item {
+        font-size: 0.75rem;
+        padding: 0 14px;
+    }
+
+    /* Bento */
+    .bento {
+        padding: 60px 16px;
+    }
+
+    .bento__title {
+        font-size: 1.8rem;
     }
 
     .bento__grid {
@@ -2773,41 +2818,270 @@
     }
 
     .bento__card--hero,
-    .bento__card--wide {
+    .bento__card--wide,
+    .bento__card--tall {
         grid-column: span 1;
+        grid-row: span 1;
     }
 
-    .arch__grid {
-        grid-template-columns: 1fr;
+    .bento__card-content {
+        padding: 20px;
+    }
+
+    .bento__card h3 {
+        font-size: 1.1rem;
+    }
+
+    .bento__card p {
+        font-size: 0.85rem;
+    }
+
+    .bento__card-tags {
+        margin-top: 12px;
+    }
+
+    .bento__card-metrics {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 14px;
+    }
+
+    .bento__metric-divider {
+        display: none;
+    }
+
+    .bento__metric {
+        min-width: 60px;
+    }
+
+    /* API Demo */
+    .api-demo__panels {
+        padding: 10px;
+    }
+
+    .api-demo__line {
+        font-size: 0.65rem;
+    }
+
+    /* Storage Demo */
+    .storage-demo {
+        padding: 10px;
+    }
+
+    .storage-demo__total-val {
+        font-size: 0.85rem;
+    }
+
+    /* Deep */
+    .deep {
+        padding: 60px 16px;
+    }
+
+    .deep__title {
+        font-size: 1.8rem;
     }
 
     .deep__tabs {
-        gap: 6px;
+        gap: 4px;
     }
 
     .deep__tab {
-        padding: 8px 16px;
-        font-size: 0.78rem;
+        padding: 7px 12px;
+        font-size: 0.72rem;
     }
 
     .deep__grid {
         grid-template-columns: 1fr;
     }
 
+    .deep__item {
+        padding: 20px;
+    }
+
+    /* Dataflow */
+    .dataflow {
+        padding: 50px 16px;
+    }
+
+    .dataflow__title {
+        font-size: 1.8rem;
+    }
+
+    .dataflow__canvas-wrap {
+        height: 120px;
+    }
+
+    .dataflow__node {
+        display: none;
+    }
+
+    /* API Lifecycle */
+    .api-lifecycle {
+        padding: 60px 16px;
+    }
+
+    .api-lifecycle__title {
+        font-size: 1.8rem;
+    }
+
+    .api-lifecycle__subtitle {
+        font-size: 0.85rem;
+    }
+
+    .api-lifecycle__nodes {
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .api-lifecycle__node {
+        min-width: 60px;
+        padding: 8px 10px;
+    }
+
+    .api-lifecycle__node-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .api-lifecycle__node-label {
+        font-size: 0.68rem;
+    }
+
+    .api-lifecycle__arrow {
+        width: 20px;
+    }
+
+    .api-lifecycle__live {
+        grid-template-columns: 1fr;
+    }
+
+    .api-lifecycle__live-req,
+    .api-lifecycle__live-res {
+        height: 240px;
+    }
+
+    .api-lifecycle__live-code {
+        font-size: 0.65rem;
+        line-height: 1.6;
+        padding: 10px;
+    }
+
+    /* Architecture */
+    .arch {
+        padding: 60px 16px;
+    }
+
+    .arch__title {
+        font-size: 1.8rem;
+    }
+
+    .arch__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .arch__card {
+        padding: 24px;
+    }
+
+    /* CLI */
+    .cli-section {
+        padding: 60px 16px;
+    }
+
+    .cli-section__title {
+        font-size: 1.8rem;
+    }
+
+    .terminal__body {
+        padding: 16px;
+        font-size: 0.72rem;
+    }
+
+    .terminal__input {
+        font-size: 0.75rem;
+    }
+
+    .terminal__autocomplete {
+        width: 280px;
+    }
+
     .cli-section__features {
         flex-direction: column;
         align-items: center;
+    }
+
+    .cli-section__feat {
+        width: 100%;
+        max-width: 260px;
+        justify-content: center;
+    }
+
+    /* CTA */
+    .cta {
+        padding: 80px 16px;
+    }
+
+    .cta__title {
+        font-size: 1.8rem;
+    }
+
+    .cta__subtitle {
+        font-size: 0.9rem;
+    }
+
+    .cta__actions {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .cta__actions .btn {
+        width: 100%;
+        max-width: 280px;
+        justify-content: center;
+    }
+
+    /* Search */
+    .search-trigger {
+        bottom: 16px;
+        right: 16px;
+        padding: 10px 16px;
+        font-size: 0.78rem;
+    }
+
+    .search-modal {
+        width: calc(100vw - 24px);
+    }
+
+    .search-overlay {
+        padding-top: 10vh;
+    }
+
+    .search-modal__input {
+        font-size: 0.95rem;
+    }
+
+    /* Cursor */
+    .cursor-glow,
+    .cursor-ring,
+    .cursor-crosshair,
+    .cursor-trail {
+        display: none;
     }
 }
 
 @media (max-width: 480px) {
     .hero__title {
-        font-size: 2.2rem;
+        font-size: 1.7rem;
     }
 
     .hero__badge {
-        font-size: 0.7rem;
-        padding: 6px 14px;
+        font-size: 0.65rem;
+        padding: 5px 12px;
+    }
+
+    .hero__stat-num {
+        font-size: 1.3rem;
     }
 
     .btn {
@@ -2816,7 +3090,47 @@
     }
 
     .bento__card-content {
-        padding: 24px;
+        padding: 18px;
+    }
+
+    .bento__card h3 {
+        font-size: 1rem;
+    }
+
+    .deep__tab {
+        padding: 6px 10px;
+        font-size: 0.68rem;
+    }
+
+    .api-lifecycle__node {
+        min-width: 50px;
+        padding: 6px 8px;
+    }
+
+    .api-lifecycle__node-icon {
+        width: 30px;
+        height: 30px;
+    }
+
+    .api-lifecycle__arrow {
+        width: 14px;
+    }
+
+    .api-lifecycle__live-req,
+    .api-lifecycle__live-res {
+        height: 200px;
+    }
+
+    .arch__card {
+        padding: 20px;
+    }
+
+    .search-trigger span {
+        display: none;
+    }
+
+    .search-trigger {
+        padding: 10px 12px;
     }
 }
 
