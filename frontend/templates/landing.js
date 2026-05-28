@@ -1556,31 +1556,33 @@
             var fromR = parseFloat(piece.getAttribute('data-from-r')) || 0;
             var fromS = parseFloat(piece.getAttribute('data-from-s')) || 0.5;
 
-            // Stagger each piece
             setTimeout(function() {
-                piece.style.transition = 'transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.6s ease';
+                piece.style.transition = 'transform 0.7s cubic-bezier(0.55, -0.6, 0.27, 1.4), opacity 0.5s ease';
                 piece.style.transform = 'translate(' + fromX + 'px, ' + fromY + 'px) rotate(' + fromR + 'deg) scale(' + fromS + ')';
-                piece.style.opacity = '0.5';
-            }, i * 80);
+                piece.style.opacity = '0.4';
+            }, i * 60);
         });
 
-        // After disassembled, wait then reassemble
-        legoTimer = setTimeout(legoAssemble, 2500);
+        legoTimer = setTimeout(legoAssemble, 2000);
     }
 
     function legoAssemble() {
         legoState = 'assembled';
         logoPieces.forEach(function(piece, i) {
-            // Stagger reassembly — pieces fly in
             setTimeout(function() {
-                piece.style.transition = 'transform 1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease';
-                piece.style.transform = 'translate(0, 0) rotate(0deg) scale(1)';
+                // Overshoot scale for a "snap" feel, then settle
+                piece.style.transition = 'transform 0.9s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.6s ease';
+                piece.style.transform = 'translate(0, 0) rotate(0deg) scale(1.08)';
                 piece.style.opacity = '1';
-            }, i * 120);
+                // Settle to 1.0 scale after overshoot
+                setTimeout(function() {
+                    piece.style.transition = 'transform 0.3s ease-out';
+                    piece.style.transform = 'translate(0, 0) rotate(0deg) scale(1)';
+                }, 500);
+            }, i * 100);
         });
 
-        // After assembled, wait then disassemble again
-        legoTimer = setTimeout(legoDisassemble, 5000);
+        legoTimer = setTimeout(legoDisassemble, 4000);
     }
 
     // Start the cycle when hero is visible

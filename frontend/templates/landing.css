@@ -335,8 +335,8 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 480px;
-    height: 480px;
+    width: 530px;
+    height: 530px;
     z-index: 0;
     pointer-events: none;
     will-change: transform;
@@ -344,22 +344,22 @@
 
 .hero__logo-glow {
     position: absolute;
-    inset: -60px;
+    inset: -80px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(0, 140, 99, 0.2) 0%, rgba(0, 140, 99, 0.08) 40%, transparent 70%);
+    background: radial-gradient(circle, rgba(0, 140, 99, 0.28) 0%, rgba(0, 140, 99, 0.12) 40%, transparent 70%);
     animation: logoGlowPulse 4s ease-in-out infinite;
 }
 
 @keyframes logoGlowPulse {
-    0%, 100% { transform: scale(1); opacity: 0.8; }
-    50% { transform: scale(1.15); opacity: 1; }
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.2); opacity: 1; }
 }
 
 .hero__logo-svg {
     width: 100%;
     height: 100%;
-    opacity: 0.22;
-    filter: drop-shadow(0 0 40px rgba(0, 140, 99, 0.25));
+    opacity: 0.32;
+    filter: drop-shadow(0 0 50px rgba(0, 140, 99, 0.35)) drop-shadow(0 0 20px rgba(0, 140, 99, 0.2));
 }
 
 /* Logo pieces — each animates independently */
@@ -374,8 +374,8 @@
 
 /* Glow pulse behind logo */
 @keyframes logoGlowPulse {
-    0%, 100% { transform: scale(1); opacity: 0.8; }
-    50% { transform: scale(1.15); opacity: 1; }
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.2); opacity: 1; }
 }
 
 /* Orbiting rings around the logo */
@@ -389,10 +389,10 @@
 }
 
 .hero__logo-orbit--1 {
-    width: 520px;
-    height: 520px;
-    margin: -260px 0 0 -260px;
-    animation: orbitSpin 20s linear infinite;
+    width: 580px;
+    height: 580px;
+    margin: -290px 0 0 -290px;
+    animation: orbitSpin 18s linear infinite;
 }
 
 .hero__logo-orbit--1::after {
@@ -409,11 +409,11 @@
 }
 
 .hero__logo-orbit--2 {
-    width: 580px;
-    height: 580px;
-    margin: -290px 0 0 -290px;
+    width: 640px;
+    height: 640px;
+    margin: -320px 0 0 -320px;
     border-color: rgba(56, 189, 248, 0.08);
-    animation: orbitSpin 30s linear infinite reverse;
+    animation: orbitSpin 25s linear infinite reverse;
 }
 
 .hero__logo-orbit--2::after {
@@ -430,11 +430,11 @@
 }
 
 .hero__logo-orbit--3 {
-    width: 640px;
-    height: 640px;
-    margin: -320px 0 0 -320px;
+    width: 700px;
+    height: 700px;
+    margin: -350px 0 0 -350px;
     border-color: rgba(167, 139, 250, 0.06);
-    animation: orbitSpin 40s linear infinite;
+    animation: orbitSpin 32s linear infinite;
 }
 
 .hero__logo-orbit--3::after {
