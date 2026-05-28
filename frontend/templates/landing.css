@@ -1352,6 +1352,259 @@
 }
 
 /* =============================================
+   CDC PIPELINES DEMO
+   ============================================= */
+.cdc-demo {
+    margin-top: auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.06);
+    padding: 14px;
+}
+
+.cdc-demo__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.cdc-demo__title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.cdc-demo__count {
+    font-size: 0.65rem;
+    color: #34d399;
+    font-weight: 600;
+}
+
+.cdc-demo__pipeline {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.04);
+}
+
+.cdc-demo__pipeline:last-of-type {
+    border-bottom: none;
+}
+
+.cdc-demo__pipeline-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3px;
+}
+
+.cdc-demo__pipeline-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.cdc-demo__status {
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.cdc-demo__status--ok {
+    background: rgba(52, 211, 153, 0.1);
+    color: #34d399;
+}
+
+.cdc-demo__pipeline-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.65rem;
+    color: #64748b;
+}
+
+.cdc-demo__sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: #334155;
+}
+
+.cdc-demo__totals {
+    display: flex;
+    gap: 0;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.cdc-demo__total {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.cdc-demo__total-val {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #f8fafc;
+}
+
+.cdc-demo__total-label {
+    font-size: 0.55rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+}
+
+/* =============================================
+   CONDUCTOR DEMO
+   ============================================= */
+.conductor-demo {
+    margin-top: auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.06);
+    padding: 14px;
+}
+
+.conductor-demo__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.conductor-demo__title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.conductor-demo__count {
+    font-size: 0.65rem;
+    color: #34d399;
+    font-weight: 600;
+}
+
+.conductor-demo__broker {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.04);
+}
+
+.conductor-demo__broker:last-of-type {
+    border-bottom: none;
+}
+
+.conductor-demo__broker-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.conductor-demo__broker-head svg {
+    color: #34d399;
+    flex-shrink: 0;
+}
+
+.conductor-demo__broker-name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.conductor-demo__broker-status {
+    margin-left: auto;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.conductor-demo__broker-status--ok {
+    background: rgba(52, 211, 153, 0.1);
+    color: #34d399;
+}
+
+.conductor-demo__broker-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.conductor-demo__stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.03);
+}
+
+.conductor-demo__stat-val {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #f8fafc;
+}
+
+.conductor-demo__stat-label {
+    font-size: 0.5rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.conductor-demo__throughput {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.conductor-demo__tp-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.conductor-demo__tp-val {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #f8fafc;
+}
+
+.conductor-demo__tp-label {
+    font-size: 0.5rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.conductor-demo__tp-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(148, 163, 184, 0.06);
+}
+
+/* =============================================
    SCANNER / ANTIVIRUS DEMO
    ============================================= */
 .scanner-demo {
@@ -3023,6 +3276,24 @@
     .scanner-demo__row {
         font-size: 0.62rem;
         gap: 4px;
+    }
+
+    /* CDC Demo */
+    .cdc-demo {
+        padding: 10px;
+    }
+
+    .cdc-demo__pipeline-name {
+        font-size: 0.68rem;
+    }
+
+    /* Conductor Demo */
+    .conductor-demo {
+        padding: 10px;
+    }
+
+    .conductor-demo__broker-stats {
+        grid-template-columns: repeat(2, 1fr);
     }
 
     /* Deep */

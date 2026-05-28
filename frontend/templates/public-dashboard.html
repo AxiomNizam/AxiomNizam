@@ -565,7 +565,7 @@
                 </div>
             </div>
 
-            <!-- Regular cards -->
+            <!-- CDC Pipelines card -->
             <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/cdc-etl')">
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
@@ -576,6 +576,57 @@
                     <h3>CDC Pipelines</h3>
                     <p>Real-time Change Data Capture with source/sink connectors, streaming ingestion, and data quality validation.</p>
                     <div class="bento__card-tags"><span>CDC</span><span>Streaming</span></div>
+
+                    <!-- CDC Demo -->
+                    <div class="cdc-demo">
+                        <div class="cdc-demo__header">
+                            <span class="cdc-demo__title">Active Pipelines</span>
+                            <span class="cdc-demo__count">4 running</span>
+                        </div>
+                        <div class="cdc-demo__pipeline">
+                            <div class="cdc-demo__pipeline-head">
+                                <span class="cdc-demo__pipeline-name">postgres-to-kafka</span>
+                                <span class="cdc-demo__status cdc-demo__status--ok">streaming</span>
+                            </div>
+                            <div class="cdc-demo__pipeline-stats">
+                                <span>12,847 events/min</span>
+                                <span class="cdc-demo__sep"></span>
+                                <span>lag: 0.3s</span>
+                            </div>
+                        </div>
+                        <div class="cdc-demo__pipeline">
+                            <div class="cdc-demo__pipeline-head">
+                                <span class="cdc-demo__pipeline-name">mysql-to-elastic</span>
+                                <span class="cdc-demo__status cdc-demo__status--ok">streaming</span>
+                            </div>
+                            <div class="cdc-demo__pipeline-stats">
+                                <span>8,234 events/min</span>
+                                <span class="cdc-demo__sep"></span>
+                                <span>lag: 1.2s</span>
+                            </div>
+                        </div>
+                        <div class="cdc-demo__pipeline">
+                            <div class="cdc-demo__pipeline-head">
+                                <span class="cdc-demo__pipeline-name">mongo-to-s3</span>
+                                <span class="cdc-demo__status cdc-demo__status--ok">streaming</span>
+                            </div>
+                            <div class="cdc-demo__pipeline-stats">
+                                <span>3,456 events/min</span>
+                                <span class="cdc-demo__sep"></span>
+                                <span>lag: 0.8s</span>
+                            </div>
+                        </div>
+                        <div class="cdc-demo__totals">
+                            <div class="cdc-demo__total">
+                                <span class="cdc-demo__total-val">24,537</span>
+                                <span class="cdc-demo__total-label">Events/min</span>
+                            </div>
+                            <div class="cdc-demo__total">
+                                <span class="cdc-demo__total-val">99.97%</span>
+                                <span class="cdc-demo__total-label">Uptime</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -618,7 +669,7 @@
                 </div>
             </div>
 
-            <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/conductor')">
+            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/conductor')">
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -628,6 +679,83 @@
                     <h3>Message Conductor</h3>
                     <p>RabbitMQ and Kafka broker management with producers, consumers, topic management, and real-time monitoring.</p>
                     <div class="bento__card-tags"><span>Kafka</span><span>RabbitMQ</span></div>
+
+                    <!-- Conductor Demo -->
+                    <div class="conductor-demo">
+                        <div class="conductor-demo__header">
+                            <span class="conductor-demo__title">Brokers</span>
+                            <span class="conductor-demo__count">2 connected</span>
+                        </div>
+
+                        <div class="conductor-demo__broker">
+                            <div class="conductor-demo__broker-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/></svg>
+                                <span class="conductor-demo__broker-name">Kafka</span>
+                                <span class="conductor-demo__broker-status conductor-demo__broker-status--ok">connected</span>
+                            </div>
+                            <div class="conductor-demo__broker-stats">
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">6</span>
+                                    <span class="conductor-demo__stat-label">Topics</span>
+                                </div>
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">14</span>
+                                    <span class="conductor-demo__stat-label">Partitions</span>
+                                </div>
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">3</span>
+                                    <span class="conductor-demo__stat-label">Producers</span>
+                                </div>
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">8</span>
+                                    <span class="conductor-demo__stat-label">Consumers</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="conductor-demo__broker">
+                            <div class="conductor-demo__broker-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/></svg>
+                                <span class="conductor-demo__broker-name">RabbitMQ</span>
+                                <span class="conductor-demo__broker-status conductor-demo__broker-status--ok">connected</span>
+                            </div>
+                            <div class="conductor-demo__broker-stats">
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">4</span>
+                                    <span class="conductor-demo__stat-label">Queues</span>
+                                </div>
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">12</span>
+                                    <span class="conductor-demo__stat-label">Bindings</span>
+                                </div>
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">2</span>
+                                    <span class="conductor-demo__stat-label">Producers</span>
+                                </div>
+                                <div class="conductor-demo__stat">
+                                    <span class="conductor-demo__stat-val">5</span>
+                                    <span class="conductor-demo__stat-label">Consumers</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="conductor-demo__throughput">
+                            <div class="conductor-demo__tp-item">
+                                <span class="conductor-demo__tp-val">34.2K</span>
+                                <span class="conductor-demo__tp-label">msg/min</span>
+                            </div>
+                            <div class="conductor-demo__tp-divider"></div>
+                            <div class="conductor-demo__tp-item">
+                                <span class="conductor-demo__tp-val">2ms</span>
+                                <span class="conductor-demo__tp-label">avg latency</span>
+                            </div>
+                            <div class="conductor-demo__tp-divider"></div>
+                            <div class="conductor-demo__tp-item">
+                                <span class="conductor-demo__tp-val">0</span>
+                                <span class="conductor-demo__tp-label">DLQ msgs</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
