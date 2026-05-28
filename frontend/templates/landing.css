@@ -1747,7 +1747,7 @@
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(148, 163, 184, 0.06);
     font-family: 'SF Mono', 'Fira Code', monospace;
-    height: 200px;
+    height: 340px;
     display: flex;
     flex-direction: column;
 }
@@ -2752,7 +2752,7 @@
 
     .api-lifecycle__live-req,
     .api-lifecycle__live-res {
-        height: 180px;
+        height: 280px;
     }
 
     .api-lifecycle__node {
