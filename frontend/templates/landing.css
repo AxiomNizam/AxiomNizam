@@ -346,7 +346,7 @@
     position: absolute;
     inset: -80px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(0, 140, 99, 0.28) 0%, rgba(0, 140, 99, 0.12) 40%, transparent 70%);
+    background: radial-gradient(circle, rgba(0, 140, 99, 0.45) 0%, rgba(0, 140, 99, 0.2) 40%, transparent 70%);
     animation: logoGlowPulse 4s ease-in-out infinite;
 }
 
@@ -358,8 +358,8 @@
 .hero__logo-svg {
     width: 100%;
     height: 100%;
-    opacity: 0.32;
-    filter: drop-shadow(0 0 50px rgba(0, 140, 99, 0.35)) drop-shadow(0 0 20px rgba(0, 140, 99, 0.2));
+    opacity: 0.55;
+    filter: drop-shadow(0 0 50px rgba(0, 140, 99, 0.5)) drop-shadow(0 0 20px rgba(0, 140, 99, 0.35));
 }
 
 /* Logo pieces — each animates independently */
@@ -384,7 +384,7 @@
     top: 50%;
     left: 50%;
     border-radius: 50%;
-    border: 1px solid rgba(52, 211, 153, 0.12);
+    border: 1px solid rgba(52, 211, 153, 0.25);
     pointer-events: none;
 }
 
@@ -412,7 +412,7 @@
     width: 640px;
     height: 640px;
     margin: -320px 0 0 -320px;
-    border-color: rgba(56, 189, 248, 0.08);
+    border-color: rgba(56, 189, 248, 0.18);
     animation: orbitSpin 25s linear infinite reverse;
 }
 
@@ -433,7 +433,7 @@
     width: 700px;
     height: 700px;
     margin: -350px 0 0 -350px;
-    border-color: rgba(167, 139, 250, 0.06);
+    border-color: rgba(167, 139, 250, 0.15);
     animation: orbitSpin 32s linear infinite;
 }
 
@@ -628,14 +628,16 @@
 }
 
 .btn--primary {
-    background: linear-gradient(135deg, #10b981, #059669);
+    background: linear-gradient(135deg, rgba(5, 150, 105, 0.85), rgba(4, 120, 84, 0.85));
     color: #fff;
-    box-shadow: 0 4px 24px rgba(16, 185, 129, 0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+    box-shadow: 0 4px 24px rgba(4, 120, 84, 0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+    backdrop-filter: blur(4px);
 }
 
 .btn--primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+    background: linear-gradient(135deg, rgba(5, 150, 105, 0.95), rgba(4, 120, 84, 0.95));
+    box-shadow: 0 8px 32px rgba(4, 120, 84, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .btn--ghost {
