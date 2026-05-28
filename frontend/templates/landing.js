@@ -979,63 +979,209 @@
             canvas.height = rect.height;
         }
 
-        // API Builder animation
+        // API Builder animation — network graph
+        var apiPackets = [];
+        var apiSpawnTimer = 0;
+
         function apiAnimation() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
 
-            // Draw endpoint lines
-            var endpoints = [
-                { x1: 20, y1: 40, x2: w - 20, y2: 40 },
-                { x1: 20, y1: 80, x2: w - 20, y2: 80 },
-                { x1: 20, y1: 120, x2: w - 20, y2: 120 },
-                { x1: 20, y1: 160, x2: w - 20, y2: 160 },
-                { x1: 20, y1: 200, x2: w - 20, y2: 200 },
+            // Hub node (center)
+            var hub = { x: w * 0.5, y: h * 0.5 };
+
+            // API endpoint nodes around the hub
+            var nodes = [
+                { x: w * 0.12, y: h * 0.2, method: 'GET', color: '#34d399', path: '/users' },
+                { x: w * 0.88, y: h * 0.18, method: 'POST', color: '#38bdf8', path: '/orders' },
+                { x: w * 0.15, y: h * 0.8, method: 'PUT', color: '#fbbf24', path: '/users/:id' },
+                { x: w * 0.85, y: h * 0.82, method: 'DEL', color: '#ef4444', path: '/sessions' },
+                { x: w * 0.5, y: h * 0.08, method: 'GET', color: '#a78bfa', path: '/products' },
+                { x: w * 0.5, y: h * 0.92, method: 'POST', color: '#34d399', path: '/auth/login' },
+                { x: w * 0.08, y: h * 0.5, method: 'GET', color: '#38bdf8', path: '/analytics' },
+                { x: w * 0.92, y: h * 0.5, method: 'PATCH', color: '#f472b6', path: '/settings' },
             ];
 
-            endpoints.forEach(function(ep, i) {
+            // Draw connections with gradient
+            nodes.forEach(function(node, i) {
+                var grad = ctx.createLinearGradient(hub.x, hub.y, node.x, node.y);
+                grad.addColorStop(0, 'rgba(52, 211, 153, 0.12)');
+                grad.addColorStop(0.5, node.color + '18');
+                grad.addColorStop(1, node.color + '30');
+
+                // Curved bezier connection
+                var cpx = (hub.x + node.x) / 2 + (Math.sin(i * 1.2) * 30);
+                var cpy = (hub.y + node.y) / 2 + (Math.cos(i * 0.8) * 25);
+
                 ctx.beginPath();
-                ctx.moveTo(ep.x1, ep.y1);
-                ctx.lineTo(ep.x2, ep.y2);
-                ctx.strokeStyle = 'rgba(52, 211, 153, 0.06)';
-                ctx.lineWidth = 1;
+                ctx.moveTo(hub.x, hub.y);
+                ctx.quadraticCurveTo(cpx, cpy, node.x, node.y);
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1.5;
                 ctx.stroke();
 
-                // Method badges
-                var methods = ['GET', 'POST', 'PUT', 'DEL', 'PATCH'];
-                var colors = ['#34d399', '#38bdf8', '#fbbf24', '#ef4444', '#a78bfa'];
-                ctx.fillStyle = colors[i % 5];
-                ctx.font = 'bold 9px monospace';
-                ctx.fillText(methods[i % 5], 24, ep.y1 - 8);
+                // Animated pulse along the connection
+                var pulseT = ((time * 0.3 + i * 0.12) % 1);
+                var px = (1 - pulseT) * (1 - pulseT) * hub.x + 2 * (1 - pulseT) * pulseT * cpx + pulseT * pulseT * node.x;
+                var py = (1 - pulseT) * (1 - pulseT) * hub.y + 2 * (1 - pulseT) * pulseT * cpy + pulseT * pulseT * node.y;
+
+                ctx.beginPath();
+                ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = node.color + 'aa';
+                ctx.fill();
+
+                // Pulse glow
+                ctx.beginPath();
+                ctx.arc(px, py, 10, 0, Math.PI * 2);
+                ctx.fillStyle = node.color + '15';
+                ctx.fill();
+
+                // Response packet going back
+                var respT = ((time * 0.25 + i * 0.1 + 0.5) % 1);
+                var rx = (1 - respT) * (1 - respT) * node.x + 2 * (1 - respT) * respT * cpx + respT * respT * hub.x;
+                var ry = (1 - respT) * (1 - respT) * node.y + 2 * (1 - respT) * respT * cpy + respT * respT * hub.y;
+
+                ctx.beginPath();
+                ctx.arc(rx, ry, 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#38bdf8aa';
+                ctx.fill();
             });
 
-            // Flowing request dots
-            var time = Date.now() * 0.001;
-            for (var d = 0; d < 5; d++) {
-                var ep = endpoints[d];
-                var t = ((time * 0.4 + d * 0.2) % 1);
-                var px = ep.x1 + (ep.x2 - ep.x1) * t;
-                var py = ep.y1;
+            // Draw hub node
+            var hubGlow = 0.3 + Math.sin(time * 2) * 0.1;
+            ctx.beginPath();
+            ctx.arc(hub.x, hub.y, 22, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, ' + hubGlow + ')';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(hub.x, hub.y, 16, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(hub.x, hub.y, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.15)';
+            ctx.fill();
 
+            // Hub icon (wrench)
+            ctx.fillStyle = '#34d399';
+            ctx.font = 'bold 10px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('API', hub.x, hub.y);
+
+            // Draw endpoint nodes
+            nodes.forEach(function(node, i) {
+                var pulse = 0.5 + Math.sin(time * 3 + i * 1.5) * 0.2;
+
+                // Outer glow
                 ctx.beginPath();
-                ctx.arc(px, py, 3, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(52, 211, 153, 0.8)';
+                ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = node.color + '12';
                 ctx.fill();
 
-                // Glow
+                // Node circle
                 ctx.beginPath();
-                ctx.arc(px, py, 8, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(52, 211, 153, 0.15)';
+                ctx.arc(node.x, node.y, 9, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fill();
+                ctx.strokeStyle = node.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Method label
+                ctx.fillStyle = node.color;
+                ctx.font = 'bold 6px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.method, node.x, node.y);
+            });
+
+            // Spawn floating data packets
+            apiSpawnTimer += 0.016;
+            if (apiSpawnTimer > 0.3) {
+                apiSpawnTimer = 0;
+                var srcNode = nodes[Math.floor(Math.random() * nodes.length)];
+                apiPackets.push({
+                    x: hub.x, y: hub.y,
+                    tx: srcNode.x, ty: srcNode.y,
+                    cx: (hub.x + srcNode.x) / 2 + (Math.random() - 0.5) * 40,
+                    cy: (hub.y + srcNode.y) / 2 + (Math.random() - 0.5) * 30,
+                    t: 0, speed: 0.012 + Math.random() * 0.008,
+                    color: srcNode.color, size: Math.random() * 2 + 1.5
+                });
+            }
+
+            // Draw & update floating packets
+            for (var p = apiPackets.length - 1; p >= 0; p--) {
+                var pkt = apiPackets[p];
+                pkt.t += pkt.speed;
+                if (pkt.t >= 1) {
+                    apiPackets.splice(p, 1);
+                    continue;
+                }
+
+                var tt = pkt.t;
+                var ppx = (1 - tt) * (1 - tt) * pkt.x + 2 * (1 - tt) * tt * pkt.cx + tt * tt * pkt.tx;
+                var ppy = (1 - tt) * (1 - tt) * pkt.y + 2 * (1 - tt) * tt * pkt.cy + tt * tt * pkt.ty;
+
+                // Trail
+                for (var tr = 0; tr < 4; tr++) {
+                    var trT = Math.max(tt - tr * 0.03, 0);
+                    var trx = (1 - trT) * (1 - trT) * pkt.x + 2 * (1 - trT) * trT * pkt.cx + trT * trT * pkt.tx;
+                    var try_ = (1 - trT) * (1 - trT) * pkt.y + 2 * (1 - trT) * trT * pkt.cy + trT * trT * pkt.ty;
+                    ctx.beginPath();
+                    ctx.arc(trx, try_, pkt.size * (1 - tr * 0.2), 0, Math.PI * 2);
+                    ctx.fillStyle = pkt.color + Math.floor((0.3 - tr * 0.07) * 255).toString(16).padStart(2, '0');
+                    ctx.fill();
+                }
+
+                // Main packet
+                ctx.beginPath();
+                ctx.arc(ppx, ppy, pkt.size, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + 'dd';
                 ctx.fill();
 
-                // Response dot going back
-                var t2 = ((time * 0.3 + d * 0.15 + 0.5) % 1);
-                var px2 = ep.x2 - (ep.x2 - ep.x1) * t2;
                 ctx.beginPath();
-                ctx.arc(px2, py + 6, 2, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
+                ctx.arc(ppx, ppy, pkt.size + 5, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + '18';
                 ctx.fill();
             }
+
+            // Draw "code" in corner
+            var codeY = 14;
+            var codeX = 12;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.font = 'bold 8px monospace';
+
+            var codeLines = [
+                { text: 'GET /api/v1/users', color: '#34d399' },
+                { text: '200 OK  23ms', color: '#64748b' },
+                { text: '{ "total": 2 }', color: '#a78bfa' },
+            ];
+
+            codeLines.forEach(function(line, i) {
+                var charCount = Math.floor(((time * 8 + i * 10) % 30));
+                var displayText = line.text.substring(0, Math.min(charCount, line.text.length));
+                ctx.fillStyle = line.color;
+                ctx.fillText(displayText, codeX, codeY + i * 12);
+                // Cursor blink on last active line
+                if (i === Math.floor((time * 2) % 3) && Math.sin(time * 8) > 0) {
+                    var textW = ctx.measureText(displayText).width;
+                    ctx.fillStyle = '#34d399';
+                    ctx.fillRect(codeX + textW + 1, codeY + i * 12, 4, 9);
+                }
+            });
+
+            // Stats in opposite corner
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 7px monospace';
+            ctx.fillText(nodes.length + ' endpoints', w - 10, 12);
+            ctx.fillText(Math.floor(time * 100) + ' req/s', w - 10, 24);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('99.9% uptime', w - 10, 36);
 
             animId = requestAnimationFrame(apiAnimation);
         }
@@ -1297,6 +1443,8 @@
                     animId = null;
                 }
                 particles = [];
+                apiPackets = [];
+                apiSpawnTimer = 0;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             },
             resize: resize
