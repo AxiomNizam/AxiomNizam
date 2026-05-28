@@ -991,29 +991,79 @@
         <div class="dataflow__header" data-reveal>
             <span class="dataflow__eyebrow">Live Data Pipeline</span>
             <h2 class="dataflow__title">Watch data <span class="text-gradient">flow.</span></h2>
+            <p class="dataflow__subtitle">Hover over each stage to see real queries, schemas, and data samples flowing through the pipeline.</p>
         </div>
         <div class="dataflow__canvas-wrap">
             <canvas class="dataflow__canvas" id="dataflowCanvas"></canvas>
-            <!-- Overlay nodes -->
-            <div class="dataflow__node dataflow__node--source" data-reveal>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            <!-- Interactive pipeline nodes with hover tooltips -->
+            <div class="dataflow__node dataflow__node--source" data-df-node="source">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                 <span>Source DB</span>
+                <div class="dataflow__tooltip">
+                    <div class="dataflow__tooltip-title">PostgreSQL Source</div>
+                    <div class="dataflow__tooltip-query">SELECT id, name, email FROM users WHERE updated_at > $1</div>
+                    <div class="dataflow__tooltip-meta">12,847 rows/s &middot; CDC enabled</div>
+                </div>
             </div>
-            <div class="dataflow__node dataflow__node--transform" data-reveal>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+            <div class="dataflow__node dataflow__node--cdc" data-df-node="cdc">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
+                <span>CDC Capture</span>
+                <div class="dataflow__tooltip">
+                    <div class="dataflow__tooltip-title">Change Data Capture</div>
+                    <div class="dataflow__tooltip-query">WAL LSN: 0/1A3E4B2 &rarr; 3 events batched</div>
+                    <div class="dataflow__tooltip-data">
+                        <code>INSERT users (id: 42, name: "Alice")</code>
+                        <code>UPDATE orders SET status="shipped" WHERE id=891</code>
+                        <code>DELETE sessions WHERE expires_at < NOW()</code>
+                    </div>
+                </div>
+            </div>
+            <div class="dataflow__node dataflow__node--transform" data-df-node="transform">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
                 <span>Transform</span>
+                <div class="dataflow__tooltip">
+                    <div class="dataflow__tooltip-title">ETL Transform</div>
+                    <div class="dataflow__tooltip-query">Pipeline: user-enrichment-v3</div>
+                    <div class="dataflow__tooltip-data">
+                        <code>enrich(geo_ip, user_ip) &rarr; country, city</code>
+                        <code>normalize(email) &rarr; lowercase, trim</code>
+                        <code>hash(ssn) &rarr; sha256_masked</code>
+                    </div>
+                </div>
             </div>
-            <div class="dataflow__node dataflow__node--process" data-reveal>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
+            <div class="dataflow__node dataflow__node--process" data-df-node="process">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
                 <span>Process</span>
+                <div class="dataflow__tooltip">
+                    <div class="dataflow__tooltip-title">Stream Processing</div>
+                    <div class="dataflow__tooltip-query">Kafka Topic: enriched-users-v2</div>
+                    <div class="dataflow__tooltip-data">
+                        <code>{"id":42,"name":"Alice","country":"US"}</code>
+                        <code>{"id":87,"name":"Bob","country":"UK"}</code>
+                    </div>
+                    <div class="dataflow__tooltip-meta">34,200 msg/min &middot; 2ms latency</div>
+                </div>
             </div>
-            <div class="dataflow__node dataflow__node--store" data-reveal>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            <div class="dataflow__node dataflow__node--store" data-df-node="store">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                 <span>Store</span>
+                <div class="dataflow__tooltip">
+                    <div class="dataflow__tooltip-title">Object Storage</div>
+                    <div class="dataflow__tooltip-query">PUT /enriched-data/users/2026/05/28/part-0042.parquet</div>
+                    <div class="dataflow__tooltip-meta">2.3 GB &middot; Snappy compressed &middot; 4,792 objects</div>
+                </div>
             </div>
-            <div class="dataflow__node dataflow__node--serve" data-reveal>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+            <div class="dataflow__node dataflow__node--serve" data-df-node="serve">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
                 <span>Serve</span>
+                <div class="dataflow__tooltip">
+                    <div class="dataflow__tooltip-title">API Gateway</div>
+                    <div class="dataflow__tooltip-query">GET /api/v1/users?country=US&limit=50</div>
+                    <div class="dataflow__tooltip-data">
+                        <code>{"total":1247,"data":[{"id":42,"name":"Alice"}]}</code>
+                    </div>
+                    <div class="dataflow__tooltip-meta">23ms p99 &middot; 99.9% uptime</div>
+                </div>
             </div>
         </div>
     </section>

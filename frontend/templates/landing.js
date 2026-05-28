@@ -393,22 +393,12 @@
     }
 
     // ============================================================
-    // DATA FLOW CANVAS ANIMATION
+    // DATA FLOW CANVAS ANIMATION — network graph
     // ============================================================
     var dfCanvas = document.getElementById('dataflowCanvas');
     if (dfCanvas) {
         var dfCtx = dfCanvas.getContext('2d');
-        var dfParticles = [];
-        var dfPaths = [
-            // Source -> Transform
-            [{x: 0.08, y: 0.2}, {x: 0.15, y: 0.35}, {x: 0.28, y: 0.55}],
-            // Transform -> Process
-            [{x: 0.28, y: 0.55}, {x: 0.38, y: 0.35}, {x: 0.50, y: 0.25}],
-            // Process -> Store
-            [{x: 0.50, y: 0.25}, {x: 0.58, y: 0.45}, {x: 0.70, y: 0.6}],
-            // Store -> Serve
-            [{x: 0.70, y: 0.6}, {x: 0.78, y: 0.35}, {x: 0.90, y: 0.3}],
-        ];
+        var dfPackets = [];
 
         function resizeDfCanvas() {
             dfCanvas.width = dfCanvas.offsetWidth;
@@ -417,71 +407,126 @@
         resizeDfCanvas();
         window.addEventListener('resize', resizeDfCanvas);
 
-        // Spawn particles along paths
-        function spawnDfParticle() {
-            var pathIdx = Math.floor(Math.random() * dfPaths.length);
-            var path = dfPaths[pathIdx];
-            dfParticles.push({
-                path: path,
-                t: 0,
-                speed: 0.005 + Math.random() * 0.008,
-                size: Math.random() * 2.5 + 1.5,
-                hue: pathIdx === 0 ? 160 : pathIdx === 1 ? 190 : pathIdx === 2 ? 260 : 160
-            });
-        }
-
         function drawDf() {
             dfCtx.clearRect(0, 0, dfCanvas.width, dfCanvas.height);
+            var w = dfCanvas.width, h = dfCanvas.height;
+            var time = Date.now() * 0.001;
 
-            // Draw paths
-            for (var p = 0; p < dfPaths.length; p++) {
-                var path = dfPaths[p];
+            // Pipeline nodes (match HTML positions)
+            var dfNodes = [
+                { x: w * 0.10, y: h * 0.22, label: 'PG', color: '#34d399' },
+                { x: w * 0.26, y: h * 0.62, label: 'CDC', color: '#38bdf8' },
+                { x: w * 0.44, y: h * 0.25, label: 'ETL', color: '#a78bfa' },
+                { x: w * 0.62, y: h * 0.65, label: 'KAFKA', color: '#fbbf24' },
+                { x: w * 0.79, y: h * 0.27, label: 'S3', color: '#34d399' },
+                { x: w * 0.94, y: h * 0.63, label: 'API', color: '#38bdf8' },
+            ];
+
+            // Draw connections between consecutive nodes
+            for (var n = 0; n < dfNodes.length - 1; n++) {
+                var from = dfNodes[n];
+                var to = dfNodes[n + 1];
+                var cpx = (from.x + to.x) / 2 + Math.sin(n * 1.3) * 25;
+                var cpy = (from.y + to.y) / 2 + Math.cos(n * 0.9) * 20;
+
+                // Connection line
                 dfCtx.beginPath();
-                dfCtx.moveTo(path[0].x * dfCanvas.width, path[0].y * dfCanvas.height);
-                for (var pt = 1; pt < path.length; pt++) {
-                    var prev = path[pt - 1];
-                    var curr = path[pt];
-                    var cpx = (prev.x + curr.x) / 2 * dfCanvas.width;
-                    var cpy = (prev.y + curr.y) / 2 * dfCanvas.height;
-                    dfCtx.quadraticCurveTo(prev.x * dfCanvas.width, prev.y * dfCanvas.height, cpx, cpy);
-                }
-                var last = path[path.length - 1];
-                dfCtx.lineTo(last.x * dfCanvas.width, last.y * dfCanvas.height);
-                dfCtx.strokeStyle = 'rgba(52, 211, 153, 0.06)';
-                dfCtx.lineWidth = 2;
+                dfCtx.moveTo(from.x, from.y);
+                dfCtx.quadraticCurveTo(cpx, cpy, to.x, to.y);
+                dfCtx.strokeStyle = 'rgba(52, 211, 153, 0.07)';
+                dfCtx.lineWidth = 1.5;
                 dfCtx.stroke();
-            }
 
-            // Draw & update particles
-            for (var i = dfParticles.length - 1; i >= 0; i--) {
-                var particle = dfParticles[i];
-                particle.t += particle.speed;
-                if (particle.t >= 1) {
-                    dfParticles.splice(i, 1);
-                    continue;
-                }
+                // Pulse along connection
+                var pulseT = ((time * 0.3 + n * 0.18) % 1);
+                var px = (1 - pulseT) * (1 - pulseT) * from.x + 2 * (1 - pulseT) * pulseT * cpx + pulseT * pulseT * to.x;
+                var py = (1 - pulseT) * (1 - pulseT) * from.y + 2 * (1 - pulseT) * pulseT * cpy + pulseT * pulseT * to.y;
 
-                var path = particle.path;
-                var segCount = path.length - 1;
-                var segT = particle.t * segCount;
-                var segIdx = Math.min(Math.floor(segT), segCount - 1);
-                var localT = segT - segIdx;
-                var from = path[segIdx];
-                var to = path[segIdx + 1];
-                var px = (from.x + (to.x - from.x) * localT) * dfCanvas.width;
-                var py = (from.y + (to.y - from.y) * localT) * dfCanvas.height;
-
-                // Glow
                 dfCtx.beginPath();
-                dfCtx.arc(px, py, particle.size + 4, 0, Math.PI * 2);
-                dfCtx.fillStyle = 'hsla(' + particle.hue + ', 80%, 55%, 0.15)';
+                dfCtx.arc(px, py, 2.5, 0, Math.PI * 2);
+                dfCtx.fillStyle = from.color + 'aa';
                 dfCtx.fill();
-                // Core
                 dfCtx.beginPath();
-                dfCtx.arc(px, py, particle.size, 0, Math.PI * 2);
-                dfCtx.fillStyle = 'hsla(' + particle.hue + ', 80%, 55%, 0.8)';
+                dfCtx.arc(px, py, 8, 0, Math.PI * 2);
+                dfCtx.fillStyle = from.color + '12';
+                dfCtx.fill();
+
+                // Response dot going back
+                var respT = ((time * 0.22 + n * 0.15 + 0.5) % 1);
+                var rx = (1 - respT) * (1 - respT) * to.x + 2 * (1 - respT) * respT * cpx + respT * respT * from.x;
+                var ry = (1 - respT) * (1 - respT) * to.y + 2 * (1 - respT) * respT * cpy + respT * respT * from.y;
+                dfCtx.beginPath();
+                dfCtx.arc(rx, ry, 1.8, 0, Math.PI * 2);
+                dfCtx.fillStyle = '#38bdf888';
                 dfCtx.fill();
             }
+
+            // Draw nodes
+            dfNodes.forEach(function(node, i) {
+                var pulse = 0.35 + Math.sin(time * 2.5 + i * 1.2) * 0.15;
+
+                // Outer glow
+                dfCtx.beginPath();
+                dfCtx.arc(node.x, node.y, 16, 0, Math.PI * 2);
+                dfCtx.fillStyle = node.color + '0a';
+                dfCtx.fill();
+
+                // Node circle
+                dfCtx.beginPath();
+                dfCtx.arc(node.x, node.y, 11, 0, Math.PI * 2);
+                dfCtx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                dfCtx.fill();
+                dfCtx.strokeStyle = node.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                dfCtx.lineWidth = 1.5;
+                dfCtx.stroke();
+
+                // Label
+                dfCtx.fillStyle = node.color;
+                dfCtx.font = 'bold 6px monospace';
+                dfCtx.textAlign = 'center';
+                dfCtx.textBaseline = 'middle';
+                dfCtx.fillText(node.label, node.x, node.y);
+            });
+
+            // Floating data packets
+            if (Math.random() < 0.06) {
+                var srcIdx = Math.floor(Math.random() * (dfNodes.length - 1));
+                dfPackets.push({
+                    x: dfNodes[srcIdx].x, y: dfNodes[srcIdx].y,
+                    tx: dfNodes[srcIdx + 1].x, ty: dfNodes[srcIdx + 1].y,
+                    cx: (dfNodes[srcIdx].x + dfNodes[srcIdx + 1].x) / 2 + (Math.random() - 0.5) * 30,
+                    cy: (dfNodes[srcIdx].y + dfNodes[srcIdx + 1].y) / 2 + (Math.random() - 0.5) * 25,
+                    t: 0, speed: 0.008 + Math.random() * 0.006,
+                    color: dfNodes[srcIdx].color, size: Math.random() * 2 + 1.2
+                });
+            }
+
+            for (var p = dfPackets.length - 1; p >= 0; p--) {
+                var pkt = dfPackets[p];
+                pkt.t += pkt.speed;
+                if (pkt.t >= 1) { dfPackets.splice(p, 1); continue; }
+                var tt = pkt.t;
+                var ppx = (1 - tt) * (1 - tt) * pkt.x + 2 * (1 - tt) * tt * pkt.cx + tt * tt * pkt.tx;
+                var ppy = (1 - tt) * (1 - tt) * pkt.y + 2 * (1 - tt) * tt * pkt.cy + tt * tt * pkt.ty;
+                dfCtx.beginPath();
+                dfCtx.arc(ppx, ppy, pkt.size, 0, Math.PI * 2);
+                dfCtx.fillStyle = pkt.color + 'cc';
+                dfCtx.fill();
+                dfCtx.beginPath();
+                dfCtx.arc(ppx, ppy, pkt.size + 4, 0, Math.PI * 2);
+                dfCtx.fillStyle = pkt.color + '15';
+                dfCtx.fill();
+            }
+
+            // Stats in corner
+            dfCtx.textAlign = 'right';
+            dfCtx.textBaseline = 'top';
+            dfCtx.fillStyle = '#64748b';
+            dfCtx.font = 'bold 7px monospace';
+            dfCtx.fillText('5 stages', w - 10, 10);
+            dfCtx.fillText('24K evt/min', w - 10, 22);
+            dfCtx.fillStyle = '#34d399';
+            dfCtx.fillText('LIVE', w - 10, 34);
 
             requestAnimationFrame(drawDf);
         }
@@ -490,7 +535,6 @@
         var dfObserver = new IntersectionObserver(function(entries) {
             if (entries[0].isIntersecting) {
                 drawDf();
-                setInterval(spawnDfParticle, 200);
                 dfObserver.unobserve(dfCanvas);
             }
         }, { threshold: 0.2 });
