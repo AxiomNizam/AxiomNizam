@@ -1715,11 +1715,220 @@
             animId = requestAnimationFrame(scannerAnimation);
         }
 
+        // Conductor animation — message flow between producers, brokers, consumers
+        var conductorPackets = [];
+        var conductorSpawnTimer = 0;
+
+        function conductorAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
+
+            // Broker nodes (center cluster)
+            var brokers = [
+                { x: w * 0.5, y: h * 0.35, label: 'Kafka', color: '#34d399' },
+                { x: w * 0.5, y: h * 0.65, label: 'RabbitMQ', color: '#38bdf8' }
+            ];
+
+            // Producer nodes (left side)
+            var producers = [
+                { x: w * 0.1, y: h * 0.2, label: 'P1', color: '#a78bfa' },
+                { x: w * 0.08, y: h * 0.5, label: 'P2', color: '#a78bfa' },
+                { x: w * 0.1, y: h * 0.8, label: 'P3', color: '#a78bfa' }
+            ];
+
+            // Consumer nodes (right side)
+            var consumers = [
+                { x: w * 0.9, y: h * 0.15, label: 'C1', color: '#fbbf24' },
+                { x: w * 0.92, y: h * 0.4, label: 'C2', color: '#fbbf24' },
+                { x: w * 0.9, y: h * 0.65, label: 'C3', color: '#fbbf24' },
+                { x: w * 0.92, y: h * 0.9, label: 'C4', color: '#fbbf24' }
+            ];
+
+            // Draw producer → broker connections
+            producers.forEach(function(prod, pi) {
+                brokers.forEach(function(broker, bi) {
+                    var grad = ctx.createLinearGradient(prod.x, prod.y, broker.x, broker.y);
+                    grad.addColorStop(0, 'rgba(167, 139, 250, 0.1)');
+                    grad.addColorStop(1, 'rgba(52, 211, 153, 0.08)');
+
+                    var cpx = (prod.x + broker.x) / 2;
+                    var cpy = (prod.y + broker.y) / 2 + Math.sin(pi + bi) * 15;
+
+                    ctx.beginPath();
+                    ctx.moveTo(prod.x, prod.y);
+                    ctx.quadraticCurveTo(cpx, cpy, broker.x, broker.y);
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            });
+
+            // Draw broker → consumer connections
+            brokers.forEach(function(broker, bi) {
+                consumers.forEach(function(cons, ci) {
+                    var grad = ctx.createLinearGradient(broker.x, broker.y, cons.x, cons.y);
+                    grad.addColorStop(0, 'rgba(52, 211, 153, 0.08)');
+                    grad.addColorStop(1, 'rgba(251, 191, 36, 0.1)');
+
+                    var cpx = (broker.x + cons.x) / 2;
+                    var cpy = (broker.y + cons.y) / 2 + Math.sin(bi + ci) * 15;
+
+                    ctx.beginPath();
+                    ctx.moveTo(broker.x, broker.y);
+                    ctx.quadraticCurveTo(cpx, cpy, cons.x, cons.y);
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            });
+
+            // Draw broker nodes
+            brokers.forEach(function(broker, i) {
+                var pulse = 0.3 + Math.sin(time * 2 + i) * 0.1;
+
+                ctx.beginPath();
+                ctx.arc(broker.x, broker.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(52, 211, 153, ' + pulse + ')';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(broker.x, broker.y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(broker.x, broker.y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = broker.color + '20';
+                ctx.fill();
+
+                ctx.fillStyle = broker.color;
+                ctx.font = 'bold 9px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(broker.label, broker.x, broker.y);
+            });
+
+            // Draw producer nodes
+            producers.forEach(function(prod, i) {
+                var pulse = 0.4 + Math.sin(time * 3 + i * 2) * 0.15;
+
+                ctx.beginPath();
+                ctx.arc(prod.x, prod.y, 11, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fill();
+                ctx.strokeStyle = prod.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                ctx.fillStyle = prod.color;
+                ctx.font = 'bold 9px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(prod.label, prod.x, prod.y);
+            });
+
+            // Draw consumer nodes
+            consumers.forEach(function(cons, i) {
+                var pulse = 0.4 + Math.sin(time * 2.5 + i * 1.8) * 0.15;
+
+                ctx.beginPath();
+                ctx.arc(cons.x, cons.y, 11, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fill();
+                ctx.strokeStyle = cons.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                ctx.fillStyle = cons.color;
+                ctx.font = 'bold 9px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cons.label, cons.x, cons.y);
+            });
+
+            // Spawn message packets from producers to brokers
+            conductorSpawnTimer += 0.016;
+            if (conductorSpawnTimer > 0.25) {
+                conductorSpawnTimer = 0;
+                var srcProd = producers[Math.floor(Math.random() * producers.length)];
+                var tgtBroker = brokers[Math.floor(Math.random() * brokers.length)];
+                conductorPackets.push({
+                    x: srcProd.x, y: srcProd.y,
+                    tx: tgtBroker.x, ty: tgtBroker.y,
+                    cx: (srcProd.x + tgtBroker.x) / 2 + (Math.random() - 0.5) * 20,
+                    cy: (srcProd.y + tgtBroker.y) / 2 + (Math.random() - 0.5) * 20,
+                    t: 0, speed: 0.015 + Math.random() * 0.01,
+                    color: '#a78bfa', size: Math.random() * 2 + 1.5
+                });
+
+                // Also spawn from brokers to consumers
+                var tgtCons = consumers[Math.floor(Math.random() * consumers.length)];
+                conductorPackets.push({
+                    x: tgtBroker.x, y: tgtBroker.y,
+                    tx: tgtCons.x, ty: tgtCons.y,
+                    cx: (tgtBroker.x + tgtCons.x) / 2 + (Math.random() - 0.5) * 20,
+                    cy: (tgtBroker.y + tgtCons.y) / 2 + (Math.random() - 0.5) * 20,
+                    t: 0, speed: 0.015 + Math.random() * 0.01,
+                    color: '#fbbf24', size: Math.random() * 2 + 1.5
+                });
+            }
+
+            // Draw & update message packets
+            for (var p = conductorPackets.length - 1; p >= 0; p--) {
+                var pkt = conductorPackets[p];
+                pkt.t += pkt.speed;
+                if (pkt.t >= 1) {
+                    conductorPackets.splice(p, 1);
+                    continue;
+                }
+
+                var tt = pkt.t;
+                var ppx = (1 - tt) * (1 - tt) * pkt.x + 2 * (1 - tt) * tt * pkt.cx + tt * tt * pkt.tx;
+                var ppy = (1 - tt) * (1 - tt) * pkt.y + 2 * (1 - tt) * tt * pkt.cy + tt * tt * pkt.ty;
+
+                // Trail
+                for (var tr = 0; tr < 3; tr++) {
+                    var trT = Math.max(tt - tr * 0.04, 0);
+                    var trx = (1 - trT) * (1 - trT) * pkt.x + 2 * (1 - trT) * trT * pkt.cx + trT * trT * pkt.tx;
+                    var try_ = (1 - trT) * (1 - trT) * pkt.y + 2 * (1 - trT) * trT * pkt.cy + trT * trT * pkt.ty;
+                    ctx.beginPath();
+                    ctx.arc(trx, try_, pkt.size * (1 - tr * 0.25), 0, Math.PI * 2);
+                    ctx.fillStyle = pkt.color + Math.floor((0.25 - tr * 0.08) * 255).toString(16).padStart(2, '0');
+                    ctx.fill();
+                }
+
+                // Main packet
+                ctx.beginPath();
+                ctx.arc(ppx, ppy, pkt.size, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + 'cc';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(ppx, ppy, pkt.size + 4, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + '15';
+                ctx.fill();
+            }
+
+            // Stats in corner
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText('34.2K msg/min', w - 10, 12);
+            ctx.fillText('2 brokers', w - 10, 26);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('2ms latency', w - 10, 40);
+
+            animId = requestAnimationFrame(conductorAnimation);
+        }
+
         var animations = {
             api: apiAnimation,
             storage: storageAnimation,
             cdc: cdcAnimation,
-            scanner: scannerAnimation
+            scanner: scannerAnimation,
+            conductor: conductorAnimation
         };
 
         return {
@@ -1749,6 +1958,8 @@
                 storageDropPackets = [];
                 cdcPackets = [];
                 scanDetected = [];
+                conductorPackets = [];
+                conductorSpawnTimer = 0;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             },
             resize: resize
