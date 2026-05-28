@@ -1747,6 +1747,9 @@
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(148, 163, 184, 0.06);
     font-family: 'SF Mono', 'Fira Code', monospace;
+    height: 200px;
+    display: flex;
+    flex-direction: column;
 }
 
 .api-lifecycle__live-label {
@@ -1761,6 +1764,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-shrink: 0;
 }
 
 .api-lifecycle__live-timing {
@@ -1773,7 +1777,8 @@
     font-size: 0.72rem;
     line-height: 1.8;
     color: #94a3b8;
-    min-height: 120px;
+    flex: 1;
+    overflow: hidden;
     white-space: pre-wrap;
 }
 
@@ -2742,6 +2747,12 @@
 
     .api-lifecycle__live {
         grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .api-lifecycle__live-req,
+    .api-lifecycle__live-res {
+        height: 180px;
     }
 
     .api-lifecycle__node {
