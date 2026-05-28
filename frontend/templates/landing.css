@@ -1120,7 +1120,7 @@
 }
 
 .bento__metric-label {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -1157,7 +1157,7 @@
     background: none;
     border: none;
     color: #475569;
-    font-size: 0.7rem;
+    font-size: 0.82rem;
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
@@ -1188,7 +1188,7 @@
 }
 
 .api-demo__line {
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     line-height: 1.9;
     color: #94a3b8;
     white-space: nowrap;
@@ -1199,7 +1199,7 @@
 .api-demo__method {
     color: #34d399;
     font-weight: 700;
-    font-size: 0.68rem;
+    font-size: 0.82rem;
 }
 
 .api-demo__url { color: #e2e8f0; }
@@ -1209,7 +1209,7 @@
 .api-demo__num { color: #fbbf24; }
 .api-demo__status { color: #34d399; font-weight: 700; }
 .api-demo__status-text { color: #64748b; }
-.api-demo__latency { color: #64748b; font-size: 0.65rem; margin-left: 8px; }
+.api-demo__latency { color: #64748b; font-size: 0.75rem; margin-left: 8px; }
 
 .api-demo__cursor-line { padding: 2px 0; }
 .api-demo__cursor {
@@ -1223,13 +1223,13 @@
     align-items: center;
     gap: 10px;
     padding: 5px 0;
-    font-size: 0.72rem;
+    font-size: 0.85rem;
 }
 
 .api-demo__ep-method {
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.6rem;
+    font-size: 0.78rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     flex-shrink: 0;
@@ -1262,7 +1262,7 @@
 }
 
 .storage-demo__title {
-    font-size: 0.75rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: #e2e8f0;
     text-transform: uppercase;
@@ -1270,7 +1270,7 @@
 }
 
 .storage-demo__count {
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     color: #34d399;
     font-weight: 600;
 }
@@ -1297,7 +1297,7 @@
 }
 
 .storage-demo__bucket-name {
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     font-weight: 600;
     color: #e2e8f0;
     font-family: 'SF Mono', 'Fira Code', monospace;
@@ -1312,7 +1312,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     color: #64748b;
     margin-bottom: 6px;
 }
@@ -1363,7 +1363,7 @@
 }
 
 .storage-demo__total-label {
-    font-size: 0.6rem;
+    font-size: 0.78rem;
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -1390,7 +1390,7 @@
 }
 
 .cdc-demo__title {
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: #e2e8f0;
     text-transform: uppercase;
@@ -1398,7 +1398,7 @@
 }
 
 .cdc-demo__count {
-    font-size: 0.65rem;
+    font-size: 0.78rem;
     color: #34d399;
     font-weight: 600;
 }
@@ -1420,14 +1420,14 @@
 }
 
 .cdc-demo__pipeline-name {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: #e2e8f0;
     font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 .cdc-demo__status {
-    font-size: 0.6rem;
+    font-size: 0.78rem;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 4px;
@@ -1442,7 +1442,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.65rem;
+    font-size: 0.78rem;
     color: #64748b;
 }
 
@@ -1476,7 +1476,7 @@
 }
 
 .cdc-demo__total-label {
-    font-size: 0.55rem;
+    font-size: 0.75rem;
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1503,7 +1503,7 @@
 }
 
 .conductor-demo__title {
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: #e2e8f0;
     text-transform: uppercase;
@@ -1511,7 +1511,7 @@
 }
 
 .conductor-demo__count {
-    font-size: 0.65rem;
+    font-size: 0.78rem;
     color: #34d399;
     font-weight: 600;
 }
@@ -1545,7 +1545,7 @@
 
 .conductor-demo__broker-status {
     margin-left: auto;
-    font-size: 0.6rem;
+    font-size: 0.72rem;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 4px;
@@ -1579,7 +1579,7 @@
 }
 
 .conductor-demo__stat-label {
-    font-size: 0.5rem;
+    font-size: 0.72rem;
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1610,7 +1610,7 @@
 }
 
 .conductor-demo__tp-label {
-    font-size: 0.5rem;
+    font-size: 0.72rem;
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1643,7 +1643,7 @@
 }
 
 .scanner-demo__title {
-    font-size: 0.75rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: #e2e8f0;
     text-transform: uppercase;
@@ -1654,7 +1654,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: #34d399;
 }
@@ -1703,7 +1703,7 @@
 .scanner-demo__metric-val--warn { color: #fbbf24; }
 
 .scanner-demo__metric-label {
-    font-size: 0.55rem;
+    font-size: 0.75rem;
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1712,7 +1712,7 @@
 
 /* Scanner table */
 .scanner-demo__table {
-    font-size: 0.68rem;
+    font-size: 0.8rem;
 }
 
 .scanner-demo__row {
@@ -1732,7 +1732,7 @@
 .scanner-demo__row--header {
     font-weight: 700;
     color: #475569;
-    font-size: 0.6rem;
+    font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding-bottom: 8px;
@@ -1965,7 +1965,7 @@
     border: 1px solid rgba(52, 211, 153, 0.15);
     backdrop-filter: blur(8px);
     color: #94a3b8;
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     font-weight: 600;
     z-index: 2;
     white-space: nowrap;
@@ -2031,7 +2031,7 @@
 }
 
 .dataflow__tooltip-title {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: #e2e8f0;
     margin-bottom: 8px;
@@ -2041,7 +2041,7 @@
 
 .dataflow__tooltip-query {
     font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 0.68rem;
+    font-size: 0.78rem;
     color: #34d399;
     background: rgba(52, 211, 153, 0.06);
     padding: 6px 8px;
@@ -2060,7 +2060,7 @@
 
 .dataflow__tooltip-data code {
     font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 0.62rem;
+    font-size: 0.72rem;
     color: #a78bfa;
     background: rgba(167, 139, 250, 0.06);
     padding: 4px 6px;
@@ -2070,7 +2070,7 @@
 }
 
 .dataflow__tooltip-meta {
-    font-size: 0.62rem;
+    font-size: 0.72rem;
     color: #64748b;
     font-weight: 600;
 }
@@ -2208,7 +2208,7 @@
 .api-lifecycle__node-icon svg { color: #34d399; }
 
 .api-lifecycle__node-label {
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: #e2e8f0;
 }
@@ -2270,7 +2270,7 @@
 
 .api-lifecycle__live-label {
     padding: 10px 14px;
-    font-size: 0.7rem;
+    font-size: 0.82rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -2290,7 +2290,7 @@
 
 .api-lifecycle__live-code {
     padding: 14px;
-    font-size: 0.72rem;
+    font-size: 0.82rem;
     line-height: 1.8;
     color: #94a3b8;
     flex: 1;
@@ -3455,7 +3455,7 @@
     }
 
     .api-demo__line {
-        font-size: 0.62rem;
+        font-size: 0.75rem;
         line-height: 1.7;
     }
 
@@ -3470,7 +3470,7 @@
     }
 
     .storage-demo__bucket-name {
-        font-size: 0.72rem;
+        font-size: 0.82rem;
     }
 
     /* Scanner Demo */
@@ -3489,11 +3489,11 @@
     }
 
     .scanner-demo__metric-val {
-        font-size: 0.75rem;
+        font-size: 0.82rem;
     }
 
     .scanner-demo__row {
-        font-size: 0.6rem;
+        font-size: 0.72rem;
         gap: 4px;
     }
 
@@ -3504,11 +3504,11 @@
     }
 
     .cdc-demo__pipeline-name {
-        font-size: 0.68rem;
+        font-size: 0.78rem;
     }
 
     .cdc-demo__total-val {
-        font-size: 0.82rem;
+        font-size: 0.88rem;
     }
 
     /* Conductor Demo */
@@ -3522,11 +3522,11 @@
     }
 
     .conductor-demo__stat-val {
-        font-size: 0.78rem;
+        font-size: 0.85rem;
     }
 
     .conductor-demo__tp-val {
-        font-size: 0.78rem;
+        font-size: 0.85rem;
     }
 
     /* Deep */
@@ -3689,7 +3689,7 @@
     }
 
     .api-lifecycle__node-label {
-        font-size: 0.65rem;
+        font-size: 0.78rem;
     }
 
     .api-lifecycle__live {
@@ -3703,7 +3703,7 @@
     }
 
     .api-lifecycle__live-code {
-        font-size: 0.62rem;
+        font-size: 0.75rem;
         line-height: 1.6;
         padding: 10px;
     }
@@ -3983,7 +3983,7 @@
 
     .scanner-demo__row {
         grid-template-columns: 1fr 0.5fr 0.5fr 0.5fr;
-        font-size: 0.55rem;
+        font-size: 0.68rem;
     }
 }
 
