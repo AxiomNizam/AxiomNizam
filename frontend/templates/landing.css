@@ -1352,6 +1352,137 @@
 }
 
 /* =============================================
+   SCANNER / ANTIVIRUS DEMO
+   ============================================= */
+.scanner-demo {
+    margin-top: auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.06);
+    padding: 14px;
+}
+
+.scanner-demo__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.scanner-demo__title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.scanner-demo__status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #34d399;
+}
+
+.scanner-demo__status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+    animation: pulseDot 1.5s ease infinite;
+}
+
+/* Metrics row */
+.scanner-demo__metrics {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.04);
+    overflow: hidden;
+}
+
+.scanner-demo__metric {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border-right: 1px solid rgba(148, 163, 184, 0.04);
+}
+
+.scanner-demo__metric:last-child {
+    border-right: none;
+}
+
+.scanner-demo__metric-val {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #f8fafc;
+    font-variant-numeric: tabular-nums;
+}
+
+.scanner-demo__metric-val--ok { color: #34d399; }
+.scanner-demo__metric-val--warn { color: #fbbf24; }
+
+.scanner-demo__metric-label {
+    font-size: 0.55rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+}
+
+/* Scanner table */
+.scanner-demo__table {
+    font-size: 0.68rem;
+}
+
+.scanner-demo__row {
+    display: grid;
+    grid-template-columns: 1.2fr 0.7fr 0.7fr 0.7fr;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.04);
+    color: #64748b;
+    align-items: center;
+}
+
+.scanner-demo__row:last-child {
+    border-bottom: none;
+}
+
+.scanner-demo__row--header {
+    font-weight: 700;
+    color: #475569;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.scanner-demo__name {
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.scanner-demo__finding {
+    color: #34d399;
+    font-weight: 600;
+    text-align: center;
+}
+
+.scanner-demo__finding--crit {
+    color: #ef4444;
+}
+
+/* =============================================
    DEEP FEATURES (TABBED)
    ============================================= */
 .deep {
@@ -2870,6 +3001,28 @@
 
     .storage-demo__total-val {
         font-size: 0.85rem;
+    }
+
+    /* Scanner Demo */
+    .scanner-demo {
+        padding: 10px;
+    }
+
+    .scanner-demo__metrics {
+        flex-wrap: wrap;
+    }
+
+    .scanner-demo__metric {
+        min-width: 55px;
+    }
+
+    .scanner-demo__metric-val {
+        font-size: 0.78rem;
+    }
+
+    .scanner-demo__row {
+        font-size: 0.62rem;
+        gap: 4px;
     }
 
     /* Deep */

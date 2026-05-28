@@ -961,6 +961,29 @@
     }
 
     // ============================================================
+    // SCANNER DEMO ROW ANIMATION
+    // ============================================================
+    var scannerDemo = document.getElementById('scannerDemo');
+    if (scannerDemo) {
+        var scanObserver = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting) {
+                var rows = scannerDemo.querySelectorAll('.scanner-demo__row:not(.scanner-demo__row--header)');
+                rows.forEach(function(row, i) {
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(-8px)';
+                    row.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                    setTimeout(function() {
+                        row.style.opacity = '1';
+                        row.style.transform = 'translateX(0)';
+                    }, i * 100);
+                });
+                scanObserver.unobserve(scannerDemo);
+            }
+        }, { threshold: 0.3 });
+        scanObserver.observe(scannerDemo);
+    }
+
+    // ============================================================
     // API DEMO TABS
     // ============================================================
     var apiDemoTabs = document.querySelectorAll('.api-demo__tab');

@@ -476,6 +476,95 @@
                 </div>
             </div>
 
+            <!-- Scanner / Antivirus card -->
+            <div class="bento__card bento__card--wide" data-reveal data-tilt onclick="requireAuth('/object-storage')">
+                <div class="bento__card-glow"></div>
+                <div class="bento__card-spotlight"></div>
+                <div class="bento__card-content">
+                    <div class="bento__card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                    </div>
+                    <h3>SafeGate Scanner & Antivirus</h3>
+                    <p>6-stage scanning pipeline — metadata, MIME, SVG XSS, macro detection, archive bombs, and native AV engine with real-time threat metrics.</p>
+                    <div class="bento__card-tags"><span>6 Scanners</span><span>Real-time</span><span>Threats</span></div>
+
+                    <!-- Scanner Demo -->
+                    <div class="scanner-demo" id="scannerDemo">
+                        <div class="scanner-demo__header">
+                            <span class="scanner-demo__title">Scan Results</span>
+                            <span class="scanner-demo__status">
+                                <span class="scanner-demo__status-dot"></span>
+                                Healthy
+                            </span>
+                        </div>
+
+                        <div class="scanner-demo__metrics">
+                            <div class="scanner-demo__metric">
+                                <span class="scanner-demo__metric-val">2,847</span>
+                                <span class="scanner-demo__metric-label">Total Scans</span>
+                            </div>
+                            <div class="scanner-demo__metric">
+                                <span class="scanner-demo__metric-val scanner-demo__metric-val--ok">2,831</span>
+                                <span class="scanner-demo__metric-label">Safe</span>
+                            </div>
+                            <div class="scanner-demo__metric">
+                                <span class="scanner-demo__metric-val scanner-demo__metric-val--warn">12</span>
+                                <span class="scanner-demo__metric-label">Unsafe</span>
+                            </div>
+                            <div class="scanner-demo__metric">
+                                <span class="scanner-demo__metric-val">99.6%</span>
+                                <span class="scanner-demo__metric-label">Safety Rate</span>
+                            </div>
+                        </div>
+
+                        <div class="scanner-demo__table">
+                            <div class="scanner-demo__row scanner-demo__row--header">
+                                <span>Scanner</span>
+                                <span>Runs</span>
+                                <span>Findings</span>
+                                <span>Avg Time</span>
+                            </div>
+                            <div class="scanner-demo__row">
+                                <span class="scanner-demo__name">Metadata</span>
+                                <span>2,847</span>
+                                <span class="scanner-demo__finding">3</span>
+                                <span>2ms</span>
+                            </div>
+                            <div class="scanner-demo__row">
+                                <span class="scanner-demo__name">MIME</span>
+                                <span>2,847</span>
+                                <span class="scanner-demo__finding">5</span>
+                                <span>8ms</span>
+                            </div>
+                            <div class="scanner-demo__row">
+                                <span class="scanner-demo__name">SVG XSS</span>
+                                <span>142</span>
+                                <span class="scanner-demo__finding">1</span>
+                                <span>4ms</span>
+                            </div>
+                            <div class="scanner-demo__row">
+                                <span class="scanner-demo__name">Macro</span>
+                                <span>89</span>
+                                <span class="scanner-demo__finding">2</span>
+                                <span>23ms</span>
+                            </div>
+                            <div class="scanner-demo__row">
+                                <span class="scanner-demo__name">Archive</span>
+                                <span>67</span>
+                                <span class="scanner-demo__finding">0</span>
+                                <span>45ms</span>
+                            </div>
+                            <div class="scanner-demo__row">
+                                <span class="scanner-demo__name">Native AV</span>
+                                <span>2,847</span>
+                                <span class="scanner-demo__finding scanner-demo__finding--crit">1</span>
+                                <span>120ms</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Regular cards -->
             <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/cdc-etl')">
                 <div class="bento__card-glow"></div>
