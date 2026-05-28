@@ -1186,230 +1186,487 @@
             animId = requestAnimationFrame(apiAnimation);
         }
 
-        // Storage animation
+        // Storage animation — S3 bucket data flow network
+        var storageDropPackets = [];
+
         function storageAnimation() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
 
-            // Spawn upload particles
-            if (Math.random() < 0.08) {
-                particles.push({
-                    x: Math.random() * w,
-                    y: h,
-                    vy: -(1 + Math.random() * 2),
-                    size: Math.random() * 3 + 1,
-                    life: 1,
-                    type: Math.random() > 0.5 ? 'upload' : 'download'
-                });
-            }
-
-            for (var i = particles.length - 1; i >= 0; i--) {
-                var p = particles[i];
-                p.y += p.vy;
-                p.life -= 0.008;
-                if (p.life <= 0 || p.y < 0) {
-                    particles.splice(i, 1);
-                    continue;
-                }
-
-                var alpha = p.life * 0.6;
-                if (p.type === 'upload') {
-                    ctx.fillStyle = 'rgba(52, 211, 153, ' + alpha + ')';
-                } else {
-                    ctx.fillStyle = 'rgba(56, 189, 248, ' + alpha + ')';
-                    p.y -= p.vy * 2; // Move downward
-                }
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Glow
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2);
-                ctx.fillStyle = p.type === 'upload' ? 'rgba(52, 211, 153, ' + (alpha * 0.2) + ')' : 'rgba(56, 189, 248, ' + (alpha * 0.2) + ')';
-                ctx.fill();
-            }
-
-            // Draw bucket outlines
-            var buckets = [
-                { x: w * 0.15, y: h * 0.3 },
-                { x: w * 0.5, y: h * 0.25 },
-                { x: w * 0.85, y: h * 0.35 },
+            // Cloud nodes (top)
+            var clouds = [
+                { x: w * 0.2, y: h * 0.12, label: 'uploads', color: '#34d399' },
+                { x: w * 0.5, y: h * 0.08, label: 'backups', color: '#38bdf8' },
+                { x: w * 0.8, y: h * 0.14, label: 'media', color: '#a78bfa' },
             ];
 
-            buckets.forEach(function(b) {
+            // Storage center node
+            var center = { x: w * 0.5, y: h * 0.5 };
+
+            // Client nodes (bottom)
+            var clients = [
+                { x: w * 0.15, y: h * 0.88, label: 'PUT', color: '#34d399' },
+                { x: w * 0.4, y: h * 0.92, label: 'GET', color: '#38bdf8' },
+                { x: w * 0.65, y: h * 0.9, label: 'LIST', color: '#fbbf24' },
+                { x: w * 0.88, y: h * 0.86, label: 'DEL', color: '#ef4444' },
+            ];
+
+            // Draw connections: clients -> center -> clouds
+            clients.forEach(function(cl, i) {
+                var cpx = (cl.x + center.x) / 2 + Math.sin(i * 2) * 20;
+                var cpy = (cl.y + center.y) / 2;
                 ctx.beginPath();
-                ctx.ellipse(b.x, b.y, 30, 10, 0, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(52, 211, 153, 0.12)';
-                ctx.lineWidth = 1;
+                ctx.moveTo(cl.x, cl.y);
+                ctx.quadraticCurveTo(cpx, cpy, center.x, center.y);
+                ctx.strokeStyle = cl.color + '15';
+                ctx.lineWidth = 1.2;
                 ctx.stroke();
+
+                // Packet from client to center
+                var t = ((time * 0.35 + i * 0.25) % 1);
+                var px = (1 - t) * (1 - t) * cl.x + 2 * (1 - t) * t * cpx + t * t * center.x;
+                var py = (1 - t) * (1 - t) * cl.y + 2 * (1 - t) * t * cpy + t * t * center.y;
                 ctx.beginPath();
-                ctx.ellipse(b.x, b.y - 30, 30, 10, 0, 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = cl.color + 'bb';
+                ctx.fill();
                 ctx.beginPath();
-                ctx.moveTo(b.x - 30, b.y);
-                ctx.lineTo(b.x - 30, b.y - 30);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(b.x + 30, b.y);
-                ctx.lineTo(b.x + 30, b.y - 30);
-                ctx.stroke();
+                ctx.arc(px, py, 8, 0, Math.PI * 2);
+                ctx.fillStyle = cl.color + '12';
+                ctx.fill();
             });
+
+            clouds.forEach(function(cld, i) {
+                var cpx = (center.x + cld.x) / 2 + Math.cos(i * 1.5) * 15;
+                var cpy = (center.y + cld.y) / 2;
+                ctx.beginPath();
+                ctx.moveTo(center.x, center.y);
+                ctx.quadraticCurveTo(cpx, cpy, cld.x, cld.y);
+                ctx.strokeStyle = cld.color + '15';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+
+                // Packet from center to cloud
+                var t = ((time * 0.3 + i * 0.3 + 0.15) % 1);
+                var px = (1 - t) * (1 - t) * center.x + 2 * (1 - t) * t * cpx + t * t * cld.x;
+                var py = (1 - t) * (1 - t) * center.y + 2 * (1 - t) * t * cpy + t * t * cld.y;
+                ctx.beginPath();
+                ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = cld.color + 'bb';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(px, py, 8, 0, Math.PI * 2);
+                ctx.fillStyle = cld.color + '12';
+                ctx.fill();
+            });
+
+            // Draw center S3 node
+            var centerPulse = 0.25 + Math.sin(time * 2) * 0.08;
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, 24, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, ' + centerPulse + ')';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, 17, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            ctx.fill();
+            ctx.fillStyle = '#34d399';
+            ctx.font = 'bold 8px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('S3', center.x, center.y);
+
+            // Draw cloud bucket nodes
+            clouds.forEach(function(cld, i) {
+                var pulse = 0.4 + Math.sin(time * 2.5 + i) * 0.15;
+                ctx.beginPath();
+                ctx.arc(cld.x, cld.y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fill();
+                ctx.strokeStyle = cld.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.fillStyle = cld.color;
+                ctx.font = 'bold 5.5px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cld.label, cld.x, cld.y);
+            });
+
+            // Draw client nodes
+            clients.forEach(function(cl, i) {
+                var pulse = 0.4 + Math.sin(time * 3 + i * 1.2) * 0.15;
+                ctx.beginPath();
+                ctx.arc(cl.x, cl.y, 11, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fill();
+                ctx.strokeStyle = cl.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+                ctx.fillStyle = cl.color;
+                ctx.font = 'bold 5.5px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cl.label, cl.x, cl.y);
+            });
+
+            // Floating file particles
+            if (Math.random() < 0.06) {
+                storageDropPackets.push({
+                    x: Math.random() * w,
+                    y: h + 10,
+                    vy: -(0.8 + Math.random() * 1.5),
+                    size: Math.random() * 2.5 + 1,
+                    life: 1,
+                    type: Math.random() > 0.4 ? 'up' : 'down'
+                });
+            }
+            for (var p = storageDropPackets.length - 1; p >= 0; p--) {
+                var pkt = storageDropPackets[p];
+                pkt.y += pkt.vy * (pkt.type === 'up' ? 1 : -1);
+                pkt.life -= 0.006;
+                if (pkt.life <= 0) { storageDropPackets.splice(p, 1); continue; }
+                ctx.beginPath();
+                ctx.arc(pkt.x, pkt.y, pkt.size, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.type === 'up' ? 'rgba(52,211,153,' + (pkt.life * 0.4) + ')' : 'rgba(56,189,248,' + (pkt.life * 0.4) + ')';
+                ctx.fill();
+            }
+
+            // Stats
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 7px monospace';
+            ctx.fillText('3 buckets', w - 10, 12);
+            ctx.fillText('4,792 objects', w - 10, 24);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('14.8 GB', w - 10, 36);
 
             animId = requestAnimationFrame(storageAnimation);
         }
 
-        // CDC animation
+        // CDC animation — multi-stream pipeline network
+        var cdcPackets = [];
+
         function cdcAnimation() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
 
-            // Draw data streams
-            var streams = [
-                { y: h * 0.25, color: '#34d399', speed: 2 },
-                { y: h * 0.5, color: '#38bdf8', speed: 1.5 },
-                { y: h * 0.75, color: '#a78bfa', speed: 2.5 },
+            // Source databases (left)
+            var sources = [
+                { x: w * 0.08, y: h * 0.2, label: 'PG', color: '#34d399' },
+                { x: w * 0.08, y: h * 0.5, label: 'MY', color: '#38bdf8' },
+                { x: w * 0.08, y: h * 0.8, label: 'MO', color: '#a78bfa' },
             ];
 
-            streams.forEach(function(s) {
-                // Stream line
-                ctx.beginPath();
-                ctx.moveTo(0, s.y);
-                for (var x = 0; x < w; x += 5) {
-                    ctx.lineTo(x, s.y + Math.sin((x * 0.02) + Date.now() * 0.002 * s.speed) * 8);
-                }
-                ctx.strokeStyle = s.color + '15';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+            // Pipeline stages (center)
+            var stages = [
+                { x: w * 0.35, y: h * 0.3, label: 'CDC', color: '#34d399' },
+                { x: w * 0.55, y: h * 0.6, label: 'ETL', color: '#fbbf24' },
+                { x: w * 0.55, y: h * 0.3, label: 'QA', color: '#38bdf8' },
+            ];
 
-                // Flowing data packets
-                var time = Date.now() * 0.001;
-                for (var d = 0; d < 4; d++) {
-                    var t = ((time * 0.3 * s.speed + d * 0.25) % 1);
-                    var px = t * w;
-                    var py = s.y + Math.sin((px * 0.02) + time * 2 * s.speed) * 8;
+            // Sinks (right)
+            var sinks = [
+                { x: w * 0.85, y: h * 0.2, label: 'Kafka', color: '#34d399' },
+                { x: w * 0.92, y: h * 0.5, label: 'S3', color: '#38bdf8' },
+                { x: w * 0.85, y: h * 0.8, label: 'ES', color: '#a78bfa' },
+            ];
 
-                    ctx.beginPath();
-                    ctx.arc(px, py, 3, 0, Math.PI * 2);
-                    ctx.fillStyle = s.color + 'cc';
-                    ctx.fill();
+            // Draw source -> stage connections
+            sources.forEach(function(src, si) {
+                stages.forEach(function(stg, sti) {
+                    if ((si + sti) % 2 === 0) {
+                        var cpx = (src.x + stg.x) / 2;
+                        var cpy = (src.y + stg.y) / 2 + Math.sin(si + sti) * 15;
+                        ctx.beginPath();
+                        ctx.moveTo(src.x, src.y);
+                        ctx.quadraticCurveTo(cpx, cpy, stg.x, stg.y);
+                        ctx.strokeStyle = src.color + '10';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
 
-                    ctx.beginPath();
-                    ctx.arc(px, py, 8, 0, Math.PI * 2);
-                    ctx.fillStyle = s.color + '1a';
-                    ctx.fill();
-                }
+                        var t = ((time * 0.3 + si * 0.2 + sti * 0.15) % 1);
+                        var px = (1 - t) * (1 - t) * src.x + 2 * (1 - t) * t * cpx + t * t * stg.x;
+                        var py = (1 - t) * (1 - t) * src.y + 2 * (1 - t) * t * cpy + t * t * stg.y;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 2, 0, Math.PI * 2);
+                        ctx.fillStyle = src.color + 'aa';
+                        ctx.fill();
+                    }
+                });
             });
 
-            // Source and sink nodes
-            ctx.beginPath();
-            ctx.arc(20, h * 0.5, 8, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(52, 211, 153, 0.2)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(52, 211, 153, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            // Draw stage -> sink connections
+            stages.forEach(function(stg, sti) {
+                sinks.forEach(function(snk, sni) {
+                    if ((sti + sni) % 2 === 0) {
+                        var cpx = (stg.x + snk.x) / 2;
+                        var cpy = (stg.y + snk.y) / 2 + Math.cos(sti + sni) * 12;
+                        ctx.beginPath();
+                        ctx.moveTo(stg.x, stg.y);
+                        ctx.quadraticCurveTo(cpx, cpy, snk.x, snk.y);
+                        ctx.strokeStyle = stg.color + '10';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
 
-            ctx.beginPath();
-            ctx.arc(w - 20, h * 0.5, 8, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-            ctx.stroke();
+                        var t = ((time * 0.25 + sti * 0.2 + sni * 0.18 + 0.3) % 1);
+                        var px = (1 - t) * (1 - t) * stg.x + 2 * (1 - t) * t * cpx + t * t * snk.x;
+                        var py = (1 - t) * (1 - t) * stg.y + 2 * (1 - t) * t * cpy + t * t * snk.y;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 2, 0, Math.PI * 2);
+                        ctx.fillStyle = stg.color + 'aa';
+                        ctx.fill();
+                    }
+                });
+            });
+
+            // Draw nodes
+            var allGroups = [
+                { nodes: sources, size: 12 },
+                { nodes: stages, size: 14 },
+                { nodes: sinks, size: 12 },
+            ];
+
+            allGroups.forEach(function(group) {
+                group.nodes.forEach(function(node, i) {
+                    var pulse = 0.35 + Math.sin(time * 2.5 + i * 1.3) * 0.15;
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, group.size + 3, 0, Math.PI * 2);
+                    ctx.fillStyle = node.color + '0a';
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, group.size, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                    ctx.fill();
+                    ctx.strokeStyle = node.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
+                    ctx.lineWidth = 1.3;
+                    ctx.stroke();
+                    ctx.fillStyle = node.color;
+                    ctx.font = 'bold 5.5px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(node.label, node.x, node.y);
+                });
+            });
+
+            // Floating event particles
+            if (Math.random() < 0.08) {
+                var srcPick = sources[Math.floor(Math.random() * sources.length)];
+                cdcPackets.push({
+                    x: srcPick.x, y: srcPick.y,
+                    tx: sinks[Math.floor(Math.random() * sinks.length)].x,
+                    ty: sinks[Math.floor(Math.random() * sinks.length)].y,
+                    cx: w * (0.3 + Math.random() * 0.3),
+                    cy: h * (0.2 + Math.random() * 0.6),
+                    t: 0, speed: 0.008 + Math.random() * 0.006,
+                    color: srcPick.color, size: Math.random() * 2 + 1
+                });
+            }
+            for (var p = cdcPackets.length - 1; p >= 0; p--) {
+                var pkt = cdcPackets[p];
+                pkt.t += pkt.speed;
+                if (pkt.t >= 1) { cdcPackets.splice(p, 1); continue; }
+                var tt = pkt.t;
+                var ppx = (1 - tt) * (1 - tt) * pkt.x + 2 * (1 - tt) * tt * pkt.cx + tt * tt * pkt.tx;
+                var ppy = (1 - tt) * (1 - tt) * pkt.y + 2 * (1 - tt) * tt * pkt.cy + tt * tt * pkt.ty;
+                ctx.beginPath();
+                ctx.arc(ppx, ppy, pkt.size, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + 'cc';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(ppx, ppy, pkt.size + 5, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + '15';
+                ctx.fill();
+            }
+
+            // Stats
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 7px monospace';
+            ctx.fillText('3 pipelines', w - 10, 12);
+            ctx.fillText('24,537 evt/min', w - 10, 24);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('99.97% uptime', w - 10, 36);
 
             animId = requestAnimationFrame(cdcAnimation);
         }
 
-        // Scanner animation
+        // Scanner animation — 6-stage pipeline with scan beam
+        var scanDetected = [];
+
         function scannerAnimation() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             var w = canvas.width, h = canvas.height;
             var time = Date.now() * 0.001;
 
-            // Scanning beam sweep
-            var beamX = ((time * 0.5) % 1) * w;
+            // 6 scanner pipeline nodes in a row
+            var scanNodes = [
+                { x: w * 0.08, y: h * 0.35, label: 'META', color: '#34d399', finds: 3 },
+                { x: w * 0.24, y: h * 0.35, label: 'MIME', color: '#38bdf8', finds: 5 },
+                { x: w * 0.40, y: h * 0.35, label: 'SVG', color: '#a78bfa', finds: 1 },
+                { x: w * 0.56, y: h * 0.35, label: 'MACRO', color: '#fbbf24', finds: 2 },
+                { x: w * 0.72, y: h * 0.35, label: 'ARCH', color: '#34d399', finds: 0 },
+                { x: w * 0.88, y: h * 0.35, label: 'AV', color: '#ef4444', finds: 1 },
+            ];
 
-            // Beam gradient
-            var gradient = ctx.createLinearGradient(beamX - 60, 0, beamX + 60, 0);
-            gradient.addColorStop(0, 'rgba(52, 211, 153, 0)');
-            gradient.addColorStop(0.4, 'rgba(52, 211, 153, 0.06)');
-            gradient.addColorStop(0.5, 'rgba(52, 211, 153, 0.12)');
-            gradient.addColorStop(0.6, 'rgba(52, 211, 153, 0.06)');
-            gradient.addColorStop(1, 'rgba(52, 211, 153, 0)');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(beamX - 60, 0, 120, h);
+            // Input file node (left)
+            var inputNode = { x: w * 0.06, y: h * 0.75, label: 'FILE', color: '#e2e8f0' };
+            // Output node (right)
+            var outputNode = { x: w * 0.94, y: h * 0.75, label: 'SAFE', color: '#34d399' };
 
-            // Beam line
+            // Scanning beam position
+            var beamProgress = ((time * 0.2) % 1);
+            var beamIdx = Math.floor(beamProgress * 6);
+            var beamX = scanNodes[Math.min(beamIdx, 5)].x;
+
+            // Draw connections: input -> nodes -> output
             ctx.beginPath();
-            ctx.moveTo(beamX, 0);
-            ctx.lineTo(beamX, h);
-            ctx.strokeStyle = 'rgba(52, 211, 153, 0.25)';
-            ctx.lineWidth = 1;
+            ctx.moveTo(inputNode.x, inputNode.y);
+            scanNodes.forEach(function(node) {
+                ctx.lineTo(node.x, node.y);
+            });
+            ctx.lineTo(outputNode.x, outputNode.y);
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.08)';
+            ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Scan grid lines
-            for (var gy = 0; gy < h; gy += 20) {
-                ctx.beginPath();
-                ctx.moveTo(0, gy);
-                ctx.lineTo(w, gy);
-                ctx.strokeStyle = 'rgba(52, 211, 153, 0.03)';
-                ctx.lineWidth = 0.5;
-                ctx.stroke();
-            }
+            // Animated beam along the pipeline
+            var beamT = ((time * 0.4) % 1);
+            var totalNodes = scanNodes.length + 2;
+            var allPipelineNodes = [inputNode].concat(scanNodes).concat([outputNode]);
+            var segT = beamT * (allPipelineNodes.length - 1);
+            var segIdx = Math.min(Math.floor(segT), allPipelineNodes.length - 2);
+            var localT = segT - segIdx;
+            var fromN = allPipelineNodes[segIdx];
+            var toN = allPipelineNodes[segIdx + 1];
+            var bx = fromN.x + (toN.x - fromN.x) * localT;
+            var by = fromN.y + (toN.y - fromN.y) * localT;
 
-            // Threat detection flashes
-            if (Math.random() < 0.02) {
-                particles.push({
-                    x: Math.random() * w,
-                    y: Math.random() * h,
-                    life: 1,
-                    size: Math.random() * 20 + 10
-                });
-            }
+            // Beam glow
+            ctx.beginPath();
+            ctx.arc(bx, by, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.15)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(bx, by, 5, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.6)';
+            ctx.fill();
 
-            for (var i = particles.length - 1; i >= 0; i--) {
-                var p = particles[i];
-                p.life -= 0.03;
-                if (p.life <= 0) {
-                    particles.splice(i, 1);
-                    continue;
-                }
+            // Beam line sweep
+            var grad = ctx.createLinearGradient(beamX - 50, 0, beamX + 50, 0);
+            grad.addColorStop(0, 'rgba(52, 211, 153, 0)');
+            grad.addColorStop(0.5, 'rgba(52, 211, 153, 0.06)');
+            grad.addColorStop(1, 'rgba(52, 211, 153, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(beamX - 50, 0, 100, h);
 
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size * (1 - p.life), 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(239, 68, 68, ' + (p.life * 0.5) + ')';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
+            // Draw scan nodes
+            scanNodes.forEach(function(node, i) {
+                var isActive = i === beamIdx;
+                var isPast = i < beamIdx;
+                var pulse = isActive ? 0.6 + Math.sin(time * 6) * 0.2 : 0.3;
 
-                // Crosshair
-                ctx.beginPath();
-                ctx.moveTo(p.x - 8, p.y);
-                ctx.lineTo(p.x + 8, p.y);
-                ctx.moveTo(p.x, p.y - 8);
-                ctx.lineTo(p.x, p.y + 8);
-                ctx.strokeStyle = 'rgba(239, 68, 68, ' + (p.life * 0.6) + ')';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-            }
-
-            // 6 scanner stage indicators at bottom
-            var stages = ['META', 'MIME', 'SVG', 'MACRO', 'ARCH', 'AV'];
-            var stageW = w / 6;
-            stages.forEach(function(stage, idx) {
-                var sx = idx * stageW + stageW / 2;
-                var lit = beamX > sx - stageW / 2 && beamX < sx + stageW / 2;
-                ctx.fillStyle = lit ? 'rgba(52, 211, 153, 0.8)' : 'rgba(52, 211, 153, 0.15)';
-                ctx.font = 'bold 8px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(stage, sx, h - 8);
-
-                if (lit) {
+                // Glow if active
+                if (isActive) {
                     ctx.beginPath();
-                    ctx.arc(sx, h - 18, 3, 0, Math.PI * 2);
-                    ctx.fillStyle = 'rgba(52, 211, 153, 0.6)';
+                    ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+                    ctx.fillStyle = node.color + '18';
                     ctx.fill();
                 }
+
+                // Node
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 12, 0, Math.PI * 2);
+                ctx.fillStyle = isPast || isActive ? 'rgba(15, 23, 42, 0.85)' : 'rgba(15, 23, 42, 0.7)';
+                ctx.fill();
+                var strokeColor = isPast || isActive ? node.color + Math.floor(pulse * 255).toString(16).padStart(2, '0') : 'rgba(148,163,184,0.15)';
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = isActive ? 2 : 1.2;
+                ctx.stroke();
+
+                ctx.fillStyle = isPast || isActive ? node.color : '#475569';
+                ctx.font = 'bold 5.5px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.label, node.x, node.y);
+
+                // Checkmark if passed
+                if (isPast) {
+                    ctx.fillStyle = '#34d399';
+                    ctx.font = 'bold 7px monospace';
+                    ctx.fillText('✓', node.x, node.y - 18);
+                }
+
+                // Finding count
+                if (node.finds > 0 && (isPast || isActive)) {
+                    ctx.beginPath();
+                    ctx.arc(node.x + 10, node.y - 10, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = node.finds > 2 ? '#ef4444' : '#fbbf24';
+                    ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 5px monospace';
+                    ctx.fillText(node.finds, node.x + 10, node.y - 10);
+                }
             });
+
+            // Draw input/output nodes
+            [inputNode, outputNode].forEach(function(node) {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fill();
+                ctx.strokeStyle = node.color + '40';
+                ctx.lineWidth = 1.3;
+                ctx.stroke();
+                ctx.fillStyle = node.color;
+                ctx.font = 'bold 6px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.label, node.x, node.y);
+            });
+
+            // Threat detection radar pings
+            if (Math.random() < 0.015) {
+                scanDetected.push({
+                    x: w * (0.2 + Math.random() * 0.6),
+                    y: h * (0.15 + Math.random() * 0.7),
+                    life: 1, size: Math.random() * 15 + 8
+                });
+            }
+            for (var d = scanDetected.length - 1; d >= 0; d--) {
+                var det = scanDetected[d];
+                det.life -= 0.025;
+                if (det.life <= 0) { scanDetected.splice(d, 1); continue; }
+                // Expanding ring
+                ctx.beginPath();
+                ctx.arc(det.x, det.y, det.size * (1 - det.life * 0.5), 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(239, 68, 68, ' + (det.life * 0.4) + ')';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                // Crosshair
+                ctx.strokeStyle = 'rgba(239, 68, 68, ' + (det.life * 0.5) + ')';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(det.x - 6, det.y);
+                ctx.lineTo(det.x + 6, det.y);
+                ctx.moveTo(det.x, det.y - 6);
+                ctx.lineTo(det.x, det.y + 6);
+                ctx.stroke();
+            }
+
+            // Stats
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 7px monospace';
+            ctx.fillText('2,847 scans', w - 10, 12);
+            ctx.fillText('99.6% safe', w - 10, 24);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('6 scanners', w - 10, 36);
 
             animId = requestAnimationFrame(scannerAnimation);
         }
@@ -1445,6 +1702,9 @@
                 particles = [];
                 apiPackets = [];
                 apiSpawnTimer = 0;
+                storageDropPackets = [];
+                cdcPackets = [];
+                scanDetected = [];
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             },
             resize: resize
