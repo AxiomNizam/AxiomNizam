@@ -354,7 +354,8 @@
 
         <div class="bento__grid">
             <!-- Large hero card -->
-            <div class="bento__card bento__card--hero" data-reveal data-tilt onclick="requireAuth('/admin')">
+            <div class="bento__card bento__card--hero" data-reveal data-tilt data-hover-effect="api" onclick="requireAuth('/admin')">
+                <canvas class="bento__hover-canvas" data-canvas="api"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -403,7 +404,8 @@
             </div>
 
             <!-- Tall card -->
-            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/object-storage')">
+            <div class="bento__card bento__card--tall" data-reveal data-tilt data-hover-effect="storage" onclick="requireAuth('/object-storage')">
+                <canvas class="bento__hover-canvas" data-canvas="storage"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -477,7 +479,8 @@
             </div>
 
             <!-- Scanner / Antivirus card -->
-            <div class="bento__card bento__card--wide" data-reveal data-tilt onclick="requireAuth('/object-storage')">
+            <div class="bento__card bento__card--wide" data-reveal data-tilt data-hover-effect="scanner" onclick="requireAuth('/object-storage')">
+                <canvas class="bento__hover-canvas" data-canvas="scanner"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -566,7 +569,8 @@
             </div>
 
             <!-- CDC Pipelines card -->
-            <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/cdc-etl')">
+            <div class="bento__card" data-reveal data-tilt data-hover-effect="cdc" onclick="requireAuth('/cdc-etl')">
+                <canvas class="bento__hover-canvas" data-canvas="cdc"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">

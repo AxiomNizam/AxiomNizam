@@ -961,6 +961,363 @@
     }
 
     // ============================================================
+    // BENTO CARD HOVER ANIMATIONS
+    // ============================================================
+    var hoverCanvases = document.querySelectorAll('.bento__hover-canvas');
+    var hoverAnimations = {};
+
+    function initHoverCanvas(canvas) {
+        var ctx = canvas.getContext('2d');
+        var type = canvas.getAttribute('data-canvas');
+        var particles = [];
+        var animId = null;
+        var rect = canvas.getBoundingClientRect();
+
+        function resize() {
+            rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        // API Builder animation
+        function apiAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+
+            // Draw endpoint lines
+            var endpoints = [
+                { x1: 20, y1: 40, x2: w - 20, y2: 40 },
+                { x1: 20, y1: 80, x2: w - 20, y2: 80 },
+                { x1: 20, y1: 120, x2: w - 20, y2: 120 },
+                { x1: 20, y1: 160, x2: w - 20, y2: 160 },
+                { x1: 20, y1: 200, x2: w - 20, y2: 200 },
+            ];
+
+            endpoints.forEach(function(ep, i) {
+                ctx.beginPath();
+                ctx.moveTo(ep.x1, ep.y1);
+                ctx.lineTo(ep.x2, ep.y2);
+                ctx.strokeStyle = 'rgba(52, 211, 153, 0.06)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Method badges
+                var methods = ['GET', 'POST', 'PUT', 'DEL', 'PATCH'];
+                var colors = ['#34d399', '#38bdf8', '#fbbf24', '#ef4444', '#a78bfa'];
+                ctx.fillStyle = colors[i % 5];
+                ctx.font = 'bold 9px monospace';
+                ctx.fillText(methods[i % 5], 24, ep.y1 - 8);
+            });
+
+            // Flowing request dots
+            var time = Date.now() * 0.001;
+            for (var d = 0; d < 5; d++) {
+                var ep = endpoints[d];
+                var t = ((time * 0.4 + d * 0.2) % 1);
+                var px = ep.x1 + (ep.x2 - ep.x1) * t;
+                var py = ep.y1;
+
+                ctx.beginPath();
+                ctx.arc(px, py, 3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(52, 211, 153, 0.8)';
+                ctx.fill();
+
+                // Glow
+                ctx.beginPath();
+                ctx.arc(px, py, 8, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(52, 211, 153, 0.15)';
+                ctx.fill();
+
+                // Response dot going back
+                var t2 = ((time * 0.3 + d * 0.15 + 0.5) % 1);
+                var px2 = ep.x2 - (ep.x2 - ep.x1) * t2;
+                ctx.beginPath();
+                ctx.arc(px2, py + 6, 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
+                ctx.fill();
+            }
+
+            animId = requestAnimationFrame(apiAnimation);
+        }
+
+        // Storage animation
+        function storageAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+
+            // Spawn upload particles
+            if (Math.random() < 0.08) {
+                particles.push({
+                    x: Math.random() * w,
+                    y: h,
+                    vy: -(1 + Math.random() * 2),
+                    size: Math.random() * 3 + 1,
+                    life: 1,
+                    type: Math.random() > 0.5 ? 'upload' : 'download'
+                });
+            }
+
+            for (var i = particles.length - 1; i >= 0; i--) {
+                var p = particles[i];
+                p.y += p.vy;
+                p.life -= 0.008;
+                if (p.life <= 0 || p.y < 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                var alpha = p.life * 0.6;
+                if (p.type === 'upload') {
+                    ctx.fillStyle = 'rgba(52, 211, 153, ' + alpha + ')';
+                } else {
+                    ctx.fillStyle = 'rgba(56, 189, 248, ' + alpha + ')';
+                    p.y -= p.vy * 2; // Move downward
+                }
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Glow
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2);
+                ctx.fillStyle = p.type === 'upload' ? 'rgba(52, 211, 153, ' + (alpha * 0.2) + ')' : 'rgba(56, 189, 248, ' + (alpha * 0.2) + ')';
+                ctx.fill();
+            }
+
+            // Draw bucket outlines
+            var buckets = [
+                { x: w * 0.15, y: h * 0.3 },
+                { x: w * 0.5, y: h * 0.25 },
+                { x: w * 0.85, y: h * 0.35 },
+            ];
+
+            buckets.forEach(function(b) {
+                ctx.beginPath();
+                ctx.ellipse(b.x, b.y, 30, 10, 0, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(52, 211, 153, 0.12)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.ellipse(b.x, b.y - 30, 30, 10, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(b.x - 30, b.y);
+                ctx.lineTo(b.x - 30, b.y - 30);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(b.x + 30, b.y);
+                ctx.lineTo(b.x + 30, b.y - 30);
+                ctx.stroke();
+            });
+
+            animId = requestAnimationFrame(storageAnimation);
+        }
+
+        // CDC animation
+        function cdcAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+
+            // Draw data streams
+            var streams = [
+                { y: h * 0.25, color: '#34d399', speed: 2 },
+                { y: h * 0.5, color: '#38bdf8', speed: 1.5 },
+                { y: h * 0.75, color: '#a78bfa', speed: 2.5 },
+            ];
+
+            streams.forEach(function(s) {
+                // Stream line
+                ctx.beginPath();
+                ctx.moveTo(0, s.y);
+                for (var x = 0; x < w; x += 5) {
+                    ctx.lineTo(x, s.y + Math.sin((x * 0.02) + Date.now() * 0.002 * s.speed) * 8);
+                }
+                ctx.strokeStyle = s.color + '15';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Flowing data packets
+                var time = Date.now() * 0.001;
+                for (var d = 0; d < 4; d++) {
+                    var t = ((time * 0.3 * s.speed + d * 0.25) % 1);
+                    var px = t * w;
+                    var py = s.y + Math.sin((px * 0.02) + time * 2 * s.speed) * 8;
+
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = s.color + 'cc';
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(px, py, 8, 0, Math.PI * 2);
+                    ctx.fillStyle = s.color + '1a';
+                    ctx.fill();
+                }
+            });
+
+            // Source and sink nodes
+            ctx.beginPath();
+            ctx.arc(20, h * 0.5, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.2)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(w - 20, h * 0.5, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+            ctx.stroke();
+
+            animId = requestAnimationFrame(cdcAnimation);
+        }
+
+        // Scanner animation
+        function scannerAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
+
+            // Scanning beam sweep
+            var beamX = ((time * 0.5) % 1) * w;
+
+            // Beam gradient
+            var gradient = ctx.createLinearGradient(beamX - 60, 0, beamX + 60, 0);
+            gradient.addColorStop(0, 'rgba(52, 211, 153, 0)');
+            gradient.addColorStop(0.4, 'rgba(52, 211, 153, 0.06)');
+            gradient.addColorStop(0.5, 'rgba(52, 211, 153, 0.12)');
+            gradient.addColorStop(0.6, 'rgba(52, 211, 153, 0.06)');
+            gradient.addColorStop(1, 'rgba(52, 211, 153, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(beamX - 60, 0, 120, h);
+
+            // Beam line
+            ctx.beginPath();
+            ctx.moveTo(beamX, 0);
+            ctx.lineTo(beamX, h);
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Scan grid lines
+            for (var gy = 0; gy < h; gy += 20) {
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(w, gy);
+                ctx.strokeStyle = 'rgba(52, 211, 153, 0.03)';
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+            }
+
+            // Threat detection flashes
+            if (Math.random() < 0.02) {
+                particles.push({
+                    x: Math.random() * w,
+                    y: Math.random() * h,
+                    life: 1,
+                    size: Math.random() * 20 + 10
+                });
+            }
+
+            for (var i = particles.length - 1; i >= 0; i--) {
+                var p = particles[i];
+                p.life -= 0.03;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * (1 - p.life), 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(239, 68, 68, ' + (p.life * 0.5) + ')';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Crosshair
+                ctx.beginPath();
+                ctx.moveTo(p.x - 8, p.y);
+                ctx.lineTo(p.x + 8, p.y);
+                ctx.moveTo(p.x, p.y - 8);
+                ctx.lineTo(p.x, p.y + 8);
+                ctx.strokeStyle = 'rgba(239, 68, 68, ' + (p.life * 0.6) + ')';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            // 6 scanner stage indicators at bottom
+            var stages = ['META', 'MIME', 'SVG', 'MACRO', 'ARCH', 'AV'];
+            var stageW = w / 6;
+            stages.forEach(function(stage, idx) {
+                var sx = idx * stageW + stageW / 2;
+                var lit = beamX > sx - stageW / 2 && beamX < sx + stageW / 2;
+                ctx.fillStyle = lit ? 'rgba(52, 211, 153, 0.8)' : 'rgba(52, 211, 153, 0.15)';
+                ctx.font = 'bold 8px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(stage, sx, h - 8);
+
+                if (lit) {
+                    ctx.beginPath();
+                    ctx.arc(sx, h - 18, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(52, 211, 153, 0.6)';
+                    ctx.fill();
+                }
+            });
+
+            animId = requestAnimationFrame(scannerAnimation);
+        }
+
+        var animations = {
+            api: apiAnimation,
+            storage: storageAnimation,
+            cdc: cdcAnimation,
+            scanner: scannerAnimation
+        };
+
+        return {
+            start: function() {
+                resize();
+                if (animations[type]) {
+                    animations[type]();
+                }
+            },
+            stop: function() {
+                if (animId) {
+                    cancelAnimationFrame(animId);
+                    animId = null;
+                }
+                particles = [];
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            },
+            resize: resize
+        };
+    }
+
+    // Attach hover events to each card
+    hoverCanvases.forEach(function(canvas) {
+        var card = canvas.parentElement;
+        var anim = initHoverCanvas(canvas);
+
+        card.addEventListener('mouseenter', function() {
+            anim.start();
+        });
+
+        card.addEventListener('mouseleave', function() {
+            anim.stop();
+        });
+    });
+
+    // Resize handler
+    window.addEventListener('resize', function() {
+        hoverCanvases.forEach(function(canvas) {
+            var rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        });
+    });
+
+    // ============================================================
     // SCANNER DEMO ROW ANIMATION
     // ============================================================
     var scannerDemo = document.getElementById('scannerDemo');
