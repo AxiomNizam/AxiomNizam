@@ -482,7 +482,7 @@
 
                 // Label
                 dfCtx.fillStyle = node.color;
-                dfCtx.font = 'bold 6px monospace';
+                dfCtx.font = 'bold 10px monospace';
                 dfCtx.textAlign = 'center';
                 dfCtx.textBaseline = 'middle';
                 dfCtx.fillText(node.label, node.x, node.y);
@@ -522,11 +522,11 @@
             dfCtx.textAlign = 'right';
             dfCtx.textBaseline = 'top';
             dfCtx.fillStyle = '#64748b';
-            dfCtx.font = 'bold 7px monospace';
-            dfCtx.fillText('5 stages', w - 10, 10);
-            dfCtx.fillText('24K evt/min', w - 10, 22);
+            dfCtx.font = 'bold 10px monospace';
+            dfCtx.fillText('5 stages', w - 10, 12);
+            dfCtx.fillText('24K evt/min', w - 10, 26);
             dfCtx.fillStyle = '#34d399';
-            dfCtx.fillText('LIVE', w - 10, 34);
+            dfCtx.fillText('LIVE', w - 10, 40);
 
             requestAnimationFrame(drawDf);
         }
@@ -1135,7 +1135,7 @@
 
                 // Method label
                 ctx.fillStyle = node.color;
-                ctx.font = 'bold 6px monospace';
+                ctx.font = 'bold 10px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(node.method, node.x, node.y);
@@ -1197,7 +1197,7 @@
             var codeX = 12;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
-            ctx.font = 'bold 8px monospace';
+            ctx.font = 'bold 11px monospace';
 
             var codeLines = [
                 { text: 'GET /api/v1/users', color: '#34d399' },
@@ -1221,11 +1221,11 @@
             // Stats in opposite corner
             ctx.textAlign = 'right';
             ctx.fillStyle = '#64748b';
-            ctx.font = 'bold 7px monospace';
+            ctx.font = 'bold 10px monospace';
             ctx.fillText(nodes.length + ' endpoints', w - 10, 12);
-            ctx.fillText(Math.floor(time * 100) + ' req/s', w - 10, 24);
+            ctx.fillText(Math.floor(time * 100) + ' req/s', w - 10, 26);
             ctx.fillStyle = '#34d399';
-            ctx.fillText('99.9% uptime', w - 10, 36);
+            ctx.fillText('99.9% uptime', w - 10, 40);
 
             animId = requestAnimationFrame(apiAnimation);
         }
@@ -1316,7 +1316,7 @@
             ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
             ctx.fill();
             ctx.fillStyle = '#34d399';
-            ctx.font = 'bold 8px monospace';
+            ctx.font = 'bold 11px monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('S3', center.x, center.y);
@@ -1332,7 +1332,7 @@
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
                 ctx.fillStyle = cld.color;
-                ctx.font = 'bold 5.5px monospace';
+                ctx.font = 'bold 9px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(cld.label, cld.x, cld.y);
@@ -1349,7 +1349,7 @@
                 ctx.lineWidth = 1.2;
                 ctx.stroke();
                 ctx.fillStyle = cl.color;
-                ctx.font = 'bold 5.5px monospace';
+                ctx.font = 'bold 9px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(cl.label, cl.x, cl.y);
@@ -1381,11 +1381,11 @@
             ctx.textAlign = 'right';
             ctx.textBaseline = 'top';
             ctx.fillStyle = '#64748b';
-            ctx.font = 'bold 7px monospace';
+            ctx.font = 'bold 10px monospace';
             ctx.fillText('3 buckets', w - 10, 12);
-            ctx.fillText('4,792 objects', w - 10, 24);
+            ctx.fillText('4,792 objects', w - 10, 26);
             ctx.fillStyle = '#34d399';
-            ctx.fillText('14.8 GB', w - 10, 36);
+            ctx.fillText('14.8 GB', w - 10, 40);
 
             animId = requestAnimationFrame(storageAnimation);
         }
@@ -1489,7 +1489,7 @@
                     ctx.lineWidth = 1.3;
                     ctx.stroke();
                     ctx.fillStyle = node.color;
-                    ctx.font = 'bold 5.5px monospace';
+                    ctx.font = 'bold 9px monospace';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(node.label, node.x, node.y);
@@ -1530,11 +1530,11 @@
             ctx.textAlign = 'right';
             ctx.textBaseline = 'top';
             ctx.fillStyle = '#64748b';
-            ctx.font = 'bold 7px monospace';
+            ctx.font = 'bold 10px monospace';
             ctx.fillText('3 pipelines', w - 10, 12);
-            ctx.fillText('24,537 evt/min', w - 10, 24);
+            ctx.fillText('24,537 evt/min', w - 10, 26);
             ctx.fillStyle = '#34d399';
-            ctx.fillText('99.97% uptime', w - 10, 36);
+            ctx.fillText('99.97% uptime', w - 10, 40);
 
             animId = requestAnimationFrame(cdcAnimation);
         }
@@ -1633,7 +1633,7 @@
                 ctx.stroke();
 
                 ctx.fillStyle = isPast || isActive ? node.color : '#475569';
-                ctx.font = 'bold 5.5px monospace';
+                ctx.font = 'bold 9px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(node.label, node.x, node.y);
@@ -1641,7 +1641,7 @@
                 // Checkmark if passed
                 if (isPast) {
                     ctx.fillStyle = '#34d399';
-                    ctx.font = 'bold 7px monospace';
+                    ctx.font = 'bold 10px monospace';
                     ctx.fillText('✓', node.x, node.y - 18);
                 }
 
@@ -1652,7 +1652,7 @@
                     ctx.fillStyle = node.finds > 2 ? '#ef4444' : '#fbbf24';
                     ctx.fill();
                     ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 5px monospace';
+                    ctx.font = 'bold 8px monospace';
                     ctx.fillText(node.finds, node.x + 10, node.y - 10);
                 }
             });
@@ -1667,7 +1667,7 @@
                 ctx.lineWidth = 1.3;
                 ctx.stroke();
                 ctx.fillStyle = node.color;
-                ctx.font = 'bold 6px monospace';
+                ctx.font = 'bold 10px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(node.label, node.x, node.y);
@@ -1706,11 +1706,11 @@
             ctx.textAlign = 'right';
             ctx.textBaseline = 'top';
             ctx.fillStyle = '#64748b';
-            ctx.font = 'bold 7px monospace';
+            ctx.font = 'bold 10px monospace';
             ctx.fillText('2,847 scans', w - 10, 12);
-            ctx.fillText('99.6% safe', w - 10, 24);
+            ctx.fillText('99.6% safe', w - 10, 26);
             ctx.fillStyle = '#34d399';
-            ctx.fillText('6 scanners', w - 10, 36);
+            ctx.fillText('6 scanners', w - 10, 40);
 
             animId = requestAnimationFrame(scannerAnimation);
         }
