@@ -1277,10 +1277,19 @@
 
         return {
             start: function() {
-                resize();
-                if (animations[type]) {
-                    animations[type]();
-                }
+                // Ensure proper sizing with a frame delay
+                requestAnimationFrame(function() {
+                    resize();
+                    // If canvas is still 0 size, try again
+                    if (canvas.width === 0 || canvas.height === 0) {
+                        requestAnimationFrame(function() {
+                            resize();
+                            if (animations[type]) animations[type]();
+                        });
+                    } else {
+                        if (animations[type]) animations[type]();
+                    }
+                });
             },
             stop: function() {
                 if (animId) {
