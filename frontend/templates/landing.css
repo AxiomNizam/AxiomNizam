@@ -3108,6 +3108,9 @@
 /* =============================================
    RESPONSIVE
    ============================================= */
+/* =============================================
+   RESPONSIVE — TABLET (1024px)
+   ============================================= */
 @media (max-width: 1024px) {
     .bento__grid {
         grid-template-columns: repeat(2, 1fr);
@@ -3125,66 +3128,103 @@
     .arch__grid {
         grid-template-columns: repeat(2, 1fr);
     }
-}
 
-@media (max-width: 768px) {
-    .hero {
-        padding: 80px 16px 50px;
-        min-height: auto;
+    .api-lifecycle__nodes {
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
     }
 
-    .hero__floaters {
+    .api-lifecycle__arrow {
         display: none;
     }
 
-    .hero__shapes {
+    .deep__tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        padding-bottom: 4px;
+    }
+
+    .deep__tab {
+        flex-shrink: 0;
+    }
+}
+
+/* =============================================
+   RESPONSIVE — MOBILE (768px)
+   ============================================= */
+@media (max-width: 768px) {
+    /* Hide hover canvases on mobile (performance) */
+    .bento__hover-canvas {
+        display: none !important;
+    }
+
+    /* Hero */
+    .hero {
+        padding: 70px 16px 40px;
+        min-height: auto;
+    }
+
+    .hero__floaters,
+    .hero__shapes,
+    .hero__scroll-hint {
         display: none;
     }
 
     .hero__aurora {
-        opacity: 0.2;
+        opacity: 0.15;
     }
 
     .hero__logo-bg {
-        width: 300px;
-        height: 300px;
+        width: 260px;
+        height: 260px;
+    }
+
+    .hero__orbs .hero__orb--4,
+    .hero__orbs .hero__orb--5 {
+        display: none;
     }
 
     .hero__content {
-        padding: 0 4px;
+        padding: 0;
     }
 
     .hero__badge {
-        font-size: 0.7rem;
+        font-size: 0.68rem;
         padding: 6px 14px;
-        margin-bottom: 20px;
+        margin-bottom: 18px;
     }
 
     .hero__title {
-        font-size: 2rem;
-        margin-bottom: 16px;
+        font-size: 1.85rem;
+        margin-bottom: 14px;
+        line-height: 1.1;
     }
 
     .hero__subtitle {
-        font-size: 0.9rem;
-        margin-bottom: 28px;
+        font-size: 0.88rem;
+        margin-bottom: 24px;
+        line-height: 1.6;
     }
 
     .hero__actions {
         flex-direction: column;
         align-items: center;
         gap: 10px;
-        margin-bottom: 32px;
+        margin-bottom: 28px;
     }
 
     .hero__actions .btn {
         width: 100%;
         max-width: 280px;
         justify-content: center;
+        padding: 13px 24px;
     }
 
     .hero__stats {
-        gap: 16px;
+        gap: 12px;
         flex-wrap: wrap;
         justify-content: center;
     }
@@ -3194,30 +3234,45 @@
     }
 
     .hero__stat-num {
-        font-size: 1.5rem;
+        font-size: 1.4rem;
     }
 
-    .hero__scroll-hint {
-        display: none;
+    .hero__stat-label {
+        font-size: 0.65rem;
     }
 
     /* Marquee */
+    .marquee-section {
+        padding: 16px 0;
+    }
+
     .marquee__item {
-        font-size: 0.75rem;
-        padding: 0 14px;
+        font-size: 0.72rem;
+        padding: 0 12px;
+    }
+
+    /* Section dividers */
+    .section-divider svg {
+        height: 30px;
     }
 
     /* Bento */
     .bento {
-        padding: 60px 16px;
+        padding: 50px 16px;
+    }
+
+    .bento__eyebrow {
+        font-size: 0.68rem;
+        margin-bottom: 12px;
     }
 
     .bento__title {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
     }
 
     .bento__grid {
         grid-template-columns: 1fr;
+        gap: 12px;
     }
 
     .bento__card--hero,
@@ -3227,26 +3282,50 @@
         grid-row: span 1;
     }
 
+    .bento__card {
+        border-radius: 16px;
+    }
+
     .bento__card-content {
-        padding: 20px;
+        padding: 18px;
+    }
+
+    .bento__card-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        margin-bottom: 14px;
+    }
+
+    .bento__card-icon svg {
+        width: 20px;
+        height: 20px;
     }
 
     .bento__card h3 {
-        font-size: 1.1rem;
+        font-size: 1rem;
+        margin-bottom: 8px;
     }
 
     .bento__card p {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
+        line-height: 1.55;
     }
 
     .bento__card-tags {
-        margin-top: 12px;
+        margin-top: 10px;
+        gap: 5px;
+    }
+
+    .bento__card-tags span {
+        padding: 3px 8px;
+        font-size: 0.65rem;
     }
 
     .bento__card-metrics {
         flex-wrap: wrap;
-        gap: 8px;
-        padding-top: 14px;
+        gap: 6px;
+        padding-top: 12px;
     }
 
     .bento__metric-divider {
@@ -3254,30 +3333,46 @@
     }
 
     .bento__metric {
-        min-width: 60px;
+        min-width: 55px;
+    }
+
+    .bento__metric-val {
+        font-size: 1.1rem;
     }
 
     /* API Demo */
+    .api-demo {
+        border-radius: 10px;
+    }
+
     .api-demo__panels {
         padding: 10px;
+        min-height: 130px;
     }
 
     .api-demo__line {
-        font-size: 0.65rem;
+        font-size: 0.62rem;
+        line-height: 1.7;
     }
 
     /* Storage Demo */
     .storage-demo {
         padding: 10px;
+        border-radius: 10px;
     }
 
     .storage-demo__total-val {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
+    }
+
+    .storage-demo__bucket-name {
+        font-size: 0.72rem;
     }
 
     /* Scanner Demo */
     .scanner-demo {
         padding: 10px;
+        border-radius: 10px;
     }
 
     .scanner-demo__metrics {
@@ -3285,74 +3380,131 @@
     }
 
     .scanner-demo__metric {
-        min-width: 55px;
+        min-width: 50px;
+        padding: 6px 2px;
     }
 
     .scanner-demo__metric-val {
-        font-size: 0.78rem;
+        font-size: 0.75rem;
     }
 
     .scanner-demo__row {
-        font-size: 0.62rem;
+        font-size: 0.6rem;
         gap: 4px;
     }
 
     /* CDC Demo */
     .cdc-demo {
         padding: 10px;
+        border-radius: 10px;
     }
 
     .cdc-demo__pipeline-name {
         font-size: 0.68rem;
     }
 
+    .cdc-demo__total-val {
+        font-size: 0.82rem;
+    }
+
     /* Conductor Demo */
     .conductor-demo {
         padding: 10px;
+        border-radius: 10px;
     }
 
     .conductor-demo__broker-stats {
         grid-template-columns: repeat(2, 1fr);
     }
 
+    .conductor-demo__stat-val {
+        font-size: 0.78rem;
+    }
+
+    .conductor-demo__tp-val {
+        font-size: 0.78rem;
+    }
+
     /* Deep */
     .deep {
-        padding: 60px 16px;
+        padding: 50px 16px;
+    }
+
+    .deep__eyebrow {
+        font-size: 0.68rem;
+        margin-bottom: 12px;
     }
 
     .deep__title {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
     }
 
     .deep__tabs {
         gap: 4px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        padding-bottom: 6px;
     }
 
     .deep__tab {
         padding: 7px 12px;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+        white-space: nowrap;
     }
 
     .deep__grid {
         grid-template-columns: 1fr;
+        gap: 10px;
     }
 
     .deep__item {
-        padding: 20px;
+        padding: 18px;
+        border-radius: 12px;
+    }
+
+    .deep__item-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .deep__item-icon svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .deep__item h4 {
+        font-size: 0.92rem;
+    }
+
+    .deep__item p {
+        font-size: 0.8rem;
     }
 
     /* Dataflow */
     .dataflow {
-        padding: 50px 16px;
+        padding: 40px 16px;
+    }
+
+    .dataflow__eyebrow {
+        font-size: 0.68rem;
     }
 
     .dataflow__title {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
     }
 
     .dataflow__canvas-wrap {
         height: auto;
         min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
     }
 
     .dataflow__canvas {
@@ -3361,24 +3513,19 @@
 
     .dataflow__node {
         position: static;
-        margin: 0 auto 8px;
+        margin: 0 auto 6px;
         width: fit-content;
-    }
-
-    .dataflow__canvas-wrap {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0;
+        padding: 8px 14px;
+        font-size: 0.72rem;
     }
 
     .dataflow__node::after {
         content: "";
         display: block;
         width: 2px;
-        height: 20px;
+        height: 16px;
         background: rgba(52, 211, 153, 0.15);
-        margin: 8px auto 0;
+        margin: 6px auto 0;
     }
 
     .dataflow__node:last-child::after {
@@ -3387,122 +3534,178 @@
 
     /* API Lifecycle */
     .api-lifecycle {
-        padding: 60px 16px;
+        padding: 50px 16px;
     }
 
-    .api-lifecycle__title {
-        font-size: 1.8rem;
-    }
-
-    .api-lifecycle__subtitle {
-        font-size: 0.85rem;
-    }
-
-    .api-lifecycle__nodes {
-        gap: 6px;
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-
-    .api-lifecycle__node {
-        min-width: 60px;
-        padding: 8px 10px;
-    }
-
-    .api-lifecycle__node-icon {
-        width: 36px;
-        height: 36px;
-    }
-
-    .api-lifecycle__node-label {
+    .api-lifecycle__eyebrow {
         font-size: 0.68rem;
     }
 
+    .api-lifecycle__title {
+        font-size: 1.6rem;
+    }
+
+    .api-lifecycle__subtitle {
+        font-size: 0.82rem;
+    }
+
+    .api-lifecycle__pipeline {
+        margin-bottom: 24px;
+    }
+
+    .api-lifecycle__nodes {
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-bottom: 24px;
+    }
+
     .api-lifecycle__arrow {
-        width: 20px;
+        display: none;
+    }
+
+    .api-lifecycle__node {
+        min-width: 55px;
+        padding: 8px 10px;
+        border-radius: 12px;
+    }
+
+    .api-lifecycle__node-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+    }
+
+    .api-lifecycle__node-label {
+        font-size: 0.65rem;
     }
 
     .api-lifecycle__live {
         grid-template-columns: 1fr;
+        gap: 12px;
     }
 
     .api-lifecycle__live-req,
     .api-lifecycle__live-res {
-        height: 240px;
+        height: 220px;
     }
 
     .api-lifecycle__live-code {
-        font-size: 0.65rem;
+        font-size: 0.62rem;
         line-height: 1.6;
         padding: 10px;
     }
 
     /* Architecture */
     .arch {
-        padding: 60px 16px;
+        padding: 50px 16px;
+    }
+
+    .arch__eyebrow {
+        font-size: 0.68rem;
     }
 
     .arch__title {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
     }
 
     .arch__grid {
         grid-template-columns: 1fr;
+        gap: 10px;
     }
 
     .arch__card {
-        padding: 24px;
+        padding: 20px;
+        border-radius: 14px;
+    }
+
+    .arch__card h4 {
+        font-size: 1rem;
+    }
+
+    .arch__card p {
+        font-size: 0.82rem;
     }
 
     /* CLI */
     .cli-section {
-        padding: 60px 16px;
+        padding: 50px 16px;
+    }
+
+    .cli-section__eyebrow {
+        font-size: 0.68rem;
     }
 
     .cli-section__title {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
+    }
+
+    .cli-section__subtitle {
+        font-size: 0.8rem;
+    }
+
+    .terminal {
+        border-radius: 12px;
     }
 
     .terminal__body {
-        padding: 16px;
-        font-size: 0.72rem;
+        padding: 14px;
+        font-size: 0.7rem;
+        line-height: 1.8;
+    }
+
+    .terminal__input-row {
+        padding: 10px 14px;
     }
 
     .terminal__input {
-        font-size: 0.75rem;
+        font-size: 0.72rem;
     }
 
     .terminal__autocomplete {
-        width: 280px;
+        width: calc(100vw - 60px);
+        max-width: 320px;
     }
 
     .cli-section__features {
         flex-direction: column;
         align-items: center;
+        gap: 8px;
     }
 
     .cli-section__feat {
         width: 100%;
         max-width: 260px;
         justify-content: center;
+        padding: 8px 14px;
+    }
+
+    .cli-section__feat svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .cli-section__feat span {
+        font-size: 0.78rem;
     }
 
     /* CTA */
     .cta {
-        padding: 80px 16px;
+        padding: 70px 16px;
     }
 
     .cta__title {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
     }
 
     .cta__subtitle {
-        font-size: 0.9rem;
+        font-size: 0.88rem;
     }
 
     .cta__actions {
         flex-direction: column;
         align-items: center;
+        gap: 10px;
     }
 
     .cta__actions .btn {
@@ -3513,86 +3716,112 @@
 
     /* Search */
     .search-trigger {
-        bottom: 16px;
-        right: 16px;
-        padding: 10px 16px;
+        bottom: 14px;
+        right: 14px;
+        padding: 10px 14px;
         font-size: 0.78rem;
     }
 
-    .search-modal {
-        width: calc(100vw - 24px);
+    .search-overlay {
+        padding-top: 8vh;
     }
 
-    .search-overlay {
-        padding-top: 10vh;
+    .search-modal {
+        width: calc(100vw - 20px);
+        max-height: 70vh;
     }
 
     .search-modal__input {
-        font-size: 0.95rem;
+        font-size: 0.92rem;
     }
 
-    /* Cursor */
+    .search-modal__kbd {
+        display: none;
+    }
+
+    /* Disable cursor effects */
     .cursor-glow,
     .cursor-ring,
     .cursor-crosshair,
     .cursor-trail {
-        display: none;
+        display: none !important;
     }
 }
 
+/* =============================================
+   RESPONSIVE — SMALL MOBILE (480px)
+   ============================================= */
 @media (max-width: 480px) {
+    .hero {
+        padding: 60px 14px 32px;
+    }
+
     .hero__title {
-        font-size: 1.7rem;
+        font-size: 1.6rem;
     }
 
     .hero__badge {
-        font-size: 0.65rem;
-        padding: 5px 12px;
+        font-size: 0.62rem;
+        padding: 5px 10px;
     }
 
     .hero__stat-num {
-        font-size: 1.3rem;
+        font-size: 1.2rem;
     }
 
     .btn {
-        padding: 12px 22px;
-        font-size: 0.88rem;
+        padding: 12px 20px;
+        font-size: 0.85rem;
+    }
+
+    .bento,
+    .deep,
+    .dataflow,
+    .api-lifecycle,
+    .arch,
+    .cli-section {
+        padding: 40px 14px;
     }
 
     .bento__card-content {
-        padding: 18px;
+        padding: 16px;
     }
 
     .bento__card h3 {
-        font-size: 1rem;
+        font-size: 0.95rem;
+    }
+
+    .bento__card p {
+        font-size: 0.78rem;
     }
 
     .deep__tab {
         padding: 6px 10px;
-        font-size: 0.68rem;
+        font-size: 0.65rem;
+    }
+
+    .deep__item {
+        padding: 16px;
     }
 
     .api-lifecycle__node {
-        min-width: 50px;
+        min-width: 48px;
         padding: 6px 8px;
     }
 
     .api-lifecycle__node-icon {
-        width: 30px;
-        height: 30px;
-    }
-
-    .api-lifecycle__arrow {
-        width: 14px;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
     }
 
     .api-lifecycle__live-req,
     .api-lifecycle__live-res {
-        height: 200px;
+        height: 180px;
     }
 
     .arch__card {
-        padding: 20px;
+        padding: 16px;
     }
 
     .search-trigger span {
@@ -3601,6 +3830,48 @@
 
     .search-trigger {
         padding: 10px 12px;
+    }
+}
+
+/* =============================================
+   RESPONSIVE — TINY (360px)
+   ============================================= */
+@media (max-width: 360px) {
+    .hero__title {
+        font-size: 1.4rem;
+    }
+
+    .hero__badge {
+        font-size: 0.58rem;
+        padding: 4px 8px;
+    }
+
+    .hero__stat {
+        min-width: 60px;
+    }
+
+    .bento__title,
+    .deep__title,
+    .dataflow__title,
+    .api-lifecycle__title,
+    .arch__title,
+    .cli-section__title,
+    .cta__title {
+        font-size: 1.35rem;
+    }
+
+    .deep__tabs {
+        gap: 3px;
+    }
+
+    .deep__tab {
+        padding: 5px 8px;
+        font-size: 0.6rem;
+    }
+
+    .scanner-demo__row {
+        grid-template-columns: 1fr 0.5fr 0.5fr 0.5fr;
+        font-size: 0.55rem;
     }
 }
 
