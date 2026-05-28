@@ -2908,10 +2908,37 @@
     }
 
     .dataflow__canvas-wrap {
-        height: 120px;
+        height: auto;
+        min-height: 120px;
+    }
+
+    .dataflow__canvas {
+        display: none;
     }
 
     .dataflow__node {
+        position: static;
+        margin: 0 auto 8px;
+        width: fit-content;
+    }
+
+    .dataflow__canvas-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+    }
+
+    .dataflow__node::after {
+        content: "";
+        display: block;
+        width: 2px;
+        height: 20px;
+        background: rgba(52, 211, 153, 0.15);
+        margin: 8px auto 0;
+    }
+
+    .dataflow__node:last-child::after {
         display: none;
     }
 
