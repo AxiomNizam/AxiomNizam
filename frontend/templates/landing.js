@@ -2896,10 +2896,39 @@
     // ---- Deep Feature Tabs ----
     var deepTabs = document.querySelectorAll('.deep__tab');
     var deepPanels = document.querySelectorAll('.deep__panel');
+    var deepSection = document.getElementById('deep-features');
+    var deepAnimated = false;
 
+    // Staggered animation for items in a panel
+    function animateDeepPanel(panel) {
+        var items = panel.querySelectorAll('.deep__item');
+
+        // Reset items
+        panel.classList.add('animating-in');
+        items.forEach(function(item) {
+            item.classList.remove('animate-in');
+        });
+
+        // Stagger animate each item
+        items.forEach(function(item, index) {
+            setTimeout(function() {
+                item.classList.add('animate-in');
+            }, index * 80 + 100);
+        });
+
+        // Clean up after all animations
+        setTimeout(function() {
+            panel.classList.remove('animating-in');
+        }, items.length * 80 + 700);
+    }
+
+    // Tab click handler with animations
     deepTabs.forEach(function(tab) {
         tab.addEventListener('click', function() {
             var targetId = 'panel-' + tab.getAttribute('data-tab');
+
+            // Don't re-animate if clicking the same tab
+            if (tab.classList.contains('active')) return;
 
             deepTabs.forEach(function(t) { t.classList.remove('active'); });
             deepPanels.forEach(function(p) { p.classList.remove('active'); });
@@ -2908,9 +2937,65 @@
             var targetPanel = document.getElementById(targetId);
             if (targetPanel) {
                 targetPanel.classList.add('active');
+                animateDeepPanel(targetPanel);
             }
+
+            // Ripple effect on tab
+            var ripple = document.createElement('span');
+            ripple.style.cssText = 'position:absolute;inset:0;background:radial-gradient(circle at center,rgba(52,211,153,0.2),transparent 70%);pointer-events:none;border-radius:inherit;';
+            tab.style.position = 'relative';
+            tab.style.overflow = 'hidden';
+            tab.appendChild(ripple);
+            setTimeout(function() { ripple.remove(); }, 600);
         });
     });
+
+    // ---- Deep Section Scroll-Triggered Animation ----
+    if (deepSection) {
+        var deepScrollObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting && !deepAnimated) {
+                    deepAnimated = true;
+
+                    // Animate the header
+                    var header = deepSection.querySelector('.deep__header');
+                    if (header) {
+                        header.style.opacity = '0';
+                        header.style.transform = 'translateY(20px)';
+                        setTimeout(function() {
+                            header.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+                            header.style.opacity = '1';
+                            header.style.transform = 'translateY(0)';
+                        }, 100);
+                    }
+
+                    // Animate the tabs with stagger
+                    var tabs = deepSection.querySelector('.deep__tabs');
+                    if (tabs) {
+                        tabs.style.opacity = '0';
+                        tabs.style.transform = 'translateY(20px)';
+                        setTimeout(function() {
+                            tabs.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+                            tabs.style.opacity = '1';
+                            tabs.style.transform = 'translateY(0)';
+                        }, 300);
+                    }
+
+                    // Animate the active panel items
+                    var activePanel = deepSection.querySelector('.deep__panel.active');
+                    if (activePanel) {
+                        setTimeout(function() {
+                            animateDeepPanel(activePanel);
+                        }, 500);
+                    }
+
+                    deepScrollObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.15 });
+
+        deepScrollObserver.observe(deepSection);
+    }
 
     // ---- Parallax on Scroll ----
     var parallaxElements = document.querySelectorAll('[data-parallax]');

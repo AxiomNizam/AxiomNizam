@@ -1793,6 +1793,7 @@
     justify-content: center;
     flex-wrap: wrap;
     margin-bottom: 48px;
+    position: relative;
 }
 
 .deep__tab {
@@ -1805,18 +1806,45 @@
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.deep__tab::before {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: #34d399;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateX(-50%);
+    border-radius: 1px;
 }
 
 .deep__tab:hover {
     color: #e2e8f0;
     border-color: rgba(148, 163, 184, 0.25);
+    transform: translateY(-2px);
+}
+
+.deep__tab:hover::before {
+    width: 60%;
 }
 
 .deep__tab.active {
     background: rgba(52, 211, 153, 0.1);
     border-color: rgba(52, 211, 153, 0.3);
     color: #34d399;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 211, 153, 0.15);
+}
+
+.deep__tab.active::before {
+    width: 80%;
+    background: #34d399;
 }
 
 .deep__panel {
@@ -1825,12 +1853,43 @@
 
 .deep__panel.active {
     display: block;
-    animation: fadeIn 0.4s ease;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+.deep__panel.animating-in .deep__item {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+}
+
+.deep__panel.animating-in .deep__item.animate-in {
+    animation: deepItemIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes deepItemIn {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes deepPanelIn {
+    from {
+        opacity: 0;
+        transform: perspective(1000px) rotateX(5deg);
+    }
+    to {
+        opacity: 1;
+        transform: perspective(1000px) rotateX(0);
+    }
+}
+
+.deep__panel.active {
+    animation: deepPanelIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .deep__grid {
@@ -1847,6 +1906,23 @@
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
+    transform-origin: center bottom;
+}
+
+.deep__item::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #34d399, transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.deep__item:hover::before {
+    opacity: 1;
 }
 
 .deep__item::after {
@@ -1867,9 +1943,9 @@
 
 .deep__item:hover {
     background: rgba(15, 23, 42, 0.6);
-    border-color: rgba(148, 163, 184, 0.12);
-    transform: translateY(-3px);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+    border-color: rgba(52, 211, 153, 0.15);
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(52, 211, 153, 0.05);
 }
 
 .deep__item-icon {
@@ -1882,12 +1958,39 @@
     justify-content: center;
     margin-bottom: 14px;
     flex-shrink: 0;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+}
+
+.deep__item-icon::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 14px;
+    background: rgba(52, 211, 153, 0.1);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.deep__item:hover .deep__item-icon {
+    background: rgba(52, 211, 153, 0.15);
+    transform: scale(1.1) rotate(-5deg);
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.2);
+}
+
+.deep__item:hover .deep__item-icon::after {
+    opacity: 1;
 }
 
 .deep__item-icon svg {
     width: 18px;
     height: 18px;
     color: #34d399;
+    transition: transform 0.3s ease;
+}
+
+.deep__item:hover .deep__item-icon svg {
+    transform: scale(1.1);
 }
 
 .deep__item h4 {
@@ -1895,12 +1998,22 @@
     font-weight: 700;
     color: #f8fafc;
     margin-bottom: 8px;
+    transition: color 0.3s ease;
+}
+
+.deep__item:hover h4 {
+    color: #34d399;
 }
 
 .deep__item p {
     font-size: 0.85rem;
     color: #94a3b8;
     line-height: 1.6;
+    transition: color 0.3s ease;
+}
+
+.deep__item:hover p {
+    color: #cbd5e1;
 }
 
 /* =============================================
