@@ -718,6 +718,75 @@
         });
     });
 
+    // ---- Toast Notifications ----
+    var toastContainer = document.getElementById('toastContainer');
+    var toastQueue = [];
+    var toastActive = false;
+
+    function showToast(message, type, duration) {
+        type = type || 'info';
+        duration = duration || 4000;
+
+        var icons = {
+            success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="toast__icon toast__icon--success"><polyline points="20 6 9 17 4 12"/></svg>',
+            info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="toast__icon toast__icon--info"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+            warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="toast__icon toast__icon--warning"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+            error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="toast__icon toast__icon--error"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+        };
+
+        var toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerHTML = (icons[type] || icons.info)
+            + '<span class="toast__text">' + message + '</span>'
+            + '<div class="toast__progress"></div>';
+
+        toastContainer.appendChild(toast);
+
+        // Trigger show animation
+        requestAnimationFrame(function() {
+            toast.classList.add('show');
+        });
+
+        // Auto-hide after duration
+        setTimeout(function() {
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            setTimeout(function() {
+                toast.remove();
+            }, 400);
+        }, duration);
+    }
+
+    // Show demo toasts when sections come into view
+    var toastDemoSections = {
+        'bento': [
+            { msg: '<strong>111 modules</strong> loaded successfully', type: 'success' },
+            { msg: '<strong>API Builder</strong> — 350+ endpoints ready', type: 'info' }
+        ],
+        'apiLifecycle': [
+            { msg: '<strong>Gateway</strong> — JWT validated', type: 'success' },
+            { msg: '<strong>Database</strong> — Query executed in 12ms', type: 'info' }
+        ]
+    };
+
+    Object.keys(toastDemoSections).forEach(function(sectionId) {
+        var section = document.getElementById(sectionId);
+        if (section) {
+            var toastObserver = new IntersectionObserver(function(entries) {
+                if (entries[0].isIntersecting) {
+                    var toasts = toastDemoSections[sectionId];
+                    toasts.forEach(function(t, i) {
+                        setTimeout(function() {
+                            showToast(t.msg, t.type);
+                        }, i * 2000 + 500);
+                    });
+                    toastObserver.unobserve(section);
+                }
+            }, { threshold: 0.3 });
+            toastObserver.observe(section);
+        }
+    });
+
     // ============================================================
     // INTERACTIVE CLI TERMINAL
     // ============================================================
@@ -1079,6 +1148,56 @@
                 }
             });
         }
+    }
+
+    // ---- Terminal Auto-Play Typing Animation ----
+    var cliSection = document.getElementById('cli');
+    var cliAnimated = false;
+
+    if (cliSection && termInput) {
+        var cliObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting && !cliAnimated) {
+                    cliAnimated = true;
+
+                    var demoCommands = ['health check', 'api list', 'metrics show'];
+                    var cmdIndex = 0;
+
+                    function typeCommand() {
+                        if (cmdIndex >= demoCommands.length) return;
+                        var cmd = demoCommands[cmdIndex];
+                        var charIndex = 0;
+
+                        // Focus terminal
+                        termInput.focus();
+
+                        // Type each character
+                        var typeInterval = setInterval(function() {
+                            if (charIndex <= cmd.length) {
+                                termInput.value = cmd.substring(0, charIndex);
+                                charIndex++;
+                            } else {
+                                clearInterval(typeInterval);
+                                // Execute after a short delay
+                                setTimeout(function() {
+                                    executeCommand(cmd);
+                                    termInput.value = '';
+                                    cmdIndex++;
+                                    // Type next command after a delay
+                                    setTimeout(typeCommand, 1500);
+                                }, 500);
+                            }
+                        }, 80);
+                    }
+
+                    // Start typing after a delay
+                    setTimeout(typeCommand, 1000);
+                    cliObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.3 });
+
+        cliObserver.observe(cliSection);
     }
 
     // ============================================================
@@ -2965,9 +3084,17 @@
         statsObserver.observe(heroStats);
     }
 
-    // ---- 3D Tilt Effect on Cards ----
+    // ---- 3D Tilt Effect on Cards with Glare ----
     var tiltCards = document.querySelectorAll('[data-tilt]');
     tiltCards.forEach(function(card) {
+        // Create glare element if not exists
+        var glare = card.querySelector('.bento__card-glare');
+        if (!glare) {
+            glare = document.createElement('div');
+            glare.className = 'bento__card-glare';
+            card.appendChild(glare);
+        }
+
         card.addEventListener('mousemove', function(e) {
             var rect = card.getBoundingClientRect();
             var x = e.clientX - rect.left;
@@ -2984,9 +3111,17 @@
                 spotlight.style.left = x + 'px';
                 spotlight.style.top = y + 'px';
             }
+
+            // Update glare effect
+            var glareX = (x / rect.width) * 100;
+            var glareY = (y / rect.height) * 100;
+            glare.style.background = 'radial-gradient(circle at ' + glareX + '% ' + glareY + '%, rgba(255, 255, 255, 0.08), transparent 60%)';
+            glare.style.opacity = '1';
         });
+
         card.addEventListener('mouseleave', function() {
             card.style.transform = '';
+            glare.style.opacity = '0';
         });
     });
 
@@ -3115,6 +3250,29 @@
         }, { threshold: 0.15 });
 
         deepScrollObserver.observe(deepSection);
+    }
+
+    // ---- Data Visualization Bar Animation ----
+    var analyticsBars = document.querySelectorAll('.analytics-demo__bar');
+    if (analyticsBars.length > 0) {
+        var barsObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    var bars = entry.target.querySelectorAll('.analytics-demo__bar');
+                    bars.forEach(function(bar, index) {
+                        setTimeout(function() {
+                            bar.classList.add('animate');
+                        }, index * 100);
+                    });
+                    barsObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.3 });
+
+        var barsContainer = document.querySelector('.analytics-demo__bars');
+        if (barsContainer) {
+            barsObserver.observe(barsContainer);
+        }
     }
 
     // ---- Text Scramble Effect ----

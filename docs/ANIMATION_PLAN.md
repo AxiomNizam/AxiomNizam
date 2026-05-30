@@ -50,6 +50,13 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 | Scroll progress bar | Global (top) | Done | `landing.js`, `landing.css` |
 | Floating badge animation | Bento tags | Done | `landing.css` |
 | Text gradient animation | Section titles | Done | `landing.css` |
+| Parallax on section headers | Bento, Deep, API, Arch | Done | `landing.js`, `landing.css` |
+| Text scramble effect | Section eyebrows | Done | `landing.js` |
+| Enhanced reveal types | All sections | Done | `landing.js`, `landing.css` |
+| Card tilt with glare | Bento cards | Done | `landing.js`, `landing.css` |
+| Data viz bar animation | Analytics demo | Done | `landing.js`, `landing.css` |
+| CLI typing auto-play | CLI section | Done | `landing.js` |
+| Toast notifications | Bento, API Lifecycle | Done | `landing.js`, `landing.css` |
 
 ---
 
@@ -135,43 +142,49 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 
 ---
 
-## Phase 3: Advanced Effects (3-5 days)
+## Phase 3: Advanced Effects (3-5 days) — COMPLETE
 
 ### 3.1 Card Tilt with Glare
 - **What:** Cards tilt on hover with a light reflection effect that follows mouse
-- **Where:** Bento cards, Deep Dive items
+- **Where:** Bento cards
 - **How:** Mouse position tracking + perspective transform + radial gradient overlay
 - **Complexity:** Medium
+- **Status:** Done (added `.bento__card-glare` with mix-blend-mode overlay)
 
 ### 3.2 Morphing SVG Icons
 - **What:** Icons animate between states on hover (e.g., lock to unlock)
 - **Where:** Feature icons, section icons
 - **How:** SVG path morphing with `d` attribute animation
 - **Complexity:** Medium
+- **Status:** Deferred (requires SVG path data for each icon state)
 
 ### 3.3 Interactive Globe
 - **What:** 3D rotating globe with connection lines between cities
 - **Where:** GIS Intelligence section
 - **How:** Three.js or CSS 3D transforms with SVG paths
 - **Complexity:** High
+- **Status:** Deferred (requires Three.js library)
 
 ### 3.4 Data Visualization Motion
 - **What:** Charts animate bars/lines/pies on load with easing
-- **Where:** Analytics demo, dashboard previews
-- **How:** SVG animation or Canvas drawing with requestAnimationFrame
+- **Where:** Analytics demo card
+- **How:** IntersectionObserver + staggered height animation
 - **Complexity:** Medium
+- **Status:** Done
 
 ### 3.5 Typing Animation
 - **What:** Terminal-style typing effect for code snippets
-- **Where:** CLI section, API demo
-- **How:** Character-by-character reveal with cursor blink
+- **Where:** CLI section (auto-plays health check, api list, metrics show)
+- **How:** Character-by-character reveal with command execution
 - **Complexity:** Low-Medium
+- **Status:** Done
 
 ### 3.6 Notification Toast Slide
 - **What:** Toast notifications slide in from corner during demos
-- **Where:** Demo sections (scanner, CDC, conductor)
+- **Where:** Bento section, API Lifecycle section
 - **How:** CSS transform with JavaScript timer
 - **Complexity:** Low
+- **Status:** Done (`.toast-container`, `.toast`, `showToast()` function)
 
 ---
 

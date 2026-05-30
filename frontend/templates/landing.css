@@ -132,6 +132,83 @@
     z-index: 9997;
 }
 
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    color: #e2e8f0;
+    font-size: 0.82rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transform: translateX(120%);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+    max-width: 320px;
+}
+
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast.hide {
+    transform: translateX(120%);
+    opacity: 0;
+}
+
+.toast__icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.toast__icon--success { color: #34d399; }
+.toast__icon--info { color: #38bdf8; }
+.toast__icon--warning { color: #fbbf24; }
+.toast__icon--error { color: #ef4444; }
+
+.toast__text {
+    flex: 1;
+}
+
+.toast__text strong {
+    color: #f8fafc;
+    font-weight: 700;
+}
+
+.toast__progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: #34d399;
+    border-radius: 0 0 10px 10px;
+    animation: toastProgress 4s linear forwards;
+}
+
+@keyframes toastProgress {
+    from { width: 100%; }
+    to { width: 0%; }
+}
+
 /* Scroll Progress Bar */
 .scroll-progress {
     position: fixed;
@@ -1100,6 +1177,18 @@
 
 .bento__card:hover .bento__card-spotlight {
     opacity: 1;
+}
+
+/* Glare effect */
+.bento__card-glare {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 2;
+    mix-blend-mode: overlay;
 }
 
 /* Hover canvas overlay */
@@ -4447,10 +4536,23 @@
 
 .analytics-demo__bar {
     flex: 1;
-    height: var(--h);
+    height: 0;
     background: linear-gradient(to top, #34d399, #38bdf8);
     border-radius: 2px 2px 0 0;
-    animation: barGrow 1.5s ease-out forwards;
+    transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0.8;
+}
+
+.analytics-demo__bar.animate {
+    height: var(--h);
+}
+
+.analytics-demo__bar:hover {
+    opacity: 1;
+    background: linear-gradient(to top, #34d399, #a78bfa);
+    transform: scaleY(1.1);
+    transform-origin: bottom;
+}
     opacity: 0.8;
 }
 
