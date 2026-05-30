@@ -641,6 +641,57 @@
         apiObserver.observe(apiStage);
     }
 
+    // ---- Scroll-Linked Timeline for API Lifecycle ----
+    var apiScrollBar = document.getElementById('apiScrollBar');
+    var apiScrollStages = document.querySelectorAll('.api-lifecycle__scroll-stage');
+    var apiLifecycleSection = document.getElementById('apiLifecycle');
+
+    if (apiScrollBar && apiLifecycleSection) {
+        var stageNames = ['client', 'gateway', 'builder', 'db', 'response'];
+
+        function updateApiTimeline() {
+            var rect = apiLifecycleSection.getBoundingClientRect();
+            var viewportHeight = window.innerHeight;
+            var sectionHeight = rect.height;
+
+            // Calculate scroll progress through the section
+            var scrollProgress = Math.max(0, Math.min(1,
+                (viewportHeight - rect.top) / (viewportHeight + sectionHeight)
+            ));
+
+            // Update progress bar
+            apiScrollBar.style.setProperty('--progress', (scrollProgress * 100) + '%');
+
+            // Update active stages
+            var activeIndex = Math.floor(scrollProgress * stageNames.length);
+            apiScrollStages.forEach(function(stage, index) {
+                if (index <= activeIndex) {
+                    stage.classList.add('active');
+                } else {
+                    stage.classList.remove('active');
+                }
+            });
+        }
+
+        // Update on scroll
+        window.addEventListener('scroll', function() {
+            requestAnimationFrame(updateApiTimeline);
+        });
+
+        // Stage click to scroll
+        apiScrollStages.forEach(function(stage) {
+            stage.addEventListener('click', function() {
+                var stageName = stage.getAttribute('data-stage');
+                var node = document.querySelector('.api-lifecycle__node--' + stageName);
+                if (node) {
+                    node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    node.classList.add('active');
+                    setTimeout(function() { node.classList.remove('active'); }, 2000);
+                }
+            });
+        });
+    }
+
     // ---- Magnetic Buttons ----
     var magneticButtons = document.querySelectorAll('.btn--primary, .btn--ghost, .hero__actions .btn');
     var magneticThreshold = 100; // pixels
@@ -3343,6 +3394,29 @@
         scrambleElements.forEach(function(el) {
             el.setAttribute('data-scramble', el.textContent);
             scrambleObserver.observe(el);
+        });
+    }
+
+    // ---- Section Blur on Scroll ----
+    var sections = document.querySelectorAll('.bento, .deep, .arch, .api-lifecycle, .cli');
+    if (sections.length > 0) {
+        var blurObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.remove('section-blur');
+                } else {
+                    // Only blur if section is far from viewport
+                    var rect = entry.boundingClientRect;
+                    var viewportHeight = window.innerHeight;
+                    if (rect.bottom < -viewportHeight * 0.5 || rect.top > viewportHeight * 1.5) {
+                        entry.target.classList.add('section-blur');
+                    }
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '100px 0px' });
+
+        sections.forEach(function(section) {
+            blurObserver.observe(section);
         });
     }
 

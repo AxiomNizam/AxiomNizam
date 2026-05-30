@@ -486,6 +486,90 @@
     75% { transform: translate(15px, -10px) scale(1.03); }
 }
 
+/* Gradient mesh for sections */
+.bento::before,
+.deep::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(52, 211, 153, 0.03), transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(56, 189, 248, 0.03), transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(167, 139, 250, 0.02), transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+    animation: meshShift 15s ease-in-out infinite;
+}
+
+@keyframes meshShift {
+    0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+    33% { background-position: 20% 20%, 80% 30%, 30% 80%; }
+    66% { background-position: -10% 10%, 110% -10%, 60% 110%; }
+}
+
+/* Page transition blur on sections */
+.bento,
+.deep,
+.arch,
+.api-lifecycle,
+.cli {
+    transition: filter 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
+    will-change: filter, opacity;
+}
+
+.section-blur {
+    filter: blur(2px);
+    opacity: 0.7;
+}
+
+/* API Lifecycle Scroll-Linked Timeline */
+.api-lifecycle__scroll-progress {
+    margin-top: 16px;
+    padding: 0 20px;
+}
+
+.api-lifecycle__scroll-bar {
+    height: 3px;
+    background: rgba(148, 163, 184, 0.1);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+}
+
+.api-lifecycle__scroll-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: var(--progress, 0%);
+    background: linear-gradient(90deg, #34d399, #38bdf8, #a78bfa);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.api-lifecycle__scroll-stages {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.api-lifecycle__scroll-stage {
+    font-size: 0.7rem;
+    color: #475569;
+    transition: color 0.3s ease, transform 0.3s ease;
+    cursor: pointer;
+}
+
+.api-lifecycle__scroll-stage.active {
+    color: #34d399;
+    transform: translateY(-2px);
+}
+
+.api-lifecycle__scroll-stage:hover {
+    color: #e2e8f0;
+}
+
 /* Animated Logo Background */
 .hero__logo-bg {
     position: absolute;
@@ -1072,6 +1156,7 @@
     padding: 100px 24px;
     max-width: 1280px;
     margin: 0 auto;
+    position: relative;
 }
 
 .bento__header {
@@ -2213,6 +2298,37 @@
     position: relative;
     overflow: hidden;
     transform-origin: center bottom;
+    cursor: pointer;
+}
+
+/* Expand detail on hover */
+.deep__item-expand {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, margin-top 0.3s ease;
+    margin-top: 0;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    line-height: 1.6;
+}
+
+.deep__item:hover .deep__item-expand {
+    max-height: 100px;
+    opacity: 1;
+    margin-top: 12px;
+}
+
+.deep__item-expand-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(52, 211, 153, 0.08);
+    border: 1px solid rgba(52, 211, 153, 0.15);
+    color: #6ee7b7;
+    font-size: 0.7rem;
+    margin-right: 6px;
+    margin-top: 6px;
 }
 
 .deep__item::before {
@@ -2886,6 +3002,7 @@
     padding: 100px 24px;
     max-width: 1280px;
     margin: 0 auto;
+    position: relative;
 }
 
 .arch__header {
@@ -2924,6 +3041,28 @@
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
+    transform-style: preserve-3d;
+    transform: rotateX(2deg) rotateY(-1deg);
+    transform-origin: center bottom;
+}
+
+.arch__card:nth-child(2) {
+    transform: rotateX(1deg) rotateY(1deg);
+}
+
+.arch__card:nth-child(3) {
+    transform: rotateX(-1deg) rotateY(-2deg);
+}
+
+.arch__card:nth-child(4) {
+    transform: rotateX(2deg) rotateY(2deg);
+}
+
+.arch__card:hover {
+    transform: rotateX(0) rotateY(0) translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 30px rgba(52, 211, 153, 0.1);
+    border-color: rgba(52, 211, 153, 0.2);
+    z-index: 10;
 }
 
 .arch__card::before {
@@ -3810,11 +3949,6 @@
     pointer-events: none;
     animation: sectionOrbFloat 18s ease-in-out infinite;
     animation-delay: -5s;
-}
-
-.bento,
-.deep {
-    position: relative;
 }
 
 @keyframes sectionOrbFloat {

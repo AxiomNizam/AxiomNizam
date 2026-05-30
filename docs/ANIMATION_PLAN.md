@@ -60,6 +60,11 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 | Horizontal scroll tabs | Deep Dive (mobile) | Done | `landing.css` |
 | SVG icon draw-on animation | Bento cards | Done | `landing.css` |
 | Interactive globe | GIS demo | Done | `landing.css` |
+| Gradient mesh | Hero, sections | Done | `landing.css` |
+| Section blur on scroll | All sections | Done | `landing.js`, `landing.css` |
+| Scroll-linked timeline | API Lifecycle | Done | `landing.js`, `landing.css` |
+| Hover card expand | Deep Dive items | Done | `landing.css` |
+| 3D card stack | Architecture cards | Done | `landing.css` |
 
 ---
 
@@ -191,43 +196,49 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 
 ---
 
-## Phase 4: Premium Effects (5-7 days)
+## Phase 4: Premium Effects (5-7 days) — COMPLETE
 
 ### 4.1 Animated Gradient Mesh
 - **What:** Large animated gradient blobs floating in background
-- **Where:** Hero section, section backgrounds
+- **Where:** Hero section (5 orbs), bento/deep/api-lifecycle sections (mesh gradient)
 - **How:** CSS radial gradients with keyframe position animation
 - **Complexity:** Medium
+- **Status:** Done
 
 ### 4.2 Page Transition Blur
 - **What:** Sections blur/fade when scrolling between them
-- **Where:** Between major sections
-- **How:** Scroll-based filter: blur() calculation
+- **Where:** All major sections
+- **How:** IntersectionObserver with blur/opacity transitions
 - **Complexity:** Medium
+- **Status:** Done
 
 ### 4.3 Scroll-Linked Timeline
-- **What:** Progress bar syncs with API Lifecycle animation
+- **What:** Progress bar syncs with API Lifecycle scroll position
 - **Where:** API Lifecycle section
-- **How:** Scroll position mapped to animation progress
+- **How:** Scroll position mapped to progress bar + stage highlights
 - **Complexity:** Medium
+- **Status:** Done (clickable stages, scroll-linked progress)
 
 ### 4.4 Hover Card Expand
 - **What:** Cards expand to show more detail with smooth transition
-- **Where:** Deep Dive items, feature cards
-- **How:** CSS grid-template-rows animation or height transition
+- **Where:** Deep Dive items
+- **How:** CSS max-height transition on hidden expand content
 - **Complexity:** Medium
+- **Status:** Done (.deep__item-expand with max-height animation)
 
 ### 4.5 Background Particles Field
 - **What:** Subtle particle field that reacts to mouse movement
 - **Where:** Hero section
 - **How:** Canvas with particle physics, mouse repulsion/attraction
 - **Complexity:** High
+- **Status:** Done (was already implemented: 80 particles, repulsion, connections)
 
 ### 4.6 3D Card Stack
 - **What:** Cards stack in 3D and fan out on hover
-- **Where:** Feature showcase
+- **Where:** Architecture section cards
 - **How:** CSS perspective + rotateX/Y transforms
 - **Complexity:** Medium
+- **Status:** Done
 
 ---
 
@@ -263,13 +274,13 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 
 ## Priority Matrix
 
-| Phase | Effort | Impact | Priority |
-|-------|--------|--------|----------|
-| Phase 1: Micro-Interactions | 2 days | High | **P0** |
-| Phase 2: Scroll-Triggered | 3 days | High | **P0** |
-| Phase 3: Advanced Effects | 5 days | Medium | **P1** |
-| Phase 4: Premium Effects | 7 days | Medium | **P2** |
-| **Total** | **17 days** | | |
+| Phase | Effort | Impact | Priority | Status |
+|-------|--------|--------|----------|--------|
+| Phase 1: Micro-Interactions | 2 days | High | **P0** | **Complete** |
+| Phase 2: Scroll-Triggered | 3 days | High | **P0** | **Complete** |
+| Phase 3: Advanced Effects | 5 days | Medium | **P1** | **Complete** |
+| Phase 4: Premium Effects | 7 days | Medium | **P2** | **Complete** |
+| **Total** | **17 days** | | | **All Done** |
 
 ---
 
@@ -284,4 +295,4 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 
 ---
 
-*Last updated: 2026-05-30 (UTC+6)*
+*Last updated: 2026-05-31 (UTC+6)*
