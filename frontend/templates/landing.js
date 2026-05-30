@@ -399,6 +399,7 @@
     if (dfCanvas) {
         var dfCtx = dfCanvas.getContext('2d');
         var dfPackets = [];
+        var dfSpawnTimer = 0;
 
         function resizeDfCanvas() {
             dfCanvas.width = dfCanvas.offsetWidth;
@@ -429,35 +430,52 @@
                 var cpx = (from.x + to.x) / 2 + Math.sin(n * 1.3) * 25;
                 var cpy = (from.y + to.y) / 2 + Math.cos(n * 0.9) * 20;
 
-                // Connection line
+                // Connection line (request path)
                 dfCtx.beginPath();
                 dfCtx.moveTo(from.x, from.y);
-                dfCtx.quadraticCurveTo(cpx, cpy, to.x, to.y);
-                dfCtx.strokeStyle = 'rgba(52, 211, 153, 0.07)';
+                dfCtx.quadraticCurveTo(cpx, cpy - 8, to.x, to.y);
+                dfCtx.strokeStyle = 'rgba(52, 211, 153, 0.1)';
                 dfCtx.lineWidth = 1.5;
                 dfCtx.stroke();
 
-                // Pulse along connection
+                // Connection line (response path)
+                dfCtx.beginPath();
+                dfCtx.moveTo(to.x, to.y);
+                dfCtx.quadraticCurveTo(cpx, cpy + 8, from.x, from.y);
+                dfCtx.strokeStyle = 'rgba(56, 189, 248, 0.06)';
+                dfCtx.lineWidth = 1;
+                dfCtx.stroke();
+
+                // Animated pulse along request path
                 var pulseT = ((time * 0.3 + n * 0.18) % 1);
                 var px = (1 - pulseT) * (1 - pulseT) * from.x + 2 * (1 - pulseT) * pulseT * cpx + pulseT * pulseT * to.x;
-                var py = (1 - pulseT) * (1 - pulseT) * from.y + 2 * (1 - pulseT) * pulseT * cpy + pulseT * pulseT * to.y;
+                var py = (1 - pulseT) * (1 - pulseT) * from.y + 2 * (1 - pulseT) * pulseT * (cpy - 8) + pulseT * pulseT * to.y;
 
+                // Pulse glow
                 dfCtx.beginPath();
-                dfCtx.arc(px, py, 2.5, 0, Math.PI * 2);
-                dfCtx.fillStyle = from.color + 'aa';
+                dfCtx.arc(px, py, 10, 0, Math.PI * 2);
+                dfCtx.fillStyle = from.color + '10';
                 dfCtx.fill();
+
+                // Pulse dot
                 dfCtx.beginPath();
-                dfCtx.arc(px, py, 8, 0, Math.PI * 2);
-                dfCtx.fillStyle = from.color + '12';
+                dfCtx.arc(px, py, 3, 0, Math.PI * 2);
+                dfCtx.fillStyle = from.color + 'cc';
                 dfCtx.fill();
 
                 // Response dot going back
                 var respT = ((time * 0.22 + n * 0.15 + 0.5) % 1);
                 var rx = (1 - respT) * (1 - respT) * to.x + 2 * (1 - respT) * respT * cpx + respT * respT * from.x;
-                var ry = (1 - respT) * (1 - respT) * to.y + 2 * (1 - respT) * respT * cpy + respT * respT * from.y;
+                var ry = (1 - respT) * (1 - respT) * to.y + 2 * (1 - respT) * respT * (cpy + 8) + respT * respT * from.y;
+
                 dfCtx.beginPath();
-                dfCtx.arc(rx, ry, 1.8, 0, Math.PI * 2);
-                dfCtx.fillStyle = '#38bdf888';
+                dfCtx.arc(rx, ry, 6, 0, Math.PI * 2);
+                dfCtx.fillStyle = '#38bdf808';
+                dfCtx.fill();
+
+                dfCtx.beginPath();
+                dfCtx.arc(rx, ry, 2, 0, Math.PI * 2);
+                dfCtx.fillStyle = '#38bdf8aa';
                 dfCtx.fill();
             }
 
@@ -465,16 +483,22 @@
             dfNodes.forEach(function(node, i) {
                 var pulse = 0.35 + Math.sin(time * 2.5 + i * 1.2) * 0.15;
 
-                // Outer glow
+                // Outer glow ring
                 dfCtx.beginPath();
-                dfCtx.arc(node.x, node.y, 16, 0, Math.PI * 2);
+                dfCtx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+                dfCtx.fillStyle = node.color + '06';
+                dfCtx.fill();
+
+                // Middle ring
+                dfCtx.beginPath();
+                dfCtx.arc(node.x, node.y, 15, 0, Math.PI * 2);
                 dfCtx.fillStyle = node.color + '0a';
                 dfCtx.fill();
 
                 // Node circle
                 dfCtx.beginPath();
                 dfCtx.arc(node.x, node.y, 11, 0, Math.PI * 2);
-                dfCtx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                dfCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
                 dfCtx.fill();
                 dfCtx.strokeStyle = node.color + Math.floor(pulse * 255).toString(16).padStart(2, '0');
                 dfCtx.lineWidth = 1.5;
@@ -488,19 +512,37 @@
                 dfCtx.fillText(node.label, node.x, node.y);
             });
 
-            // Floating data packets
-            if (Math.random() < 0.06) {
+            // Auto-spawn data packets (forward direction)
+            dfSpawnTimer += 0.016;
+            if (dfSpawnTimer > 0.25) {
+                dfSpawnTimer = 0;
                 var srcIdx = Math.floor(Math.random() * (dfNodes.length - 1));
+                var colors = ['#34d399', '#38bdf8', '#a78bfa', '#fbbf24'];
                 dfPackets.push({
                     x: dfNodes[srcIdx].x, y: dfNodes[srcIdx].y,
                     tx: dfNodes[srcIdx + 1].x, ty: dfNodes[srcIdx + 1].y,
                     cx: (dfNodes[srcIdx].x + dfNodes[srcIdx + 1].x) / 2 + (Math.random() - 0.5) * 30,
-                    cy: (dfNodes[srcIdx].y + dfNodes[srcIdx + 1].y) / 2 + (Math.random() - 0.5) * 25,
+                    cy: (dfNodes[srcIdx].y + dfNodes[srcIdx + 1].y) / 2 + (Math.random() - 0.5) * 25 - 8,
                     t: 0, speed: 0.008 + Math.random() * 0.006,
-                    color: dfNodes[srcIdx].color, size: Math.random() * 2 + 1.2
+                    color: dfNodes[srcIdx].color, size: Math.random() * 2 + 1.5,
+                    reverse: false
                 });
+
+                // Also spawn some reverse packets (response)
+                if (Math.random() < 0.4) {
+                    dfPackets.push({
+                        x: dfNodes[srcIdx + 1].x, y: dfNodes[srcIdx + 1].y,
+                        tx: dfNodes[srcIdx].x, ty: dfNodes[srcIdx].y,
+                        cx: (dfNodes[srcIdx].x + dfNodes[srcIdx + 1].x) / 2 + (Math.random() - 0.5) * 30,
+                        cy: (dfNodes[srcIdx].y + dfNodes[srcIdx + 1].y) / 2 + (Math.random() - 0.5) * 25 + 8,
+                        t: 0, speed: 0.006 + Math.random() * 0.005,
+                        color: '#38bdf8', size: Math.random() * 1.5 + 1,
+                        reverse: true
+                    });
+                }
             }
 
+            // Update and draw packets
             for (var p = dfPackets.length - 1; p >= 0; p--) {
                 var pkt = dfPackets[p];
                 pkt.t += pkt.speed;
@@ -508,13 +550,28 @@
                 var tt = pkt.t;
                 var ppx = (1 - tt) * (1 - tt) * pkt.x + 2 * (1 - tt) * tt * pkt.cx + tt * tt * pkt.tx;
                 var ppy = (1 - tt) * (1 - tt) * pkt.y + 2 * (1 - tt) * tt * pkt.cy + tt * tt * pkt.ty;
+
+                // Trail effect
+                for (var trail = 1; trail <= 3; trail++) {
+                    var trailT = Math.max(0, tt - trail * 0.06);
+                    var trailPx = (1 - trailT) * (1 - trailT) * pkt.x + 2 * (1 - trailT) * trailT * pkt.cx + trailT * trailT * pkt.tx;
+                    var trailPy = (1 - trailT) * (1 - trailT) * pkt.y + 2 * (1 - trailT) * trailT * pkt.cy + trailT * trailT * pkt.ty;
+                    dfCtx.beginPath();
+                    dfCtx.arc(trailPx, trailPy, pkt.size * (1 - trail * 0.2), 0, Math.PI * 2);
+                    dfCtx.fillStyle = pkt.color + (30 - trail * 8).toString(16).padStart(2, '0');
+                    dfCtx.fill();
+                }
+
+                // Glow
+                dfCtx.beginPath();
+                dfCtx.arc(ppx, ppy, pkt.size + 5, 0, Math.PI * 2);
+                dfCtx.fillStyle = pkt.color + '15';
+                dfCtx.fill();
+
+                // Packet
                 dfCtx.beginPath();
                 dfCtx.arc(ppx, ppy, pkt.size, 0, Math.PI * 2);
-                dfCtx.fillStyle = pkt.color + 'cc';
-                dfCtx.fill();
-                dfCtx.beginPath();
-                dfCtx.arc(ppx, ppy, pkt.size + 4, 0, Math.PI * 2);
-                dfCtx.fillStyle = pkt.color + '15';
+                dfCtx.fillStyle = pkt.color + 'dd';
                 dfCtx.fill();
             }
 
@@ -523,8 +580,8 @@
             dfCtx.textBaseline = 'top';
             dfCtx.fillStyle = '#64748b';
             dfCtx.font = 'bold 10px monospace';
-            dfCtx.fillText('5 stages', w - 10, 12);
-            dfCtx.fillText('24K evt/min', w - 10, 26);
+            dfCtx.fillText('6 stages', w - 10, 12);
+            dfCtx.fillText('34K evt/min', w - 10, 26);
             dfCtx.fillStyle = '#34d399';
             dfCtx.fillText('LIVE', w - 10, 40);
 
