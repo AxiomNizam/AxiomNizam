@@ -57,6 +57,9 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 | Data viz bar animation | Analytics demo | Done | `landing.js`, `landing.css` |
 | CLI typing auto-play | CLI section | Done | `landing.js` |
 | Toast notifications | Bento, API Lifecycle | Done | `landing.js`, `landing.css` |
+| Horizontal scroll tabs | Deep Dive (mobile) | Done | `landing.css` |
+| SVG icon draw-on animation | Bento cards | Done | `landing.css` |
+| Interactive globe | GIS demo | Done | `landing.css` |
 
 ---
 
@@ -135,10 +138,10 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 
 ### 2.5 Horizontal Scroll Gallery
 - **What:** Features scroll horizontally with snap points
-- **Where:** Mobile feature showcase (Deep Dive tabs already horizontal-scroll on mobile)
+- **Where:** Deep Dive tabs on mobile
 - **How:** CSS scroll-snap with horizontal overflow
 - **Complexity:** Medium
-- **Status:** Deferred (Deep Dive tabs already have horizontal scroll on mobile via CSS)
+- **Status:** Done
 
 ---
 
@@ -152,18 +155,18 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 - **Status:** Done (added `.bento__card-glare` with mix-blend-mode overlay)
 
 ### 3.2 Morphing SVG Icons
-- **What:** Icons animate between states on hover (e.g., lock to unlock)
-- **Where:** Feature icons, section icons
-- **How:** SVG path morphing with `d` attribute animation
+- **What:** Icons animate with draw-on effect and hover pulse
+- **Where:** Bento card icons, Deep Dive icons, Architecture icons
+- **How:** SVG stroke-dasharray/dashoffset animation + drop-shadow pulse
 - **Complexity:** Medium
-- **Status:** Deferred (requires SVG path data for each icon state)
+- **Status:** Done
 
 ### 3.3 Interactive Globe
-- **What:** 3D rotating globe with connection lines between cities
-- **Where:** GIS Intelligence section
-- **How:** Three.js or CSS 3D transforms with SVG paths
-- **Complexity:** High
-- **Status:** Deferred (requires Three.js library)
+- **What:** CSS-based rotating globe with connection lines and pulsing dots
+- **Where:** GIS Intelligence demo card
+- **How:** CSS 3D transforms with rings, dots, and line animations
+- **Complexity:** Medium
+- **Status:** Done (CSS-based, no Three.js needed)
 
 ### 3.4 Data Visualization Motion
 - **What:** Charts animate bars/lines/pies on load with easing

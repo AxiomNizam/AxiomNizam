@@ -1191,6 +1191,73 @@
     mix-blend-mode: overlay;
 }
 
+/* SVG Icon Morph Animation */
+.bento__card-icon svg,
+.deep__item-icon svg,
+.arch__card-icon svg {
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    stroke-dasharray: 0;
+    stroke-dashoffset: 0;
+}
+
+.bento__card:hover .bento__card-icon svg,
+.deep__item:hover .deep__item-icon svg,
+.arch__card:hover .arch__card-icon svg {
+    stroke-width: 2;
+    filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.4));
+}
+
+/* Icon draw-on animation */
+.bento__card-icon svg path,
+.bento__card-icon svg polyline,
+.bento__card-icon svg rect,
+.bento__card-icon svg circle,
+.bento__card-icon svg line,
+.bento__card-icon svg ellipse {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bento__card.revealed .bento__card-icon svg path,
+.bento__card.revealed .bento__card-icon svg polyline,
+.bento__card.revealed .bento__card-icon svg rect,
+.bento__card.revealed .bento__card-icon svg circle,
+.bento__card.revealed .bento__card-icon svg line,
+.bento__card.revealed .bento__card-icon svg ellipse {
+    stroke-dashoffset: 0;
+}
+
+/* Stagger icon draw for each card */
+.bento__card:nth-child(1) .bento__card-icon svg * { transition-delay: 0.1s; }
+.bento__card:nth-child(2) .bento__card-icon svg * { transition-delay: 0.2s; }
+.bento__card:nth-child(3) .bento__card-icon svg * { transition-delay: 0.3s; }
+.bento__card:nth-child(4) .bento__card-icon svg * { transition-delay: 0.4s; }
+.bento__card:nth-child(5) .bento__card-icon svg * { transition-delay: 0.5s; }
+.bento__card:nth-child(6) .bento__card-icon svg * { transition-delay: 0.6s; }
+.bento__card:nth-child(7) .bento__card-icon svg * { transition-delay: 0.7s; }
+.bento__card:nth-child(8) .bento__card-icon svg * { transition-delay: 0.8s; }
+.bento__card:nth-child(9) .bento__card-icon svg * { transition-delay: 0.9s; }
+
+/* Icon hover rotation variations */
+.bento__card:nth-child(odd):hover .bento__card-icon {
+    transform: scale(1.1) rotate(-5deg);
+}
+
+.bento__card:nth-child(even):hover .bento__card-icon {
+    transform: scale(1.1) rotate(5deg);
+}
+
+/* Icon pulse on hover */
+@keyframes iconPulse {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.3)); }
+    50% { filter: drop-shadow(0 0 12px rgba(52, 211, 153, 0.6)); }
+}
+
+.bento__card:hover .bento__card-icon svg {
+    animation: iconPulse 2s ease-in-out infinite;
+}
+
 /* Hover canvas overlay */
 .bento__hover-canvas {
     position: absolute;
@@ -2010,6 +2077,29 @@
     flex-wrap: wrap;
     margin-bottom: 48px;
     position: relative;
+}
+
+@media (max-width: 768px) {
+    .deep__tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        justify-content: flex-start;
+        padding-bottom: 10px;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .deep__tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .deep__tab {
+        flex-shrink: 0;
+        scroll-snap-align: start;
+        white-space: nowrap;
+    }
 }
 
 .deep__tab {
@@ -4750,6 +4840,123 @@
     padding: 2px 8px;
     border-radius: 6px;
     background: rgba(148, 163, 184, 0.06);
+}
+
+/* Globe Visualization */
+.gis-demo__globe-container {
+    display: flex;
+    justify-content: center;
+    padding: 10px 0;
+    margin-bottom: 10px;
+}
+
+.gis-demo__globe {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    position: relative;
+    background: radial-gradient(circle at 35% 35%, rgba(56, 189, 248, 0.15), rgba(15, 23, 42, 0.8));
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    animation: globeRotate 20s linear infinite;
+    box-shadow: 0 0 30px rgba(56, 189, 248, 0.1), inset 0 0 20px rgba(56, 189, 248, 0.05);
+}
+
+@keyframes globeRotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.gis-demo__globe-ring {
+    position: absolute;
+    border: 1px solid rgba(56, 189, 248, 0.15);
+    border-radius: 50%;
+}
+
+.gis-demo__globe-ring--1 {
+    inset: 10%;
+    transform: rotateX(60deg);
+}
+
+.gis-demo__globe-ring--2 {
+    inset: 20%;
+    transform: rotateX(60deg) rotateY(30deg);
+}
+
+.gis-demo__globe-ring--3 {
+    inset: 5%;
+    transform: rotateX(60deg) rotateY(60deg);
+    border-style: dashed;
+}
+
+.gis-demo__globe-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+    animation: globeDotPulse 2s ease-in-out infinite;
+}
+
+.gis-demo__globe-dot::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    animation: globeDotRing 2s ease-out infinite;
+}
+
+@keyframes globeDotPulse {
+    0%, 100% { opacity: 0.8; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
+}
+
+@keyframes globeDotRing {
+    0% { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(2); opacity: 0; }
+}
+
+.gis-demo__globe-dot--1 { top: 20%; left: 30%; animation-delay: 0s; }
+.gis-demo__globe-dot--2 { top: 40%; left: 70%; animation-delay: 0.4s; background: #38bdf8; }
+.gis-demo__globe-dot--3 { top: 65%; left: 40%; animation-delay: 0.8s; }
+.gis-demo__globe-dot--4 { top: 30%; left: 55%; animation-delay: 1.2s; background: #a78bfa; }
+.gis-demo__globe-dot--5 { top: 75%; left: 65%; animation-delay: 1.6s; background: #fbbf24; }
+
+.gis-demo__globe-line {
+    position: absolute;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.3), transparent);
+    transform-origin: left center;
+    animation: globeLineGlow 3s ease-in-out infinite;
+}
+
+.gis-demo__globe-line--1 {
+    top: 25%;
+    left: 30%;
+    width: 40%;
+    transform: rotate(-15deg);
+}
+
+.gis-demo__globe-line--2 {
+    top: 50%;
+    left: 20%;
+    width: 55%;
+    transform: rotate(10deg);
+    animation-delay: 1s;
+}
+
+.gis-demo__globe-line--3 {
+    top: 70%;
+    left: 35%;
+    width: 30%;
+    transform: rotate(-5deg);
+    animation-delay: 2s;
+}
+
+@keyframes globeLineGlow {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
 }
 
 .gis-demo__map-preview {
