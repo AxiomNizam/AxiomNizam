@@ -634,7 +634,7 @@
                 </div>
             </div>
 
-            <div class="bento__card bento__card--wide" data-reveal data-tilt onclick="requireAuth('/analytics')">
+            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/analytics')">
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -644,19 +644,6 @@
                     <h3>Analytics</h3>
                     <p>Custom dashboards with charts, heatmaps, KPI widgets — reorder layouts, CSV export, and real-time refresh.</p>
                     <div class="bento__card-tags"><span>Charts</span><span>KPI</span><span>Export</span></div>
-                </div>
-            </div>
-
-            <div class="bento__card bento__card--wide" data-reveal data-tilt onclick="requireAuth('/gis')">
-                <div class="bento__card-glow"></div>
-                <div class="bento__card-spotlight"></div>
-                <div class="bento__card-content">
-                    <div class="bento__card-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    </div>
-                    <h3>GIS Intelligence</h3>
-                    <p>Multi-layer interactive maps with regions, markers, datasets — agriculture, satellite, aircraft, and shipping dashboards.</p>
-                    <div class="bento__card-tags"><span>Maps</span><span>Layers</span><span>Geo</span></div>
                 </div>
             </div>
 
@@ -673,7 +660,20 @@
                 </div>
             </div>
 
-            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/netintel')">
+            <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/gis')">
+                <div class="bento__card-glow"></div>
+                <div class="bento__card-spotlight"></div>
+                <div class="bento__card-content">
+                    <div class="bento__card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </div>
+                    <h3>GIS Intelligence</h3>
+                    <p>Multi-layer interactive maps with regions, markers, datasets — agriculture, satellite, aircraft, and shipping dashboards.</p>
+                    <div class="bento__card-tags"><span>Maps</span><span>Layers</span><span>Geo</span></div>
+                </div>
+            </div>
+
+            <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/netintel')">
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -686,7 +686,7 @@
                 </div>
             </div>
 
-            <div class="bento__card bento__card--tall" data-reveal data-tilt data-hover-effect="conductor" onclick="requireAuth('/conductor')">
+            <div class="bento__card" data-reveal data-tilt data-hover-effect="conductor" onclick="requireAuth('/conductor')">
                 <canvas class="bento__hover-canvas" data-canvas="conductor"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
