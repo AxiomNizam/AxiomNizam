@@ -1,0 +1,426 @@
+# Zero Trust Architecture Audit
+
+> **AxiomNizam Data Control Plane — Security Architecture Review**
+> Audited: 2026-05-30 | Branch: `miraz-ui`
+
+---
+
+## Executive Summary
+
+AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
+
+**Current Zero Trust coverage: ~30%**
+
+| Principle | Score | Status |
+|-----------|-------|--------|
+| Verify explicitly | 6/10 | JWT works, but demo token fallback undermines RSA |
+| Least privilege | 5/10 | Storage module strong; RBAC engine never called |
+| Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
+| Encrypt everything | 4/10 | At rest: AES-256-GCM. In transit: none |
+| Continuous verification | 1/10 | Token validated once, never re-checked |
+| Risk-based decisions | 1/10 | Engine built with 18 signals, only IP used |
+| Micro-segmentation | 0/10 | Single binary, single network |
+| Configuration hygiene | 3/10 | Default creds, trusted proxies wide open |
+
+---
+
+## Architecture Overview
+
+### Middleware Chain (main.go)
+
+```
+Request
+  → CORS (origin allowlist)
+  → RequestID
+  → AccessLog
+  → SecurityHeaders (HSTS, X-Frame-Options, CSP, etc.)
+  → RequestValidation (body size limits)
+  → CSRF (double-submit cookie, Bearer exempt)
+  → Metrics (Prometheus)
+  → JWT Auth (RSA-256 via JWKS, rate limiting)
+  → Handler
+```
+
+### Server Topology
+
+| Server | Port | Protocol | Auth |
+|--------|------|----------|------|
+| Backend (main.go) | 8000 | HTTP | JWT Bearer on protected routes |
+| Frontend (frontend/main.go) | 7000 | HTTP | None (proxies /api/health, /api/status) |
+| Runtime | 8001 | HTTP | Internal |
+
+---
+
+## Component-by-Component Analysis
+
+### 1. Authentication
+
+**What exists:**
+
+- JWT validation via RSA-256 with JWKS key rotation (`internal/auth/auth.go`)
+- IAM subsystem with separate RSA validation + etcd-based token revocation (`internal/iam/token/token.go`)
+- Gatekeeper MFA middleware (`internal/gatekeeper/middleware/http.go`)
+- Token rate limiting: 500 calls per token, 10-minute window
+- Bootstrap sysadmin email fallback for initial setup
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| Demo token fallback accepts HMAC when no `kid` | Critical | `internal/auth/auth.go:306-353` |
+| Token revocation (etcd JTI denylist) only checked on IAM path | High | `internal/iam/middleware/middleware.go:24` |
+| No `aud` (audience) claim validation | High | `internal/iam/token/token.go:312` |
+| Sysadmin roles injected unconditionally by email match | High | `main.go:499-508` |
+| No token binding (DPoP or certificate) | Medium | All token paths |
+| Rate limit returns 401 instead of 429 | Medium | `main.go:550-568` |
+| Rate limiter in-memory only (per-process counters) | Medium | `internal/auth/rate_limit.go` |
+
+### 2. Authorization
+
+**What exists:**
+
+- **IAM Authorizer** (`internal/iam/authz/authz.go`) — resource + action level permission checking with wildcard support
+- **K8s-style RBAC Engine** (`internal/rbac/engine.go`) — roles, cluster roles, bindings, `CanPerform(ctx, userID, resourceKind, verb, namespace)`
+- **In-Memory RBAC Manager** (`internal/rbac/in_memory.go`) — tenant-scoped, priority-based allow/deny, resource selectors
+- **Policy Engine** (`internal/gatekeeper/policy/engine.go`) — 4 rule types: IP restriction, sensitive resource, high-risk block, label-based
+- **Storage Access Control** (`internal/storage/access/access.go`) — 3-layer middleware: auth → role → bucket access
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| RBAC engine never called from main middleware | Critical | `main.go` uses `claims.HasRole("admin")` only |
+| `EngineRuleCondition` (IPRestriction, TimeWindow) defined but ignored | High | `internal/rbac/engine.go:76-79` |
+| `EvaluatePolicy()` hardcodes `RiskScore=0` and `LastMFAAt=0` | High | `internal/gatekeeper/policy/engine.go:104` |
+| Policy enforcement mode ("optional"/"required"/"adaptive") never read | Medium | `internal/gatekeeper/config/config.go` |
+| No per-route RBAC enforcement on main API | Medium | `main.go` |
+
+### 3. Risk Engine
+
+**What exists:**
+
+- `internal/gatekeeper/risk/engine.go` — pluggable scorer, 0-100 score, 4 risk levels (Low/Medium/High/Critical)
+- 18 signal inputs across 7 categories:
+
+| Category | Signals | Max Points |
+|----------|---------|------------|
+| Device/Location | IsNewDevice, NewBrowser, VPNDetected, DatacenterIP | 30 |
+| Geographic | ASNChange, GeoDifference | 25 |
+| IP Reputation | IPReputation (0-100) | 20 |
+| Behavioral | UnusualTimeOfDay, DaysSinceLastAuth, UnusualActivity, SuspiciousLogin | 35 |
+| Failure Tracking | FailureCount, FailureWindow | 15 |
+| Account Maturity | AccountAge (reduces score) | -5 |
+| Privilege Escalation | HighPrivilegeOp, SensitiveAction | 25 |
+
+- `CompositeScorer` for weighted multi-scorer aggregation
+- `GeoScorer` and `BehavioralScorer` as standalone specialized scorers
+- `IsKnownGoodIP` for corporate VPN allowlisting
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| `ScoreAuthentication()` only passes IP address | Critical | `internal/gatekeeper/risk/engine.go:72` |
+| Risk engine not wired into auth flow | Critical | `main.go` never calls `ScoreAuthentication()` |
+| No risk re-evaluation during challenge verification | High | `internal/gatekeeper/challenge/service.go` |
+| Risk score not embedded in JWT claims | High | Token issue path |
+| No step-up MFA for high-risk requests | High | Middleware chain |
+
+### 4. MFA (Gatekeeper)
+
+**What exists:**
+
+- TOTP enrollment and verification (`internal/gatekeeper/totp/`)
+- Backup codes (SHA-256 hashed, single-use)
+- Trusted devices with browser fingerprinting (`internal/gatekeeper/trusteddevices/`)
+- Challenge state machine: Waiting → Verified/Expired/Failed/Rejected
+- Policy engine with adaptive evaluators
+- Risk-based MFA rules (IP restriction, sensitive resource, high-risk block)
+- AES-GCM encryption of TOTP secrets at rest
+- 5-minute challenge TTL, 3 max attempts
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| No MFA-gate middleware for API requests | Critical | Middleware chain |
+| Trusted device bypass not implemented | High | Service works, bypass logic missing |
+| `ChallengePhaseRejected` state exists but never used | Medium | `internal/gatekeeper/challenge/state.go` |
+| Policy enforcement mode ignored | Medium | Config vs. middleware |
+| No step-up authentication for sensitive operations | Medium | Handler layer |
+| `VerifyChallenge()` doesn't consult risk engine | Medium | `internal/gatekeeper/challenge/service.go:116` |
+
+### 5. Encryption
+
+**What exists:**
+
+- **AES-256-GCM field-level encryption** (`internal/encryption/field_encryption.go`)
+- **Rotating keyring** (`internal/keyring/keyring.go`) — active + retired keys, ciphertext-prefixed key IDs
+- **TOTP secret encryption** — AES-GCM before storage, decrypted on verification
+- **Key hierarchy models** — DEK/KEK/Master defined
+- **External KMS providers** — `aws-kms`, `azure-keyvault`, `gcp-cloud-kms`, `vault` defined (not wired)
+- **Security headers** — HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| No TLS on backend or frontend | Critical | `main.go:2333`, `frontend/main.go:188` |
+| Encryption is manual/on-demand, not automatic | High | No transparent middleware |
+| No mTLS between services | Medium | Single binary, N/A for now |
+| HSTS header sent without TLS (misleading) | Medium | `internal/observability/validation.go:95` |
+| No automated key rotation schedule | Medium | Manual API calls only |
+| DB connections default to `sslmode=disable` | Medium | `.env` |
+| External KMS providers defined but not integrated | Low | `internal/encryption/models.go:78-91` |
+
+### 6. Audit Logging
+
+**What exists:**
+
+- **Tamper-evident hash chain** (`internal/audit/chain.go`) — SHA-256 with `VerifyChain()`
+- **Central AuditComplianceManager** — CRUD, Auth, Data, Policy events
+- **Domain-specific loggers** (5 modules):
+
+| Module | KV Key | Events |
+|--------|--------|--------|
+| Gatekeeper | `gatekeeper:audit:log` | Enrollment, Verification, Failure, BackupCode, HighRisk |
+| IAM | `iam:audit:log` | Auth, TokenIssued/Revoked, PermissionCheck, UserCreated, Session |
+| Storage | `storage:audit:log` | Bucket/Object CRUD, Policy, Presign, Scan results |
+| Antivirus | `antivirus:audit:log` | Scan, Threat, Engine events |
+| Jobs | `jobs:audit:log` | Job lifecycle, DLQ events |
+
+- **RBAC decision audit** — every `CanPerform()` recorded (in-memory, 10K cap)
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| Core audit is in-memory only (100K cap, lost on restart) | High | `internal/audit/compliance.go` |
+| No unified query interface across domain loggers | Medium | Each module has own buffer |
+| Encryption key audit not forwarded to central system | Medium | `internal/encryption/` |
+| No persistent audit sink (DB, ES, S3) | Medium | Config models defined, not wired |
+| `DeleteOldLogs` deletes after 90 days | Low | May conflict with compliance retention |
+
+### 7. Storage Access Control
+
+**What exists (strongest Zero Trust implementation):**
+
+- **3-layer middleware**: `RequireStorageAuth()` → `RequireStorageRole()` → `RequireBucketAccess()`
+- **Scoped API keys**: bucket scope, prefix scope, role, expiration
+- **Tenant isolation**: store-level `Get(tenantID, bucket)` filtering
+- **HMAC constant-time comparison** for secret key validation
+- **Privilege escalation guard**: non-admin can't create keys with higher role
+- **Per-bucket rate limiting**: read/write ops per minute, per tenant
+- **Time-bound access**: `ExpiresAt` on policies and access keys
+- **Presigned URL validation**: signature, expiration, scope, method
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| Scanner is post-hoc (async after upload, not inline) | High | `internal/storage/admin/admin.go:1124` |
+| Sysadmin bypass is absolute (no MFA check) | Medium | `internal/storage/access/access.go` |
+| Default presign secret hardcoded | Medium | `internal/storage/config/config.go:46` |
+| In-memory policy storage with async KV persistence | Low | Crash between write and persist loses data |
+
+### 8. Network Security
+
+**What exists:**
+
+- CORS origin allowlisting (configurable via env)
+- Trusted proxy CIDR configuration
+- CSRF double-submit cookie (Bearer exempt)
+- Body size limits (10MB default)
+- Request ID propagation + W3C traceparent
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| `TRUSTED_PROXIES=0.0.0.0/0` (trust all) | Critical | `.env` |
+| No TLS on any server | Critical | `main.go:2333` |
+| Single Docker network, no segmentation | Medium | `docker-compose.yml` |
+| CSRF cookie `Secure: false` | Medium | `internal/observability/csrf.go:48` |
+| No Content-Security-Policy header | Medium | `internal/observability/validation.go` |
+| Anonymous `/api/notifications/status` endpoint | Low | `main.go:826` |
+
+### 9. Configuration Security
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| Default DB passwords (root/root, postgres/postgres) | Critical | `.env` |
+| RSA private key in `.env` | High | `IAM_RSA_PRIVATE_KEY` |
+| Keycloak client secret in plaintext | High | `.env` |
+| Gatekeeper encryption/HMAC keys in plaintext | High | `.env` |
+| Discord webhook URL with token | Medium | `.env` |
+| `SECURITY_GUARDRAILS_MODE=audit` (not enforce) | Medium | `.env` |
+| `.env` in `.gitignore` | Good | `.gitignore` |
+
+---
+
+## The Wiring Gap Map
+
+Every component that exists but isn't connected to the request pipeline:
+
+```
+BUILT BUT NOT WIRED                    BUILT AND WIRED
+─────────────────────                  ────────────────
+Risk Engine (18 signals)               JWT Auth Middleware
+Policy Engine (4 rule types)           Storage 3-Layer Auth
+RBAC Engine (K8s-style)               CORS Whitelist
+IAM Authorizer (resource+action)       CSRF Protection
+Trusted Device Bypass                  Security Headers
+MFA Enforcement Mode                   Audit Hash Chain
+Adaptive Evaluator                     Rate Limiting
+Inline Scanner (pre-commit)            Storage Access Keys
+Session Re-verification                Tenant Isolation
+Step-up Authentication                 Request ID Tracing
+TLS/HTTPS                             Presigned URL Validation
+Auto Field Encryption                  TOTP Secret Encryption
+Persistent Audit Sink                  Domain Audit Loggers
+External KMS Integration               Keyring Rotation
+```
+
+---
+
+## Implementation Roadmap
+
+### Phase 0: Critical Configuration (2 hours)
+
+- [ ] Fix `TRUSTED_PROXIES` — set to actual proxy CIDRs, not `0.0.0.0/0`
+- [ ] Change default database credentials
+- [ ] Disable demo token fallback (or restrict to dev-only with build tag)
+- [ ] Fix CORS wildcard in gatekeeper middleware
+- [ ] Set `SECURITY_GUARDRAILS_MODE=enforce`
+
+### Phase 1: Unify JWT Validation (1 day)
+
+- [ ] Main API uses same validation path as IAM (with etcd revocation check)
+- [ ] Remove HMAC demo token fallback from production builds
+- [ ] Add `aud` claim validation
+- [ ] Rate limit returns 429 instead of 401
+
+### Phase 2: Wire Risk Engine (1 day)
+
+- [ ] Populate full `Signals` struct in `authenticateRequest()` (IP, User-Agent, device fingerprint, geo)
+- [ ] Embed risk score in JWT claims at token issue
+- [ ] Score ≥ 70 → require `X-MFA-Token` header with fresh TOTP
+- [ ] Score ≥ 90 → reject request
+
+### Phase 3: Wire RBAC + Policy Engine (1 day)
+
+- [ ] New `authorizeRequest()` middleware after JWT validation
+- [ ] Call `rbac.CanPerform(ctx, userID, resource, verb, namespace)`
+- [ ] Call `policy.Evaluate(user, resource, verb, riskScore)`
+- [ ] Wire IAM Authorizer's `RequirePermission` middleware on protected routes
+- [ ] Evaluate `EngineRuleCondition` types (IPRestriction, TimeWindow) in `CanPerform()`
+
+### Phase 4: TLS (1 day)
+
+- [ ] `TLS_CERT_FILE` / `TLS_KEY_FILE` env vars
+- [ ] `ListenAndServeTLS()` with auto-generated self-signed certs for dev
+- [ ] Force HTTPS redirect middleware in production
+- [ ] Frontend proxy to backend over HTTPS
+- [ ] Set `POSTGRES_SSLMODE=require`
+- [ ] Fix CSRF cookie `Secure: true`
+
+### Phase 5: Trusted Device + Step-up MFA (1 day)
+
+- [ ] Wire trusted device bypass in MFA challenge flow
+- [ ] Add step-up MFA for sensitive operations (admin, delete, policy change)
+- [ ] Use `ChallengePhaseRejected` for risk-rejected challenges
+- [ ] Wire policy enforcement mode ("required"/"adaptive") into middleware
+
+### Phase 6: Inline Scanner (1 day)
+
+- [ ] Change `scanObjectAsync` from post-upload to pre-commit
+- [ ] Buffer upload to temp → scan → if safe: commit; if unsafe: reject + quarantine
+- [ ] Wire `HighRiskBlockRule` to actually block (currently hardcodes `RiskScore=0`)
+
+### Phase 7: Persistent Audit (2 days)
+
+- [ ] PostgreSQL audit sink for core `AuditComplianceManager`
+- [ ] Unified query API across all domain audit loggers
+- [ ] Forward encryption key audit events to central system
+- [ ] Configurable retention policy (replace hardcoded 90-day delete)
+
+### Phase 8: Auto Field Encryption (2 days)
+
+- [ ] Middleware that transparently encrypts fields marked with `Classification: PII/Sensitive`
+- [ ] Transparent decryption on read
+- [ ] Scheduled key rotation (not manual API calls)
+- [ ] Integrate external KMS providers (AWS KMS, Azure Key Vault, HashiCorp Vault)
+
+### Phase 9: Continuous Verification (3 days)
+
+- [ ] Re-evaluate risk signals on every request (IP change, geo change, device change)
+- [ ] Session idle timeout (separate from token expiry)
+- [ ] Embed last risk score in JWT, compare with current on each request
+- [ ] Risk delta > threshold → require step-up MFA
+- [ ] Revoke sessions on high-risk signal detection
+
+---
+
+## Impact Summary
+
+| Phase | Effort | Zero Trust Impact |
+|-------|--------|-------------------|
+| P0 | 2 hours | Closes known attack vectors (config) |
+| P1 | 1 day | Revoked tokens actually blocked |
+| P2 | 1 day | Adaptive auth based on context |
+| P3 | 1 day | Resource-level authorization |
+| P4 | 1 day | All traffic encrypted |
+| P5 | 1 day | Better UX + security |
+| P6 | 1 day | Prevents malware storage |
+| P7 | 2 days | Audit survives restarts |
+| P8 | 2 days | Eliminates human error in encryption |
+| P9 | 3 days | True continuous verification |
+| **Total** | **13 days** | **~90% Zero Trust** |
+
+---
+
+## Reference: Zero Trust Principles
+
+| Principle | Definition | AxiomNizam Status |
+|-----------|-----------|-------------------|
+| **Verify explicitly** | Every request must prove identity | JWT works, demo fallback undermines it |
+| **Least privilege** | Minimum access needed, scoped to time/context | Storage strong, main API uses role-gating only |
+| **Assume breach** | Design as if attacker is inside | Audit logging yes, but in-memory, no TLS |
+| **Encrypt everything** | Data at rest and in transit | At rest: strong. In transit: none |
+| **Continuous verification** | Re-evaluate trust on every request | Token validated once, never re-checked |
+| **Micro-segmentation** | Services authenticate to each other | Single binary, N/A |
+| **Risk-based decisions** | Adapt security to context | Engine built, signals unused |
+
+---
+
+## Key Files Reference
+
+| Component | File | Line(s) |
+|-----------|------|---------|
+| JWT validation (main API) | `main.go` | 460-598 |
+| JWT validation (IAM) | `internal/iam/middleware/middleware.go` | 24-85 |
+| Token validation | `internal/auth/auth.go` | 306-353 |
+| Rate limiting | `internal/auth/rate_limit.go` | Full file |
+| RBAC engine | `internal/rbac/engine.go` | 189 (`CanPerform`) |
+| IAM authorizer | `internal/iam/authz/authz.go` | Full file |
+| Risk engine | `internal/gatekeeper/risk/engine.go` | 72 (`ScoreAuthentication`) |
+| Risk signals | `internal/gatekeeper/risk/signals.go` | Full file |
+| Policy engine | `internal/gatekeeper/policy/engine.go` | 104 (`EvaluatePolicy`) |
+| Policy rules | `internal/gatekeeper/policy/rules.go` | Full file |
+| Challenge service | `internal/gatekeeper/challenge/service.go` | 116 (`VerifyChallenge`) |
+| Trusted devices | `internal/gatekeeper/trusteddevices/service.go` | Full file |
+| Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
+| Keyring | `internal/keyring/keyring.go` | Full file |
+| Audit chain | `internal/audit/chain.go` | Full file |
+| Security headers | `internal/observability/validation.go` | 90 |
+| CSRF | `internal/observability/csrf.go` | 83 |
+| CORS (main) | `main.go` | 349-371 |
+| CORS (gatekeeper) | `internal/gatekeeper/middleware/http.go` | 53 |
+| Storage auth | `internal/storage/access/access.go` | 180, 247, 302 |
+| Scanner pipeline | `internal/scanner/scanner.go` | Full file |
+| Storage admin | `internal/storage/admin/admin.go` | 1124 (async scan) |
+| TLS (missing) | `main.go` | 2333 (`ListenAndServe`) |
+
+---
+
+*Last updated: 2026-05-30 (UTC+6)*

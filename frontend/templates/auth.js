@@ -263,6 +263,19 @@ window.addEventListener('DOMContentLoaded', function() {
     }
 
     const path = window.location.pathname;
+
+    // If on login page and already authenticated, redirect to returnTo or default
+    if (authToken && (path === '/login' || path === '/signup')) {
+        var returnTo = localStorage.getItem('returnTo');
+        localStorage.removeItem('returnTo');
+        if (returnTo && returnTo.charAt(0) === '/' && returnTo !== '/login' && returnTo !== '/signup') {
+            window.location.href = returnTo;
+        } else {
+            window.location.href = defaultPathForRole(userRole);
+        }
+        return;
+    }
+
     if (!authToken && isProtectedPath(path)) {
         window.location.href = '/login';
         return;
@@ -343,15 +356,19 @@ function handleLogin(event) {
         localStorage.setItem('userRole', userRole);
         setAuthCookies(authToken, userRole, userName);
 
-        // Redirect based on user role
-        if (userRole === 'system-manager') {
+        // Check for return URL from landing page feature click
+        var returnTo = localStorage.getItem('returnTo');
+        localStorage.removeItem('returnTo');
+
+        if (returnTo && returnTo.charAt(0) === '/' && returnTo !== '/login' && returnTo !== '/signup') {
+            window.location.href = returnTo;
+        } else if (userRole === 'system-manager') {
             window.location.href = '/system-manager';
         } else if (userRole === 'admin') {
             window.location.href = '/admin';
         } else if (userRole === 'manager') {
             window.location.href = '/manager';
         } else {
-            // Normal users go to dashboard (view-only)
             window.location.href = '/';
         }
     })
