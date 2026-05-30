@@ -634,7 +634,8 @@
                 </div>
             </div>
 
-            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/analytics')">
+            <div class="bento__card bento__card--tall" data-reveal data-tilt data-hover-effect="analytics" onclick="requireAuth('/analytics')">
+                <canvas class="bento__hover-canvas" data-canvas="analytics"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -644,10 +645,56 @@
                     <h3>Analytics</h3>
                     <p>Custom dashboards with charts, heatmaps, KPI widgets — reorder layouts, CSV export, and real-time refresh.</p>
                     <div class="bento__card-tags"><span>Charts</span><span>KPI</span><span>Export</span></div>
+
+                    <!-- Analytics Demo -->
+                    <div class="analytics-demo">
+                        <div class="analytics-demo__header">
+                            <span class="analytics-demo__title">Live Dashboard</span>
+                            <span class="analytics-demo__count">5 widgets</span>
+                        </div>
+                        <div class="analytics-demo__kpi-row">
+                            <div class="analytics-demo__kpi">
+                                <span class="analytics-demo__kpi-val">24.8K</span>
+                                <span class="analytics-demo__kpi-label">Requests</span>
+                                <span class="analytics-demo__kpi-trend analytics-demo__kpi-trend--up">+12.4%</span>
+                            </div>
+                            <div class="analytics-demo__kpi">
+                                <span class="analytics-demo__kpi-val">98.2%</span>
+                                <span class="analytics-demo__kpi-label">Uptime</span>
+                                <span class="analytics-demo__kpi-trend analytics-demo__kpi-trend--up">+0.3%</span>
+                            </div>
+                        </div>
+                        <div class="analytics-demo__chart">
+                            <div class="analytics-demo__chart-header">
+                                <span>Throughput (req/s)</span>
+                                <span class="analytics-demo__chart-live">LIVE</span>
+                            </div>
+                            <div class="analytics-demo__bars">
+                                <div class="analytics-demo__bar" style="--h:45%"></div>
+                                <div class="analytics-demo__bar" style="--h:62%"></div>
+                                <div class="analytics-demo__bar" style="--h:38%"></div>
+                                <div class="analytics-demo__bar" style="--h:78%"></div>
+                                <div class="analytics-demo__bar" style="--h:55%"></div>
+                                <div class="analytics-demo__bar" style="--h:90%"></div>
+                                <div class="analytics-demo__bar" style="--h:72%"></div>
+                                <div class="analytics-demo__bar" style="--h:85%"></div>
+                                <div class="analytics-demo__bar" style="--h:60%"></div>
+                                <div class="analytics-demo__bar" style="--h:95%"></div>
+                                <div class="analytics-demo__bar" style="--h:68%"></div>
+                                <div class="analytics-demo__bar" style="--h:82%"></div>
+                            </div>
+                        </div>
+                        <div class="analytics-demo__footer">
+                            <span class="analytics-demo__footer-item"><span class="analytics-demo__dot analytics-demo__dot--green"></span> Real-time</span>
+                            <span class="analytics-demo__footer-item"><span class="analytics-demo__dot analytics-demo__dot--blue"></span> CSV Export</span>
+                            <span class="analytics-demo__footer-item"><span class="analytics-demo__dot analytics-demo__dot--purple"></span> KPI Alerts</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/iam-admin')">
+            <div class="bento__card bento__card--tall" data-reveal data-tilt data-hover-effect="iam" onclick="requireAuth('/iam-admin')">
+                <canvas class="bento__hover-canvas" data-canvas="iam"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -657,10 +704,74 @@
                     <h3>IAM & RBAC</h3>
                     <p>Full Keycloak integration with multi-realm support, user/client/role management, group hierarchies, OAuth2/OIDC/SAML/LDAP, and fine-grained permissions with approval workflows.</p>
                     <div class="bento__card-tags"><span>Keycloak</span><span>OIDC</span><span>Multi-Realm</span><span>RBAC</span></div>
+
+                    <!-- IAM Demo -->
+                    <div class="iam-demo">
+                        <div class="iam-demo__header">
+                            <span class="iam-demo__title">Identity Console</span>
+                            <span class="iam-demo__count">3 realms</span>
+                        </div>
+                        <div class="iam-demo__realm">
+                            <div class="iam-demo__realm-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
+                                <span class="iam-demo__realm-name">master</span>
+                                <span class="iam-demo__realm-status iam-demo__realm-status--ok">active</span>
+                            </div>
+                            <div class="iam-demo__realm-stats">
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">1,247</span>
+                                    <span class="iam-demo__stat-label">Users</span>
+                                </div>
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">38</span>
+                                    <span class="iam-demo__stat-label">Roles</span>
+                                </div>
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">12</span>
+                                    <span class="iam-demo__stat-label">Clients</span>
+                                </div>
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">5</span>
+                                    <span class="iam-demo__stat-label">Groups</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="iam-demo__realm">
+                            <div class="iam-demo__realm-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
+                                <span class="iam-demo__realm-name">tenant-acme</span>
+                                <span class="iam-demo__realm-status iam-demo__realm-status--ok">active</span>
+                            </div>
+                            <div class="iam-demo__realm-stats">
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">892</span>
+                                    <span class="iam-demo__stat-label">Users</span>
+                                </div>
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">24</span>
+                                    <span class="iam-demo__stat-label">Roles</span>
+                                </div>
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">8</span>
+                                    <span class="iam-demo__stat-label">Clients</span>
+                                </div>
+                                <div class="iam-demo__stat">
+                                    <span class="iam-demo__stat-val">3</span>
+                                    <span class="iam-demo__stat-label">Groups</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="iam-demo__footer">
+                            <span class="iam-demo__footer-item"><span class="iam-demo__dot iam-demo__dot--green"></span> OAuth2/OIDC</span>
+                            <span class="iam-demo__footer-item"><span class="iam-demo__dot iam-demo__dot--blue"></span> SAML</span>
+                            <span class="iam-demo__footer-item"><span class="iam-demo__dot iam-demo__dot--purple"></span> LDAP</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="bento__card bento__card--tall" data-reveal data-tilt onclick="requireAuth('/gis')">
+            <div class="bento__card bento__card--tall" data-reveal data-tilt data-hover-effect="gis" onclick="requireAuth('/gis')">
+                <canvas class="bento__hover-canvas" data-canvas="gis"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -670,6 +781,51 @@
                     <h3>GIS Intelligence</h3>
                     <p>Multi-layer interactive maps with regions, markers, datasets — agriculture, satellite, aircraft, and shipping dashboards.</p>
                     <div class="bento__card-tags"><span>Maps</span><span>Layers</span><span>Geo</span></div>
+
+                    <!-- GIS Demo -->
+                    <div class="gis-demo">
+                        <div class="gis-demo__header">
+                            <span class="gis-demo__title">Map Layers</span>
+                            <span class="gis-demo__count">6 active</span>
+                        </div>
+                        <div class="gis-demo__map-preview">
+                            <div class="gis-demo__map-grid"></div>
+                            <div class="gis-demo__marker gis-demo__marker--1"></div>
+                            <div class="gis-demo__marker gis-demo__marker--2"></div>
+                            <div class="gis-demo__marker gis-demo__marker--3"></div>
+                            <div class="gis-demo__marker gis-demo__marker--4"></div>
+                            <div class="gis-demo__marker gis-demo__marker--5"></div>
+                            <div class="gis-demo__region gis-demo__region--1"></div>
+                            <div class="gis-demo__region gis-demo__region--2"></div>
+                        </div>
+                        <div class="gis-demo__layers">
+                            <div class="gis-demo__layer">
+                                <span class="gis-demo__layer-dot gis-demo__layer-dot--green"></span>
+                                <span class="gis-demo__layer-name">Agriculture</span>
+                                <span class="gis-demo__layer-count">2,847 points</span>
+                            </div>
+                            <div class="gis-demo__layer">
+                                <span class="gis-demo__layer-dot gis-demo__layer-dot--blue"></span>
+                                <span class="gis-demo__layer-name">Aircraft Tracking</span>
+                                <span class="gis-demo__layer-count">156 live</span>
+                            </div>
+                            <div class="gis-demo__layer">
+                                <span class="gis-demo__layer-dot gis-demo__layer-dot--purple"></span>
+                                <span class="gis-demo__layer-name">Shipping Routes</span>
+                                <span class="gis-demo__layer-count">89 vessels</span>
+                            </div>
+                            <div class="gis-demo__layer">
+                                <span class="gis-demo__layer-dot gis-demo__layer-dot--orange"></span>
+                                <span class="gis-demo__layer-name">Satellite Overlay</span>
+                                <span class="gis-demo__layer-count">12 zones</span>
+                            </div>
+                        </div>
+                        <div class="gis-demo__footer">
+                            <span class="gis-demo__footer-item"><span class="gis-demo__dot gis-demo__dot--green"></span> Leaflet.js</span>
+                            <span class="gis-demo__footer-item"><span class="gis-demo__dot gis-demo__dot--blue"></span> GeoJSON</span>
+                            <span class="gis-demo__footer-item"><span class="gis-demo__dot gis-demo__dot--purple"></span> Real-time</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -764,7 +920,8 @@
                 </div>
             </div>
 
-            <div class="bento__card" data-reveal data-tilt onclick="requireAuth('/netintel')">
+            <div class="bento__card" data-reveal data-tilt data-hover-effect="netintel" onclick="requireAuth('/netintel')">
+                <canvas class="bento__hover-canvas" data-canvas="netintel"></canvas>
                 <div class="bento__card-glow"></div>
                 <div class="bento__card-spotlight"></div>
                 <div class="bento__card-content">
@@ -774,6 +931,46 @@
                     <h3>Network Intelligence</h3>
                     <p>Log parsing, topology mapping, heatmap generation, anomaly detection, MAC tracking, and trend forecasting.</p>
                     <div class="bento__card-tags"><span>NetIntel</span><span>Topology</span></div>
+
+                    <!-- Network Intelligence Demo -->
+                    <div class="netintel-demo">
+                        <div class="netintel-demo__header">
+                            <span class="netintel-demo__title">Network Map</span>
+                            <span class="netintel-demo__count">24 nodes</span>
+                        </div>
+                        <div class="netintel-demo__topology">
+                            <div class="netintel-demo__node netintel-demo__node--core">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+                            </div>
+                            <div class="netintel-demo__link netintel-demo__link--1"></div>
+                            <div class="netintel-demo__node netintel-demo__node--switch">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m-10-10h4m12 0h4"/></svg>
+                            </div>
+                            <div class="netintel-demo__link netintel-demo__link--2"></div>
+                            <div class="netintel-demo__node netintel-demo__node--endpoint">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
+                            </div>
+                        </div>
+                        <div class="netintel-demo__stats">
+                            <div class="netintel-demo__stat">
+                                <span class="netintel-demo__stat-val">2.4ms</span>
+                                <span class="netintel-demo__stat-label">Avg Latency</span>
+                            </div>
+                            <div class="netintel-demo__stat">
+                                <span class="netintel-demo__stat-val">99.97%</span>
+                                <span class="netintel-demo__stat-label">Uptime</span>
+                            </div>
+                            <div class="netintel-demo__stat">
+                                <span class="netintel-demo__stat-val">3</span>
+                                <span class="netintel-demo__stat-label">Anomalies</span>
+                            </div>
+                        </div>
+                        <div class="netintel-demo__footer">
+                            <span class="netintel-demo__footer-item"><span class="netintel-demo__dot netintel-demo__dot--green"></span> Topology</span>
+                            <span class="netintel-demo__footer-item"><span class="netintel-demo__dot netintel-demo__dot--blue"></span> Heatmap</span>
+                            <span class="netintel-demo__footer-item"><span class="netintel-demo__dot netintel-demo__dot--red"></span> Anomaly</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

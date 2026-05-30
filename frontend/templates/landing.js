@@ -1923,12 +1923,386 @@
             animId = requestAnimationFrame(conductorAnimation);
         }
 
+        // Analytics animation — bar chart with flowing data
+        var analyticsBars = [];
+        var analyticsSpawnTimer = 0;
+
+        function analyticsAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
+
+            // Draw grid lines
+            for (var i = 0; i < 5; i++) {
+                var y = h * 0.2 + (h * 0.6 / 4) * i;
+                ctx.beginPath();
+                ctx.moveTo(w * 0.05, y);
+                ctx.lineTo(w * 0.95, y);
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            // Animated bar chart
+            var barCount = 12;
+            var barWidth = (w * 0.9) / barCount;
+            var barGap = barWidth * 0.2;
+
+            for (var i = 0; i < barCount; i++) {
+                var barHeight = (Math.sin(time * 2 + i * 0.5) * 0.3 + 0.5) * h * 0.5;
+                var x = w * 0.05 + i * barWidth + barGap / 2;
+                var y = h * 0.7 - barHeight;
+
+                var grad = ctx.createLinearGradient(x, y + barHeight, x, y);
+                grad.addColorStop(0, 'rgba(52, 211, 153, 0.3)');
+                grad.addColorStop(1, 'rgba(56, 189, 248, 0.5)');
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.roundRect(x, y, barWidth - barGap, barHeight, [3, 3, 0, 0]);
+                ctx.fill();
+            }
+
+            // Flowing line chart
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.4)';
+            ctx.lineWidth = 2;
+            for (var i = 0; i < barCount; i++) {
+                var x = w * 0.05 + i * barWidth + barWidth / 2;
+                var y = h * 0.3 + Math.sin(time * 1.5 + i * 0.8) * h * 0.15;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Data dots
+            for (var i = 0; i < barCount; i++) {
+                var x = w * 0.05 + i * barWidth + barWidth / 2;
+                var y = h * 0.3 + Math.sin(time * 1.5 + i * 0.8) * h * 0.15;
+
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#34d399';
+                ctx.fill();
+            }
+
+            // Stats in corner
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText('24.8K requests', w - 10, 12);
+            ctx.fillText('5 dashboards', w - 10, 26);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText('98.2% uptime', w - 10, 40);
+
+            animId = requestAnimationFrame(analyticsAnimation);
+        }
+
+        // GIS animation — map with pulsing markers
+        var gisMarkers = [];
+        var gisSpawnTimer = 0;
+
+        function gisAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
+
+            // Draw grid (map grid)
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.04)';
+            ctx.lineWidth = 1;
+            for (var x = 0; x < w; x += 30) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+                ctx.stroke();
+            }
+            for (var y = 0; y < h; y += 30) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+                ctx.stroke();
+            }
+
+            // Draw regions (filled areas)
+            var regions = [
+                { x: w * 0.15, y: h * 0.2, rx: w * 0.2, ry: h * 0.15, color: '52, 211, 153' },
+                { x: w * 0.6, y: h * 0.4, rx: w * 0.25, ry: h * 0.2, color: '56, 189, 248' },
+                { x: w * 0.3, y: h * 0.65, rx: w * 0.18, ry: h * 0.12, color: '167, 139, 250' }
+            ];
+
+            regions.forEach(function(r) {
+                ctx.beginPath();
+                ctx.ellipse(r.x, r.y, r.rx, r.ry, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(' + r.color + ', 0.06)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(' + r.color + ', 0.15)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // Draw markers with pulse
+            var markers = [
+                { x: w * 0.2, y: h * 0.25, color: '#34d399' },
+                { x: w * 0.7, y: h * 0.35, color: '#38bdf8' },
+                { x: w * 0.4, y: h * 0.6, color: '#a78bfa' },
+                { x: w * 0.8, y: h * 0.5, color: '#fbbf24' },
+                { x: w * 0.55, y: h * 0.75, color: '#f472b6' }
+            ];
+
+            markers.forEach(function(m, i) {
+                var pulse = Math.sin(time * 3 + i) * 0.5 + 0.5;
+
+                // Outer pulse ring
+                ctx.beginPath();
+                ctx.arc(m.x, m.y, 12 + pulse * 8, 0, Math.PI * 2);
+                ctx.fillStyle = m.color + '10';
+                ctx.fill();
+
+                // Inner marker
+                ctx.beginPath();
+                ctx.arc(m.x, m.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = m.color;
+                ctx.fill();
+            });
+
+            // Draw connections between markers
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+            ctx.lineWidth = 1;
+            for (var i = 0; i < markers.length - 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(markers[i].x, markers[i].y);
+                ctx.lineTo(markers[i + 1].x, markers[i + 1].y);
+                ctx.stroke();
+            }
+
+            // Stats in corner
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText('6 map layers', w - 10, 12);
+            ctx.fillText('2,847 points', w - 10, 26);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('89 vessels', w - 10, 40);
+
+            animId = requestAnimationFrame(gisAnimation);
+        }
+
+        // IAM animation — shield with user nodes
+        var iamParticles = [];
+        var iamSpawnTimer = 0;
+
+        function iamAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
+
+            // Central shield
+            var cx = w * 0.5, cy = h * 0.45;
+            var shieldSize = Math.min(w, h) * 0.2;
+
+            // Shield glow
+            ctx.beginPath();
+            ctx.arc(cx, cy, shieldSize + 10 + Math.sin(time * 2) * 5, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.05)';
+            ctx.fill();
+
+            // Shield shape
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - shieldSize);
+            ctx.lineTo(cx + shieldSize * 0.8, cy - shieldSize * 0.3);
+            ctx.lineTo(cx + shieldSize * 0.8, cy + shieldSize * 0.3);
+            ctx.lineTo(cx, cy + shieldSize);
+            ctx.lineTo(cx - shieldSize * 0.8, cy + shieldSize * 0.3);
+            ctx.lineTo(cx - shieldSize * 0.8, cy - shieldSize * 0.3);
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(52, 211, 153, 0.08)';
+            ctx.fill();
+
+            // Lock icon in center
+            ctx.fillStyle = '#34d399';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🔒', cx, cy);
+
+            // User nodes around shield
+            var users = [
+                { x: w * 0.15, y: h * 0.2, role: 'Admin', color: '#34d399' },
+                { x: w * 0.85, y: h * 0.2, role: 'User', color: '#38bdf8' },
+                { x: w * 0.1, y: h * 0.7, role: 'Viewer', color: '#a78bfa' },
+                { x: w * 0.9, y: h * 0.7, role: 'Editor', color: '#fbbf24' },
+                { x: w * 0.3, y: h * 0.9, role: 'Manager', color: '#f472b6' },
+                { x: w * 0.7, y: h * 0.9, role: 'SysAdmin', color: '#ef4444' }
+            ];
+
+            users.forEach(function(u, i) {
+                // Connection line to shield
+                var grad = ctx.createLinearGradient(u.x, u.y, cx, cy);
+                grad.addColorStop(0, u.color + '30');
+                grad.addColorStop(1, 'rgba(52, 211, 153, 0.1)');
+                ctx.beginPath();
+                ctx.moveTo(u.x, u.y);
+                ctx.lineTo(cx, cy);
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // User node
+                ctx.beginPath();
+                ctx.arc(u.x, u.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = u.color + '40';
+                ctx.fill();
+                ctx.strokeStyle = u.color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Role label
+                ctx.fillStyle = u.color;
+                ctx.font = 'bold 8px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(u.role, u.x, u.y + 14);
+            });
+
+            // Stats in corner
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText('3 realms', w - 10, 12);
+            ctx.fillText('1,247 users', w - 10, 26);
+            ctx.fillStyle = '#a78bfa';
+            ctx.fillText('38 roles', w - 10, 40);
+
+            animId = requestAnimationFrame(iamAnimation);
+        }
+
+        // Network Intelligence animation — topology with data flow
+        var netintelPackets = [];
+        var netintelSpawnTimer = 0;
+
+        function netintelAnimation() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var w = canvas.width, h = canvas.height;
+            var time = Date.now() * 0.001;
+
+            // Network nodes
+            var nodes = [
+                { x: w * 0.5, y: h * 0.3, type: 'core', color: '#34d399', label: 'Core' },
+                { x: w * 0.2, y: h * 0.5, type: 'switch', color: '#38bdf8', label: 'Switch' },
+                { x: w * 0.8, y: h * 0.5, type: 'switch', color: '#38bdf8', label: 'Switch' },
+                { x: w * 0.1, y: h * 0.8, type: 'endpoint', color: '#a78bfa', label: 'Server' },
+                { x: w * 0.35, y: h * 0.8, type: 'endpoint', color: '#a78bfa', label: 'DB' },
+                { x: w * 0.65, y: h * 0.8, type: 'endpoint', color: '#a78bfa', label: 'Cache' },
+                { x: w * 0.9, y: h * 0.8, type: 'endpoint', color: '#a78bfa', label: 'API' }
+            ];
+
+            // Draw connections
+            var connections = [
+                [0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [2, 6]
+            ];
+
+            connections.forEach(function(c) {
+                var from = nodes[c[0]];
+                var to = nodes[c[1]];
+
+                var grad = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
+                grad.addColorStop(0, from.color + '20');
+                grad.addColorStop(1, to.color + '20');
+
+                ctx.beginPath();
+                ctx.moveTo(from.x, from.y);
+                ctx.lineTo(to.x, to.y);
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+
+            // Draw nodes
+            nodes.forEach(function(n, i) {
+                var pulse = Math.sin(time * 2 + i) * 0.3 + 0.7;
+
+                // Glow
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, 12 + pulse * 4, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + '10';
+                ctx.fill();
+
+                // Node
+                var size = n.type === 'core' ? 8 : n.type === 'switch' ? 6 : 5;
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, size, 0, Math.PI * 2);
+                ctx.fillStyle = n.color + '60';
+                ctx.fill();
+                ctx.strokeStyle = n.color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Label
+                ctx.fillStyle = n.color;
+                ctx.font = 'bold 8px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(n.label, n.x, n.y + size + 10);
+            });
+
+            // Data packets flowing
+            netintelSpawnTimer += 0.016;
+            if (netintelSpawnTimer > 0.3) {
+                netintelSpawnTimer = 0;
+                var conn = connections[Math.floor(Math.random() * connections.length)];
+                netintelPackets.push({
+                    from: nodes[conn[0]],
+                    to: nodes[conn[1]],
+                    progress: 0,
+                    color: nodes[conn[0]].color
+                });
+            }
+
+            for (var p = netintelPackets.length - 1; p >= 0; p--) {
+                var pkt = netintelPackets[p];
+                pkt.progress += 0.02;
+
+                if (pkt.progress >= 1) {
+                    netintelPackets.splice(p, 1);
+                    continue;
+                }
+
+                var px = pkt.from.x + (pkt.to.x - pkt.from.x) * pkt.progress;
+                var py = pkt.from.y + (pkt.to.y - pkt.from.y) * pkt.progress;
+
+                ctx.beginPath();
+                ctx.arc(px, py, 3, 0, Math.PI * 2);
+                ctx.fillStyle = pkt.color + 'cc';
+                ctx.fill();
+            }
+
+            // Stats in corner
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText('24 nodes', w - 10, 12);
+            ctx.fillText('2.4ms latency', w - 10, 26);
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText('3 anomalies', w - 10, 40);
+
+            animId = requestAnimationFrame(netintelAnimation);
+        }
+
         var animations = {
             api: apiAnimation,
             storage: storageAnimation,
             cdc: cdcAnimation,
             scanner: scannerAnimation,
-            conductor: conductorAnimation
+            conductor: conductorAnimation,
+            analytics: analyticsAnimation,
+            gis: gisAnimation,
+            iam: iamAnimation,
+            netintel: netintelAnimation
         };
 
         return {
@@ -1960,6 +2334,14 @@
                 scanDetected = [];
                 conductorPackets = [];
                 conductorSpawnTimer = 0;
+                analyticsBars = [];
+                analyticsSpawnTimer = 0;
+                gisMarkers = [];
+                gisSpawnTimer = 0;
+                iamParticles = [];
+                iamSpawnTimer = 0;
+                netintelPackets = [];
+                netintelSpawnTimer = 0;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             },
             resize: resize
