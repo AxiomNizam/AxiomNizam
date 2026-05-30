@@ -3218,8 +3218,8 @@
     padding: 24px;
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
     font-size: 0.82rem;
-    line-height: 2;
-    max-height: 300px;
+    line-height: 1.8;
+    height: 420px;
     overflow-y: auto;
     overflow-x: hidden;
     scroll-behavior: smooth;
@@ -4517,8 +4517,8 @@
     .terminal__body {
         padding: 14px;
         font-size: 0.7rem;
-        line-height: 1.8;
-        max-height: 200px;
+        line-height: 1.6;
+        height: 320px;
     }
 
     .terminal__input-row {
