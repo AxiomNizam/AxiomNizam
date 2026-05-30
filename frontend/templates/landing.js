@@ -3274,6 +3274,31 @@
         });
     }
 
+    // ---- Back to Top ----
+    var backToTopBtn = document.getElementById('backToTop');
+    if (backToTopBtn) {
+        var bttTicking = false;
+        window.addEventListener('scroll', function() {
+            if (!bttTicking) {
+                requestAnimationFrame(function() {
+                    var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                    var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+                    // Show when scrolled past 70% of the page
+                    if (scrollTop > docHeight * 0.7) {
+                        backToTopBtn.classList.add('is-visible');
+                    } else {
+                        backToTopBtn.classList.remove('is-visible');
+                    }
+                    bttTicking = false;
+                });
+                bttTicking = true;
+            }
+        });
+        backToTopBtn.addEventListener('click', function() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
     // ---- Scroll Reveal (IntersectionObserver) ----
     var revealElements = document.querySelectorAll('[data-reveal]');
     if (revealElements.length > 0) {
