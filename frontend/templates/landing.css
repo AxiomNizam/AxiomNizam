@@ -2655,48 +2655,20 @@
 /* Pipeline */
 .api-lifecycle__pipeline {
     position: relative;
-    height: 4px;
-    background: rgba(148, 163, 184, 0.06);
-    border-radius: 2px;
+    height: 80px;
     margin-bottom: 32px;
     overflow: hidden;
+}
+
+.api-lifecycle__canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .api-lifecycle__track {
     position: absolute;
     inset: 0;
-}
-
-.api-lifecycle__packet {
-    position: absolute;
-    top: 50%;
-    width: 8px;
-    height: 8px;
-    margin: -4px 0 0 -4px;
-    border-radius: 50%;
-    background: #34d399;
-    box-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
-    animation: packetFlow 2s linear forwards;
-}
-
-.api-lifecycle__packet--response {
-    background: #38bdf8;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
-    animation: packetFlowReverse 2s linear forwards;
-}
-
-@keyframes packetFlow {
-    0% { left: 0%; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { left: 100%; opacity: 0; }
-}
-
-@keyframes packetFlowReverse {
-    0% { right: 0%; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { right: 100%; opacity: 0; }
 }
 
 /* Nodes */

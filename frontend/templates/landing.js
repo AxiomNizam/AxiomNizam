@@ -545,7 +545,8 @@
     // API LIFECYCLE ANIMATION
     // ============================================================
     var apiStage = document.getElementById('apiLifecycleStage');
-    var apiTrack = document.getElementById('apiTrack');
+    var apiCanvas = document.getElementById('apiCanvas');
+    var apiCtx = apiCanvas ? apiCanvas.getContext('2d') : null;
     var liveReqCode = document.getElementById('liveReqCode');
     var liveResCode = document.getElementById('liveResCode');
     var liveTiming = document.getElementById('liveTiming');
@@ -562,13 +563,155 @@
     var apiNodeIds = ['nodeClient', 'nodeGateway', 'nodeBuilder', 'nodeDB', 'nodeResponse'];
     var apiCycleIdx = 0;
     var apiCycleTimer = null;
+    var apiPackets = [];
+    var apiAnimId = null;
 
-    function spawnPacket(reverse) {
-        if (!apiTrack) return;
-        var dot = document.createElement('div');
-        dot.className = 'api-lifecycle__packet' + (reverse ? ' api-lifecycle__packet--response' : '');
-        apiTrack.appendChild(dot);
-        setTimeout(function() { dot.remove(); }, 2100);
+    // Resize canvas
+    function resizeApiCanvas() {
+        if (!apiCanvas) return;
+        apiCanvas.width = apiCanvas.offsetWidth;
+        apiCanvas.height = apiCanvas.offsetHeight;
+    }
+    resizeApiCanvas();
+    window.addEventListener('resize', resizeApiCanvas);
+
+    // Node positions along the pipeline (normalized 0-1)
+    var nodePositions = [
+        { x: 0.05, y: 0.5 },  // Client
+        { x: 0.25, y: 0.5 },  // Gateway
+        { x: 0.5, y: 0.5 },   // Builder
+        { x: 0.75, y: 0.5 },  // Database
+        { x: 0.95, y: 0.5 },  // Response
+    ];
+
+    // Spawn a packet along the curve
+    function spawnApiPacket(reverse) {
+        apiPackets.push({
+            t: 0,
+            speed: 0.012 + Math.random() * 0.005,
+            reverse: reverse,
+            color: reverse ? '#38bdf8' : '#34d399',
+            glowColor: reverse ? 'rgba(56, 189, 248, 0.4)' : 'rgba(52, 211, 153, 0.4)',
+            size: 3 + Math.random() * 2,
+        });
+    }
+
+    // Draw the API lifecycle canvas
+    function drawApiCanvas() {
+        if (!apiCtx || !apiCanvas) return;
+        apiCtx.clearRect(0, 0, apiCanvas.width, apiCanvas.height);
+        var w = apiCanvas.width, h = apiCanvas.height;
+        var time = Date.now() * 0.001;
+
+        // Draw connections between nodes
+        for (var i = 0; i < nodePositions.length - 1; i++) {
+            var from = nodePositions[i];
+            var to = nodePositions[i + 1];
+
+            // Curved path
+            var cpx = (from.x + to.x) / 2 * w;
+            var cpy = (from.y + to.y) / 2 * h - 15 + Math.sin(time + i) * 5;
+
+            apiCtx.beginPath();
+            apiCtx.moveTo(from.x * w, from.y * h);
+            apiCtx.quadraticCurveTo(cpx, cpy, to.x * w, to.y * h);
+            apiCtx.strokeStyle = 'rgba(52, 211, 153, 0.08)';
+            apiCtx.lineWidth = 1;
+            apiCtx.stroke();
+
+            // Return path (below)
+            var cpyReturn = (from.y + to.y) / 2 * h + 15 + Math.cos(time + i) * 5;
+            apiCtx.beginPath();
+            apiCtx.moveTo(to.x * w, to.y * h);
+            apiCtx.quadraticCurveTo(cpx, cpyReturn, from.x * w, from.y * h);
+            apiCtx.strokeStyle = 'rgba(56, 189, 248, 0.05)';
+            apiCtx.lineWidth = 1;
+            apiCtx.stroke();
+        }
+
+        // Draw node circles
+        nodePositions.forEach(function(node, idx) {
+            var pulse = Math.sin(time * 2 + idx) * 0.3 + 0.7;
+
+            // Glow
+            apiCtx.beginPath();
+            apiCtx.arc(node.x * w, node.y * h, 12 + pulse * 4, 0, Math.PI * 2);
+            apiCtx.fillStyle = 'rgba(52, 211, 153, 0.05)';
+            apiCtx.fill();
+
+            // Node
+            apiCtx.beginPath();
+            apiCtx.arc(node.x * w, node.y * h, 6, 0, Math.PI * 2);
+            apiCtx.fillStyle = 'rgba(52, 211, 153, 0.15)';
+            apiCtx.fill();
+            apiCtx.strokeStyle = 'rgba(52, 211, 153, 0.3)';
+            apiCtx.lineWidth = 1.5;
+            apiCtx.stroke();
+        });
+
+        // Update and draw packets
+        for (var p = apiPackets.length - 1; p >= 0; p--) {
+            var pkt = apiPackets[p];
+            pkt.t += pkt.speed;
+
+            if (pkt.t >= 1) {
+                apiPackets.splice(p, 1);
+                continue;
+            }
+
+            var progress = pkt.reverse ? (1 - pkt.t) : pkt.t;
+            var segCount = nodePositions.length - 1;
+            var segProgress = progress * segCount;
+            var segIdx = Math.min(Math.floor(segProgress), segCount - 1);
+            var segT = segProgress - segIdx;
+
+            var from = nodePositions[pkt.reverse ? segIdx + 1 : segIdx];
+            var to = nodePositions[pkt.reverse ? segIdx : segIdx + 1];
+
+            // Quadratic bezier interpolation
+            var cpx = (from.x + to.x) / 2 * w;
+            var cpyOffset = pkt.reverse ? 15 : -15;
+            var cpy = (from.y + to.y) / 2 * h + cpyOffset + Math.sin(time + segIdx) * 5;
+
+            var px = (1 - segT) * (1 - segT) * from.x * w + 2 * (1 - segT) * segT * cpx + segT * segT * to.x * w;
+            var py = (1 - segT) * (1 - segT) * from.y * h + 2 * (1 - segT) * segT * cpy + segT * segT * to.y * h;
+
+            // Glow
+            apiCtx.beginPath();
+            apiCtx.arc(px, py, pkt.size + 4, 0, Math.PI * 2);
+            apiCtx.fillStyle = pkt.glowColor;
+            apiCtx.fill();
+
+            // Packet
+            apiCtx.beginPath();
+            apiCtx.arc(px, py, pkt.size, 0, Math.PI * 2);
+            apiCtx.fillStyle = pkt.color;
+            apiCtx.fill();
+
+            // Trail
+            for (var trail = 1; trail <= 3; trail++) {
+                var trailT = Math.max(0, segT - trail * 0.08);
+                var trailPx = (1 - trailT) * (1 - trailT) * from.x * w + 2 * (1 - trailT) * trailT * cpx + trailT * trailT * to.x * w;
+                var trailPy = (1 - trailT) * (1 - trailT) * from.y * h + 2 * (1 - trailT) * trailT * cpy + trailT * trailT * to.y * h;
+                apiCtx.beginPath();
+                apiCtx.arc(trailPx, trailPy, pkt.size * (1 - trail * 0.2), 0, Math.PI * 2);
+                apiCtx.fillStyle = pkt.color + (40 - trail * 10).toString(16).padStart(2, '0');
+                apiCtx.fill();
+            }
+        }
+
+        // Ambient floating particles
+        for (var i = 0; i < 8; i++) {
+            var ax = (Math.sin(time * 0.5 + i * 1.5) * 0.4 + 0.5) * w;
+            var ay = (Math.cos(time * 0.3 + i * 2) * 0.3 + 0.5) * h;
+            var aSize = Math.sin(time + i) * 0.5 + 1;
+            apiCtx.beginPath();
+            apiCtx.arc(ax, ay, aSize, 0, Math.PI * 2);
+            apiCtx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+            apiCtx.fill();
+        }
+
+        apiAnimId = requestAnimationFrame(drawApiCanvas);
     }
 
     function activateNode(idx) {
@@ -588,7 +731,7 @@
         if (liveResCode) liveResCode.innerHTML = '';
         if (liveTiming) liveTiming.textContent = '';
 
-        // Animate request flowing through nodes
+        // Animate request flowing through nodes with packets
         var steps = [
             { delay: 200, node: 0, text: '<span class="req-method">' + ep.method + '</span> <span class="req-url">' + ep.url + '</span>\n<span class="req-key">Authorization:</span> <span class="req-val">Bearer eyJhbG...</span>\n<span class="req-key">Content-Type:</span> <span class="req-val">application/json</span>' },
             { delay: 600, node: 1, text: null },
@@ -599,7 +742,7 @@
         steps.forEach(function(step) {
             setTimeout(function() {
                 activateNode(step.node);
-                spawnPacket(false);
+                spawnApiPacket(false);
                 if (step.text && liveReqCode) {
                     liveReqCode.innerHTML = step.text;
                 }
@@ -609,12 +752,11 @@
         // Response flows back
         setTimeout(function() {
             activateNode(4);
-            spawnPacket(true);
+            spawnApiPacket(true);
             if (liveResCode) {
                 if (ep.status === 204) {
                     liveResCode.innerHTML = '<span class="res-status">' + ep.status + '</span> No Content';
                 } else {
-                    // Syntax highlight the JSON
                     var highlighted = ep.resBody
                         .replace(/"([^"]+)":/g, '<span class="res-key">"$1"</span>:')
                         .replace(/: "([^"]+)"/g, ': <span class="res-str">"$1"</span>')
@@ -631,11 +773,13 @@
     if (apiStage) {
         var apiObserver = new IntersectionObserver(function(entries) {
             if (entries[0].isIntersecting) {
+                drawApiCanvas();
                 runApiCycle();
                 apiCycleTimer = setInterval(runApiCycle, 4000);
                 apiObserver.unobserve(apiStage);
             } else {
                 clearInterval(apiCycleTimer);
+                if (apiAnimId) cancelAnimationFrame(apiAnimId);
             }
         }, { threshold: 0.3 });
         apiObserver.observe(apiStage);
