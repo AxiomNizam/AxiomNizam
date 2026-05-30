@@ -588,13 +588,17 @@
     function spawnApiPacket(reverse) {
         apiPackets.push({
             t: 0,
-            speed: 0.012 + Math.random() * 0.005,
+            speed: 0.006 + Math.random() * 0.006,
             reverse: reverse,
             color: reverse ? '#38bdf8' : '#34d399',
-            glowColor: reverse ? 'rgba(56, 189, 248, 0.4)' : 'rgba(52, 211, 153, 0.4)',
-            size: 3 + Math.random() * 2,
+            glowColor: reverse ? 'rgba(56, 189, 248, 0.5)' : 'rgba(52, 211, 153, 0.5)',
+            size: 2.5 + Math.random() * 2,
         });
     }
+
+    // Auto-spawn packets for continuous flow
+    var apiSpawnTimer = 0;
+    var apiResponseSpawnTimer = 0;
 
     // Draw the API lifecycle canvas
     function drawApiCanvas() {
@@ -603,29 +607,43 @@
         var w = apiCanvas.width, h = apiCanvas.height;
         var time = Date.now() * 0.001;
 
+        // Auto-spawn request packets (green, left to right)
+        apiSpawnTimer += 0.016;
+        if (apiSpawnTimer > 0.6) {
+            apiSpawnTimer = 0;
+            spawnApiPacket(false);
+        }
+
+        // Auto-spawn response packets (blue, right to left)
+        apiResponseSpawnTimer += 0.016;
+        if (apiResponseSpawnTimer > 0.9) {
+            apiResponseSpawnTimer = 0;
+            spawnApiPacket(true);
+        }
+
         // Draw connections between nodes
         for (var i = 0; i < nodePositions.length - 1; i++) {
             var from = nodePositions[i];
             var to = nodePositions[i + 1];
 
-            // Curved path
+            // Request path (top curve, green)
             var cpx = (from.x + to.x) / 2 * w;
-            var cpy = (from.y + to.y) / 2 * h - 15 + Math.sin(time + i) * 5;
+            var cpyTop = (from.y + to.y) / 2 * h - 20 + Math.sin(time + i) * 3;
 
             apiCtx.beginPath();
             apiCtx.moveTo(from.x * w, from.y * h);
-            apiCtx.quadraticCurveTo(cpx, cpy, to.x * w, to.y * h);
-            apiCtx.strokeStyle = 'rgba(52, 211, 153, 0.08)';
-            apiCtx.lineWidth = 1;
+            apiCtx.quadraticCurveTo(cpx, cpyTop, to.x * w, to.y * h);
+            apiCtx.strokeStyle = 'rgba(52, 211, 153, 0.1)';
+            apiCtx.lineWidth = 1.5;
             apiCtx.stroke();
 
-            // Return path (below)
-            var cpyReturn = (from.y + to.y) / 2 * h + 15 + Math.cos(time + i) * 5;
+            // Response path (bottom curve, blue)
+            var cpyBottom = (from.y + to.y) / 2 * h + 20 + Math.cos(time + i) * 3;
             apiCtx.beginPath();
             apiCtx.moveTo(to.x * w, to.y * h);
-            apiCtx.quadraticCurveTo(cpx, cpyReturn, from.x * w, from.y * h);
-            apiCtx.strokeStyle = 'rgba(56, 189, 248, 0.05)';
-            apiCtx.lineWidth = 1;
+            apiCtx.quadraticCurveTo(cpx, cpyBottom, from.x * w, from.y * h);
+            apiCtx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+            apiCtx.lineWidth = 1.5;
             apiCtx.stroke();
         }
 
@@ -670,8 +688,8 @@
 
             // Quadratic bezier interpolation
             var cpx = (from.x + to.x) / 2 * w;
-            var cpyOffset = pkt.reverse ? 15 : -15;
-            var cpy = (from.y + to.y) / 2 * h + cpyOffset + Math.sin(time + segIdx) * 5;
+            var cpyOffset = pkt.reverse ? 20 : -20;
+            var cpy = (from.y + to.y) / 2 * h + cpyOffset + Math.sin(time + segIdx) * 3;
 
             var px = (1 - segT) * (1 - segT) * from.x * w + 2 * (1 - segT) * segT * cpx + segT * segT * to.x * w;
             var py = (1 - segT) * (1 - segT) * from.y * h + 2 * (1 - segT) * segT * cpy + segT * segT * to.y * h;

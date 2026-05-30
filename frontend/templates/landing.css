@@ -2655,7 +2655,7 @@
 /* Pipeline */
 .api-lifecycle__pipeline {
     position: relative;
-    height: 80px;
+    height: 100px;
     margin-bottom: 32px;
     overflow: hidden;
 }
