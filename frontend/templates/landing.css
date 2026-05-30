@@ -3080,6 +3080,56 @@
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
     font-size: 0.82rem;
     line-height: 2;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+}
+
+/* Custom scrollbar for terminal */
+.terminal__body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.terminal__body::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 3px;
+}
+
+.terminal__body::-webkit-scrollbar-thumb {
+    background: rgba(52, 211, 153, 0.3);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+}
+
+.terminal__body::-webkit-scrollbar-thumb:hover {
+    background: rgba(52, 211, 153, 0.5);
+}
+
+/* Firefox scrollbar */
+.terminal__body {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(52, 211, 153, 0.3) rgba(15, 23, 42, 0.5);
+}
+
+/* Fade indicator when scrolled */
+.terminal__body::before {
+    content: '';
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    display: block;
+    background: linear-gradient(to bottom, #0d1117, transparent);
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.terminal__body.scrolled::before {
+    opacity: 1;
 }
 
 .terminal__line {
@@ -4334,6 +4384,7 @@
         padding: 14px;
         font-size: 0.7rem;
         line-height: 1.8;
+        max-height: 200px;
     }
 
     .terminal__input-row {

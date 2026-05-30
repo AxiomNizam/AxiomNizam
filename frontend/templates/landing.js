@@ -832,8 +832,21 @@
         var div = document.createElement('div');
         div.className = 'terminal__line' + (cls ? ' ' + cls : '');
         div.innerHTML = html;
-        if (termBody) termBody.appendChild(div);
-        if (termBody) termBody.scrollTop = termBody.scrollHeight;
+        if (termBody) {
+            termBody.appendChild(div);
+            termBody.scrollTop = termBody.scrollHeight;
+        }
+    }
+
+    // Terminal scroll indicator
+    if (termBody) {
+        termBody.addEventListener('scroll', function() {
+            if (termBody.scrollTop > 10) {
+                termBody.classList.add('scrolled');
+            } else {
+                termBody.classList.remove('scrolled');
+            }
+        });
     }
 
     function executeCommand(input) {
