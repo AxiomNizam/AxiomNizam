@@ -100,33 +100,38 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 
 ### 2.1 Animated Counters
 - **What:** Numbers count up from 0 to target value when scrolling into view
-- **Where:** Hero stats (111 modules, 244K lines, etc.), section stats
-- **How:** IntersectionObserver + requestAnimationFrame counter
+- **Where:** Hero stats (111 modules, 1040 Go files, 244K+ Go lines)
+- **How:** IntersectionObserver + requestAnimationFrame counter with easing
 - **Complexity:** Medium
+- **Status:** Done (enhanced with suffix support, number formatting, stagger, counting/counted states)
 
 ### 2.2 Section Parallax Layers
 - **What:** Background elements move at different speeds during scroll
-- **Where:** Hero orbs, section backgrounds
+- **Where:** Hero orbs (mouse-reactive), section headers (scroll-based)
 - **How:** Scroll event listener with transform calculations per layer
 - **Complexity:** Medium
+- **Status:** Done (enhanced with parallax on bento, deep, api-lifecycle, arch headers)
 
 ### 2.3 Text Scramble Effect
 - **What:** Text characters scramble (random chars) before revealing final text
-- **Where:** Hero title, section titles
-- **How:** Character-by-character reveal with random intermediate chars
+- **Where:** Section eyebrow labels (Platform Capabilities, Deep Dive, API Lifecycle, Architecture)
+- **How:** Character-by-character reveal with random intermediate chars via IntersectionObserver
 - **Complexity:** Medium
+- **Status:** Done
 
 ### 2.4 Staggered Section Reveals
 - **What:** Each section animates in with staggered child elements
 - **Where:** All major sections
 - **How:** IntersectionObserver + staggered CSS class application
 - **Complexity:** Medium
+- **Status:** Done (enhanced with reveal types: scale, slide-left, slide-right, rotate, blur)
 
 ### 2.5 Horizontal Scroll Gallery
 - **What:** Features scroll horizontally with snap points
-- **Where:** Mobile feature showcase
+- **Where:** Mobile feature showcase (Deep Dive tabs already horizontal-scroll on mobile)
 - **How:** CSS scroll-snap with horizontal overflow
 - **Complexity:** Medium
+- **Status:** Deferred (Deep Dive tabs already have horizontal scroll on mobile via CSS)
 
 ---
 

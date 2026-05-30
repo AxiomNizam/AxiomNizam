@@ -190,6 +190,49 @@
     transform: translateY(0);
 }
 
+/* Reveal animation types */
+[data-reveal].revealed--scale {
+    transform: scale(1);
+}
+
+[data-reveal][data-reveal-type="scale"] {
+    transform: scale(0.9);
+}
+
+[data-reveal].revealed--slide-left {
+    transform: translateX(0);
+}
+
+[data-reveal][data-reveal-type="slide-left"] {
+    transform: translateX(-30px);
+}
+
+[data-reveal].revealed--slide-right {
+    transform: translateX(0);
+}
+
+[data-reveal][data-reveal-type="slide-right"] {
+    transform: translateX(30px);
+}
+
+[data-reveal].revealed--rotate {
+    transform: rotate(0) scale(1);
+}
+
+[data-reveal][data-reveal-type="rotate"] {
+    transform: rotate(-5deg) scale(0.95);
+}
+
+[data-reveal].revealed--blur {
+    filter: blur(0);
+    transform: translateY(0);
+}
+
+[data-reveal][data-reveal-type="blur"] {
+    filter: blur(10px);
+    transform: translateY(20px);
+}
+
 /* =============================================
    HERO SECTION
    ============================================= */
@@ -727,6 +770,36 @@
     display: flex;
     align-items: center;
     gap: 2px;
+    transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.hero__stat-num.counting {
+    color: #34d399;
+    transform: scale(1.05);
+}
+
+.hero__stat-num.counted {
+    animation: counterComplete 0.5s ease forwards;
+}
+
+@keyframes counterComplete {
+    0% { transform: scale(1.05); }
+    50% { transform: scale(0.98); }
+    100% { transform: scale(1); }
+}
+
+.hero__stat:hover .hero__stat-num {
+    color: #34d399;
+    transform: scale(1.1);
+}
+
+.hero__stat:hover .hero__stat-plus {
+    color: #34d399;
+    transform: scale(1.1);
+}
+
+.hero__stat:hover .hero__stat-label {
+    color: #e2e8f0;
 }
 
 .hero__stat-plus {

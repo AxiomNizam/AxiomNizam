@@ -2887,9 +2887,15 @@
                             break;
                         }
                     }
+
+                    // Get animation type from data attribute
+                    var animType = entry.target.getAttribute('data-reveal-type') || 'default';
+
                     setTimeout(function() {
                         entry.target.classList.add('revealed');
+                        entry.target.classList.add('revealed--' + animType);
                     }, delay);
+
                     revealObserver.unobserve(entry.target);
                 }
             });
@@ -2904,28 +2910,47 @@
     var counterElements = document.querySelectorAll('[data-count]');
     var counterAnimated = false;
 
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     function animateCounters() {
         if (counterAnimated) return;
         counterAnimated = true;
 
-        counterElements.forEach(function(el) {
+        counterElements.forEach(function(el, index) {
             var target = parseInt(el.getAttribute('data-count'), 10);
+            var suffix = el.getAttribute('data-suffix') || '';
             if (isNaN(target)) return;
-            var duration = 2000;
+
+            var duration = 2000 + (index * 200); // Stagger each counter
             var startTime = null;
+
+            // Add counting class for visual effect
+            el.classList.add('counting');
 
             function step(timestamp) {
                 if (!startTime) startTime = timestamp;
                 var progress = Math.min((timestamp - startTime) / duration, 1);
+                // Ease out cubic
                 var eased = 1 - Math.pow(1 - progress, 3);
-                el.textContent = Math.floor(eased * target);
+                var current = Math.floor(eased * target);
+
+                el.textContent = formatNumber(current) + (progress >= 1 ? suffix : '');
+
                 if (progress < 1) {
                     requestAnimationFrame(step);
                 } else {
-                    el.textContent = target;
+                    el.textContent = formatNumber(target) + suffix;
+                    el.classList.remove('counting');
+                    el.classList.add('counted');
                 }
             }
-            requestAnimationFrame(step);
+
+            // Stagger start of each counter
+            setTimeout(function() {
+                requestAnimationFrame(step);
+            }, index * 150);
         });
     }
 
@@ -3090,6 +3115,64 @@
         }, { threshold: 0.15 });
 
         deepScrollObserver.observe(deepSection);
+    }
+
+    // ---- Text Scramble Effect ----
+    var scrambleChars = '!@#$%^&*()_+-=[]{}|;:,.<>?/~`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+    function scrambleText(element, finalText, duration, callback) {
+        var length = finalText.length;
+        var frame = 0;
+        var totalFrames = Math.floor(duration / 30); // ~30ms per frame
+
+        function update() {
+            var progress = frame / totalFrames;
+            var revealed = Math.floor(progress * length);
+            var text = '';
+
+            for (var i = 0; i < length; i++) {
+                if (i < revealed) {
+                    text += finalText[i];
+                } else if (finalText[i] === ' ') {
+                    text += ' ';
+                } else {
+                    text += scrambleChars[Math.floor(Math.random() * scrambleChars.length)];
+                }
+            }
+
+            element.textContent = text;
+            frame++;
+
+            if (frame <= totalFrames) {
+                requestAnimationFrame(update);
+            } else {
+                element.textContent = finalText;
+                if (callback) callback();
+            }
+        }
+
+        requestAnimationFrame(update);
+    }
+
+    // Apply scramble to section titles on scroll
+    var scrambleElements = document.querySelectorAll('[data-scramble]');
+    if (scrambleElements.length > 0) {
+        var scrambleObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    var el = entry.target;
+                    var text = el.getAttribute('data-scramble') || el.textContent;
+                    el.setAttribute('data-scramble', text);
+                    scrambleText(el, text, 800);
+                    scrambleObserver.unobserve(el);
+                }
+            });
+        }, { threshold: 0.5 });
+
+        scrambleElements.forEach(function(el) {
+            el.setAttribute('data-scramble', el.textContent);
+            scrambleObserver.observe(el);
+        });
     }
 
     // ---- Parallax on Scroll ----
