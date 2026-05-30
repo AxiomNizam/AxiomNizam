@@ -11,10 +11,18 @@
 
 /* ---- Text Gradient Utility ---- */
 .text-gradient {
-    background: linear-gradient(135deg, #34d399, #38bdf8, #a78bfa);
+    background: linear-gradient(135deg, #34d399, #38bdf8, #a78bfa, #34d399);
+    background-size: 300% 300%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    animation: gradientShift 4s ease infinite;
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 /* ---- Cursor Glow ---- */
@@ -122,6 +130,35 @@
     height: 100%;
     pointer-events: none;
     z-index: 9997;
+}
+
+/* Scroll Progress Bar */
+.scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    z-index: 10000;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.scroll-progress__bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #34d399, #38bdf8, #a78bfa);
+    background-size: 200% 100%;
+    animation: scrollProgressGradient 3s ease infinite;
+    transition: width 0.1s ease-out;
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+    border-radius: 0 2px 2px 0;
+}
+
+@keyframes scrollProgressGradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 /* ---- Pulse Dot ---- */
@@ -1082,6 +1119,23 @@
     background: rgba(52, 211, 153, 0.08);
     border: 1px solid rgba(52, 211, 153, 0.15);
     color: #6ee7b7;
+    animation: floatBadge 3s ease-in-out infinite;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.bento__card-tags span:nth-child(2) { animation-delay: 0.5s; }
+.bento__card-tags span:nth-child(3) { animation-delay: 1s; }
+.bento__card-tags span:nth-child(4) { animation-delay: 1.5s; }
+
+.bento__card-tags span:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 12px rgba(52, 211, 153, 0.2);
+}
+
+@keyframes floatBadge {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
     font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.03em;

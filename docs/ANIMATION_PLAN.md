@@ -45,18 +45,29 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 | API Lifecycle node 3D tilt on hover | API Lifecycle | Done | `landing.js`, `landing.css` |
 | API Lifecycle request/response proximity animation | API Lifecycle | Done | `landing.js`, `landing.css` |
 | API Lifecycle node active pulse | API Lifecycle | Done | `landing.css` |
+| Cursor trail particles + glow + ring | Global | Done | `landing.js`, `landing.css` |
+| Magnetic buttons | Hero CTA, Buttons | Done | `landing.js` |
+| Scroll progress bar | Global (top) | Done | `landing.js`, `landing.css` |
+| Floating badge animation | Bento tags | Done | `landing.css` |
+| Text gradient animation | Section titles | Done | `landing.css` |
 
 ---
 
-## Phase 1: Micro-Interactions (1-2 days)
+## Phase 1: Micro-Interactions (1-2 days) — COMPLETE
 
 ### 1.1 Cursor Trail Particles
 - **What:** Colored particles follow the cursor across the entire page
 - **Where:** Global
 - **How:** Canvas overlay, spawn particles on mousemove, fade out over time
 - **Complexity:** Low
+- **Status:** Done (was already implemented)
 
 ### 1.2 Magnetic Buttons
+- **What:** CTA buttons subtly follow cursor when mouse is nearby
+- **Where:** Hero CTA, section CTAs
+- **How:** Calculate distance, apply subtle transform toward cursor
+- **Complexity:** Low
+- **Status:** Done
 - **What:** CTA buttons subtly follow cursor when mouse is nearby
 - **Where:** Hero CTA, section CTAs
 - **How:** Calculate distance, apply subtle transform toward cursor
@@ -67,18 +78,21 @@ This document tracks all planned animations for the AxiomNizam **public landing 
 - **Where:** Fixed at top of viewport
 - **How:** Track scroll position, update width of fixed bar
 - **Complexity:** Low
+- **Status:** Done
 
 ### 1.4 Floating Badge Animation
 - **What:** Tags/badges float with subtle bob animation
 - **Where:** Feature tags, bento card tags
 - **How:** CSS keyframe with translateY oscillation
 - **Complexity:** Low
+- **Status:** Done
 
 ### 1.5 Text Gradient Animation
 - **What:** Gradient text shifts colors smoothly
 - **Where:** Section titles with `.text-gradient`
 - **How:** CSS `background-position` animation on gradient text
 - **Complexity:** Low
+- **Status:** Done
 
 ---
 

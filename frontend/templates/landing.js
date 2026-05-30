@@ -641,6 +641,55 @@
         apiObserver.observe(apiStage);
     }
 
+    // ---- Magnetic Buttons ----
+    var magneticButtons = document.querySelectorAll('.btn--primary, .btn--ghost, .hero__actions .btn');
+    var magneticThreshold = 100; // pixels
+
+    magneticButtons.forEach(function(btn) {
+        btn.addEventListener('mousemove', function(e) {
+            var rect = btn.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+            var centerX = rect.width / 2;
+            var centerY = rect.height / 2;
+
+            var dx = x - centerX;
+            var dy = y - centerY;
+            var distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < magneticThreshold) {
+                var strength = 0.3; // How much the button follows the cursor
+                var moveX = dx * strength;
+                var moveY = dy * strength;
+
+                btn.style.transform = 'translate(' + moveX + 'px, ' + moveY + 'px) scale(1.05)';
+                btn.style.transition = 'transform 0.2s ease-out';
+
+                // Move the inner content slightly more for parallax effect
+                var inner = btn.querySelector('span, svg');
+                if (inner) {
+                    inner.style.transform = 'translate(' + (moveX * 0.5) + 'px, ' + (moveY * 0.5) + 'px)';
+                    inner.style.transition = 'transform 0.1s ease-out';
+                }
+            }
+        });
+
+        btn.addEventListener('mouseleave', function() {
+            btn.style.transform = '';
+            btn.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+
+            var inner = btn.querySelector('span, svg');
+            if (inner) {
+                inner.style.transform = '';
+                inner.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+            }
+        });
+
+        btn.addEventListener('mouseenter', function() {
+            btn.style.transition = 'transform 0.1s ease-out';
+        });
+    });
+
     // ---- Node Hover Tilt Animation ----
     var lifecycleNodes = document.querySelectorAll('.api-lifecycle__node');
 
@@ -2804,6 +2853,24 @@
         requestAnimationFrame(animateCursorSystem);
     }
     animateCursorSystem();
+
+    // ---- Scroll Progress Bar ----
+    var scrollProgressBar = document.getElementById('scrollProgressBar');
+    if (scrollProgressBar) {
+        var ticking = false;
+        window.addEventListener('scroll', function() {
+            if (!ticking) {
+                requestAnimationFrame(function() {
+                    var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                    var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+                    var scrollPercent = (scrollTop / docHeight) * 100;
+                    scrollProgressBar.style.width = scrollPercent + '%';
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        });
+    }
 
     // ---- Scroll Reveal (IntersectionObserver) ----
     var revealElements = document.querySelectorAll('[data-reveal]');
