@@ -641,6 +641,34 @@
         apiObserver.observe(apiStage);
     }
 
+    // ---- Node Hover Tilt Animation ----
+    var lifecycleNodes = document.querySelectorAll('.api-lifecycle__node');
+
+    lifecycleNodes.forEach(function(node) {
+        node.addEventListener('mousemove', function(e) {
+            var rect = node.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+            var centerX = rect.width / 2;
+            var centerY = rect.height / 2;
+
+            var rotateX = ((y - centerY) / centerY) * -8;
+            var rotateY = ((x - centerX) / centerX) * 8;
+
+            node.style.transform = 'perspective(500px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) translateY(-4px) scale(1.05)';
+
+            // Move glow with mouse
+            var glowX = (x / rect.width) * 100;
+            var glowY = (y / rect.height) * 100;
+            node.style.background = 'radial-gradient(circle at ' + glowX + '% ' + glowY + '%, rgba(52, 211, 153, 0.08), rgba(15, 23, 42, 0.5))';
+        });
+
+        node.addEventListener('mouseleave', function() {
+            node.style.transform = '';
+            node.style.background = '';
+        });
+    });
+
     // ============================================================
     // INTERACTIVE CLI TERMINAL
     // ============================================================

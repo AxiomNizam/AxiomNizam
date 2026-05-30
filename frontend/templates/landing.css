@@ -2296,8 +2296,9 @@
     border-radius: 16px;
     background: rgba(15, 23, 42, 0.5);
     border: 1px solid rgba(148, 163, 184, 0.08);
-    transition: all 0.3s;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     min-width: 100px;
+    will-change: transform;
 }
 
 .api-lifecycle__node.active {
@@ -2317,7 +2318,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.3s;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
 }
 
 .api-lifecycle__node-icon svg { color: #34d399; }
@@ -2347,6 +2349,153 @@
     height: 5px;
     border-radius: 50%;
     background: #334155;
+
+}
+
+/* Node hover detail popup */
+.api-lifecycle__node {
+    position: relative;
+    cursor: pointer;
+}
+
+.api-lifecycle__node-detail {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%) translateY(10px) scale(0.95);
+    width: 240px;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(52, 211, 153, 0.1);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+}
+
+.api-lifecycle__node-detail::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(52, 211, 153, 0.2);
+}
+
+.api-lifecycle__node:hover .api-lifecycle__node-detail {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.api-lifecycle__node-detail-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #34d399;
+    margin-bottom: 6px;
+}
+
+.api-lifecycle__node-detail-desc {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.api-lifecycle__node-detail-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+.api-lifecycle__node-detail-stats strong {
+    color: #e2e8f0;
+}
+
+/* Node hover animations */
+.api-lifecycle__node:hover {
+    transform: translateY(-4px) scale(1.05);
+    border-color: rgba(52, 211, 153, 0.3);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(52, 211, 153, 0.1);
+    z-index: 10;
+}
+
+.api-lifecycle__node:hover .api-lifecycle__node-icon {
+    background: rgba(52, 211, 153, 0.15);
+    transform: scale(1.1) rotate(-5deg);
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.2);
+}
+
+.api-lifecycle__node:hover .api-lifecycle__node-label {
+    color: #34d399;
+}
+
+.api-lifecycle__node:hover .api-lifecycle__node-status {
+    color: #34d399;
+}
+
+/* Response node specific colors */
+.api-lifecycle__node--response:hover {
+    border-color: rgba(56, 189, 248, 0.3);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(56, 189, 248, 0.1);
+}
+
+.api-lifecycle__node--response:hover .api-lifecycle__node-icon {
+    background: rgba(56, 189, 248, 0.15);
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+}
+
+.api-lifecycle__node--response:hover .api-lifecycle__node-label {
+    color: #38bdf8;
+}
+
+.api-lifecycle__node--response:hover .api-lifecycle__node-status {
+    color: #38bdf8;
+}
+
+.api-lifecycle__node--response .api-lifecycle__node-detail {
+    border-color: rgba(56, 189, 248, 0.2);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(56, 189, 248, 0.1);
+}
+
+.api-lifecycle__node--response .api-lifecycle__node-detail::after {
+    border-top-color: rgba(56, 189, 248, 0.2);
+}
+
+.api-lifecycle__node--response .api-lifecycle__node-detail-title {
+    color: #38bdf8;
+}
+
+/* Arrow animation on adjacent node hover */
+.api-lifecycle__nodes:has(.api-lifecycle__node:hover) .api-lifecycle__arrow {
+    opacity: 0.6;
+}
+
+.api-lifecycle__arrow {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Pulse animation for active node */
+.api-lifecycle__node.active .api-lifecycle__node-icon::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 16px;
+    border: 2px solid rgba(52, 211, 153, 0.3);
+    animation: nodePulse 2s ease-in-out infinite;
+}
+
+@keyframes nodePulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.5; }
+}
     transition: background 0.3s;
 }
 

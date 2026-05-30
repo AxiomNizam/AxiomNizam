@@ -1315,7 +1315,7 @@
 
             <!-- Stage nodes -->
             <div class="api-lifecycle__nodes">
-                <div class="api-lifecycle__node api-lifecycle__node--client">
+                <div class="api-lifecycle__node api-lifecycle__node--client" data-stage="client">
                     <div class="api-lifecycle__node-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                     </div>
@@ -1324,13 +1324,22 @@
                         <span class="api-lifecycle__dot"></span>
                         Ready
                     </div>
+                    <div class="api-lifecycle__node-detail">
+                        <div class="api-lifecycle__node-detail-title">Client Application</div>
+                        <div class="api-lifecycle__node-detail-desc">Browser, mobile app, or CLI sends HTTP request with headers, auth token, and body payload.</div>
+                        <div class="api-lifecycle__node-detail-stats">
+                            <span><strong>Method:</strong> GET/POST/PUT/DELETE</span>
+                            <span><strong>Auth:</strong> Bearer JWT</span>
+                            <span><strong>Headers:</strong> Content-Type, Accept</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="api-lifecycle__arrow">
                     <svg viewBox="0 0 48 24" fill="none"><path d="M0 12h40" stroke="rgba(52,211,153,0.3)" stroke-width="1.5" stroke-dasharray="4 4"/><polyline points="36 6 44 12 36 18" stroke="#34d399" stroke-width="1.5" fill="none"/></svg>
                 </div>
 
-                <div class="api-lifecycle__node api-lifecycle__node--gateway">
+                <div class="api-lifecycle__node api-lifecycle__node--gateway" data-stage="gateway">
                     <div class="api-lifecycle__node-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                     </div>
@@ -1339,13 +1348,22 @@
                         <span class="api-lifecycle__dot"></span>
                         Auth
                     </div>
+                    <div class="api-lifecycle__node-detail">
+                        <div class="api-lifecycle__node-detail-title">API Gateway</div>
+                        <div class="api-lifecycle__node-detail-desc">Validates JWT tokens, checks rate limits, applies CORS policies, and routes to backend services.</div>
+                        <div class="api-lifecycle__node-detail-stats">
+                            <span><strong>JWT:</strong> RSA-256 verified</span>
+                            <span><strong>Rate:</strong> 500 req/token</span>
+                            <span><strong>CORS:</strong> Allowlist</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="api-lifecycle__arrow">
                     <svg viewBox="0 0 48 24" fill="none"><path d="M0 12h40" stroke="rgba(52,211,153,0.3)" stroke-width="1.5" stroke-dasharray="4 4"/><polyline points="36 6 44 12 36 18" stroke="#34d399" stroke-width="1.5" fill="none"/></svg>
                 </div>
 
-                <div class="api-lifecycle__node api-lifecycle__node--builder">
+                <div class="api-lifecycle__node api-lifecycle__node--builder" data-stage="builder">
                     <div class="api-lifecycle__node-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                     </div>
@@ -1354,13 +1372,22 @@
                         <span class="api-lifecycle__dot"></span>
                         Route
                     </div>
+                    <div class="api-lifecycle__node-detail">
+                        <div class="api-lifecycle__node-detail-title">API Builder Engine</div>
+                        <div class="api-lifecycle__node-detail-desc">Executes custom request/response transforms, applies field mapping, runs validation rules.</div>
+                        <div class="api-lifecycle__node-detail-stats">
+                            <span><strong>Transform:</strong> JS hooks</span>
+                            <span><strong>Validate:</strong> JSON Schema</span>
+                            <span><strong>Cache:</strong> Redis-backed</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="api-lifecycle__arrow">
                     <svg viewBox="0 0 48 24" fill="none"><path d="M0 12h40" stroke="rgba(52,211,153,0.3)" stroke-width="1.5" stroke-dasharray="4 4"/><polyline points="36 6 44 12 36 18" stroke="#34d399" stroke-width="1.5" fill="none"/></svg>
                 </div>
 
-                <div class="api-lifecycle__node api-lifecycle__node--db">
+                <div class="api-lifecycle__node api-lifecycle__node--db" data-stage="db">
                     <div class="api-lifecycle__node-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                     </div>
@@ -1369,13 +1396,22 @@
                         <span class="api-lifecycle__dot"></span>
                         Query
                     </div>
+                    <div class="api-lifecycle__node-detail">
+                        <div class="api-lifecycle__node-detail-title">Database Layer</div>
+                        <div class="api-lifecycle__node-detail-desc">Executes parameterized SQL queries against MySQL, PostgreSQL, MariaDB, MongoDB, or Oracle.</div>
+                        <div class="api-lifecycle__node-detail-stats">
+                            <span><strong>Pool:</strong> 20 connections</span>
+                            <span><strong>Timeout:</strong> 5000ms</span>
+                            <span><strong>ORM:</strong> Auto-generated</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="api-lifecycle__arrow">
                     <svg viewBox="0 0 48 24" fill="none"><path d="M0 12h40" stroke="rgba(56,189,248,0.3)" stroke-width="1.5" stroke-dasharray="4 4"/><polyline points="36 6 44 12 36 18" stroke="#38bdf8" stroke-width="1.5" fill="none"/></svg>
                 </div>
 
-                <div class="api-lifecycle__node api-lifecycle__node--response">
+                <div class="api-lifecycle__node api-lifecycle__node--response" data-stage="response">
                     <div class="api-lifecycle__node-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22"><polyline points="20 6 9 17 4 12"/></svg>
                     </div>
@@ -1383,6 +1419,15 @@
                     <div class="api-lifecycle__node-status" id="nodeResponse">
                         <span class="api-lifecycle__dot"></span>
                         200 OK
+                    </div>
+                    <div class="api-lifecycle__node-detail">
+                        <div class="api-lifecycle__node-detail-title">Response Builder</div>
+                        <div class="api-lifecycle__node-detail-desc">Formats JSON response, applies pagination, adds CORS headers, and returns to client.</div>
+                        <div class="api-lifecycle__node-detail-stats">
+                            <span><strong>Format:</strong> JSON envelope</span>
+                            <span><strong>Paging:</strong> Cursor-based</span>
+                            <span><strong>Compress:</strong> gzip/brotli</span>
+                        </div>
                     </div>
                 </div>
             </div>
