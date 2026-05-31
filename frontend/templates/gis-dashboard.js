@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function initMap() {
-    gisMap = L.map('gisMap', {
+    gisMap = AxMap.map('gisMap', {
         center: [23.6850, 90.3563],
         zoom: 7,
         preferCanvas: true,
@@ -138,19 +138,19 @@ function initMap() {
     });
 
     // Base tile layers
-    const osmLight = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const osmLight = AxMap.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19,
     });
-    const osmTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    const osmTopo = AxMap.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenTopoMap',
         maxZoom: 17,
     });
-    const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    const cartoDark = AxMap.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; CARTO',
         maxZoom: 19,
     });
-    const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    const cartoLight = AxMap.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; CARTO',
         maxZoom: 19,
     });
@@ -167,10 +167,10 @@ function initMap() {
     };
 
     // Add Layer control
-    L.control.layers(gisState.baseLayers, null, { position: 'topright', collapsed: true }).addTo(gisMap);
+    AxMap.control.layers(gisState.baseLayers, null, { position: 'topright', collapsed: true }).addTo(gisMap);
 
     // Scale bar
-    L.control.scale({ position: 'bottomright', imperial: false }).addTo(gisMap);
+    AxMap.control.scale({ position: 'bottomright', imperial: false }).addTo(gisMap);
 
     // Track mouse position
     gisMap.on('mousemove', function (e) {
@@ -734,7 +734,7 @@ function renderRegionsOnMap() {
             ? Math.max(25000, Math.sqrt(Math.max(val, 0) / 100) * 500)
             : Math.max(500000, Math.sqrt(Math.max(val, 0) / 1000) * 5000);
 
-        const circle = L.circle(region.center, {
+        const circle = AxMap.circle(region.center, {
             radius: radius,
             color: darkenColor(color),
             weight: 2,
@@ -766,7 +766,7 @@ function renderRegionsOnMap() {
             ? Math.max(5000, Math.sqrt(Math.max(val, 0) / 100) * 250)
             : Math.max(200000, Math.sqrt(Math.max(val, 0) / 1000) * 2000);
 
-        const circle = L.circle(region.center, {
+        const circle = AxMap.circle(region.center, {
             radius: radius,
             color: '#666',
             weight: 1,
@@ -907,7 +907,7 @@ function renderMarkersOnMap() {
     const useCluster = gisState.useMarkerClustering && canCluster;
 
     gisState.markerGroup = useCluster
-        ? L.markerClusterGroup({
+        ? AxMap.markerClusterGroup({
             chunkedLoading: true,
             chunkInterval: 120,
             chunkDelay: 25,
@@ -915,13 +915,13 @@ function renderMarkersOnMap() {
             maxClusterRadius: 44,
             showCoverageOnHover: false,
         })
-        : L.layerGroup();
+        : AxMap.layerGroup();
 
     gisState.markers.forEach(m => {
         const color = m.color || '#3388ff';
         const glyph = getMarkerGlyph(m.category);
 
-        const icon = L.divIcon({
+        const icon = AxMap.divIcon({
             html: '<div class="gis-marker-icon"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C9.4 2 4 7.4 4 14c0 7.5 8.8 15.6 11.2 17.6a1.2 1.2 0 0 0 1.6 0C19.2 29.6 28 21.5 28 14 28 7.4 22.6 2 16 2Z" fill="' + color + '"/><circle cx="16" cy="14" r="6" fill="#ffffff"/><text x="16" y="17" text-anchor="middle" font-size="8" font-weight="700" fill="#0f172a" font-family="Arial, sans-serif">' + glyph + '</text></svg></div>',
             className: 'gis-marker-container',
             iconSize: [32, 32],
@@ -929,7 +929,7 @@ function renderMarkersOnMap() {
             popupAnchor: [0, -28],
         });
 
-        const marker = L.marker([m.lat, m.lng], { icon: icon });
+        const marker = AxMap.marker([m.lat, m.lng], { icon: icon });
         marker.bindPopup('<strong>' + m.name + '</strong><br><em>' + m.category + '</em>');
         marker.on('click', () => showMarkerProperties(m));
         marker.__source = m;
@@ -994,7 +994,7 @@ function getMarkerGlyph(category) {
 }
 
 function isMarkerClusteringAvailable() {
-    return typeof L !== 'undefined' && typeof L.markerClusterGroup === 'function';
+    return typeof AxMap !== 'undefined' && typeof AxMap.markerClusterGroup === 'function';
 }
 
 // =============================================
@@ -1347,7 +1347,7 @@ function toggleFullscreen() {
 function locateUser() {
     gisMap.locate({ setView: true, maxZoom: 12 });
     gisMap.on('locationfound', function (e) {
-        L.marker(e.latlng).addTo(gisMap).bindPopup('You are here').openPopup();
+        AxMap.marker(e.latlng).addTo(gisMap).bindPopup('You are here').openPopup();
     });
 }
 
@@ -1368,13 +1368,13 @@ function toggleMeasure() {
 }
 
 function addMeasurePoint(latlng) {
-    const marker = L.circleMarker(latlng, { radius: 5, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 1 }).addTo(gisMap);
+    const marker = AxMap.circleMarker(latlng, { radius: 5, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 1 }).addTo(gisMap);
     gisState.measurePoints.push(marker);
 
     if (gisState.measurePoints.length > 1) {
         const points = gisState.measurePoints.map(m => m.getLatLng());
         if (gisState.measureLine) gisMap.removeLayer(gisState.measureLine);
-        gisState.measureLine = L.polyline(points, { color: '#e74c3c', weight: 2, dashArray: '5,10' }).addTo(gisMap);
+        gisState.measureLine = AxMap.polyline(points, { color: '#e74c3c', weight: 2, dashArray: '5,10' }).addTo(gisMap);
 
         // Calculate total distance
         let totalDist = 0;
@@ -1472,7 +1472,7 @@ function placeTemporaryCoordinateMarker(lat, lng, label) {
     if (gisState.temporarySearchMarker) {
         gisMap.removeLayer(gisState.temporarySearchMarker);
     }
-    gisState.temporarySearchMarker = L.circleMarker([lat, lng], {
+    gisState.temporarySearchMarker = AxMap.circleMarker([lat, lng], {
         radius: 7,
         color: '#f59e0b',
         fillColor: '#f59e0b',
@@ -1483,7 +1483,7 @@ function placeTemporaryCoordinateMarker(lat, lng, label) {
 }
 
 function fitVisibleData() {
-    const bounds = L.latLngBounds([]);
+    const bounds = AxMap.latLngBounds([]);
 
     Object.values(gisState.divisionPolygons).forEach(layer => {
         if (gisMap.hasLayer(layer)) bounds.extend(layer.getBounds());
@@ -1627,14 +1627,14 @@ function syncClusterToggleUI() {
 }
 
 function initDrawQueryTools() {
-    gisState.drawLayerGroup = L.featureGroup().addTo(gisMap);
+    gisState.drawLayerGroup = AxMap.featureGroup().addTo(gisMap);
 
     if (!isDrawToolAvailable()) {
-        setDrawQueryResult('Draw tools unavailable. Leaflet Draw is not loaded.', true);
+        setDrawQueryResult('Draw tools unavailable. Map Draw is not loaded.', true);
         return;
     }
 
-    gisMap.on(L.Draw.Event.CREATED, function (event) {
+    gisMap.on(AxMap.Draw.Event.CREATED, function (event) {
         if (!gisState.drawLayerGroup) return;
 
         gisState.drawLayerGroup.clearLayers();
@@ -1649,34 +1649,34 @@ function initDrawQueryTools() {
         runSpatialQuery(layer);
     });
 
-    gisMap.on(L.Draw.Event.DELETED, function () {
+    gisMap.on(AxMap.Draw.Event.DELETED, function () {
         gisState.activeQueryShape = null;
         setDrawQueryResult('Selection cleared. Draw a new area to query.', false);
     });
 }
 
 function isDrawToolAvailable() {
-    return typeof L !== 'undefined' && typeof L.Draw !== 'undefined' && typeof L.Draw.Rectangle === 'function';
+    return typeof AxMap !== 'undefined' && typeof AxMap.Draw !== 'undefined' && typeof AxMap.Draw.Rectangle === 'function';
 }
 
 function startDrawTool(toolType) {
     switchDataTab('tools');
 
     if (!isDrawToolAvailable()) {
-        setDrawQueryResult('Draw tools unavailable. Leaflet Draw plugin failed to load.', true);
+        setDrawQueryResult('Draw tools unavailable. Map Draw plugin failed to load.', true);
         return;
     }
 
     const shapeOptions = { color: '#0ea5e9', weight: 2, dashArray: '6,4', fillOpacity: 0.08 };
 
     if (toolType === 'rectangle') {
-        const drawer = new L.Draw.Rectangle(gisMap, { shapeOptions: shapeOptions });
+        const drawer = new AxMap.Draw.Rectangle(gisMap, { shapeOptions: shapeOptions });
         drawer.enable();
         return;
     }
 
     if (toolType === 'polygon') {
-        const drawer = new L.Draw.Polygon(gisMap, {
+        const drawer = new AxMap.Draw.Polygon(gisMap, {
             allowIntersection: false,
             showArea: true,
             shapeOptions: shapeOptions,
@@ -1701,12 +1701,12 @@ function runSpatialQuery(overrideShape) {
     }
 
     const matchedMarkers = gisState.markers.filter(marker => {
-        return isLatLngInsideShape(L.latLng(marker.lat, marker.lng), shape);
+        return isLatLngInsideShape(AxMap.latLng(marker.lat, marker.lng), shape);
     });
 
     const matchedRegions = gisState.regions.filter(region => {
         if (!Array.isArray(region.center) || region.center.length < 2) return false;
-        return isLatLngInsideShape(L.latLng(region.center[0], region.center[1]), shape);
+        return isLatLngInsideShape(AxMap.latLng(region.center[0], region.center[1]), shape);
     });
 
     const preview = matchedMarkers.slice(0, 5).map(item => item.name).join(', ');
@@ -1719,15 +1719,15 @@ function runSpatialQuery(overrideShape) {
 function isLatLngInsideShape(latLng, shape) {
     if (!shape || !latLng) return false;
 
-    if (shape instanceof L.Circle) {
+    if (shape instanceof AxMap.Circle) {
         return shape.getLatLng().distanceTo(latLng) <= shape.getRadius();
     }
 
-    if (shape instanceof L.Rectangle) {
+    if (shape instanceof AxMap.Rectangle) {
         return shape.getBounds().contains(latLng);
     }
 
-    if (shape instanceof L.Polygon) {
+    if (shape instanceof AxMap.Polygon) {
         const latLngs = shape.getLatLngs();
         const ring = Array.isArray(latLngs[0]) ? latLngs[0] : latLngs;
         return isPointInPolygon(latLng, ring);
@@ -2051,12 +2051,12 @@ function importGISJsonToMap() {
 
     clearGISJsonLayer();
 
-    gisState.importedGeoJsonLayer = L.geoJSON(geo, {
+    gisState.importedGeoJsonLayer = AxMap.geoJSON(geo, {
         style: function () {
             return { color: '#0ea5e9', weight: 2, fillOpacity: 0.12 };
         },
         pointToLayer: function (_feature, latlng) {
-            return L.circleMarker(latlng, {
+            return AxMap.circleMarker(latlng, {
                 radius: 5,
                 color: '#0ea5e9',
                 fillColor: '#22d3ee',
@@ -2297,7 +2297,7 @@ function runPanelAction(action) {
 
 function fitAllPrimaryRegions() {
     const types = getPrimaryRegionTypes();
-    const bounds = L.latLngBounds([]);
+    const bounds = AxMap.latLngBounds([]);
 
     gisState.regions
         .filter(region => types.includes(region.type) && Array.isArray(region.center))

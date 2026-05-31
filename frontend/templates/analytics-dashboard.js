@@ -1,6 +1,6 @@
 // =====================================================
 // Analytics Dashboard JS
-// Chart.js rendering, Widget editor, CSV/XLSX export
+// Chart rendering, Widget editor, CSV/XLSX export
 // =====================================================
 
 const BACKEND = (typeof window.resolveBackendURL === 'function') ? window.resolveBackendURL() : (window.__backendURL || window.BACKEND_URL || 'http://localhost:8000');
@@ -405,7 +405,7 @@ function renderFunnel(container, widget) {
         </div>`;
 }
 
-// --- Chart.js Charts (bar, line, area, pie, doughnut, radar, scatter) ---
+// --- Charts (bar, line, area, pie, doughnut, radar, scatter) ---
 function renderChart(container, widget) {
     const canvas = document.createElement('canvas');
     canvas.id = `chart-${widget.id}`;
@@ -488,7 +488,7 @@ function renderChart(container, widget) {
     }
 
     try {
-        chartInstances[widget.id] = new Chart(canvas, chartConfig);
+        chartInstances[widget.id] = new AxChart(canvas, chartConfig);
     } catch (e) {
         container.innerHTML = `<p class="analytics-muted">Chart rendering failed: ${e.message}</p>`;
     }

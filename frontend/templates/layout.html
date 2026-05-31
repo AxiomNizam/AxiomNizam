@@ -6,12 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*; connect-src 'self' ws: wss: https: http:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' ws: wss: https: http:;">
     
-    <!-- Premium Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Fonts (self-hosted) -->
+    <link rel="stylesheet" href="/static/lib/fonts.css">
     <title>{{ .title }}</title>
     <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/style.css?v=20260412-1">
@@ -22,16 +20,15 @@
     <link rel="stylesheet" href="/static/netintel-dashboard.css?v=20260410">
     <link rel="stylesheet" href="/static/conductor-dashboard.css?v=20260410-2">
     <link rel="stylesheet" href="/static/platform-console.css?v=20260410">
-    <!-- Leaflet.js for GIS maps -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css?v=20260410" crossorigin="" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <!-- Chart.js for Analytics dashboard -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- GIS maps + Charts (self-hosted) -->
+    <link rel="stylesheet" href="/static/lib/gis-core.css" />
+    <link rel="stylesheet" href="/static/lib/gis-cluster.css" />
+    <link rel="stylesheet" href="/static/lib/gis-cluster-default.css" />
+    <link rel="stylesheet" href="/static/lib/gis-draw.css" />
+    <script src="/static/lib/gis-core.js"></script>
+    <script src="/static/lib/gis-cluster.js"></script>
+    <script src="/static/lib/gis-draw.js"></script>
+    <script src="/static/lib/platform-charts.js"></script>
     <script>
         (function() {
             var configuredBackendURL = '{{ .backendURL }}'.trim();

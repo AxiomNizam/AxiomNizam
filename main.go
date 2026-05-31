@@ -295,7 +295,15 @@ func main() {
 	logging.Init(logEnv)
 
 	// Create Gin router
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+
+	// Strip server/framework identifying headers (anti-fingerprinting)
+	router.Use(func(c *gin.Context) {
+		c.Header("X-Powered-By", "")
+		c.Header("Server", "")
+		c.Next()
+	})
 
 	// Trust proxies for X-Forwarded-For / X-Real-IP.
 	// Set TRUSTED_PROXIES env to comma-separated CIDRs (e.g. "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16").

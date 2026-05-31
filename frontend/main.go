@@ -126,7 +126,15 @@ func main() {
 		backendProxyURL = backendURL
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+
+	// Strip server/framework identifying headers (anti-fingerprinting)
+	router.Use(func(c *gin.Context) {
+		c.Header("X-Powered-By", "")
+		c.Header("Server", "")
+		c.Next()
+	})
 
 	// Add custom template functions
 	router.SetFuncMap(template.FuncMap{

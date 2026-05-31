@@ -106,7 +106,7 @@
 
         // Analytics & Visualization
         { title: 'Analytics Dashboards', desc: 'Custom dashboards with charts, heatmaps, KPI widgets', icon: ICONS.chart, url: '/analytics', group: 'Analytics', keywords: 'analytics dashboard chart heatmap kpi widget' },
-        { title: 'GIS Intelligence', desc: 'Multi-layer interactive maps with regions and markers', icon: ICONS.globe, url: '/gis', group: 'Analytics', keywords: 'gis map geography geo spatial leaflet layers' },
+        { title: 'GIS Intelligence', desc: 'Multi-layer interactive maps with regions and markers', icon: ICONS.globe, url: '/gis', group: 'Analytics', keywords: 'gis map geography geo spatial geo layers' },
         { title: 'Network Intelligence', desc: 'Log parsing, topology mapping, anomaly detection', icon: ICONS.search, url: '/netintel', group: 'Analytics', keywords: 'network netintel topology heatmap anomaly mac' },
         { title: 'Data Lineage', desc: 'Column-level tracking with impact analysis', icon: ICONS.zap, url: '/admin', group: 'Analytics', keywords: 'lineage column tracking upstream downstream impact' },
         { title: 'Version Lineage', desc: 'Resource version tracking with diff visualization', icon: ICONS.pin, url: '/admin', group: 'Analytics', keywords: 'version lineage diff history rollback' },

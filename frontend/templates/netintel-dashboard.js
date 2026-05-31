@@ -326,8 +326,8 @@
         if (!mapEl) return;
 
         if (!heatmapInstance) {
-            heatmapInstance = L.map('heatmapMap').setView([23.8103, 90.4125], 16);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            heatmapInstance = AxMap.map('heatmapMap').setView([23.8103, 90.4125], 16);
+            AxMap.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 20
             }).addTo(heatmapInstance);
@@ -344,7 +344,7 @@
         const group = [];
         pts.forEach(p => {
             const color = intensityColor(p.intensity);
-            const circle = L.circleMarker([p.lat, p.lng], {
+            const circle = AxMap.circleMarker([p.lat, p.lng], {
                 radius: 6 + p.intensity * 8,
                 fillColor: color,
                 color: color,
@@ -661,7 +661,7 @@
         const values = Object.values(dataMap);
         const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b','#a855f7','#22d3ee','#f97316','#84cc16'];
 
-        charts[canvasId] = new Chart(canvas, {
+        charts[canvasId] = new AxChart(canvas, {
             type: 'doughnut',
             data: {
                 labels,
@@ -685,7 +685,7 @@
         const values = Object.values(dataMap);
         const colors = labels.map(l => (colorMap && colorMap[l]) || '#3b82f6');
 
-        charts[canvasId] = new Chart(canvas, {
+        charts[canvasId] = new AxChart(canvas, {
             type: 'bar',
             data: {
                 labels,
@@ -713,7 +713,7 @@
         });
         const values = points.map(p => p.value);
 
-        charts[canvasId] = new Chart(canvas, {
+        charts[canvasId] = new AxChart(canvas, {
             type: 'line',
             data: {
                 labels,
