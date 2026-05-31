@@ -2,6 +2,7 @@
 
 > **AxiomNizam Data Control Plane — Security Architecture Review**
 > Audited: 2026-05-30 | Branch: `miraz-ui`
+> Extended: 2026-05-31 | Comprehensive internal code analysis
 
 ---
 
@@ -21,6 +22,10 @@ AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF
 | Risk-based decisions | 1/10 | Engine built with 18 signals, only IP used |
 | Micro-segmentation | 0/10 | Single binary, single network |
 | Configuration hygiene | 3/10 | Default creds, trusted proxies wide open |
+| Identity-centric security | 3/10 | IAM exists but session lifecycle incomplete |
+| Device trust | 1/10 | Trusted device service built, bypass logic missing |
+| Data classification | 0/10 | No labels on fields, encryption is manual |
+| Supply chain security | 0/10 | No dependency scanning, no SBOM |
 
 ---
 
@@ -279,6 +284,338 @@ TLS/HTTPS                             Presigned URL Validation
 Auto Field Encryption                  TOTP Secret Encryption
 Persistent Audit Sink                  Domain Audit Loggers
 External KMS Integration               Keyring Rotation
+WebAuthn (FIDO2)                       API Scanner (XSS/SQLi)
+Session Idle Timeout Enforcement        Body Size Limits
+Data Classification Labels             Security Headers
+Supply Chain / SBOM                    Adaptive Evaluator (built)
+Service Mesh / mTLS                    Cipher Config
+DPoP Token Binding
+```
+
+---
+
+## Extended Analysis: Additional Zero Trust Implementation Areas
+
+### 10. WebAuthn / FIDO2 — Phishing-Resistant Authentication
+
+**Current state:** `internal/gatekeeper/webauthn/service.go` is a complete stub — all 4 methods (`BeginRegistration`, `FinishRegistration`, `BeginAuthentication`, `FinishAuthentication`) return `"webauthn not implemented"`. The models already define `FactorTypeWebAuthn` in `internal/gatekeeper/models/enums.go:10`.
+
+**Why it matters for Zero Trust:**
+WebAuthn provides **origin-bound, phishing-resistant** credentials that cannot be replayed, phished, or intercepted. Unlike TOTP (which relies on shared secrets and can be phished via real-time proxy attacks), WebAuthn binds the credential to the exact origin — a phishing domain cannot complete the ceremony. This is the strongest form of "verify explicitly" — the credential itself proves the user is on the legitimate site.
+
+**Implementation path:**
+- Integrate `github.com/go-webauthn/webauthn` library
+- Register authenticators (security keys, biometrics) during enrollment
+- Use as second factor in Gatekeeper challenge flow
+- Wire into `AdaptiveEvaluator` — high-risk ops require WebAuthn, not just TOTP
+- Store credential public keys in `pgstore` (new table: `webauthn_credentials`)
+
+**Zero Trust impact:** Moves from "something you know" (TOTP) to "something you have + something you are" (hardware key / biometric). Eliminates entire classes of phishing and real-time MFA bypass attacks.
+
+---
+
+### 11. Session Lifecycle Management
+
+**Current state:** IAM models define `SSOSessionIdleTimeout` (default 1800s) and `SSOSessionMaxLifespan` (default 36000s) in `internal/iam/models/models.go:29-30`, but **no middleware enforces these values**. Sessions are validated once at token issue and never re-checked. The `SessionRepository` interface (`internal/iam/repositories/session_repository.go`) has `Get`, `Create`, `Revoke`, and `ListActive` methods, but no idle timeout enforcement.
+
+**Why it matters for Zero Trust:**
+"Never trust, always verify" means a session validated 6 hours ago carries zero trust today. Without idle timeout enforcement, a stolen token remains valid until its JWT expiry (15 minutes for access tokens, but refresh tokens live 7 days). A user who walks away from their machine leaves an active session indefinitely.
+
+**Implementation path:**
+- New middleware: on every request, check `session.LastActivityAt` against `realm.SSOSessionIdleTimeout`
+- If idle timeout exceeded → return 401 with `Session-Expired` header
+- If max lifespan exceeded → force re-authentication regardless of refresh token
+- Track `LastActivityAt` in session repository (update on each authenticated request)
+- Frontend: intercept 401/Session-Expired → redirect to login with `returnTo`
+
+**Zero Trust impact:** Ensures trust has a time boundary. A session idle for 30 minutes requires re-verification, limiting the blast radius of stolen tokens.
+
+---
+
+### 12. Device Trust & Posture Assessment
+
+**Current state:** `internal/gatekeeper/trusteddevices/service.go` implements device registration with browser fingerprinting, token generation, and cookie-based "remember this device" flow. The `TrustDevice()` method creates a device token with configurable TTL. However, the **bypass logic is never called** during MFA challenge verification — the challenge flow in `internal/gatekeeper/challenge/service.go` doesn't check if the device is already trusted.
+
+**Why it matters for Zero Trust:**
+Device trust is a core Zero Trust signal. A known device that passed MFA 2 days ago carries more trust than a brand-new device from a new ASN. Without device posture assessment, every request from every device is treated identically — which is the opposite of "risk-based decisions."
+
+**Implementation path:**
+- Wire `TrustedDeviceService.IsDeviceTrusted()` into challenge verification flow
+- If device is trusted → skip MFA (configurable per policy)
+- If device fingerprint changed → revoke trust, require re-verification
+- Add device posture signals to risk engine: `IsManagedDevice`, `OSVersion`, `PatchLevel`, `FirewallEnabled`
+- Enterprise: integrate with MDM (Mobile Device Management) for managed device attestation
+
+**Zero Trust impact:** Enables continuous, context-aware access decisions. Trusted devices reduce friction; unknown devices trigger additional verification.
+
+---
+
+### 13. Data Classification & Automatic Encryption
+
+**Current state:** `internal/encryption/field_encryption.go` provides `FieldLevelEncryption` with `RegisterKey()`, `AddEncryptionPolicy()`, and `EncryptField()`/`DecryptField()` methods. The `FieldEncryptionPolicy` struct has a `Classification` field (PII, Sensitive, Confidential, etc.). However, encryption is entirely **manual and on-demand** — no middleware automatically encrypts fields based on classification labels.
+
+**Why it matters for Zero Trust:**
+"Encrypt everything" means data should be encrypted by default, not by opt-in. Without automatic classification-driven encryption, developers must manually call `EncryptField()` for each sensitive field — and forgetting one means plaintext storage. Zero Trust requires that the system enforces encryption policy, not individual developers.
+
+**Implementation path:**
+- Tag model fields with `classification:"pii"` struct tags
+- Middleware intercepts GORM writes → checks classification → auto-encrypts before persist
+- Middleware intercepts GORM reads → auto-decrypts after loading
+- Classification scanner: crawl all models, report unclassified sensitive-looking fields (email, SSN, phone)
+- Wire `ExternalKMSProvider` interface to AWS KMS / Azure Key Vault / HashiCorp Vault for key management
+- Scheduled key rotation via `keyring.Rotate()` on a configurable interval (e.g., 90 days)
+
+**Zero Trust impact:** Eliminates human error from the encryption surface. Even if an attacker gains database read access, all classified fields are ciphertext.
+
+---
+
+### 14. API Security Hardening
+
+**Current state:** The API scanner (`internal/apiscanner/scanner.go`) can detect XSS, SQL injection, NoSQL injection, and other vulnerabilities in external APIs. The request validation middleware (`internal/observability/validation.go`) enforces body size limits. However, the **internal API surface lacks several critical protections**:
+
+**Gaps identified:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| No Content-Security-Policy header | High | `internal/observability/validation.go:90-100` |
+| No rate limiting per IP (only per token) | High | `internal/auth/rate_limit.go` |
+| No request schema validation | Medium | All POST/PUT handlers |
+| No response filtering (data leakage) | Medium | All handlers return full objects |
+| No API versioning enforcement | Medium | `/api/v1/` prefix exists but no version negotiation |
+| No request body decompression bomb protection | Medium | Body size limit only, not decompression ratio |
+| `InsecureSkipVerify: true` in API scanner client | Low | `internal/apiscanner/scanner.go:43` |
+| Anonymous notification status endpoint | Low | `main.go:826` |
+
+**Implementation path:**
+- Add CSP header: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'`
+- IP-based rate limiting (token bucket per source IP, separate from per-token limits)
+- JSON schema validation middleware for known endpoint schemas
+- Response field filtering — strip internal fields (`id`, `created_at`, internal metadata) from public API responses
+- API versioning middleware — reject requests to deprecated versions after sunset date
+- Decompression bomb protection — limit decompressed size ratio (e.g., 10:1)
+
+**Zero Trust impact:** Defense in depth at the API layer. Even if auth is bypassed, these controls limit attacker capability.
+
+---
+
+### 15. mTLS & Service Identity (SPIFFE)
+
+**Current state:** The `internal/apiserver/filters/authentication.go` defines an `Authenticator` interface that supports pluggable authentication strategies including mTLS. The `User` struct has a `Name` field documented as "stable principal identifier (e.g. email, SPIFFE ID)." The `internal/security/handler.go` manages TLS certificate lifecycle for Kubernetes (kubeadm mode) and custom TLS certificates. However, **no mTLS is configured between internal services** — the system runs as a single binary with no inter-service TLS.
+
+**Why it matters for Zero Trust:**
+Micro-segmentation requires that every service-to-service communication is authenticated and encrypted. In a single-binary architecture, this is less critical — but as the system evolves toward microservices (or communicates with external services like etcd, PostgreSQL, RabbitMQ, Kafka), mTLS ensures that no unauthorized process can impersonate a legitimate service.
+
+**Implementation path:**
+- For single-binary: encrypt connections to external stores (PostgreSQL `sslmode=verify-full`, etcd TLS, RabbitMQ TLS)
+- For future microservices: integrate SPIFFE/SPIRE for workload identity
+- Use `internal/security/handler.go` certificate management for automatic cert provisioning
+- Wire mTLS config into `internal/client/client.go` — replace `InsecureSkipVerify` with proper CA bundle
+- Service mesh (Istio/Linkerd) for transparent mTLS when decomposing to microservices
+
+**Zero Trust impact:** Every network hop is authenticated. An attacker who gains network access cannot intercept or impersonate service traffic.
+
+---
+
+### 16. Continuous Verification & Session Re-evaluation
+
+**Current state:** JWT tokens are validated once at the middleware layer (`main.go:460-598`). The token's claims (roles, permissions, risk score at time of issue) are trusted for the entire token lifetime (15 minutes). There is no mechanism to:
+- Re-evaluate risk signals mid-session
+- Revoke sessions based on behavioral changes
+- Embed dynamic risk scores in token claims
+- Compare current risk against issued-at risk
+
+**Why it matters for Zero Trust:**
+A token issued 14 minutes ago to a user on a trusted device in a known location carries high trust. But if that same token is now being used from a different ASN, different country, or at 3 AM when the user normally works 9-5, the trust should be re-evaluated. Without continuous verification, the system trusts the token's claims regardless of changing context.
+
+**Implementation path:**
+- On each request, compute current risk signals (IP, geo, device, time)
+- Compare against `risk_score_at_issue` claim in JWT
+- If delta > threshold (e.g., 30 points) → require step-up MFA
+- If IP changed to different ASN → force re-authentication
+- If device fingerprint changed → revoke session
+- Embed `last_risk_score` and `last_risk_at` in JWT claims
+- Middleware: `if currentRisk - issuedRisk > threshold { requireStepUp() }`
+
+**Zero Trust impact:** Trust is dynamic, not static. A session that was trusted 5 minutes ago can be downgraded or revoked if context changes.
+
+---
+
+### 17. Supply Chain Security
+
+**Current state:** No SBOM (Software Bill of Materials) generation, no dependency vulnerability scanning, no container image signing, no provenance attestation. The `go.mod` file lists dependencies but there's no automated check for known CVEs.
+
+**Why it matters for Zero Trust:**
+"Assume breach" extends to the supply chain. A compromised dependency can inject malicious code that bypasses all application-level security controls. Zero Trust requires verifying the integrity of every component in the stack.
+
+**Implementation path:**
+- Integrate `govulncheck` into CI pipeline — scan Go dependencies for known CVEs
+- Generate SBOM with `syft` or `go-mod-bom` on each build
+- Container image signing with `cosign` / Sigstore
+- Dependency pinning — verify `go.sum` integrity in CI
+- SLSA provenance attestation for build artifacts
+- Automated dependency updates with security-only patching (Dependabot/Renovate)
+
+**Zero Trust impact:** Verifies that the code running in production is exactly what was built from audited source, with no known vulnerabilities.
+
+---
+
+### 18. Observability-Driven Security
+
+**Current state:** Prometheus metrics exist across 19+ modules (`metrics/counters.go` in gatekeeper, iam, antivirus, conductor, jobs, storage, scanner, waitx, etc.). The audit hash chain (`internal/audit/chain.go`) provides tamper-evident logging. However, there is **no security-focused alerting, anomaly detection, or automated incident response**.
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| No security alert rules (failed auth spikes, privilege escalation attempts) | High | Prometheus/Grafana layer |
+| No anomaly detection on access patterns | Medium | Audit log data |
+| No automated session revocation on threat detection | Medium | Risk engine → session manager |
+| No security dashboard | Medium | Frontend templates |
+| Audit hash chain verification not automated | Low | `internal/audit/chain.go` |
+
+**Implementation path:**
+- Prometheus alert rules: `rate(auth_failures_total[5m]) > 10` → PagerDuty/Discord alert
+- Anomaly detection: baseline normal access patterns per user, alert on deviations
+- Automated response: risk score > 90 → auto-revoke all sessions + notify user
+- Security dashboard: live view of auth attempts, risk scores, MFA challenges, blocked requests
+- Scheduled audit chain verification (cron job calling `VerifyChain()` daily)
+- Export audit events to SIEM (Splunk, ELK, Datadog) via persistent sink
+
+**Zero Trust impact:** Security is not just preventive but also detective. Anomalies trigger automated responses before human intervention is needed.
+
+---
+
+### 19. Secret Management & Rotation
+
+**Current state:** Secrets are stored in `.env` files (RSA private keys, encryption keys, database passwords, webhook URLs). The `internal/keyring/keyring.go` supports key rotation with active + retired keys. The `internal/encryption/models.go` defines external KMS provider interfaces (AWS KMS, Azure Key Vault, GCP Cloud KMS, HashiCorp Vault) but **none are integrated**.
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| RSA private key in plaintext `.env` | Critical | `.env` |
+| No automated secret rotation | High | All secret storage |
+| External KMS providers defined but not wired | High | `internal/encryption/models.go:78-91` |
+| No secret versioning (old secrets immediately invalidated) | Medium | Keyring only, not all secrets |
+| No secret access audit (who read which secret when) | Medium | All secret paths |
+| Hardcoded default presign secret | Medium | `internal/storage/config/config.go:46` |
+
+**Implementation path:**
+- Integrate HashiCorp Vault for centralized secret management
+- Auto-rotate database credentials, API keys, encryption keys on schedule
+- Secret versioning — old version remains valid for grace period during rotation
+- Audit trail for secret access (read events logged to audit chain)
+- Remove all secrets from `.env` — use Vault agent or Kubernetes secrets
+- Wire `ExternalKMSProvider` for field encryption key management
+
+**Zero Trust impact:** Secrets are never static, never in plaintext at rest, and access is audited. A compromised secret has a limited blast radius due to rotation.
+
+---
+
+### 20. Network Micro-Segmentation
+
+**Current state:** Single Docker network, single binary. All services (backend, frontend, database, etcd, Redis) share the same network namespace. No network policies, no service-to-service authentication, no ingress/egress filtering.
+
+**Why it matters for Zero Trust:**
+If an attacker compromises the backend process, they have direct access to the database, the etcd cluster, and the frontend — because there are no network boundaries. Micro-segmentation ensures that even with process-level compromise, lateral movement is blocked.
+
+**Implementation path:**
+- Docker Compose: separate networks for frontend, backend, database, message queue
+- Kubernetes NetworkPolicies: restrict pod-to-pod communication
+- Database: listen only on internal network, not exposed to frontend network
+- etcd: client TLS + peer TLS, separate network from application tier
+- Redis: require AUTH + TLS, separate network
+- Egress filtering: backend can only reach external services (KMS, webhook URLs) through a proxy
+
+**Zero Trust impact:** An attacker who compromises one component cannot move laterally to others without authenticating through each network boundary.
+
+---
+
+### 21. Identity-Centric Security (Beyond JWT)
+
+**Current state:** Identity is carried in JWT claims (`internal/auth/auth.go`). The `Claims` struct includes `Sub`, `PreferredUsername`, `Email`, `Roles`, `RealmAccess`, `ResourceAccess`. The IAM system (`internal/iam/`) provides realm-based multi-tenancy, client management, and user lifecycle. However:
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| No identity federation (SAML, OIDC upstream) | Medium | IAM models have `Protocol` field but no implementation |
+| No user behavior profiling | Medium | Audit data exists but not analyzed |
+| No identity risk scoring | Medium | Risk engine works on auth events, not identity lifecycle |
+| No just-in-time privilege elevation | Medium | RBAC is static, not time-bound |
+| No identity proofing (email verification enforcement) | Low | `VerifyEmail` field exists but not enforced |
+
+**Implementation path:**
+- SAML/OIDC federation — wire `Protocol` field in Client model to actual upstream IdP integration
+- User behavior profiling — baseline normal access times, locations, resource patterns per user
+- Identity risk score — separate from auth risk; tracks account compromise indicators (password changes, email changes, role changes)
+- Just-in-time privilege — time-bound role assignments that auto-expire (e.g., `expires_at` on RoleBinding)
+- Email verification enforcement — block login for unverified emails when `realm.VerifyEmail=true`
+
+**Zero Trust impact:** Identity is not just "who authenticated" but "how trustworthy is this identity right now." Continuous identity assessment adapts security posture dynamically.
+
+---
+
+### 22. API Gateway Pattern
+
+**Current state:** All routes are registered directly on `*gin.Engine` in `main.go` (~2300 lines of route registration). There is no API gateway layer, no request/response transformation, no centralized rate limiting, no API key management for external consumers.
+
+**Gaps:**
+
+| Issue | Severity | Location |
+|-------|----------|----------|
+| No centralized API gateway | Medium | `main.go` |
+| No per-endpoint rate limiting | Medium | Only per-token and per-bucket limits |
+| No API key management for external consumers | Medium | Only internal JWT auth |
+| No request/response transformation | Low | Direct handler calls |
+| No API documentation enforcement (OpenAPI validation) | Low | `internal/apiscanner/openapi.go` exists for scanning, not enforcement |
+
+**Implementation path:**
+- Extract route registration into API gateway module
+- Per-endpoint rate limits: `POST /api/v1/storage/upload` → 100/min; `GET /api/v1/storage/list` → 1000/min
+- API key management: `X-API-Key` header for service-to-service auth (in addition to JWT for user auth)
+- OpenAPI spec validation middleware — reject requests that don't match the schema
+- Request/response transformation layer for versioning and backward compatibility
+
+**Zero Trust impact:** Every API endpoint has its own security policy. No single token grants unlimited access to all endpoints.
+
+---
+
+## Extended Wiring Gap Map
+
+```
+BUILT BUT NOT WIRED                    BUILT AND WIRED
+─────────────────────                  ────────────────
+Risk Engine (18 signals)               JWT Auth Middleware
+Policy Engine (4 rule types)           Storage 3-Layer Auth
+RBAC Engine (K8s-style)               CORS Whitelist
+IAM Authorizer (resource+action)       CSRF Protection
+Trusted Device Bypass                  Security Headers
+MFA Enforcement Mode                   Audit Hash Chain
+Adaptive Evaluator                     Rate Limiting
+Inline Scanner (pre-commit)            Storage Access Keys
+Session Re-verification                Tenant Isolation
+Step-up Authentication                 Request ID Tracing
+TLS/HTTPS                             Presigned URL Validation
+Auto Field Encryption                  TOTP Secret Encryption
+Persistent Audit Sink                  Domain Audit Loggers
+External KMS Integration               Keyring Rotation
+WebAuthn (FIDO2)                       API Scanner (XSS/SQLi)
+Session Idle Timeout Enforcement        Body Size Limits
+Data Classification Labels             Security Headers
+Supply Chain / SBOM                    Adaptive Evaluator (built)
+Service Mesh / mTLS                    Cipher Config
+DPoP Token Binding                     API Scanner
+IP-based Rate Limiting                 Per-bucket Rate Limiting
+Request Schema Validation              Brute Force Protection (IAM)
+Response Field Filtering               Password Policy (IAM)
+Anomaly Detection                      MFA Challenge State Machine
+Automated Incident Response            Trusted Device Service
+Secret Rotation                        Encryption Keyring
+Identity Federation                    HMAC Key Validation
+Just-in-time Privilege                 Audit Hash Chain
+API Gateway                            Request ID Propagation
+User Behavior Profiling
 ```
 
 ---
@@ -359,6 +696,72 @@ External KMS Integration               Keyring Rotation
 - [ ] Risk delta > threshold → require step-up MFA
 - [ ] Revoke sessions on high-risk signal detection
 
+### Phase 10: WebAuthn / FIDO2 Integration (3 days)
+
+- [ ] Integrate `go-webauthn` library
+- [ ] Registration ceremony with security key / biometric
+- [ ] Authentication ceremony in Gatekeeper challenge flow
+- [ ] Wire as `FactorTypeWebAuthn` in adaptive evaluator
+- [ ] High-risk operations require WebAuthn, not just TOTP
+- [ ] Store credential public keys in `pgstore` (new table)
+
+### Phase 11: Session Lifecycle Enforcement (1 day)
+
+- [ ] Middleware checks `session.LastActivityAt` against `realm.SSOSessionIdleTimeout`
+- [ ] Idle timeout → 401 with `Session-Expired` header
+- [ ] Max lifespan → force re-authentication
+- [ ] Frontend intercepts `Session-Expired` → redirect to login
+- [ ] Track `LastActivityAt` on each authenticated request
+
+### Phase 12: Supply Chain Security (1 day)
+
+- [ ] `govulncheck` in CI pipeline
+- [ ] SBOM generation on each build
+- [ ] Container image signing with cosign
+- [ ] Dependency pinning verification
+- [ ] Automated security-only dependency updates
+
+### Phase 13: Security Observability (2 days)
+
+- [ ] Prometheus alert rules for auth failure spikes
+- [ ] Anomaly detection on access patterns
+- [ ] Automated session revocation on threat detection
+- [ ] Security dashboard in frontend
+- [ ] Scheduled audit chain verification
+- [ ] SIEM export for audit events
+
+### Phase 14: Secret Management (2 days)
+
+- [ ] HashiCorp Vault integration for centralized secrets
+- [ ] Auto-rotate database credentials, API keys, encryption keys
+- [ ] Secret versioning with grace period
+- [ ] Secret access audit trail
+- [ ] Remove secrets from `.env` files
+
+### Phase 15: Network Micro-Segmentation (2 days)
+
+- [ ] Docker Compose: separate networks per tier
+- [ ] Kubernetes NetworkPolicies
+- [ ] Database/etcd/Redis on internal networks only
+- [ ] Egress filtering through proxy
+- [ ] Service-to-service TLS for all external connections
+
+### Phase 16: Identity Federation (2 days)
+
+- [ ] SAML 2.0 upstream IdP integration
+- [ ] OIDC federation (upstream provider as identity source)
+- [ ] User behavior profiling from audit data
+- [ ] Identity risk scoring (account lifecycle events)
+- [ ] Just-in-time privilege elevation (time-bound role bindings)
+
+### Phase 17: API Gateway Pattern (2 days)
+
+- [ ] Extract route registration into gateway module
+- [ ] Per-endpoint rate limiting
+- [ ] API key management for external consumers
+- [ ] OpenAPI schema validation middleware
+- [ ] Request/response transformation for versioning
+
 ---
 
 ## Impact Summary
@@ -375,7 +778,15 @@ External KMS Integration               Keyring Rotation
 | P7 | 2 days | Audit survives restarts |
 | P8 | 2 days | Eliminates human error in encryption |
 | P9 | 3 days | True continuous verification |
-| **Total** | **13 days** | **~90% Zero Trust** |
+| P10 | 3 days | Phishing-resistant authentication |
+| P11 | 1 day | Session time boundaries |
+| P12 | 1 day | Supply chain integrity |
+| P13 | 2 days | Security is detective, not just preventive |
+| P14 | 2 days | Secrets never static, never plaintext |
+| P15 | 2 days | Lateral movement blocked |
+| P16 | 2 days | Identity is continuous, not one-time |
+| P17 | 2 days | Per-endpoint security policies |
+| **Total** | **28 days** | **~95% Zero Trust** |
 
 ---
 
@@ -390,6 +801,11 @@ External KMS Integration               Keyring Rotation
 | **Continuous verification** | Re-evaluate trust on every request | Token validated once, never re-checked |
 | **Micro-segmentation** | Services authenticate to each other | Single binary, N/A |
 | **Risk-based decisions** | Adapt security to context | Engine built, signals unused |
+| **Identity-centric** | Identity is the new perimeter | IAM exists but session lifecycle incomplete |
+| **Device trust** | Verify device posture | Service built, bypass logic missing |
+| **Data classification** | Label and protect by sensitivity | No labels, encryption is manual |
+| **Supply chain** | Verify integrity of all components | No SBOM, no vuln scanning |
+| **Automated response** | React to threats without human intervention | No alerting, no auto-revocation |
 
 ---
 
@@ -407,10 +823,13 @@ External KMS Integration               Keyring Rotation
 | Risk signals | `internal/gatekeeper/risk/signals.go` | Full file |
 | Policy engine | `internal/gatekeeper/policy/engine.go` | 104 (`EvaluatePolicy`) |
 | Policy rules | `internal/gatekeeper/policy/rules.go` | Full file |
+| Adaptive evaluator | `internal/gatekeeper/policy/evaluator.go` | Full file |
 | Challenge service | `internal/gatekeeper/challenge/service.go` | 116 (`VerifyChallenge`) |
 | Trusted devices | `internal/gatekeeper/trusteddevices/service.go` | Full file |
+| WebAuthn stub | `internal/gatekeeper/webauthn/service.go` | Full file (all stubs) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
+| External KMS models | `internal/encryption/models.go` | 78-91 |
 | Audit chain | `internal/audit/chain.go` | Full file |
 | Security headers | `internal/observability/validation.go` | 90 |
 | CSRF | `internal/observability/csrf.go` | 83 |
@@ -420,7 +839,16 @@ External KMS Integration               Keyring Rotation
 | Scanner pipeline | `internal/scanner/scanner.go` | Full file |
 | Storage admin | `internal/storage/admin/admin.go` | 1124 (async scan) |
 | TLS (missing) | `main.go` | 2333 (`ListenAndServe`) |
+| API scanner | `internal/apiscanner/scanner.go` | Full file |
+| Session models | `internal/iam/models/models.go` | 29-30 (idle timeout) |
+| Session repo | `internal/iam/repositories/session_repository.go` | Full file |
+| mTLS support | `internal/apiserver/filters/authentication.go` | Full file |
+| Certificate mgmt | `internal/security/handler.go` | Full file |
+| Data mesh | `internal/mesh/datamesh.go` | Full file |
+| Conductor | `internal/conductor/manager.go` | Full file |
+| Client (skip TLS) | `internal/client/client.go` | 46-55 |
+| Brute force config | `internal/iam/models/models.go` | 31-33 |
 
 ---
 
-*Last updated: 2026-05-30 (UTC+6)*
+*Extended: 2026-05-31 (UTC+6) — Comprehensive internal code analysis*
