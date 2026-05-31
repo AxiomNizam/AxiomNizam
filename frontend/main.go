@@ -147,6 +147,16 @@ func main() {
 	router.LoadHTMLGlob("templates/*.html")
 	router.Static("/static", "templates/")
 
+	// Security: return 403 for all unknown routes (hides route enumeration)
+	router.NoRoute(func(c *gin.Context) {
+		c.AbortWithStatus(http.StatusForbidden)
+	})
+
+	// Security: return 403 for all unknown methods
+	router.NoMethod(func(c *gin.Context) {
+		c.AbortWithStatus(http.StatusForbidden)
+	})
+
 	// Routes
 	router.GET("/", dashboardHandler)
 	router.GET("/signup", signupHandler)
