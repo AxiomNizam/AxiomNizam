@@ -662,7 +662,7 @@
             return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
         });
 
-        state.chartInstances['chart-etl-runs'] = new AxChart(canvas, {
+        state.chartInstances['chart-etl-runs'] = new window.__axc(canvas, {
             type: 'line',
             data: {
                 labels: labels.length ? labels : ['No data'],
@@ -690,7 +690,7 @@
             return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
         });
 
-        state.chartInstances['chart-cdc-throughput'] = new AxChart(canvas, {
+        state.chartInstances['chart-cdc-throughput'] = new window.__axc(canvas, {
             type: 'line',
             data: {
                 labels: labels.length ? labels : ['No data'],
@@ -728,7 +728,7 @@
         const stats = obs.step_type_stats || {};
         const labels = Object.keys(stats);
         const values = Object.values(stats);
-        state.chartInstances['chart-etl-steps'] = new AxChart(canvas, {
+        state.chartInstances['chart-etl-steps'] = new window.__axc(canvas, {
             type: 'doughnut',
             data: {
                 labels: labels.length ? labels : ['No data'],
@@ -747,7 +747,7 @@
         if (!canvas || typeof Chart === 'undefined') return;
 
         const byOp = obs.events_by_operation || {};
-        state.chartInstances['chart-cdc-ops'] = new AxChart(canvas, {
+        state.chartInstances['chart-cdc-ops'] = new window.__axc(canvas, {
             type: 'bar',
             data: {
                 labels: Object.keys(byOp).length ? Object.keys(byOp) : ['No data'],

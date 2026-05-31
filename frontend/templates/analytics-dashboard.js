@@ -488,7 +488,7 @@ function renderChart(container, widget) {
     }
 
     try {
-        chartInstances[widget.id] = new AxChart(canvas, chartConfig);
+        chartInstances[widget.id] = new window.__axc(canvas, chartConfig);
     } catch (e) {
         container.innerHTML = `<p class="analytics-muted">Chart rendering failed: ${e.message}</p>`;
     }
