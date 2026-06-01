@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~35%** (Phase 1 complete)
+**Current Zero Trust coverage: ~40%** (Phases 1-2 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -19,7 +19,7 @@ AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF
 | Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
 | Encrypt everything | 4/10 | At rest: AES-256-GCM. In transit: none |
 | Continuous verification | 2/10 | Revocation checked on all paths now; still no re-verification |
-| Risk-based decisions | 1/10 | Engine built with 18 signals, only IP used |
+| Risk-based decisions | 3/10 | Risk engine wired to authenticateRequest; IP + device fingerprint + MFA enforcement |
 | Micro-segmentation | 0/10 | Single binary, single network |
 | Configuration hygiene | 4/10 | Demo tokens gated; still have default creds, trusted proxies open |
 | Identity-centric security | 3/10 | IAM exists but session lifecycle incomplete |
@@ -637,12 +637,12 @@ User Behavior Profiling
 - [x] Add `aud` claim validation
 - [x] Rate limit returns 429 instead of 401
 
-### Phase 2: Wire Risk Engine (1 day)
+### Phase 2: Wire Risk Engine (1 day) ✅ DONE (2026-06-01)
 
-- [ ] Populate full `Signals` struct in `authenticateRequest()` (IP, User-Agent, device fingerprint, geo)
-- [ ] Embed risk score in JWT claims at token issue
-- [ ] Score ≥ 70 → require `X-MFA-Token` header with fresh TOTP
-- [ ] Score ≥ 90 → reject request
+- [x] Populate full `Signals` struct in `authenticateRequest()` (IP, User-Agent, device fingerprint, geo)
+- [x] Embed risk score in JWT claims at token issue
+- [x] Score ≥ 70 → require `X-MFA-Token` header with fresh TOTP
+- [x] Score ≥ 90 → reject request
 
 ### Phase 3: Wire RBAC + Policy Engine (1 day)
 

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base32"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,6 +32,8 @@ import (
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/gatekeeper"
+	gkmodels "example.com/axiomnizam/internal/gatekeeper/models"
+	gkrisk "example.com/axiomnizam/internal/gatekeeper/risk"
 	analyticspkg "example.com/axiomnizam/internal/analytics"
 	gispkg "example.com/axiomnizam/internal/gis"
 	graphqlpkg "example.com/axiomnizam/internal/graphql"
@@ -78,9 +83,29 @@ import (
 	"example.com/axiomnizam/internal/webhooks"
 	"example.com/axiomnizam/internal/workflows"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 )
+
+// decryptAESSecret decrypts an AES-GCM encrypted TOTP secret.
+// The ciphertext must include the nonce as a prefix (standard Go AES-GCM format).
+func decryptAESSecret(encryptionKey []byte, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(encryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonceSize := aesGCM.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+	nonce, ct := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	return aesGCM.Open(nil, nonce, ct, nil)
+}
 
 func main() {
 	// Load environment variables from .env file
@@ -262,6 +287,10 @@ func main() {
 	// ====================================
 	var iamSystem *iampkg.System
 	var iamErr error
+
+	// Gatekeeper (2FA) system — declared here so authenticateRequest() can
+	// reference it in the closure even though it is initialized later.
+	var gkSystem *gatekeeper.System
 
 	if earlyStorageBackend != "raft" {
 		// etcd mode: initialize IAM immediately.
@@ -598,6 +627,117 @@ func main() {
 			}
 		}
 
+		// ── Risk scoring ─────────────────────────────────────────────────
+
+		riskScore := 0
+		if gkSystem != nil && gkSystem.RiskService != nil {
+			signals := &gkrisk.Signals{
+				IPAddress:         c.ClientIP(),
+				DeviceFingerprint: c.GetHeader("X-Device-Fingerprint"),
+			}
+			if ua := c.GetHeader("User-Agent"); ua != "" {
+				// Detect new browser from User-Agent heuristics
+				_ = ua // populated for future browser-fingerprint tracking
+			}
+			if score, scoreErr := gkSystem.RiskService.Score(c.Request.Context(), signals); scoreErr == nil {
+				riskScore = score
+			} else {
+				log.Printf("⚠️  Risk scoring failed: %v", scoreErr)
+			}
+		}
+
+		c.Set("risk_score", riskScore)
+
+		// Propagate risk score into the claims for downstream consumers.
+		if iamClaims != nil {
+			iamClaims.RiskScore = riskScore
+		} else if legacyClaims != nil {
+			legacyClaims.RiskScore = riskScore
+		}
+
+		// ── Risk-based MFA enforcement ──────────────────────────────────
+		//
+		// Score ≥ 90 → reject outright (critical risk).
+		// Score ≥ 70 → require X-MFA-Token header with a valid TOTP code.
+		//
+		// If the Gatekeeper system is unavailable or the user has no
+		// enrolled TOTP factor, high-risk requests are rejected to
+		// maintain security posture.
+
+		if riskScore >= 90 {
+			log.Printf("🚫 Request rejected — critical risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":      "request blocked due to high risk score",
+				"risk_score": riskScore,
+				"message":    "this request has been flagged as high risk. please verify your identity through a trusted device or contact support",
+			})
+			c.Abort()
+			return false
+		}
+
+		if riskScore >= 70 {
+			mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
+			if mfaToken == "" {
+				log.Printf("⚠️  MFA required — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":      "mfa verification required",
+					"risk_score": riskScore,
+					"message":    "this request requires multi-factor authentication. provide a valid TOTP code in the X-MFA-Token header",
+				})
+				c.Abort()
+				return false
+			}
+
+			// Validate TOTP code against user's enrolled factors.
+			mfaOK := false
+			if gkSystem != nil && gkSystem.FactorRepository() != nil && gkSystem.TOTPService != nil {
+				var userID uuid.UUID
+				if iamClaims != nil {
+					if parsedUUID, parseErr := uuid.Parse(strings.TrimSpace(iamClaims.Sub)); parseErr == nil {
+						userID = parsedUUID
+					}
+				} else if legacyClaims != nil {
+					if parsedUUID, parseErr := uuid.Parse(strings.TrimSpace(legacyClaims.Sub)); parseErr == nil {
+						userID = parsedUUID
+					}
+				}
+
+				if userID != uuid.Nil {
+					if factors, fErr := gkSystem.FactorRepository().GetByUserID(c.Request.Context(), userID); fErr == nil {
+						for _, factor := range factors {
+							if !factor.IsActive() || factor.Spec.Type != gkmodels.FactorTypeTOTP {
+								continue
+							}
+							if len(factor.Spec.EncryptedSecret) == 0 {
+								continue
+							}
+							secretBytes, decErr := decryptAESSecret(gkSystem.Config().EncryptionKey, factor.Spec.EncryptedSecret)
+							if decErr != nil {
+								continue
+							}
+							secretB32 := base32.StdEncoding.EncodeToString(secretBytes)
+							if ok, _ := gkSystem.TOTPService.ValidateCode(c.Request.Context(), secretB32, mfaToken); ok {
+								mfaOK = true
+								break
+							}
+						}
+					}
+				}
+			}
+
+			if !mfaOK {
+				log.Printf("🚫 MFA verification failed — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":      "mfa verification failed",
+					"risk_score": riskScore,
+					"message":    "the provided TOTP code is invalid or no MFA factor is enrolled",
+				})
+				c.Abort()
+				return false
+			}
+			log.Printf("✅ MFA verified for user %s (risk score: %d)", principal, riskScore)
+		}
+
 		// ── Rate limiting ────────────────────────────────────────────────
 
 		defaultMaxCalls, defaultValidity := rateLimiter.DefaultPolicy()
@@ -667,6 +807,7 @@ func main() {
 				Email:             iamClaims.Email,
 				DisplayName:       iamClaims.DisplayName,
 				Roles:             iamClaims.Roles,
+				RiskScore:         riskScore,
 				RegisteredClaims:  iamClaims.RegisteredClaims,
 			}
 			c.Set("user", compatClaims)
@@ -1783,7 +1924,8 @@ func main() {
 	// ====================================
 	// GATEKEEPER 2FA MODULE
 	// ====================================
-	gkSystem, gkErr := gatekeeper.NewSystem(conns.PostgreSQL)
+	var gkErr error
+	gkSystem, gkErr = gatekeeper.NewSystem(conns.PostgreSQL)
 	if gkErr != nil {
 		log.Printf("⚠️  Gatekeeper 2FA module initialization failed: %v — 2FA endpoints will be unavailable", gkErr)
 	} else {

@@ -34,6 +34,7 @@ type Claims struct {
 	Roles             []string               `json:"roles,omitempty"`
 	RealmAccess       RealmAccess            `json:"realm_access"`
 	ResourceAccess    map[string]interface{} `json:"resource_access"`
+	RiskScore         int                    `json:"risk_score,omitempty"` // 0-100
 	jwt.RegisteredClaims
 }
 

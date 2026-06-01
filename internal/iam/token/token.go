@@ -32,6 +32,7 @@ type IAMClaims struct {
 	Scope       string   `json:"scope,omitempty"`
 	ClientID    string   `json:"client_id,omitempty"`
 	SessionID   string   `json:"sid,omitempty"`
+	RiskScore   int      `json:"risk_score,omitempty"` // 0-100, embedded at token issue time
 	jwt.RegisteredClaims
 }
 
@@ -63,6 +64,7 @@ type IssueInput struct {
 	ClientID    string
 	SessionID   string
 	Roles       []string
+	RiskScore   int // 0-100, embedded in JWT claims when > 0
 }
 
 // JWKSResponse is the /.well-known/jwks.json payload.
@@ -209,6 +211,7 @@ func (iss *Issuer) IssueTokenPairWithAccessTTL(input IssueInput, accessTokenTTL 
 		Scope:       input.Scope,
 		ClientID:    input.ClientID,
 		SessionID:   input.SessionID,
+		RiskScore:   input.RiskScore,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    iss.issuerURL,
 			Subject:   input.Sub,
@@ -284,6 +287,7 @@ func (iss *Issuer) IssueAccessTokenWithTTL(input IssueInput, accessTokenTTL time
 		Scope:       input.Scope,
 		ClientID:    input.ClientID,
 		SessionID:   input.SessionID,
+		RiskScore:   input.RiskScore,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    iss.issuerURL,
 			Subject:   input.Sub,
