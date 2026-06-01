@@ -10,18 +10,18 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~30%**
+**Current Zero Trust coverage: ~35%** (Phase 1 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
-| Verify explicitly | 6/10 | JWT works, but demo token fallback undermines RSA |
+| Verify explicitly | 7/10 | Unified JWT (Phase 1): RSA-256 + etcd revocation on all paths; demo tokens gated |
 | Least privilege | 5/10 | Storage module strong; RBAC engine never called |
 | Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
 | Encrypt everything | 4/10 | At rest: AES-256-GCM. In transit: none |
-| Continuous verification | 1/10 | Token validated once, never re-checked |
+| Continuous verification | 2/10 | Revocation checked on all paths now; still no re-verification |
 | Risk-based decisions | 1/10 | Engine built with 18 signals, only IP used |
 | Micro-segmentation | 0/10 | Single binary, single network |
-| Configuration hygiene | 3/10 | Default creds, trusted proxies wide open |
+| Configuration hygiene | 4/10 | Demo tokens gated; still have default creds, trusted proxies open |
 | Identity-centric security | 3/10 | IAM exists but session lifecycle incomplete |
 | Device trust | 1/10 | Trusted device service built, bypass logic missing |
 | Data classification | 0/10 | No labels on fields, encryption is manual |
@@ -626,16 +626,16 @@ User Behavior Profiling
 
 - [ ] Fix `TRUSTED_PROXIES` — set to actual proxy CIDRs, not `0.0.0.0/0`
 - [ ] Change default database credentials
-- [ ] Disable demo token fallback (or restrict to dev-only with build tag)
+- [x] Disable demo token fallback (gated behind `ALLOW_DEMO_TOKENS=true` env var)
 - [ ] Fix CORS wildcard in gatekeeper middleware
 - [ ] Set `SECURITY_GUARDRAILS_MODE=enforce`
 
-### Phase 1: Unify JWT Validation (1 day)
+### Phase 1: Unify JWT Validation (1 day) ✅ DONE (2026-06-01)
 
-- [ ] Main API uses same validation path as IAM (with etcd revocation check)
-- [ ] Remove HMAC demo token fallback from production builds
-- [ ] Add `aud` claim validation
-- [ ] Rate limit returns 429 instead of 401
+- [x] Main API uses same validation path as IAM (with etcd revocation check)
+- [x] Remove HMAC demo token fallback from production builds
+- [x] Add `aud` claim validation
+- [x] Rate limit returns 429 instead of 401
 
 ### Phase 2: Wire Risk Engine (1 day)
 

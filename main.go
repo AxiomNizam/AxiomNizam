@@ -465,17 +465,11 @@ func main() {
 	}
 
 	// authenticateRequest validates token + rate limits and sets auth context without advancing handlers.
+	//
+	// Phase 1 — unified JWT validation:
+	//   Primary:  IAM Issuer (RSA-256 + etcd revocation check)
+	//   Fallback: legacy auth.TokenValidator (only when IAM is unavailable)
 	authenticateRequest := func(c *gin.Context) bool {
-		activeTokenValidator := getOrInitTokenValidator()
-		if activeTokenValidator == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":   "authentication unavailable",
-				"message": "token validation is not available because IAM token validator initialization failed",
-			})
-			c.Abort()
-			return false
-		}
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			// WebSocket connections cannot send custom headers from browsers;
@@ -490,53 +484,133 @@ func main() {
 			return false
 		}
 
-		token, err := auth.ExtractBearerToken(authHeader)
+		rawToken, err := auth.ExtractBearerToken(authHeader)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid authorization header: %v", err)})
 			c.Abort()
 			return false
 		}
 
-		claims, err := activeTokenValidator.ValidateToken(token)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
-			c.Abort()
-			return false
-		}
+		// ── Unified validation path ──────────────────────────────────────
+		// When the IAM system is available, use its Issuer for RSA-256
+		// signature validation + etcd revocation check.  This is the same
+		// path the IAM-specific middleware uses, ensuring a single
+		// validation surface for the entire platform.
+		//
+		// Only when IAM is nil (e.g. startup race) do we fall back to the
+		// legacy JWKS-based TokenValidator which supports demo HMAC tokens.
+		// ─────────────────────────────────────────────────────────────────
 
-		if claims != nil && len(claims.RolesList()) == 0 {
-			configuredSysadminEmail := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
-			claimEmail := strings.ToLower(strings.TrimSpace(claims.Email))
-			if configuredSysadminEmail != "" && claimEmail != "" && claimEmail == configuredSysadminEmail {
-				fallbackRoles := []string{"sysadmin", "system-manager", "admin"}
-				claims.Roles = append([]string{}, fallbackRoles...)
-				claims.RealmAccess.Roles = append([]string{}, fallbackRoles...)
-				log.Printf("⚠️  Applied bootstrap sysadmin role fallback for token subject %s", claimEmail)
+		var principal string
+		var email string
+		var roles []string
+		var clientID string
+		var iamClaims *iamtoken.IAMClaims
+		var legacyClaims *auth.Claims
+
+		if iamSystem != nil && iamSystem.Issuer != nil {
+			// ── Primary: IAM Issuer (RSA-256 + revocation) ──
+			parsed, valErr := iamSystem.Issuer.ValidateAccessToken(rawToken)
+			if valErr != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+				c.Abort()
+				return false
+			}
+			iamClaims = parsed
+
+			// Replay-attack prevention: check JTI revocation in etcd/Raft
+			if iamSystem.RevokedStore != nil && strings.TrimSpace(iamClaims.ID) != "" {
+				if revoked, _ := iamSystem.RevokedStore.IsRevoked(strings.TrimSpace(iamClaims.ID)); revoked {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
+					c.Abort()
+					return false
+				}
+			}
+
+			// Bootstrap sysadmin role fallback (same logic as IAM middleware)
+			if len(iamClaims.Roles) == 0 {
+				configuredSysadminEmail := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
+				claimEmail := strings.ToLower(strings.TrimSpace(iamClaims.Email))
+				if configuredSysadminEmail != "" && claimEmail != "" && claimEmail == configuredSysadminEmail {
+					iamClaims.Roles = []string{"sysadmin", "system-manager", "admin"}
+					log.Printf("⚠️  Applied bootstrap sysadmin role fallback for token subject %s", claimEmail)
+				}
+			}
+
+			email = iamClaims.Email
+			roles = iamClaims.Roles
+			clientID = strings.TrimSpace(iamClaims.ClientID)
+
+			principal = strings.TrimSpace(iamClaims.DisplayName)
+			if principal == "" {
+				principal = strings.TrimSpace(iamClaims.Email)
+			}
+			if principal == "" {
+				principal = strings.TrimSpace(iamClaims.Sub)
+			}
+			if principal == "" {
+				principal = "token-user"
+			}
+		} else {
+			// ── Fallback: legacy JWKS TokenValidator ──
+			activeTokenValidator := getOrInitTokenValidator()
+			if activeTokenValidator == nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"error":   "authentication unavailable",
+					"message": "token validation is not available because IAM token validator initialization failed",
+				})
+				c.Abort()
+				return false
+			}
+
+			claims, valErr := activeTokenValidator.ValidateToken(rawToken)
+			if valErr != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", valErr)})
+				c.Abort()
+				return false
+			}
+			legacyClaims = claims
+
+			if len(legacyClaims.RolesList()) == 0 {
+				configuredSysadminEmail := strings.ToLower(strings.TrimSpace(os.Getenv("IAM_SYSADMIN_EMAIL")))
+				claimEmail := strings.ToLower(strings.TrimSpace(legacyClaims.Email))
+				if configuredSysadminEmail != "" && claimEmail != "" && claimEmail == configuredSysadminEmail {
+					fallbackRoles := []string{"sysadmin", "system-manager", "admin"}
+					legacyClaims.Roles = append([]string{}, fallbackRoles...)
+					legacyClaims.RealmAccess.Roles = append([]string{}, fallbackRoles...)
+					log.Printf("⚠️  Applied bootstrap sysadmin role fallback for token subject %s", claimEmail)
+				}
+			}
+
+			email = legacyClaims.Email
+			roles = legacyClaims.RolesList()
+			clientID = strings.TrimSpace(legacyClaims.ClientID)
+
+			principal = strings.TrimSpace(legacyClaims.PreferredUsername)
+			if principal == "" {
+				principal = strings.TrimSpace(legacyClaims.Email)
+			}
+			if principal == "" {
+				principal = strings.TrimSpace(legacyClaims.Sub)
+			}
+			if principal == "" {
+				principal = "token-user"
 			}
 		}
 
-		principal := strings.TrimSpace(claims.PreferredUsername)
-		if principal == "" {
-			principal = strings.TrimSpace(claims.Email)
-		}
-		if principal == "" {
-			principal = strings.TrimSpace(claims.Sub)
-		}
-		if principal == "" {
-			principal = "token-user"
-		}
+		// ── Rate limiting ────────────────────────────────────────────────
 
 		defaultMaxCalls, defaultValidity := rateLimiter.DefaultPolicy()
 		callsLimit := defaultMaxCalls
 
-		allowed, callsRemaining, expiresAt, limitErr := rateLimiter.CheckRateLimit(token)
+		allowed, callsRemaining, expiresAt, limitErr := rateLimiter.CheckRateLimit(rawToken)
 		if !allowed && limitErr != nil && limitErr.Error() == "token not tracked or invalid" {
 			// Accept valid IAM/JWT tokens even if they were not issued through /auth/login.
 			policyCalls := defaultMaxCalls
 			policyValidity := defaultValidity
 
-			if claims != nil && strings.TrimSpace(claims.ClientID) != "" && iamSystem != nil && iamSystem.Clients != nil {
-				if clientCfg, clientErr := iamSystem.Clients.GetClient(strings.TrimSpace(claims.ClientID)); clientErr == nil && clientCfg != nil {
+			if clientID != "" && iamSystem != nil && iamSystem.Clients != nil {
+				if clientCfg, clientErr := iamSystem.Clients.GetClient(clientID); clientErr == nil && clientCfg != nil {
 					if clientCfg.RateLimitMaxCalls > 0 {
 						policyCalls = clientCfg.RateLimitMaxCalls
 					}
@@ -546,12 +620,12 @@ func main() {
 				}
 			}
 
-			rateLimiter.RegisterTokenWithPolicy(token, principal, policyCalls, policyValidity)
+			rateLimiter.RegisterTokenWithPolicy(rawToken, principal, policyCalls, policyValidity)
 			callsLimit = policyCalls
-			allowed, callsRemaining, expiresAt, limitErr = rateLimiter.CheckRateLimit(token)
+			allowed, callsRemaining, expiresAt, limitErr = rateLimiter.CheckRateLimit(rawToken)
 		}
 
-		if trackedLimit, _, tracked := rateLimiter.GetTokenPolicy(token); tracked && trackedLimit > 0 {
+		if trackedLimit, _, tracked := rateLimiter.GetTokenPolicy(rawToken); tracked && trackedLimit > 0 {
 			callsLimit = trackedLimit
 		}
 
@@ -563,7 +637,8 @@ func main() {
 					"expired_at": expiresAt.Format("2006-01-02 15:04:05"),
 				})
 			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{
+				c.Header("Retry-After", "60")
+				c.JSON(http.StatusTooManyRequests, gin.H{
 					"error":           "api call limit exceeded",
 					"message":         fmt.Sprintf("you have used all %d api calls allowed for this token", callsLimit),
 					"calls_limit":     callsLimit,
@@ -576,17 +651,34 @@ func main() {
 			return false
 		}
 
-		if err := rateLimiter.IncrementCallCount(token); err != nil {
+		if err := rateLimiter.IncrementCallCount(rawToken); err != nil {
 			log.Printf("⚠️  Failed to increment call count: %v", err)
 		}
 
-		c.Set("user", claims)
+		// ── Set context for downstream handlers ──────────────────────────
+
+		// Store the appropriate claims type so downstream handlers can
+		// retrieve them via auth.GetUser(c) or c.Get("user").
+		if iamClaims != nil {
+			// Convert IAM claims to legacy auth.Claims for backward compat
+			compatClaims := &auth.Claims{
+				Sub:               iamClaims.Sub,
+				PreferredUsername: iamClaims.DisplayName,
+				Email:             iamClaims.Email,
+				DisplayName:       iamClaims.DisplayName,
+				Roles:             iamClaims.Roles,
+				RegisteredClaims:  iamClaims.RegisteredClaims,
+			}
+			c.Set("user", compatClaims)
+		} else {
+			c.Set("user", legacyClaims)
+		}
 		c.Set("username", principal)
-		c.Set("email", claims.Email)
-		c.Set("roles", claims.RolesList())
+		c.Set("email", email)
+		c.Set("roles", roles)
 		c.Set("calls_remaining", callsRemaining)
 		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
-		c.Set("token", token)
+		c.Set("token", rawToken)
 
 		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", callsLimit))
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))

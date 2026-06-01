@@ -90,6 +90,10 @@ type Issuer struct {
 
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+
+	// ExpectedAudience, when set, enables aud claim validation.
+	// Tokens whose aud claim does not contain this value are rejected.
+	ExpectedAudience string
 }
 
 // Default constants re-exported from config package.
@@ -309,6 +313,7 @@ func (iss *Issuer) IssueAccessTokenWithTTL(input IssueInput, accessTokenTTL time
 }
 
 // ValidateAccessToken parses and validates an access token.
+// When ExpectedAudience is set on the Issuer, the token's aud claim must contain it.
 func (iss *Issuer) ValidateAccessToken(raw string) (*IAMClaims, error) {
 	claims := &IAMClaims{}
 	token, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
@@ -323,6 +328,25 @@ func (iss *Issuer) ValidateAccessToken(raw string) (*IAMClaims, error) {
 	if !token.Valid {
 		return nil, errors.New("invalid token")
 	}
+
+	// Audience validation — reject tokens that don't carry the expected audience.
+	if expected := strings.TrimSpace(iss.ExpectedAudience); expected != "" {
+		aud := claims.Audience
+		if len(aud) == 0 {
+			return nil, errors.New("token missing aud claim")
+		}
+		found := false
+		for _, a := range aud {
+			if a == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("token audience mismatch: expected %q", expected)
+		}
+	}
+
 	return claims, nil
 }
 
