@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~65%** (Phases 1-5 complete)
+**Current Zero Trust coverage: ~70%** (Phases 1-6 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -693,11 +693,13 @@ User Behavior Profiling
 - [x] Wire policy enforcement mode — policy engine's `ShouldChallenge()` triggers MFA even at low risk scores
 - [x] Extract `validateTOTPForUser()` helper — shared by authenticateRequest + authorizeRequest, eliminates code duplication
 
-### Phase 6: Inline Scanner (1 day)
+### Phase 6: Inline Scanner (1 day) ✅ DONE (2026-06-02)
 
-- [ ] Change `scanObjectAsync` from post-upload to pre-commit
-- [ ] Buffer upload to temp → scan → if safe: commit; if unsafe: reject + quarantine
-- [ ] Wire `HighRiskBlockRule` to actually block (currently hardcodes `RiskScore=0`)
+- [x] Change `scanObjectAsync` from post-upload to pre-commit — `PutObject` now buffers to memory, scans with SafeGate, then commits
+- [x] Buffer upload → scan → if safe: commit to storage; if unsafe: reject with 403 + audit event
+- [x] Wire `HighRiskBlockRule` to actually block — already working via Phase 3's `EvaluateHTTPRequest()` (risk >= 90 → `ShouldBlock()`)
+- [x] Added `detectMIMEType()` helper for pre-commit scanner FileInfo construction
+- [x] Fallback to direct upload when no scanner configured (backward compatible)
 
 ### Phase 7: Persistent Audit (2 days)
 
