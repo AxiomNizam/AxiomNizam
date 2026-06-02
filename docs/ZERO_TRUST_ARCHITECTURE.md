@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~70%** (Phases 1-6 complete)
+**Current Zero Trust coverage: ~75%** (Phases 1-7 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -701,12 +701,13 @@ User Behavior Profiling
 - [x] Added `detectMIMEType()` helper for pre-commit scanner FileInfo construction
 - [x] Fallback to direct upload when no scanner configured (backward compatible)
 
-### Phase 7: Persistent Audit (2 days)
+### Phase 7: Persistent Audit (2 days) ✅ DONE (2026-06-02)
 
-- [ ] PostgreSQL audit sink for core `AuditComplianceManager`
-- [ ] Unified query API across all domain audit loggers
-- [ ] Forward encryption key audit events to central system
-- [ ] Configurable retention policy (replace hardcoded 90-day delete)
+- [x] PostgreSQL audit sink for core `AuditComplianceManager` — `PostgresAuditLogger` wrapping GORM `AuditRepository` with hash-chain sealing
+- [x] Unified query API across all domain audit loggers — `GET /api/v1/audit/unified` with full filter support
+- [x] Forward encryption key audit events to central system — `CreateKey`, `RotateKey`, `DeleteKey` now log to `AuditComplianceManager`
+- [x] Configurable retention policy — `AUDIT_RETENTION_DAYS` env var + `?days=` query param override
+- [x] Fixed MySQL syntax bug in GORM `DeleteOldLogs` — now uses PostgreSQL `INTERVAL` syntax
 
 ### Phase 8: Auto Field Encryption (2 days)
 
