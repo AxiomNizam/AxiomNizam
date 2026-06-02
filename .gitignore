@@ -38,6 +38,7 @@ go.work.sum
 # In Docker/k8s this maps to a persistent volume mount.
 /data/
 /.openclaude/
+/.continue/
 # AI context tracking
 claude.md
 
