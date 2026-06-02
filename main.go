@@ -33,6 +33,7 @@ import (
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/gatekeeper"
 	gkmodels "example.com/axiomnizam/internal/gatekeeper/models"
+	gkpolicy "example.com/axiomnizam/internal/gatekeeper/policy"
 	gkrisk "example.com/axiomnizam/internal/gatekeeper/risk"
 	analyticspkg "example.com/axiomnizam/internal/analytics"
 	gispkg "example.com/axiomnizam/internal/gis"
@@ -105,6 +106,128 @@ func decryptAESSecret(encryptionKey []byte, ciphertext []byte) ([]byte, error) {
 	}
 	nonce, ct := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	return aesGCM.Open(nil, nonce, ct, nil)
+}
+
+// ── Zero Trust Phase 3: RBAC Authorization Helpers ────────────────────────────
+
+// mapHTTPMethodToRBACVerb translates HTTP methods to RBAC verb strings.
+func mapHTTPMethodToRBACVerb(method string) string {
+	switch method {
+	case "GET", "HEAD", "OPTIONS":
+		return "read"
+	case "POST":
+		return "create"
+	case "PUT", "PATCH":
+		return "update"
+	case "DELETE":
+		return "delete"
+	default:
+		return strings.ToLower(method)
+	}
+}
+
+// mapPathToRBACResource extracts the primary resource kind from a URL path.
+// Examples:
+//
+//	"/api/v1/storage/buckets" → "storage"
+//	"/api/v1/iam/users"       → "iam"
+//	"/api/v1/rbac/roles"      → "rbac"
+//	"/api/mysql/query"         → "database"
+//	"/auth/login"              → "auth"
+func mapPathToRBACResource(path string) string {
+	// Handle /api/v1/<module>/... paths
+	if strings.HasPrefix(path, "/api/v1/") {
+		rest := strings.TrimPrefix(path, "/api/v1/")
+		parts := strings.SplitN(rest, "/", 2)
+		if len(parts) > 0 && parts[0] != "" {
+			return parts[0]
+		}
+	}
+
+	// Handle /api/<service>/... paths
+	if strings.HasPrefix(path, "/api/") {
+		rest := strings.TrimPrefix(path, "/api/")
+		parts := strings.SplitN(rest, "/", 2)
+		if len(parts) > 0 {
+			switch parts[0] {
+			case "mysql", "mariadb", "postgres", "percona", "oracle", "mssql", "sqlite", "mongodb":
+				return "database"
+			case "graphql":
+				return "graphql"
+			default:
+				return parts[0]
+			}
+		}
+	}
+
+	// Handle /auth/... paths
+	if strings.HasPrefix(path, "/auth/") {
+		return "auth"
+	}
+
+	return "unknown"
+}
+
+// seedDefaultRBACRoles populates the K8s-style RBAC engine with default
+// cluster roles that mirror the IAM system roles. This ensures CanPerform()
+// has data to evaluate against from startup.
+func seedDefaultRBACRoles(engine *rbac.Engine) {
+	ctx := context.Background()
+
+	// Sysadmin: full wildcard access on all resources/verbs
+	_ = engine.CreateClusterRole(ctx, &rbac.EngineClusterRole{
+		Name: "sysadmin",
+		Rules: []*rbac.EnginePolicyRule{
+			{Verbs: []string{"*"}, Resources: []string{"*"}},
+		},
+	})
+	_ = engine.CreateClusterRoleBinding(ctx, &rbac.EngineClusterRoleBinding{
+		Name:     "sysadmin-binding",
+		Role:     "sysadmin",
+		Subjects: []*rbac.EngineSubject{{Type: "User", Name: "sysadmin"}},
+	})
+
+	// Admin: full wildcard access on all resources (matches IAM admin role capabilities)
+	_ = engine.CreateClusterRole(ctx, &rbac.EngineClusterRole{
+		Name: "admin",
+		Rules: []*rbac.EnginePolicyRule{
+			{Verbs: []string{"*"}, Resources: []string{"*"}},
+		},
+	})
+	_ = engine.CreateClusterRoleBinding(ctx, &rbac.EngineClusterRoleBinding{
+		Name:     "admin-binding",
+		Role:     "admin",
+		Subjects: []*rbac.EngineSubject{{Type: "User", Name: "admin"}},
+	})
+
+	// Manager: read on most resources, execute on jobs
+	_ = engine.CreateClusterRole(ctx, &rbac.EngineClusterRole{
+		Name: "manager",
+		Rules: []*rbac.EnginePolicyRule{
+			{Verbs: []string{"read"}, Resources: []string{"*"}},
+			{Verbs: []string{"create", "update"}, Resources: []string{"jobs"}},
+		},
+	})
+	_ = engine.CreateClusterRoleBinding(ctx, &rbac.EngineClusterRoleBinding{
+		Name:     "manager-binding",
+		Role:     "manager",
+		Subjects: []*rbac.EngineSubject{{Type: "User", Name: "manager"}},
+	})
+
+	// User: read/update on own profile only
+	_ = engine.CreateClusterRole(ctx, &rbac.EngineClusterRole{
+		Name: "user",
+		Rules: []*rbac.EnginePolicyRule{
+			{Verbs: []string{"read", "update"}, Resources: []string{"profile", "auth"}},
+		},
+	})
+	_ = engine.CreateClusterRoleBinding(ctx, &rbac.EngineClusterRoleBinding{
+		Name:     "user-binding",
+		Role:     "user",
+		Subjects: []*rbac.EngineSubject{{Type: "User", Name: "user"}},
+	})
+
+	log.Println("✅ RBAC engine seeded with default cluster roles (sysadmin, admin, manager, user)")
 }
 
 func main() {
@@ -929,6 +1052,126 @@ func main() {
 		c.Next()
 	}
 
+	// ====================================
+	// RBAC ENGINE + ZERO TRUST AUTHORIZATION (Phase 3)
+	// ====================================
+	//
+	// The K8s-style RBAC engine provides resource+verb permission checks
+	// with condition evaluation (IP restrictions, time windows).
+	// It is seeded with default cluster roles matching the IAM system roles.
+
+	rbacEngine := rbac.NewEngine()
+	seedDefaultRBACRoles(rbacEngine)
+
+	// authorizeRequest evaluates resource-level RBAC permissions and
+	// risk-based policy decisions after JWT authentication has succeeded.
+	//
+	// Flow:
+	//   1. Map HTTP method → RBAC verb (GET→read, POST→create, etc.)
+	//   2. Map URL path segment → RBAC resource kind
+	//   3. Inject request metadata (IP, time) into context for condition evaluation
+	//   4. Call rbacEngine.CanPerform() — checks roles + conditions
+	//   5. Call policy engine with actual risk score — may block or require MFA
+	//   6. If RBAC denies and user is not sysadmin → 403
+	authorizeRequest := func(c *gin.Context) {
+		userID, _ := c.Get("user_id")
+		userIDStr, _ := userID.(string)
+		if userIDStr == "" {
+			c.Next()
+			return
+		}
+
+		// Admin-equivalent bypass — matches the same roles that adminOrSysMiddleware accepts.
+		// Sysadmin, admin, system-manager, system_admin, system-admin all get full access.
+		// This preserves backward compatibility with the existing role model while the RBAC
+		// engine handles fine-grained authorization for non-admin users.
+		if claims := auth.GetUser(c); claims != nil {
+			for _, r := range claims.RolesList() {
+				role := strings.ToLower(strings.TrimSpace(r))
+				if role == "sysadmin" || role == "admin" || role == "system-manager" ||
+					role == "system_admin" || role == "system-admin" {
+					c.Next()
+					return
+				}
+			}
+		}
+
+		// Map HTTP method → RBAC verb
+		verb := mapHTTPMethodToRBACVerb(c.Request.Method)
+
+		// Map URL path → RBAC resource kind
+		resource := mapPathToRBACResource(c.Request.URL.Path)
+
+		// Inject request metadata for condition evaluation (IP restrictions, time windows)
+		meta := &rbac.RequestMetadata{
+			IPAddress:   c.ClientIP(),
+			RequestTime: time.Now(),
+			UserAgent:   c.GetHeader("User-Agent"),
+		}
+		ctx := context.WithValue(c.Request.Context(), rbac.RequestMetadataKey, meta)
+
+		// RBAC check
+		allowed, reason := rbacEngine.CanPerform(ctx, userIDStr, resource, verb, "")
+
+		// Policy evaluation with actual risk score
+		if gkSystem != nil && gkSystem.PolicyService != nil {
+			riskScore := 0
+			if rs, ok := c.Get("risk_score"); ok {
+				if v, ok := rs.(int); ok {
+					riskScore = v
+				}
+			}
+			policyReq := &gkpolicy.EvaluationRequest{
+				UserID:       userIDStr,
+				ResourceType: resource,
+				ResourcePath: c.Request.URL.Path,
+				IPAddress:    c.ClientIP(),
+				RiskScore:    riskScore,
+			}
+			policyResult, polErr := gkSystem.PolicyService.EvaluateHTTPRequest(ctx, policyReq)
+			if polErr == nil && policyResult != nil {
+				if policyResult.ShouldBlock() {
+					log.Printf("🚫 Policy engine blocked request: user=%s resource=%s verb=%s reason=%s",
+						userIDStr, resource, verb, policyResult.Reason)
+					c.JSON(http.StatusForbidden, gin.H{
+						"error":  "request blocked by policy",
+						"reason": policyResult.Reason,
+					})
+					c.Abort()
+					return
+				}
+				// Store policy result for downstream handlers
+				c.Set("policy_requires_mfa", policyResult.RequiresMFA)
+				c.Set("policy_risk_action", policyResult.RiskAction)
+			}
+		}
+
+		if !allowed {
+			log.Printf("🚫 RBAC denied: user=%s resource=%s verb=%s reason=%s",
+				userIDStr, resource, verb, reason)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":    "insufficient permissions",
+				"resource": resource,
+				"action":   verb,
+				"reason":   reason,
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+
+	// authzMiddleware combines authentication + RBAC authorization in one middleware.
+	// Use this on route groups that require resource-level permission checks.
+	authzMiddleware := func(c *gin.Context) {
+		if !authenticateRequest(c) {
+			return
+		}
+		enrichRequestContext(c)
+		authorizeRequest(c)
+	}
+
 	// GraphQL endpoints (auth required)
 	router.POST("/api/graphql", authMiddleware, graphQLHandler.Query)
 	router.GET("/api/graphql/schema", authMiddleware, graphQLHandler.GetSchema)
@@ -943,32 +1186,32 @@ func main() {
 
 	// MySQL Dynamic Queries
 	router.GET("/api/mysql/query", authMiddleware, mysqlDynamicHandler.DynamicQuery)
-	router.POST("/api/mysql/query", adminOrSysMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/mysql/query/batch", adminOrSysMiddleware, mysqlDynamicHandler.BatchQueries)
+	router.POST("/api/mysql/query", authzMiddleware, mysqlDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mysql/query/batch", authzMiddleware, mysqlDynamicHandler.BatchQueries)
 	router.GET("/api/mysql/schema", authMiddleware, mysqlDynamicHandler.TableSchema)
 
 	// MariaDB Dynamic Queries
 	router.GET("/api/mariadb/query", authMiddleware, mariadbDynamicHandler.DynamicQuery)
-	router.POST("/api/mariadb/query", adminOrSysMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/mariadb/query/batch", adminOrSysMiddleware, mariadbDynamicHandler.BatchQueries)
+	router.POST("/api/mariadb/query", authzMiddleware, mariadbDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/mariadb/query/batch", authzMiddleware, mariadbDynamicHandler.BatchQueries)
 	router.GET("/api/mariadb/schema", authMiddleware, mariadbDynamicHandler.TableSchema)
 
 	// PostgreSQL Dynamic Queries
 	router.GET("/api/postgres/query", authMiddleware, postgresDynamicHandler.DynamicQuery)
-	router.POST("/api/postgres/query", adminOrSysMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/postgres/query/batch", adminOrSysMiddleware, postgresDynamicHandler.BatchQueries)
+	router.POST("/api/postgres/query", authzMiddleware, postgresDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/postgres/query/batch", authzMiddleware, postgresDynamicHandler.BatchQueries)
 	router.GET("/api/postgres/schema", authMiddleware, postgresDynamicHandler.TableSchema)
 
 	// Percona Dynamic Queries
 	router.GET("/api/percona/query", authMiddleware, perconaDynamicHandler.DynamicQuery)
-	router.POST("/api/percona/query", adminOrSysMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/percona/query/batch", adminOrSysMiddleware, perconaDynamicHandler.BatchQueries)
+	router.POST("/api/percona/query", authzMiddleware, perconaDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/percona/query/batch", authzMiddleware, perconaDynamicHandler.BatchQueries)
 	router.GET("/api/percona/schema", authMiddleware, perconaDynamicHandler.TableSchema)
 
 	// Oracle Dynamic Queries
 	router.GET("/api/oracle/query", authMiddleware, oracleDynamicHandler.DynamicQuery)
-	router.POST("/api/oracle/query", adminOrSysMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
-	router.POST("/api/oracle/query/batch", adminOrSysMiddleware, oracleDynamicHandler.BatchQueries)
+	router.POST("/api/oracle/query", authzMiddleware, oracleDynamicHandler.DynamicQueryWithBody)
+	router.POST("/api/oracle/query/batch", authzMiddleware, oracleDynamicHandler.BatchQueries)
 	router.GET("/api/oracle/schema", authMiddleware, oracleDynamicHandler.TableSchema)
 
 	// ====================================
@@ -1026,35 +1269,35 @@ func main() {
 	// ====================================
 	certificateHandler := securitypkg.NewHandler()
 
-	// Database management endpoints (admin only)
-	router.POST("/api/admin/database/create", adminOrSysMiddleware, adminHandler.CreateDatabase)
-	router.GET("/api/admin/database/list", adminOrSysMiddleware, adminHandler.ListDatabases)
-	router.GET("/api/admin/database/servers", adminOrSysMiddleware, adminHandler.ListDatabaseServers)
-	router.POST("/api/admin/database/connect", adminOrSysMiddleware, adminHandler.ConnectDatabaseServer)
-	router.PUT("/api/admin/database/servers/:key", adminOrSysMiddleware, adminHandler.UpdateDatabaseServer)
-	router.DELETE("/api/admin/database/servers/:key", adminOrSysMiddleware, adminHandler.DeleteDatabaseServer)
-	router.GET("/api/admin/certificates/status", adminOrSysMiddleware, certificateHandler.GetCertificateStatus)
-	router.POST("/api/admin/certificates/renew", adminOrSysMiddleware, certificateHandler.RenewCertificate)
+	// Database management endpoints (RBAC-authorized)
+	router.POST("/api/admin/database/create", authzMiddleware, adminHandler.CreateDatabase)
+	router.GET("/api/admin/database/list", authzMiddleware, adminHandler.ListDatabases)
+	router.GET("/api/admin/database/servers", authzMiddleware, adminHandler.ListDatabaseServers)
+	router.POST("/api/admin/database/connect", authzMiddleware, adminHandler.ConnectDatabaseServer)
+	router.PUT("/api/admin/database/servers/:key", authzMiddleware, adminHandler.UpdateDatabaseServer)
+	router.DELETE("/api/admin/database/servers/:key", authzMiddleware, adminHandler.DeleteDatabaseServer)
+	router.GET("/api/admin/certificates/status", authzMiddleware, certificateHandler.GetCertificateStatus)
+	router.POST("/api/admin/certificates/renew", authzMiddleware, certificateHandler.RenewCertificate)
 
-	// Table management endpoints (admin only)
-	router.POST("/api/admin/table/create", adminOrSysMiddleware, adminHandler.CreateTable)
-	router.GET("/api/admin/table/list", adminOrSysMiddleware, adminHandler.ListTables)
+	// Table management endpoints (RBAC-authorized)
+	router.POST("/api/admin/table/create", authzMiddleware, adminHandler.CreateTable)
+	router.GET("/api/admin/table/list", authzMiddleware, adminHandler.ListTables)
 
-	// Legacy platform user management endpoints (admin only)
+	// Legacy platform user management endpoints (RBAC-authorized)
 	if !iamOnlyAuth {
-		router.GET("/api/v1/users", adminOrSysMiddleware, platformUserHandler.ListPlatformUsers)
-		router.GET("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.GetPlatformUser)
-		router.POST("/api/v1/users", adminOrSysMiddleware, platformUserHandler.CreatePlatformUser)
-		router.PUT("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.UpdatePlatformUser)
-		router.DELETE("/api/v1/users/:id", adminOrSysMiddleware, platformUserHandler.DeletePlatformUser)
+		router.GET("/api/v1/users", authzMiddleware, platformUserHandler.ListPlatformUsers)
+		router.GET("/api/v1/users/:id", authzMiddleware, platformUserHandler.GetPlatformUser)
+		router.POST("/api/v1/users", authzMiddleware, platformUserHandler.CreatePlatformUser)
+		router.PUT("/api/v1/users/:id", authzMiddleware, platformUserHandler.UpdatePlatformUser)
+		router.DELETE("/api/v1/users/:id", authzMiddleware, platformUserHandler.DeletePlatformUser)
 	} else {
 		log.Println("ℹ️  IAM_ONLY_AUTH=true: legacy /api/v1/users endpoints are disabled; use /iam/admin/users")
 	}
 
-	// API Metrics endpoints (admin only)
-	router.GET("/api/admin/metrics/all", adminOrSysMiddleware, apiMetricsTracker.GetAllAPIMetrics)
-	router.GET("/api/admin/metrics/count", adminOrSysMiddleware, apiMetricsTracker.GetAPICount)
-	router.GET("/api/admin/metrics/stats", adminOrSysMiddleware, apiMetricsTracker.GetAPIStats)
+	// API Metrics endpoints (RBAC-authorized)
+	router.GET("/api/admin/metrics/all", authzMiddleware, apiMetricsTracker.GetAllAPIMetrics)
+	router.GET("/api/admin/metrics/count", authzMiddleware, apiMetricsTracker.GetAPICount)
+	router.GET("/api/admin/metrics/stats", authzMiddleware, apiMetricsTracker.GetAPIStats)
 
 	// ====================================
 	// NOTIFICATION ENDPOINTS (Auth Required)
@@ -1089,23 +1332,23 @@ func main() {
 	// Namespaced resource endpoints: /api/v1/namespaces/{namespace}/{kind}
 	nsAPI := router.Group("/api/v1/namespaces")
 	{
-		nsAPI.POST("/:namespace/:kind", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+		nsAPI.POST("/:namespace/:kind", authzMiddleware, resourceHandler.CreateOrUpdate)
 		nsAPI.GET("/:namespace/:kind", authMiddleware, resourceHandler.List)
 		nsAPI.GET("/:namespace/:kind/:name", authMiddleware, resourceHandler.Get)
-		nsAPI.PUT("/:namespace/:kind/:name", adminOrSysMiddleware, resourceHandler.Update)
-		nsAPI.DELETE("/:namespace/:kind/:name", adminOrSysMiddleware, resourceHandler.Delete)
+		nsAPI.PUT("/:namespace/:kind/:name", authzMiddleware, resourceHandler.Update)
+		nsAPI.DELETE("/:namespace/:kind/:name", authzMiddleware, resourceHandler.Delete)
 		nsAPI.GET("/:namespace/:kind/:name/status", authMiddleware, resourceHandler.GetStatus)
 		nsAPI.GET("/:namespace/:kind/:name/events", authMiddleware, resourceHandler.Events)
 	}
 
 	// Non-namespaced resource endpoints: /api/v1/{kind}
-	router.POST("/api/v1/apis", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+	router.POST("/api/v1/apis", authzMiddleware, resourceHandler.CreateOrUpdate)
 	router.GET("/api/v1/apis", authMiddleware, resourceHandler.ListAll)
-	router.POST("/api/v1/policies", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+	router.POST("/api/v1/policies", authzMiddleware, resourceHandler.CreateOrUpdate)
 	router.GET("/api/v1/policies", authMiddleware, resourceHandler.ListAll)
-	router.POST("/api/v1/workflows", adminOrSysMiddleware, resourceHandler.CreateOrUpdate)
+	router.POST("/api/v1/workflows", authzMiddleware, resourceHandler.CreateOrUpdate)
 	router.GET("/api/v1/workflows", authMiddleware, resourceHandler.ListAll)
-	router.POST("/api/v1/workflows/:name/run", adminOrSysMiddleware, func(c *gin.Context) {
+	router.POST("/api/v1/workflows/:name/run", authzMiddleware, func(c *gin.Context) {
 		workflowName := strings.TrimSpace(c.Param("name"))
 		if workflowName == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "workflow name is required"})
@@ -1195,25 +1438,25 @@ func main() {
 
 	// DataSource endpoints
 	dsHandler := datasourceresource.NewDataSourceHandler(conns.Etcd)
-	router.POST("/api/v1/datasources", adminOrSysMiddleware, dsHandler.Create)
+	router.POST("/api/v1/datasources", authzMiddleware, dsHandler.Create)
 	router.GET("/api/v1/datasources", authMiddleware, dsHandler.List)
 	router.GET("/api/v1/datasources/:name", authMiddleware, dsHandler.Get)
-	router.PUT("/api/v1/datasources/:name", adminOrSysMiddleware, dsHandler.Update)
-	router.DELETE("/api/v1/datasources/:name", adminOrSysMiddleware, dsHandler.Delete)
-	router.POST("/api/v1/datasources/:name/test", adminOrSysMiddleware, dsHandler.Test)
+	router.PUT("/api/v1/datasources/:name", authzMiddleware, dsHandler.Update)
+	router.DELETE("/api/v1/datasources/:name", authzMiddleware, dsHandler.Delete)
+	router.POST("/api/v1/datasources/:name/test", authzMiddleware, dsHandler.Test)
 
 	// Job endpoints
 	jobHandler := jobs.NewLegacyJobHandler(conns.Etcd)
-	router.POST("/api/v1/jobs", adminOrSysMiddleware, jobHandler.Create)
+	router.POST("/api/v1/jobs", authzMiddleware, jobHandler.Create)
 	router.GET("/api/v1/jobs", authMiddleware, jobHandler.List)
 	router.GET("/api/v1/jobs/schedules", authMiddleware, jobHandler.ListSchedules)
 	router.GET("/api/v1/jobs/:id", authMiddleware, jobHandler.Get)
-	router.POST("/api/v1/jobs/:id/schedule", adminOrSysMiddleware, jobHandler.SetSchedule)
-	router.DELETE("/api/v1/jobs/:id/schedule", adminOrSysMiddleware, jobHandler.RemoveSchedule)
-	router.POST("/api/v1/jobs/:id/run", adminOrSysMiddleware, jobHandler.Run)
+	router.POST("/api/v1/jobs/:id/schedule", authzMiddleware, jobHandler.SetSchedule)
+	router.DELETE("/api/v1/jobs/:id/schedule", authzMiddleware, jobHandler.RemoveSchedule)
+	router.POST("/api/v1/jobs/:id/run", authzMiddleware, jobHandler.Run)
 	router.GET("/api/v1/jobs/:id/logs", authMiddleware, jobHandler.GetLogs)
-	router.POST("/api/v1/jobs/:id/cancel", adminOrSysMiddleware, jobHandler.Cancel)
-	router.DELETE("/api/v1/jobs/:id", adminOrSysMiddleware, jobHandler.Delete)
+	router.POST("/api/v1/jobs/:id/cancel", authzMiddleware, jobHandler.Cancel)
+	router.DELETE("/api/v1/jobs/:id", authzMiddleware, jobHandler.Delete)
 
 	// ====================================
 	// PLATFORM FEATURE APIs (PHASE 1)
@@ -1238,52 +1481,52 @@ func main() {
 	// Bulk operations
 	bulkAPI := router.Group("/api/v1/bulk/operations", authMiddleware)
 	{
-		bulkAPI.POST("", adminOrSysMiddleware, bulkHandler.SubmitBulkOperation)
+		bulkAPI.POST("", authzMiddleware, bulkHandler.SubmitBulkOperation)
 		bulkAPI.GET("", bulkHandler.ListOperations)
 		bulkAPI.GET("/:id", bulkHandler.GetOperation)
 		bulkAPI.GET("/:id/progress", bulkHandler.GetProgress)
-		bulkAPI.DELETE("/:id", adminOrSysMiddleware, bulkHandler.CancelOperation)
-		bulkAPI.POST("/:id/retry-failed", adminOrSysMiddleware, bulkHandler.RetryFailed)
+		bulkAPI.DELETE("/:id", authzMiddleware, bulkHandler.CancelOperation)
+		bulkAPI.POST("/:id/retry-failed", authzMiddleware, bulkHandler.RetryFailed)
 		bulkAPI.GET("/:id/results", bulkHandler.GetResults)
 	}
 
 	// Event bus
 	eventBusAPI := router.Group("/api/v1/eventbus", authMiddleware)
 	{
-		eventBusAPI.POST("/events/publish", adminOrSysMiddleware, eventBusHandler.PublishEvent)
+		eventBusAPI.POST("/events/publish", authzMiddleware, eventBusHandler.PublishEvent)
 		eventBusAPI.GET("/events", eventBusHandler.ListEvents)
-		eventBusAPI.POST("/events/:id/ack", adminOrSysMiddleware, eventBusHandler.AckEvent)
-		eventBusAPI.POST("/topics", adminOrSysMiddleware, eventBusHandler.CreateTopic)
+		eventBusAPI.POST("/events/:id/ack", authzMiddleware, eventBusHandler.AckEvent)
+		eventBusAPI.POST("/topics", authzMiddleware, eventBusHandler.CreateTopic)
 		eventBusAPI.GET("/topics", eventBusHandler.ListTopics)
-		eventBusAPI.POST("/subscriptions", adminOrSysMiddleware, eventBusHandler.CreateSubscription)
+		eventBusAPI.POST("/subscriptions", authzMiddleware, eventBusHandler.CreateSubscription)
 		eventBusAPI.GET("/subscriptions/:id", eventBusHandler.GetSubscription)
 		eventBusAPI.GET("/subscriptions", eventBusHandler.ListSubscriptions)
 		eventBusAPI.GET("/dlq", eventBusHandler.ListDLQ)
-		eventBusAPI.POST("/dlq/:id/replay", adminOrSysMiddleware, eventBusHandler.ReplayDLQEvent)
+		eventBusAPI.POST("/dlq/:id/replay", authzMiddleware, eventBusHandler.ReplayDLQEvent)
 	}
 
 	// Exports
 	exportAPI := router.Group("/api/v1/exports", authMiddleware)
 	{
-		exportAPI.POST("", adminOrSysMiddleware, exportHandler.SubmitExport)
+		exportAPI.POST("", authzMiddleware, exportHandler.SubmitExport)
 		exportAPI.GET("", exportHandler.ListExports)
 		exportAPI.GET("/:id", exportHandler.GetExport)
 		exportAPI.GET("/:id/progress", exportHandler.GetExportProgress)
 		exportAPI.GET("/:id/download", exportHandler.DownloadExport)
-		exportAPI.DELETE("/:id", adminOrSysMiddleware, exportHandler.CancelExport)
+		exportAPI.DELETE("/:id", authzMiddleware, exportHandler.CancelExport)
 	}
-	router.POST("/api/v1/export-templates", authMiddleware, adminOrSysMiddleware, exportHandler.CreateTemplate)
+	router.POST("/api/v1/export-templates", authzMiddleware, exportHandler.CreateTemplate)
 	router.GET("/api/v1/export-templates", authMiddleware, exportHandler.ListTemplates)
 
 	// Webhooks
 	webhookAPI := router.Group("/api/v1/webhooks", authMiddleware)
 	{
-		webhookAPI.POST("", adminOrSysMiddleware, webhookHandler.CreateWebhook)
+		webhookAPI.POST("", authzMiddleware, webhookHandler.CreateWebhook)
 		webhookAPI.GET("", webhookHandler.ListWebhooks)
 		webhookAPI.GET("/:id", webhookHandler.GetWebhook)
-		webhookAPI.PATCH("/:id", adminOrSysMiddleware, webhookHandler.UpdateWebhook)
-		webhookAPI.DELETE("/:id", adminOrSysMiddleware, webhookHandler.DeleteWebhook)
-		webhookAPI.POST("/:id/test", adminOrSysMiddleware, webhookHandler.TestWebhook)
+		webhookAPI.PATCH("/:id", authzMiddleware, webhookHandler.UpdateWebhook)
+		webhookAPI.DELETE("/:id", authzMiddleware, webhookHandler.DeleteWebhook)
+		webhookAPI.POST("/:id/test", authzMiddleware, webhookHandler.TestWebhook)
 		webhookAPI.GET("/:id/deliveries", webhookHandler.GetDeliveryLogs)
 	}
 
@@ -1291,15 +1534,15 @@ func main() {
 	router.GET("/ws/stream", authMiddleware, streamHandler.HandleStream)
 	streamsAPI := router.Group("/api/v1/streams", authMiddleware)
 	{
-		streamsAPI.POST("", adminOrSysMiddleware, streamHandler.CreateStreamRequest)
+		streamsAPI.POST("", authzMiddleware, streamHandler.CreateStreamRequest)
 		streamsAPI.GET("", streamHandler.ListStreams)
 		streamsAPI.GET("/:id", streamHandler.GetStreamStatus)
-		streamsAPI.DELETE("/:id", adminOrSysMiddleware, streamHandler.CancelStream)
+		streamsAPI.DELETE("/:id", authzMiddleware, streamHandler.CancelStream)
 	}
 	streamSubscriptionsAPI := router.Group("/api/v1/streaming/subscriptions", authMiddleware)
 	{
-		streamSubscriptionsAPI.POST("", adminOrSysMiddleware, streamHandler.Subscribe)
-		streamSubscriptionsAPI.DELETE("/:id", adminOrSysMiddleware, streamHandler.Unsubscribe)
+		streamSubscriptionsAPI.POST("", authzMiddleware, streamHandler.Subscribe)
+		streamSubscriptionsAPI.DELETE("/:id", authzMiddleware, streamHandler.Unsubscribe)
 	}
 
 	// Conductor (RabbitMQ / Kafka producer & consumer management)
@@ -1311,13 +1554,13 @@ func main() {
 	// Tenants
 	tenantAPI := router.Group("/api/v1/tenants", authMiddleware)
 	{
-		tenantAPI.POST("", adminOrSysMiddleware, tenantHandler.CreateTenant)
+		tenantAPI.POST("", authzMiddleware, tenantHandler.CreateTenant)
 		tenantAPI.GET("", tenantHandler.ListTenants)
 		tenantAPI.GET("/:id", tenantHandler.GetTenant)
-		tenantAPI.PATCH("/:id", adminOrSysMiddleware, tenantHandler.UpdateTenant)
-		tenantAPI.DELETE("/:id", adminOrSysMiddleware, tenantHandler.DeleteTenant)
-		tenantAPI.POST("/:id/members", adminOrSysMiddleware, tenantHandler.AddMember)
-		tenantAPI.DELETE("/:id/members/:userId", adminOrSysMiddleware, tenantHandler.RemoveMember)
+		tenantAPI.PATCH("/:id", authzMiddleware, tenantHandler.UpdateTenant)
+		tenantAPI.DELETE("/:id", authzMiddleware, tenantHandler.DeleteTenant)
+		tenantAPI.POST("/:id/members", authzMiddleware, tenantHandler.AddMember)
+		tenantAPI.DELETE("/:id/members/:userId", authzMiddleware, tenantHandler.RemoveMember)
 		tenantAPI.GET("/:id/quota", tenantHandler.GetQuota)
 		tenantAPI.POST("/:id/quota/check", tenantHandler.CheckQuota)
 	}
@@ -1325,23 +1568,23 @@ func main() {
 	// RBAC
 	rbacAPI := router.Group("/api/v1/rbac", authMiddleware)
 	{
-		rbacAPI.POST("/roles", adminOrSysMiddleware, rbacHandler.CreateRole)
+		rbacAPI.POST("/roles", authzMiddleware, rbacHandler.CreateRole)
 		rbacAPI.GET("/roles", rbacHandler.ListRoles)
 		rbacAPI.GET("/roles/:id", rbacHandler.GetRole)
-		rbacAPI.PATCH("/roles/:id", adminOrSysMiddleware, rbacHandler.UpdateRole)
-		rbacAPI.DELETE("/roles/:id", adminOrSysMiddleware, rbacHandler.DeleteRole)
+		rbacAPI.PATCH("/roles/:id", authzMiddleware, rbacHandler.UpdateRole)
+		rbacAPI.DELETE("/roles/:id", authzMiddleware, rbacHandler.DeleteRole)
 
-		rbacAPI.POST("/role-bindings", adminOrSysMiddleware, rbacHandler.BindRole)
+		rbacAPI.POST("/role-bindings", authzMiddleware, rbacHandler.BindRole)
 		rbacAPI.GET("/role-bindings", rbacHandler.ListBindings)
-		rbacAPI.DELETE("/role-bindings/:id", adminOrSysMiddleware, rbacHandler.DeleteBinding)
+		rbacAPI.DELETE("/role-bindings/:id", authzMiddleware, rbacHandler.DeleteBinding)
 
 		rbacAPI.GET("/permissions", rbacHandler.ListPermissions)
 		rbacAPI.POST("/permissions/check", rbacHandler.CheckPermission)
 
 		rbacAPI.POST("/access-requests", rbacHandler.CreateAccessRequest)
 		rbacAPI.GET("/access-requests", rbacHandler.ListAccessRequests)
-		rbacAPI.POST("/access-requests/:id/approve", adminOrSysMiddleware, rbacHandler.ApproveAccessRequest)
-		rbacAPI.POST("/access-requests/:id/reject", adminOrSysMiddleware, rbacHandler.RejectAccessRequest)
+		rbacAPI.POST("/access-requests/:id/approve", authzMiddleware, rbacHandler.ApproveAccessRequest)
+		rbacAPI.POST("/access-requests/:id/reject", authzMiddleware, rbacHandler.RejectAccessRequest)
 	}
 
 	// Versioning
@@ -1351,8 +1594,8 @@ func main() {
 		versionAPI.GET("/versions/:resourceType/:resourceId", versionHandler.ListVersions)
 		versionAPI.GET("/history/:resourceType/:resourceId", versionHandler.GetHistory)
 		versionAPI.GET("/diff/:resourceType/:resourceId", versionHandler.GetDiff)
-		versionAPI.POST("/snapshots/:resourceType/:resourceId", adminOrSysMiddleware, versionHandler.CreateSnapshot)
-		versionAPI.POST("/versions/:resourceType/:resourceId/rollback", adminOrSysMiddleware, versionHandler.Rollback)
+		versionAPI.POST("/snapshots/:resourceType/:resourceId", authzMiddleware, versionHandler.CreateSnapshot)
+		versionAPI.POST("/versions/:resourceType/:resourceId/rollback", authzMiddleware, versionHandler.Rollback)
 	}
 
 	// Lineage
@@ -1372,17 +1615,17 @@ func main() {
 	// Tracing
 	tracingAPI := router.Group("/api/v1/tracing", authMiddleware)
 	{
-		tracingAPI.POST("/traces", adminOrSysMiddleware, tracingHandler.IngestTrace)
+		tracingAPI.POST("/traces", authzMiddleware, tracingHandler.IngestTrace)
 		tracingAPI.GET("/traces/:traceId", tracingHandler.GetTrace)
 		tracingAPI.GET("/traces/search", tracingHandler.SearchTraces)
-		tracingAPI.POST("/spans", adminOrSysMiddleware, tracingHandler.IngestSpan)
+		tracingAPI.POST("/spans", authzMiddleware, tracingHandler.IngestSpan)
 		tracingAPI.GET("/spans/:spanId", tracingHandler.GetSpan)
 		tracingAPI.GET("/service-map", tracingHandler.GetServiceMap)
 		tracingAPI.GET("/services", tracingHandler.ListServices)
 		tracingAPI.GET("/services/:service/metrics", tracingHandler.GetServiceMetrics)
 		tracingAPI.GET("/services/:service/operations/:operation/metrics", tracingHandler.GetOperationMetrics)
 		tracingAPI.GET("/errors/analysis", tracingHandler.GetErrorAnalysis)
-		tracingAPI.GET("/ingestion/audit", adminOrSysMiddleware, tracingHandler.ListIngestionAudits)
+		tracingAPI.GET("/ingestion/audit", authzMiddleware, tracingHandler.ListIngestionAudits)
 	}
 
 	// ====================================
@@ -1394,25 +1637,25 @@ func main() {
 		gisAPI.GET("/summary", gisHandler.GetSummary)
 
 		gisAPI.GET("/layers", gisHandler.ListLayers)
-		gisAPI.POST("/layers", adminOrSysMiddleware, gisHandler.CreateLayer)
-		gisAPI.PUT("/layers/:id", adminOrSysMiddleware, gisHandler.UpdateLayer)
-		gisAPI.DELETE("/layers/:id", adminOrSysMiddleware, gisHandler.DeleteLayer)
+		gisAPI.POST("/layers", authzMiddleware, gisHandler.CreateLayer)
+		gisAPI.PUT("/layers/:id", authzMiddleware, gisHandler.UpdateLayer)
+		gisAPI.DELETE("/layers/:id", authzMiddleware, gisHandler.DeleteLayer)
 
 		gisAPI.GET("/regions", gisHandler.ListRegions)
 		gisAPI.GET("/regions/:id", gisHandler.GetRegion)
-		gisAPI.POST("/regions", adminOrSysMiddleware, gisHandler.CreateRegion)
-		gisAPI.PUT("/regions/:id", adminOrSysMiddleware, gisHandler.UpdateRegion)
-		gisAPI.DELETE("/regions/:id", adminOrSysMiddleware, gisHandler.DeleteRegion)
+		gisAPI.POST("/regions", authzMiddleware, gisHandler.CreateRegion)
+		gisAPI.PUT("/regions/:id", authzMiddleware, gisHandler.UpdateRegion)
+		gisAPI.DELETE("/regions/:id", authzMiddleware, gisHandler.DeleteRegion)
 
 		gisAPI.GET("/markers", gisHandler.ListMarkers)
-		gisAPI.POST("/markers", adminOrSysMiddleware, gisHandler.CreateMarker)
-		gisAPI.DELETE("/markers/:id", adminOrSysMiddleware, gisHandler.DeleteMarker)
+		gisAPI.POST("/markers", authzMiddleware, gisHandler.CreateMarker)
+		gisAPI.DELETE("/markers/:id", authzMiddleware, gisHandler.DeleteMarker)
 
 		gisAPI.GET("/datasets", gisHandler.ListDatasets)
 		gisAPI.GET("/datasets/:id", gisHandler.GetDataset)
-		gisAPI.POST("/datasets", adminOrSysMiddleware, gisHandler.CreateDataset)
-		gisAPI.PUT("/datasets/:id", adminOrSysMiddleware, gisHandler.UpdateDataset)
-		gisAPI.DELETE("/datasets/:id", adminOrSysMiddleware, gisHandler.DeleteDataset)
+		gisAPI.POST("/datasets", authzMiddleware, gisHandler.CreateDataset)
+		gisAPI.PUT("/datasets/:id", authzMiddleware, gisHandler.UpdateDataset)
+		gisAPI.DELETE("/datasets/:id", authzMiddleware, gisHandler.DeleteDataset)
 	}
 
 	// Specialized GIS dashboards (agriculture, industries, medical, satellite, airplane, ship)
@@ -1437,8 +1680,8 @@ func main() {
 	{
 		analyticsAPI.GET("/dashboards", analyticsHandler.ListDashboards)
 		analyticsAPI.GET("/dashboards/:id", analyticsHandler.GetDashboard)
-		analyticsAPI.PUT("/dashboards/:id/widgets/:widgetId", adminOrSysMiddleware, analyticsHandler.UpdateWidget)
-		analyticsAPI.PUT("/dashboards/:id/layout", adminOrSysMiddleware, analyticsHandler.ReorderWidgets)
+		analyticsAPI.PUT("/dashboards/:id/widgets/:widgetId", authzMiddleware, analyticsHandler.UpdateWidget)
+		analyticsAPI.PUT("/dashboards/:id/layout", authzMiddleware, analyticsHandler.ReorderWidgets)
 		analyticsAPI.GET("/dashboards/:id/widgets/:widgetId/export", analyticsHandler.ExportCSV)
 		analyticsAPI.GET("/widget-types", analyticsHandler.GetWidgetTypes)
 	}
@@ -1467,12 +1710,12 @@ func main() {
 	{
 		cdcAPI.GET("/pipelines", cdcEtlHandler.ListCDCPipelines)
 		cdcAPI.GET("/pipelines/:id", cdcEtlHandler.GetCDCPipeline)
-		cdcAPI.POST("/pipelines", adminOrSysMiddleware, cdcEtlHandler.CreateCDCPipeline)
-		cdcAPI.PUT("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.UpdateCDCPipeline)
-		cdcAPI.DELETE("/pipelines/:id", adminOrSysMiddleware, cdcEtlHandler.DeleteCDCPipeline)
-		cdcAPI.POST("/pipelines/:id/start", adminOrSysMiddleware, cdcEtlHandler.StartCDCPipeline)
-		cdcAPI.POST("/pipelines/:id/pause", adminOrSysMiddleware, cdcEtlHandler.PauseCDCPipeline)
-		cdcAPI.POST("/pipelines/:id/stop", adminOrSysMiddleware, cdcEtlHandler.StopCDCPipeline)
+		cdcAPI.POST("/pipelines", authzMiddleware, cdcEtlHandler.CreateCDCPipeline)
+		cdcAPI.PUT("/pipelines/:id", authzMiddleware, cdcEtlHandler.UpdateCDCPipeline)
+		cdcAPI.DELETE("/pipelines/:id", authzMiddleware, cdcEtlHandler.DeleteCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/start", authzMiddleware, cdcEtlHandler.StartCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/pause", authzMiddleware, cdcEtlHandler.PauseCDCPipeline)
+		cdcAPI.POST("/pipelines/:id/stop", authzMiddleware, cdcEtlHandler.StopCDCPipeline)
 		cdcAPI.GET("/sources", cdcEtlHandler.GetCDCSourceTypes)
 		cdcAPI.GET("/sinks", cdcEtlHandler.GetCDCSinkTypes)
 		cdcAPI.GET("/observability", cdcEtlHandler.GetCDCObservability)
@@ -1508,43 +1751,43 @@ func main() {
 		// Custom API CRUD
 		builderAPI.GET("/apis", apiBuilderHandler.ListAPIs)
 		builderAPI.GET("/apis/:id", apiBuilderHandler.GetAPI)
-		builderAPI.POST("/apis", adminOrSysMiddleware, apiBuilderHandler.CreateAPI)
-		builderAPI.PUT("/apis/:id", adminOrSysMiddleware, apiBuilderHandler.UpdateAPI)
-		builderAPI.DELETE("/apis/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteAPI)
-		builderAPI.POST("/apis/:id/test", adminOrSysMiddleware, apiBuilderHandler.TestAPI)
+		builderAPI.POST("/apis", authzMiddleware, apiBuilderHandler.CreateAPI)
+		builderAPI.PUT("/apis/:id", authzMiddleware, apiBuilderHandler.UpdateAPI)
+		builderAPI.DELETE("/apis/:id", authzMiddleware, apiBuilderHandler.DeleteAPI)
+		builderAPI.POST("/apis/:id/test", authzMiddleware, apiBuilderHandler.TestAPI)
 
 		// CSV Upload & Dashboard Generation
-		builderAPI.POST("/csv/upload", adminOrSysMiddleware, apiBuilderHandler.UploadCSV)
+		builderAPI.POST("/csv/upload", authzMiddleware, apiBuilderHandler.UploadCSV)
 		builderAPI.GET("/csv/uploads", apiBuilderHandler.ListCSVUploads)
 		builderAPI.GET("/csv/uploads/:id", apiBuilderHandler.GetCSVUpload)
-		builderAPI.DELETE("/csv/uploads/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteCSVUpload)
-		builderAPI.POST("/csv/uploads/:id/generate-dashboard", adminOrSysMiddleware, apiBuilderHandler.GenerateDashboard)
-		builderAPI.POST("/csv/uploads/:id/generate-gis", adminOrSysMiddleware, apiBuilderHandler.GenerateGISFromCSV)
+		builderAPI.DELETE("/csv/uploads/:id", authzMiddleware, apiBuilderHandler.DeleteCSVUpload)
+		builderAPI.POST("/csv/uploads/:id/generate-dashboard", authzMiddleware, apiBuilderHandler.GenerateDashboard)
+		builderAPI.POST("/csv/uploads/:id/generate-gis", authzMiddleware, apiBuilderHandler.GenerateGISFromCSV)
 
 		// Dashboard <-> GIS Conversion
-		builderAPI.POST("/convert/analyze", adminOrSysMiddleware, apiBuilderHandler.AnalyzeConversion)
-		builderAPI.POST("/convert/dashboard-to-gis", adminOrSysMiddleware, apiBuilderHandler.ConvertDashboardToGIS)
-		builderAPI.POST("/convert/gis-to-dashboard", adminOrSysMiddleware, apiBuilderHandler.ConvertGISToDashboard)
+		builderAPI.POST("/convert/analyze", authzMiddleware, apiBuilderHandler.AnalyzeConversion)
+		builderAPI.POST("/convert/dashboard-to-gis", authzMiddleware, apiBuilderHandler.ConvertDashboardToGIS)
+		builderAPI.POST("/convert/gis-to-dashboard", authzMiddleware, apiBuilderHandler.ConvertGISToDashboard)
 		builderAPI.GET("/conversions", apiBuilderHandler.ListConversions)
 
 		// File Scanner (SafeGate Pipeline)
-		builderAPI.POST("/scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanFile)
+		builderAPI.POST("/scanner/scan", authzMiddleware, apiBuilderHandler.ScanFile)
 		builderAPI.GET("/scanner/scans", apiBuilderHandler.ListScans)
 		builderAPI.GET("/scanner/scans/:id", apiBuilderHandler.GetScan)
 		builderAPI.GET("/scanner/health", apiBuilderHandler.GetScannerHealth)
 
 		// API Scanner Reports
-		builderAPI.POST("/api-scanner/scan", adminOrSysMiddleware, apiBuilderHandler.ScanAPI)
+		builderAPI.POST("/api-scanner/scan", authzMiddleware, apiBuilderHandler.ScanAPI)
 		builderAPI.GET("/api-scanner/reports", apiBuilderHandler.ListAPIScanReports)
-		builderAPI.POST("/api-scanner/reports/bulk-delete", adminOrSysMiddleware, apiBuilderHandler.BulkDeleteAPIScanReports)
+		builderAPI.POST("/api-scanner/reports/bulk-delete", authzMiddleware, apiBuilderHandler.BulkDeleteAPIScanReports)
 		builderAPI.GET("/api-scanner/reports/:id", apiBuilderHandler.GetAPIScanReport)
-		builderAPI.DELETE("/api-scanner/reports/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteAPIScanReport)
+		builderAPI.DELETE("/api-scanner/reports/:id", authzMiddleware, apiBuilderHandler.DeleteAPIScanReport)
 
 		// SQL Assistant for API Builder
-		builderAPI.POST("/sql-assistant/chat", adminOrSysMiddleware, apiBuilderHandler.ChatSQLAssistant)
+		builderAPI.POST("/sql-assistant/chat", authzMiddleware, apiBuilderHandler.ChatSQLAssistant)
 
 		// Dashboard Deletion
-		builderAPI.DELETE("/dashboards/:id", adminOrSysMiddleware, apiBuilderHandler.DeleteDashboard)
+		builderAPI.DELETE("/dashboards/:id", authzMiddleware, apiBuilderHandler.DeleteDashboard)
 	}
 
 	// Runtime execution routes for REST APIs created via API Builder.
@@ -1580,7 +1823,7 @@ func main() {
 		netintelAPI.GET("/modes", func(c *gin.Context) {
 			c.JSON(http.StatusOK, netintelpkg.ModesListResponse{Status: "success", Modes: modeManager.List()})
 		})
-		netintelAPI.PUT("/modes/:name", adminOrSysMiddleware, func(c *gin.Context) {
+		netintelAPI.PUT("/modes/:name", authzMiddleware, func(c *gin.Context) {
 			var cfg modes.ModeConfig
 			if err := c.ShouldBindJSON(&cfg); err != nil {
 				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
@@ -1594,7 +1837,7 @@ func main() {
 			modeManager.Upsert(cfg)
 			c.JSON(http.StatusOK, netintelpkg.ModesUpsertResponse{Message: "mode upserted", Mode: cfg})
 		})
-		netintelAPI.POST("/modes/events", adminOrSysMiddleware, func(c *gin.Context) {
+		netintelAPI.POST("/modes/events", authzMiddleware, func(c *gin.Context) {
 			var ev modes.ModeEvent
 			if err := c.ShouldBindJSON(&ev); err != nil {
 				c.JSON(http.StatusBadRequest, netintelpkg.MessageResponse{Error: err.Error()})
@@ -1653,7 +1896,7 @@ func main() {
 			c.JSON(http.StatusOK, admissionEngine.Evaluate(req))
 		})
 
-		kubeplusAPI.PUT("/scheduler/nodes/:name", adminOrSysMiddleware, func(c *gin.Context) {
+		kubeplusAPI.PUT("/scheduler/nodes/:name", authzMiddleware, func(c *gin.Context) {
 			var node scheduler.Node
 			if err := c.ShouldBindJSON(&node); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1692,7 +1935,7 @@ func main() {
 			c.JSON(http.StatusOK, best)
 		})
 
-		kubeplusAPI.POST("/crd/definitions", adminOrSysMiddleware, func(c *gin.Context) {
+		kubeplusAPI.POST("/crd/definitions", authzMiddleware, func(c *gin.Context) {
 			var def crd.Definition
 			if err := c.ShouldBindJSON(&def); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1742,7 +1985,7 @@ func main() {
 
 	vectorAPI := router.Group("/api/v1/vectorplus", authMiddleware)
 	{
-		vectorAPI.PUT("/records/:id", adminOrSysMiddleware, func(c *gin.Context) {
+		vectorAPI.PUT("/records/:id", authzMiddleware, func(c *gin.Context) {
 			var body struct {
 				Vec    []float64         `json:"vec"`
 				Labels map[string]string `json:"labels"`
@@ -1758,7 +2001,7 @@ func main() {
 			}
 			c.JSON(http.StatusOK, gin.H{"message": "record upserted", "id": rec.ID})
 		})
-		vectorAPI.DELETE("/records/:id", adminOrSysMiddleware, func(c *gin.Context) {
+		vectorAPI.DELETE("/records/:id", authzMiddleware, func(c *gin.Context) {
 			vectorIndex.Delete(c.Param("id"))
 			c.JSON(http.StatusOK, gin.H{"message": "record deleted", "id": c.Param("id")})
 		})
@@ -1807,7 +2050,7 @@ func main() {
 
 	reviewAPI := router.Group("/api/v1/reviewflow", authMiddleware)
 	{
-		reviewAPI.PUT("/items/:id", adminOrSysMiddleware, func(c *gin.Context) {
+		reviewAPI.PUT("/items/:id", authzMiddleware, func(c *gin.Context) {
 			var item reviewflow.ReviewItem
 			if err := c.ShouldBindJSON(&item); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1836,7 +2079,7 @@ func main() {
 			stage := reviewflow.Stage(strings.TrimSpace(c.Query("stage")))
 			c.JSON(http.StatusOK, gin.H{"items": reviewPipeline.ListByStage(stage)})
 		})
-		reviewAPI.POST("/items/:id/stage", adminOrSysMiddleware, func(c *gin.Context) {
+		reviewAPI.POST("/items/:id/stage", authzMiddleware, func(c *gin.Context) {
 			var body struct {
 				Stage reviewflow.Stage `json:"stage"`
 			}
@@ -1950,10 +2193,10 @@ func main() {
 	auditHandler := audit.NewAuditHandler(nil) // AuditLogger impl wired when available
 	auditAPI := router.Group("/api/v1/audit", authMiddleware)
 	{
-		auditAPI.POST("/logs", adminOrSysMiddleware, auditHandler.LogAction)
+		auditAPI.POST("/logs", authzMiddleware, auditHandler.LogAction)
 		auditAPI.GET("/logs", auditHandler.QueryLogs)
 		auditAPI.GET("/report", auditHandler.GetReport)
-		auditAPI.DELETE("/logs", adminOrSysMiddleware, auditHandler.DeleteOldLogs)
+		auditAPI.DELETE("/logs", authzMiddleware, auditHandler.DeleteOldLogs)
 	}
 	log.Println("✅ Audit routes registered")
 
@@ -1965,14 +2208,14 @@ func main() {
 	encryptionHandler := encryption.NewEncryptionHandler(nil)
 	encryptionAPI := router.Group("/api/v1/encryption", authMiddleware)
 	{
-		encryptionAPI.POST("/keys", adminOrSysMiddleware, encryptionHandler.CreateKey)
+		encryptionAPI.POST("/keys", authzMiddleware, encryptionHandler.CreateKey)
 		encryptionAPI.GET("/keys", encryptionHandler.ListKeys)
 		encryptionAPI.GET("/keys/:id", encryptionHandler.GetKey)
-		encryptionAPI.POST("/keys/:id/rotate", adminOrSysMiddleware, encryptionHandler.RotateKey)
-		encryptionAPI.DELETE("/keys/:id", adminOrSysMiddleware, encryptionHandler.DeleteKey)
+		encryptionAPI.POST("/keys/:id/rotate", authzMiddleware, encryptionHandler.RotateKey)
+		encryptionAPI.DELETE("/keys/:id", authzMiddleware, encryptionHandler.DeleteKey)
 		encryptionAPI.POST("/encrypt", authMiddleware, encryptionHandler.Encrypt)
 		encryptionAPI.POST("/decrypt", authMiddleware, encryptionHandler.Decrypt)
-		encryptionAPI.POST("/policies", adminOrSysMiddleware, encryptionHandler.CreatePolicy)
+		encryptionAPI.POST("/policies", authzMiddleware, encryptionHandler.CreatePolicy)
 		encryptionAPI.GET("/policies", encryptionHandler.ListPolicies)
 	}
 	log.Println("✅ Encryption routes registered")
@@ -2167,7 +2410,7 @@ func main() {
 			snapshotH := snapshothandler.NewHandler(backendMgr)
 			sysAPI := router.Group("/api/v1/system", authMiddleware)
 			sysAPI.GET("/snapshot", snapshotH.Download)
-			sysAPI.POST("/snapshot/restore", adminOrSysMiddleware, snapshotH.Restore)
+			sysAPI.POST("/snapshot/restore", authzMiddleware, snapshotH.Restore)
 			log.Println("  ✅ Snapshot backup/restore endpoints registered (/api/v1/system/snapshot)")
 		}
 

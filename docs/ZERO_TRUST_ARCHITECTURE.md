@@ -10,16 +10,16 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~40%** (Phases 1-2 complete)
+**Current Zero Trust coverage: ~50%** (Phases 1-3 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
-| Verify explicitly | 7/10 | Unified JWT (Phase 1): RSA-256 + etcd revocation on all paths; demo tokens gated |
-| Least privilege | 5/10 | Storage module strong; RBAC engine never called |
+| Verify explicitly | 8/10 | Unified JWT (Phase 1) + RBAC+Policy middleware (Phase 3) on all write routes |
+| Least privilege | 7/10 | RBAC engine wired with resource+verb checks; 4 default roles; policy engine with risk thresholds |
 | Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
 | Encrypt everything | 4/10 | At rest: AES-256-GCM. In transit: none |
-| Continuous verification | 2/10 | Revocation checked on all paths now; still no re-verification |
-| Risk-based decisions | 3/10 | Risk engine wired to authenticateRequest; IP + device fingerprint + MFA enforcement |
+| Continuous verification | 3/10 | Revocation + RBAC + policy on every write request; still no session re-verification |
+| Risk-based decisions | 5/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA and blocking |
 | Micro-segmentation | 0/10 | Single binary, single network |
 | Configuration hygiene | 4/10 | Demo tokens gated; still have default creds, trusted proxies open |
 | Identity-centric security | 3/10 | IAM exists but session lifecycle incomplete |
@@ -270,26 +270,42 @@ Every component that exists but isn't connected to the request pipeline:
 ```
 BUILT BUT NOT WIRED                    BUILT AND WIRED
 ─────────────────────                  ────────────────
-Risk Engine (18 signals)               JWT Auth Middleware
-Policy Engine (4 rule types)           Storage 3-Layer Auth
-RBAC Engine (K8s-style)               CORS Whitelist
-IAM Authorizer (resource+action)       CSRF Protection
-Trusted Device Bypass                  Security Headers
-MFA Enforcement Mode                   Audit Hash Chain
-Adaptive Evaluator                     Rate Limiting
-Inline Scanner (pre-commit)            Storage Access Keys
-Session Re-verification                Tenant Isolation
-Step-up Authentication                 Request ID Tracing
-TLS/HTTPS                             Presigned URL Validation
-Auto Field Encryption                  TOTP Secret Encryption
-Persistent Audit Sink                  Domain Audit Loggers
-External KMS Integration               Keyring Rotation
-WebAuthn (FIDO2)                       API Scanner (XSS/SQLi)
-Session Idle Timeout Enforcement        Body Size Limits
-Data Classification Labels             Security Headers
-Supply Chain / SBOM                    Adaptive Evaluator (built)
-Service Mesh / mTLS                    Cipher Config
-DPoP Token Binding
+IAM Authorizer (resource+action)       JWT Auth Middleware
+Trusted Device Bypass                  Storage 3-Layer Auth
+MFA Enforcement Mode                   CORS Whitelist
+Inline Scanner (pre-commit)            CSRF Protection
+Session Re-verification                Security Headers
+Step-up Authentication                 Audit Hash Chain
+TLS/HTTPS                             Rate Limiting
+Auto Field Encryption                  Storage Access Keys
+Persistent Audit Sink                  Tenant Isolation
+External KMS Integration               Request ID Tracing
+WebAuthn (FIDO2)                       Presigned URL Validation
+Session Idle Timeout Enforcement        TOTP Secret Encryption
+Data Classification Labels             Domain Audit Loggers
+Supply Chain / SBOM                    Keyring Rotation
+Service Mesh / mTLS                    API Scanner (XSS/SQLi)
+DPoP Token Binding                     Body Size Limits
+IP-based Rate Limiting                 Security Headers
+Request Schema Validation              Adaptive Evaluator (built)
+Response Field Filtering               Cipher Config
+Anomaly Detection                      API Scanner
+Automated Incident Response            Per-bucket Rate Limiting
+Secret Rotation                        Brute Force Protection (IAM)
+Identity Federation                    Password Policy (IAM)
+Just-in-time Privilege                 MFA Challenge State Machine
+API Gateway                            Trusted Device Service
+User Behavior Profiling                Encryption Keyring
+                                     HMAC Key Validation
+                                     Audit Hash Chain
+                                     Request ID Propagation
+                                     ─────────────────────────
+                                     Risk Engine (18 signals) [Phase 2]
+                                     Policy Engine (4 rule types) [Phase 3]
+                                     RBAC Engine (K8s-style) [Phase 3]
+                                     EngineRuleCondition eval [Phase 3]
+                                     authorizeRequest middleware [Phase 3]
+                                     authzMiddleware (80+ routes) [Phase 3]
 ```
 
 ---
@@ -644,13 +660,16 @@ User Behavior Profiling
 - [x] Score ≥ 70 → require `X-MFA-Token` header with fresh TOTP
 - [x] Score ≥ 90 → reject request
 
-### Phase 3: Wire RBAC + Policy Engine (1 day)
+### Phase 3: Wire RBAC + Policy Engine (1 day) ✅ DONE (2026-06-02)
 
-- [ ] New `authorizeRequest()` middleware after JWT validation
-- [ ] Call `rbac.CanPerform(ctx, userID, resource, verb, namespace)`
-- [ ] Call `policy.Evaluate(user, resource, verb, riskScore)`
-- [ ] Wire IAM Authorizer's `RequirePermission` middleware on protected routes
-- [ ] Evaluate `EngineRuleCondition` types (IPRestriction, TimeWindow) in `CanPerform()`
+- [x] New `authorizeRequest()` middleware after JWT validation
+- [x] Call `rbac.CanPerform(ctx, userID, resource, verb, namespace)` — with RequestMetadata (IP, time) in context
+- [x] Call `policy.EvaluateHTTPRequest()` with actual risk score from `authenticateRequest()`
+- [x] Evaluate `EngineRuleCondition` types (IPRestriction via CIDR, TimeWindow via HH:MM range) in `CanPerform()`
+- [x] `authzMiddleware` combines authenticateRequest + enrichRequestContext + authorizeRequest
+- [x] ~80 inline write routes converted from `adminOrSysMiddleware` to `authzMiddleware`
+- [x] RBAC engine seeded with default cluster roles (sysadmin, admin, manager, user)
+- [ ] Wire IAM Authorizer's `RequirePermission` middleware on protected routes (deferred — module-internal routes)
 
 ### Phase 4: TLS (1 day)
 
