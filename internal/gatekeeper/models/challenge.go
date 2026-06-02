@@ -43,7 +43,7 @@ type Challenge struct {
 // IsTerminal returns true if no further state transitions are possible.
 func (c *Challenge) IsTerminal() bool {
 	switch c.Phase {
-	case ChallengePhaseVerified, ChallengePhaseExpired, ChallengePhaseFailed:
+	case ChallengePhaseVerified, ChallengePhaseExpired, ChallengePhaseFailed, ChallengePhaseRejected:
 		return true
 	}
 	return false

@@ -675,6 +675,40 @@ func main() {
 		}
 	}
 
+	// validateTOTPForUser validates a TOTP code against the user's enrolled factors.
+	// Used by authenticateRequest() (risk-based MFA) and authorizeRequest()
+	// (policy-triggered and step-up MFA) to avoid code duplication.
+	validateTOTPForUser := func(c *gin.Context, userIDStr string, mfaToken string) bool {
+		if gkSystem == nil || gkSystem.FactorRepository() == nil || gkSystem.TOTPService == nil {
+			return false
+		}
+		uid, err := uuid.Parse(strings.TrimSpace(userIDStr))
+		if err != nil || uid == uuid.Nil {
+			return false
+		}
+		factors, fErr := gkSystem.FactorRepository().GetByUserID(c.Request.Context(), uid)
+		if fErr != nil {
+			return false
+		}
+		for _, factor := range factors {
+			if !factor.IsActive() || factor.Spec.Type != gkmodels.FactorTypeTOTP {
+				continue
+			}
+			if len(factor.Spec.EncryptedSecret) == 0 {
+				continue
+			}
+			secretBytes, decErr := decryptAESSecret(gkSystem.Config().EncryptionKey, factor.Spec.EncryptedSecret)
+			if decErr != nil {
+				continue
+			}
+			secretB32 := base32.StdEncoding.EncodeToString(secretBytes)
+			if ok, _ := gkSystem.TOTPService.ValidateCode(c.Request.Context(), secretB32, mfaToken); ok {
+				return true
+			}
+		}
+		return false
+	}
+
 	// authenticateRequest validates token + rate limits and sets auth context without advancing handlers.
 	//
 	// Phase 1 — unified JWT validation:
@@ -846,78 +880,87 @@ func main() {
 		// enrolled TOTP factor, high-risk requests are rejected to
 		// maintain security posture.
 
+		// ── Phase 5: Trusted device bypass + MFA enforcement ───────────────
+		//
+		// Risk >= 90: ChallengePhaseRejected — return structured MFA challenge
+		//   so the frontend can prompt for TOTP instead of a hard block.
+		// Risk >= 70: Require MFA (TOTP) unless the device is trusted.
+
 		if riskScore >= 90 {
-			log.Printf("🚫 Request rejected — critical risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+			log.Printf("🚫 Critical risk — %d for user %s from %s — requiring MFA challenge",
+				riskScore, principal, c.ClientIP())
 			c.JSON(http.StatusForbidden, gin.H{
-				"error":      "request blocked due to high risk score",
-				"risk_score": riskScore,
-				"message":    "this request has been flagged as high risk. please verify your identity through a trusted device or contact support",
+				"error":          "challenge_rejected",
+				"risk_score":     riskScore,
+				"mfa_required":   true,
+				"challenge_type": "totp",
+				"message":        "this request has been flagged as high risk. complete MFA verification to proceed",
 			})
 			c.Abort()
 			return false
 		}
 
 		if riskScore >= 70 {
-			mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
-			if mfaToken == "" {
-				log.Printf("⚠️  MFA required — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":      "mfa verification required",
-					"risk_score": riskScore,
-					"message":    "this request requires multi-factor authentication. provide a valid TOTP code in the X-MFA-Token header",
-				})
-				c.Abort()
-				return false
-			}
-
-			// Validate TOTP code against user's enrolled factors.
-			mfaOK := false
-			if gkSystem != nil && gkSystem.FactorRepository() != nil && gkSystem.TOTPService != nil {
-				var userID uuid.UUID
-				if iamClaims != nil {
-					if parsedUUID, parseErr := uuid.Parse(strings.TrimSpace(iamClaims.Sub)); parseErr == nil {
-						userID = parsedUUID
-					}
-				} else if legacyClaims != nil {
-					if parsedUUID, parseErr := uuid.Parse(strings.TrimSpace(legacyClaims.Sub)); parseErr == nil {
-						userID = parsedUUID
-					}
-				}
-
-				if userID != uuid.Nil {
-					if factors, fErr := gkSystem.FactorRepository().GetByUserID(c.Request.Context(), userID); fErr == nil {
-						for _, factor := range factors {
-							if !factor.IsActive() || factor.Spec.Type != gkmodels.FactorTypeTOTP {
-								continue
-							}
-							if len(factor.Spec.EncryptedSecret) == 0 {
-								continue
-							}
-							secretBytes, decErr := decryptAESSecret(gkSystem.Config().EncryptionKey, factor.Spec.EncryptedSecret)
-							if decErr != nil {
-								continue
-							}
-							secretB32 := base32.StdEncoding.EncodeToString(secretBytes)
-							if ok, _ := gkSystem.TOTPService.ValidateCode(c.Request.Context(), secretB32, mfaToken); ok {
-								mfaOK = true
-								break
+			// ── Trusted device bypass (Phase 5) ──────────────────────────
+			// If the user has a valid trusted device cookie, skip TOTP.
+			mfaSkippedByDevice := false
+			if gkSystem != nil && gkSystem.DeviceService != nil {
+				deviceToken, cookieErr := c.Cookie("axiomnizam_device_token")
+				if cookieErr == nil && deviceToken != "" {
+					deviceFingerprint := c.GetHeader("X-Device-Fingerprint")
+					if deviceFingerprint != "" {
+						var deviceUserID uuid.UUID
+						if iamClaims != nil {
+							deviceUserID, _ = uuid.Parse(strings.TrimSpace(iamClaims.Sub))
+						} else if legacyClaims != nil {
+							deviceUserID, _ = uuid.Parse(strings.TrimSpace(legacyClaims.Sub))
+						}
+						if deviceUserID != uuid.Nil {
+							if verified, _ := gkSystem.DeviceService.VerifyDeviceToken(
+								c.Request.Context(), deviceUserID, deviceFingerprint, deviceToken,
+							); verified {
+								log.Printf("✅ Trusted device bypass — user %s from %s (risk: %d)",
+									principal, c.ClientIP(), riskScore)
+								mfaSkippedByDevice = true
 							}
 						}
 					}
 				}
 			}
 
-			if !mfaOK {
-				log.Printf("🚫 MFA verification failed — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":      "mfa verification failed",
-					"risk_score": riskScore,
-					"message":    "the provided TOTP code is invalid or no MFA factor is enrolled",
-				})
-				c.Abort()
-				return false
+			if !mfaSkippedByDevice {
+				mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
+				if mfaToken == "" {
+					log.Printf("⚠️  MFA required — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+					c.JSON(http.StatusForbidden, gin.H{
+						"error":        "mfa verification required",
+						"risk_score":   riskScore,
+						"mfa_required": true,
+						"message":      "this request requires multi-factor authentication. provide a valid TOTP code in the X-MFA-Token header",
+					})
+					c.Abort()
+					return false
+				}
+
+				// Validate TOTP via shared helper (used by authenticateRequest + authorizeRequest)
+				var mfaUserID string
+				if iamClaims != nil {
+					mfaUserID = strings.TrimSpace(iamClaims.Sub)
+				} else if legacyClaims != nil {
+					mfaUserID = strings.TrimSpace(legacyClaims.Sub)
+				}
+				if !validateTOTPForUser(c, mfaUserID, mfaToken) {
+					log.Printf("🚫 MFA verification failed — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+					c.JSON(http.StatusForbidden, gin.H{
+						"error":      "mfa verification failed",
+						"risk_score": riskScore,
+						"message":    "the provided TOTP code is invalid or no MFA factor is enrolled",
+					})
+					c.Abort()
+					return false
+				}
+				log.Printf("✅ MFA verified for user %s (risk score: %d)", principal, riskScore)
 			}
-			log.Printf("✅ MFA verified for user %s (risk score: %d)", principal, riskScore)
 		}
 
 		// ── Rate limiting ────────────────────────────────────────────────
@@ -1202,7 +1245,70 @@ func main() {
 				// Store policy result for downstream handlers
 				c.Set("policy_requires_mfa", policyResult.RequiresMFA)
 				c.Set("policy_risk_action", policyResult.RiskAction)
+
+				// ── Phase 5: Policy enforcement mode ────────────────────────
+				// When the policy engine says MFA is required (risk >= 50, new device,
+				// sensitive resource), enforce it here even if authenticateRequest()
+				// didn't trigger MFA (e.g., risk score was < 70).
+				if policyResult.ShouldChallenge() && !policyResult.ShouldBlock() {
+					mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
+					if mfaToken == "" {
+						log.Printf("⚠️  Policy requires MFA: user=%s resource=%s verb=%s reason=%s",
+							userIDStr, resource, verb, policyResult.Reason)
+						c.JSON(http.StatusForbidden, gin.H{
+							"error":          "challenge_rejected",
+							"mfa_required":   true,
+							"challenge_type": "totp",
+							"reason":         policyResult.Reason,
+							"message":        "this operation requires MFA verification. provide a TOTP code in the X-MFA-Token header",
+						})
+						c.Abort()
+						return
+					}
+					// Validate the TOTP code for policy-triggered MFA
+					mfaValid := validateTOTPForUser(c, userIDStr, mfaToken)
+					if !mfaValid {
+						c.JSON(http.StatusForbidden, gin.H{
+							"error":   "mfa verification failed",
+							"reason":  policyResult.Reason,
+							"message": "the provided TOTP code is invalid",
+						})
+						c.Abort()
+						return
+					}
+					log.Printf("✅ Policy MFA verified: user=%s resource=%s", userIDStr, resource)
+				}
 			}
+		}
+
+		// ── Phase 5: Step-up MFA for sensitive operations ────────────────
+		// Certain operations require fresh MFA regardless of risk score:
+		// DELETE operations, admin resources, policy/encryption changes.
+		if verb == "delete" || resource == "admin" || resource == "encryption" || resource == "rbac" {
+			mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
+			if mfaToken == "" {
+				log.Printf("⚠️  Step-up MFA required: user=%s resource=%s verb=%s",
+					userIDStr, resource, verb)
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":          "challenge_rejected",
+					"mfa_required":   true,
+					"challenge_type": "totp",
+					"step_up":        true,
+					"message":        "this sensitive operation requires fresh MFA verification",
+				})
+				c.Abort()
+				return
+			}
+			mfaValid := validateTOTPForUser(c, userIDStr, mfaToken)
+			if !mfaValid {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":   "mfa verification failed",
+					"message": "the provided TOTP code is invalid for step-up verification",
+				})
+				c.Abort()
+				return
+			}
+			log.Printf("✅ Step-up MFA verified: user=%s resource=%s verb=%s", userIDStr, resource, verb)
 		}
 
 		if !allowed {

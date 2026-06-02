@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~60%** (Phases 1-4 complete)
+**Current Zero Trust coverage: ~65%** (Phases 1-5 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -684,12 +684,14 @@ User Behavior Profiling
 - [x] CSRF cookie `Secure: true` + `SameSite: Strict` when TLS is enabled (CSRFConfigWithTLS)
 - [ ] HSTS header (deferred — needs careful max-age staging)
 
-### Phase 5: Trusted Device + Step-up MFA (1 day)
+### Phase 5: Trusted Device + Step-up MFA (1 day) ✅ DONE (2026-06-02)
 
-- [ ] Wire trusted device bypass in MFA challenge flow
-- [ ] Add step-up MFA for sensitive operations (admin, delete, policy change)
-- [ ] Use `ChallengePhaseRejected` for risk-rejected challenges
-- [ ] Wire policy enforcement mode ("required"/"adaptive") into middleware
+- [x] Wire trusted device bypass in MFA challenge flow — reads `axiomnizam_device_token` cookie + `X-Device-Fingerprint` header, calls `DeviceService.VerifyDeviceToken()`, skips TOTP if trusted
+- [x] Use `ChallengePhaseRejected` for risk-rejected challenges — risk >= 90 returns structured `challenge_rejected` response with `mfa_required: true`
+- [x] Fix `models.Challenge.IsTerminal()` to include `ChallengePhaseRejected` (was missing — bug)
+- [x] Add step-up MFA for sensitive operations — DELETE, admin, encryption, rbac operations require fresh TOTP
+- [x] Wire policy enforcement mode — policy engine's `ShouldChallenge()` triggers MFA even at low risk scores
+- [x] Extract `validateTOTPForUser()` helper — shared by authenticateRequest + authorizeRequest, eliminates code duplication
 
 ### Phase 6: Inline Scanner (1 day)
 
