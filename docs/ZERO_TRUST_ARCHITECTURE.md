@@ -10,14 +10,14 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~50%** (Phases 1-3 complete)
+**Current Zero Trust coverage: ~60%** (Phases 1-4 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
 | Verify explicitly | 8/10 | Unified JWT (Phase 1) + RBAC+Policy middleware (Phase 3) on all write routes |
 | Least privilege | 7/10 | RBAC engine wired with resource+verb checks; 4 default roles; policy engine with risk thresholds |
 | Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
-| Encrypt everything | 4/10 | At rest: AES-256-GCM. In transit: none |
+| Encrypt everything | 6/10 | At rest: AES-256-GCM. In transit: TLS (Phase 4) with auto-generated dev certs; POSTGRES_SSLMODE=require auto-set |
 | Continuous verification | 3/10 | Revocation + RBAC + policy on every write request; still no session re-verification |
 | Risk-based decisions | 5/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA and blocking |
 | Micro-segmentation | 0/10 | Single binary, single network |
@@ -276,7 +276,7 @@ MFA Enforcement Mode                   CORS Whitelist
 Inline Scanner (pre-commit)            CSRF Protection
 Session Re-verification                Security Headers
 Step-up Authentication                 Audit Hash Chain
-TLS/HTTPS                             Rate Limiting
+TLS/HTTPS [Phase 4]                   Rate Limiting
 Auto Field Encryption                  Storage Access Keys
 Persistent Audit Sink                  Tenant Isolation
 External KMS Integration               Request ID Tracing
@@ -612,7 +612,7 @@ Adaptive Evaluator                     Rate Limiting
 Inline Scanner (pre-commit)            Storage Access Keys
 Session Re-verification                Tenant Isolation
 Step-up Authentication                 Request ID Tracing
-TLS/HTTPS                             Presigned URL Validation
+TLS/HTTPS [Phase 4]                   Presigned URL Validation
 Auto Field Encryption                  TOTP Secret Encryption
 Persistent Audit Sink                  Domain Audit Loggers
 External KMS Integration               Keyring Rotation
@@ -671,14 +671,18 @@ User Behavior Profiling
 - [x] RBAC engine seeded with default cluster roles (sysadmin, admin, manager, user)
 - [ ] Wire IAM Authorizer's `RequirePermission` middleware on protected routes (deferred — module-internal routes)
 
-### Phase 4: TLS (1 day)
+### Phase 4: TLS (1 day) ✅ DONE (2026-06-02)
 
-- [ ] `TLS_CERT_FILE` / `TLS_KEY_FILE` env vars
-- [ ] `ListenAndServeTLS()` with auto-generated self-signed certs for dev
-- [ ] Force HTTPS redirect middleware in production
-- [ ] Frontend proxy to backend over HTTPS
-- [ ] Set `POSTGRES_SSLMODE=require`
-- [ ] Fix CSRF cookie `Secure: true`
+- [x] `TLS_CERT_FILE` / `TLS_KEY_FILE` / `TLS_AUTO_GENERATE` / `TLS_ENABLED` env vars in config.go
+- [x] `internal/tls/tls.go` — auto-generates ECDSA P-256 self-signed cert for dev (data/certs/)
+- [x] `ListenAndServeTLS()` on backend when TLS enabled (main.go)
+- [x] `http.ListenAndServeTLS()` on frontend when TLS enabled (frontend/main.go)
+- [x] HTTPS redirect middleware for plain HTTP requests (main.go)
+- [x] Frontend auto-upgrades backend URLs to https:// when TLS_ENABLED=true
+- [x] Frontend TLS-aware HTTP client (skips cert verification for self-signed dev certs)
+- [x] `POSTGRES_SSLMODE` auto-set to `require` when TLS is enabled
+- [x] CSRF cookie `Secure: true` + `SameSite: Strict` when TLS is enabled (CSRFConfigWithTLS)
+- [ ] HSTS header (deferred — needs careful max-age staging)
 
 ### Phase 5: Trusted Device + Step-up MFA (1 day)
 
