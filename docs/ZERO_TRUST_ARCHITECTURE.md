@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~75%** (Phases 1-7 complete)
+**Current Zero Trust coverage: ~80%** (Phases 1-8 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -709,12 +709,13 @@ User Behavior Profiling
 - [x] Configurable retention policy — `AUDIT_RETENTION_DAYS` env var + `?days=` query param override
 - [x] Fixed MySQL syntax bug in GORM `DeleteOldLogs` — now uses PostgreSQL `INTERVAL` syntax
 
-### Phase 8: Auto Field Encryption (2 days)
+### Phase 8: Auto Field Encryption (2 days) ✅ DONE (2026-06-02)
 
-- [ ] Middleware that transparently encrypts fields marked with `Classification: PII/Sensitive`
-- [ ] Transparent decryption on read
-- [ ] Scheduled key rotation (not manual API calls)
-- [ ] Integrate external KMS providers (AWS KMS, Azure Key Vault, HashiCorp Vault)
+- [x] Auto-encryption via struct tags — `classification:"PII"` / `classification:"Sensitive"` tags trigger AES-256-GCM encryption
+- [x] `AutoEncryptor` — `EncryptStruct()` / `DecryptStruct()` with `enc:v1:` prefix for encrypted values
+- [x] Scheduled key rotation — `KeyRotationScheduler` background goroutine, `ENCRYPTION_KEY_ROTATION_DAYS` env var (default 30)
+- [x] KMS provider interface — `KMSProvider` interface with `LocalKMS` implementation, `ENCRYPTION_KMS_PROVIDER` env var
+- [ ] External KMS integration (Vault, AWS KMS) — interface ready, implementations deferred to Phase 14
 
 ### Phase 9: Continuous Verification (3 days)
 
