@@ -24,15 +24,20 @@ import (
 )
 
 // IAMClaims are the JWT claims issued by the IAM system.
+// Phase 9: Added continuous verification claims for risk delta, IP change, device change detection.
 type IAMClaims struct {
-	Sub         string   `json:"sub"`
-	Email       string   `json:"email"`
-	DisplayName string   `json:"display_name,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
-	Scope       string   `json:"scope,omitempty"`
-	ClientID    string   `json:"client_id,omitempty"`
-	SessionID   string   `json:"sid,omitempty"`
-	RiskScore   int      `json:"risk_score,omitempty"` // 0-100, embedded at token issue time
+	Sub             string   `json:"sub"`
+	Email           string   `json:"email"`
+	DisplayName     string   `json:"display_name,omitempty"`
+	Roles           []string `json:"roles,omitempty"`
+	Scope           string   `json:"scope,omitempty"`
+	ClientID        string   `json:"client_id,omitempty"`
+	SessionID       string   `json:"sid,omitempty"`
+	RiskScore       int      `json:"risk_score,omitempty"`        // 0-100, current risk at token issue
+	LastRiskScore   int      `json:"last_risk_score,omitempty"`   // 0-100, previous risk for delta comparison
+	LastVerifiedAt  int64    `json:"last_verified_at,omitempty"`  // unix timestamp of last MFA verification
+	LastIPAddress   string   `json:"last_ip,omitempty"`           // IP from previous request for change detection
+	LastDeviceFP    string   `json:"last_fp,omitempty"`           // device fingerprint for change detection
 	jwt.RegisteredClaims
 }
 
@@ -56,15 +61,18 @@ type AccessTokenResponse struct {
 }
 
 // IssueInput carries common token issuance arguments.
+// Phase 9: Added LastRiskScore and LastVerifiedAt for continuous verification.
 type IssueInput struct {
-	Sub         string
-	Email       string
-	DisplayName string
-	Scope       string
-	ClientID    string
-	SessionID   string
-	Roles       []string
-	RiskScore   int // 0-100, embedded in JWT claims when > 0
+	Sub            string
+	Email          string
+	DisplayName    string
+	Scope          string
+	ClientID       string
+	SessionID      string
+	Roles          []string
+	RiskScore      int // 0-100, embedded in JWT claims when > 0
+	LastRiskScore  int // 0-100, previous risk score for delta comparison
+	LastVerifiedAt int64 // unix timestamp of last MFA verification
 }
 
 // JWKSResponse is the /.well-known/jwks.json payload.
@@ -211,7 +219,9 @@ func (iss *Issuer) IssueTokenPairWithAccessTTL(input IssueInput, accessTokenTTL 
 		Scope:       input.Scope,
 		ClientID:    input.ClientID,
 		SessionID:   input.SessionID,
-		RiskScore:   input.RiskScore,
+		RiskScore:      input.RiskScore,
+		LastRiskScore:  input.LastRiskScore,
+		LastVerifiedAt: input.LastVerifiedAt,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    iss.issuerURL,
 			Subject:   input.Sub,
@@ -287,7 +297,9 @@ func (iss *Issuer) IssueAccessTokenWithTTL(input IssueInput, accessTokenTTL time
 		Scope:       input.Scope,
 		ClientID:    input.ClientID,
 		SessionID:   input.SessionID,
-		RiskScore:   input.RiskScore,
+		RiskScore:      input.RiskScore,
+		LastRiskScore:  input.LastRiskScore,
+		LastVerifiedAt: input.LastVerifiedAt,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    iss.issuerURL,
 			Subject:   input.Sub,

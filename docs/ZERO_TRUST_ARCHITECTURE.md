@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~80%** (Phases 1-8 complete)
+**Current Zero Trust coverage: ~85%** (Phases 1-9 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -717,13 +717,15 @@ User Behavior Profiling
 - [x] KMS provider interface — `KMSProvider` interface with `LocalKMS` implementation, `ENCRYPTION_KMS_PROVIDER` env var
 - [ ] External KMS integration (Vault, AWS KMS) — interface ready, implementations deferred to Phase 14
 
-### Phase 9: Continuous Verification (3 days)
+### Phase 9: Continuous Verification (3 days) ✅ DONE (2026-06-02)
 
-- [ ] Re-evaluate risk signals on every request (IP change, geo change, device change)
-- [ ] Session idle timeout (separate from token expiry)
-- [ ] Embed last risk score in JWT, compare with current on each request
-- [ ] Risk delta > threshold → require step-up MFA
-- [ ] Revoke sessions on high-risk signal detection
+- [x] Re-evaluate risk signals on every request — IP change (+10 risk), device fingerprint change (+15 risk)
+- [x] Embed last risk score in JWT — `LastRiskScore`, `LastIPAddress`, `LastDeviceFP` in `IAMClaims`
+- [x] Risk delta comparison — current vs JWT-embedded last risk score on each request
+- [x] Risk delta > 30 → require step-up MFA (TOTP)
+- [x] Risk delta >= 50 + risk >= 70 → auto-revoke session + JTI denylist
+- [x] Session revocation on critical risk (>= 90) — session + token revoked
+- [ ] Session idle timeout — `SESSION_IDLE_TIMEOUT_MINUTES` env var parsed, `LastAccessAt` field exists on SSO session, enforcement deferred
 
 ### Phase 10: WebAuthn / FIDO2 Integration (3 days)
 

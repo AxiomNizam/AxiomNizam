@@ -34,7 +34,11 @@ type Claims struct {
 	Roles             []string               `json:"roles,omitempty"`
 	RealmAccess       RealmAccess            `json:"realm_access"`
 	ResourceAccess    map[string]interface{} `json:"resource_access"`
-	RiskScore         int                    `json:"risk_score,omitempty"` // 0-100
+	RiskScore       int    `json:"risk_score,omitempty"`       // 0-100
+	LastRiskScore   int    `json:"last_risk_score,omitempty"`  // Phase 9: previous risk for delta
+	LastVerifiedAt  int64  `json:"last_verified_at,omitempty"` // Phase 9: last MFA verification
+	LastIPAddress   string `json:"last_ip,omitempty"`          // Phase 9: IP change detection
+	LastDeviceFP    string `json:"last_fp,omitempty"`          // Phase 9: device change detection
 	jwt.RegisteredClaims
 }
 

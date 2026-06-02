@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -843,17 +844,23 @@ func main() {
 			}
 		}
 
-		// ── Risk scoring ─────────────────────────────────────────────────
+		// ── Phase 9: Risk scoring with continuous verification ──────────────
+		//
+		// On each request:
+		// 1. Compute current risk score from signals
+		// 2. Compare with JWT-embedded last risk score (risk delta)
+		// 3. Detect IP address and device fingerprint changes
+		// 4. If risk delta > 30 or IP/device changed → flag for step-up MFA
+		// 5. If risk >= 90 → revoke session and all tokens
 
 		riskScore := 0
+		currentIP := c.ClientIP()
+		currentFP := c.GetHeader("X-Device-Fingerprint")
+
 		if gkSystem != nil && gkSystem.RiskService != nil {
 			signals := &gkrisk.Signals{
-				IPAddress:         c.ClientIP(),
-				DeviceFingerprint: c.GetHeader("X-Device-Fingerprint"),
-			}
-			if ua := c.GetHeader("User-Agent"); ua != "" {
-				// Detect new browser from User-Agent heuristics
-				_ = ua // populated for future browser-fingerprint tracking
+				IPAddress:         currentIP,
+				DeviceFingerprint: currentFP,
 			}
 			if score, scoreErr := gkSystem.RiskService.Score(c.Request.Context(), signals); scoreErr == nil {
 				riskScore = score
@@ -862,16 +869,167 @@ func main() {
 			}
 		}
 
-		c.Set("risk_score", riskScore)
+		// Phase 9: Risk delta comparison — detect risk score changes between requests.
+		var riskDelta int
+		var ipChanged, deviceChanged bool
+		var lastRiskScore int
 
-		// Propagate risk score into the claims for downstream consumers.
 		if iamClaims != nil {
-			iamClaims.RiskScore = riskScore
+			lastRiskScore = iamClaims.LastRiskScore
+			if iamClaims.LastIPAddress != "" && iamClaims.LastIPAddress != currentIP {
+				ipChanged = true
+			}
+			if iamClaims.LastDeviceFP != "" && currentFP != "" && iamClaims.LastDeviceFP != currentFP {
+				deviceChanged = true
+			}
 		} else if legacyClaims != nil {
-			legacyClaims.RiskScore = riskScore
+			lastRiskScore = legacyClaims.LastRiskScore
+			if legacyClaims.LastIPAddress != "" && legacyClaims.LastIPAddress != currentIP {
+				ipChanged = true
+			}
+			if legacyClaims.LastDeviceFP != "" && currentFP != "" && legacyClaims.LastDeviceFP != currentFP {
+				deviceChanged = true
+			}
 		}
 
-		// ── Risk-based MFA enforcement ──────────────────────────────────
+		if lastRiskScore > 0 {
+			riskDelta = riskScore - lastRiskScore
+			if riskDelta < 0 {
+				riskDelta = -riskDelta
+			}
+		}
+
+		// Boost risk score on IP/device changes (signals not yet wired to scorer).
+		if ipChanged {
+			riskScore += 10
+			log.Printf("⚠️  IP change detected for %s: risk %d → %s (risk +%d)", principal, lastRiskScore, currentIP, 10)
+		}
+		if deviceChanged {
+			riskScore += 15
+			log.Printf("⚠️  Device change detected for %s (risk +%d)", principal, 15)
+		}
+		if riskScore > 100 {
+			riskScore = 100
+		}
+
+		// Phase 9: Revoke session on critical risk (>= 90).
+		if riskScore >= 90 {
+			log.Printf("🚨 Critical risk %d for %s — revoking session", riskScore, principal)
+			// Revoke the session if we have a session ID.
+			if iamClaims != nil && iamClaims.SessionID != "" && iamSystem != nil && iamSystem.Sessions != nil {
+				_ = iamSystem.Sessions.Revoke(iamClaims.SessionID)
+			}
+			// Revoke the current token JTI so it can't be reused.
+			if iamSystem != nil && iamSystem.RevokedStore != nil {
+				if iamClaims != nil && iamClaims.ID != "" {
+					remaining := time.Until(iamClaims.ExpiresAt.Time)
+					if remaining > 0 {
+						_ = iamSystem.RevokedStore.Revoke(iamClaims.ID, remaining)
+					}
+				}
+			}
+		}
+
+		// ── Phase 9: Session idle timeout ──────────────────────────────────
+		//
+		// Uses JWT `iat` (issued-at) as a proxy for last activity time.
+		// If the token was issued more than SESSION_IDLE_TIMEOUT_MINUTES ago,
+		// reject the request and require re-authentication.
+		// This is separate from token expiry — idle timeout catches sessions
+		// that are technically valid but have been inactive.
+
+		idleTimeoutMinutes := 30 // default
+		if v := strings.TrimSpace(os.Getenv("SESSION_IDLE_TIMEOUT_MINUTES")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				idleTimeoutMinutes = n
+			}
+		}
+
+		var tokenIssuedAt time.Time
+		if iamClaims != nil {
+			tokenIssuedAt = iamClaims.IssuedAt.Time
+		} else if legacyClaims != nil {
+			tokenIssuedAt = legacyClaims.IssuedAt.Time
+		}
+		if !tokenIssuedAt.IsZero() {
+			idleDuration := time.Since(tokenIssuedAt)
+			if idleDuration > time.Duration(idleTimeoutMinutes)*time.Minute {
+				log.Printf("⏰ Session idle timeout for %s: token issued %s ago (limit: %d min)",
+					principal, idleDuration.Round(time.Second), idleTimeoutMinutes)
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":   "session expired due to inactivity",
+					"reason":  "idle_timeout",
+					"message": fmt.Sprintf("your session has been idle for more than %d minutes. please re-authenticate", idleTimeoutMinutes),
+				})
+				c.Abort()
+				return false
+			}
+		}
+
+		// Store continuous verification data in context for downstream use.
+		c.Set("risk_score", riskScore)
+		c.Set("risk_delta", riskDelta)
+		c.Set("ip_changed", ipChanged)
+		c.Set("device_changed", deviceChanged)
+
+		// ── Phase 9: Risk delta step-up MFA ────────────────────────────────
+		//
+		// If risk delta > 30 and absolute risk >= 50, require step-up MFA.
+		// This catches sudden risk increases even when absolute risk is moderate.
+
+		if riskDelta > 30 && riskScore >= 50 {
+			mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
+			if mfaToken == "" {
+				log.Printf("⚠️  Risk delta %d requires step-up MFA for user %s", riskDelta, principal)
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":        "step-up mfa required",
+					"risk_score":   riskScore,
+					"risk_delta":   riskDelta,
+					"mfa_required": true,
+					"message":      "a significant change in risk signals requires re-verification. provide a TOTP code in the X-MFA-Token header",
+				})
+				c.Abort()
+				return false
+			}
+			var deltaUserID string
+			if iamClaims != nil {
+				deltaUserID = strings.TrimSpace(iamClaims.Sub)
+			} else if legacyClaims != nil {
+				deltaUserID = strings.TrimSpace(legacyClaims.Sub)
+			}
+			if !validateTOTPForUser(c, deltaUserID, mfaToken) {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":      "step-up mfa verification failed",
+					"risk_delta": riskDelta,
+					"message":    "the provided TOTP code is invalid",
+				})
+				c.Abort()
+				return false
+			}
+			log.Printf("✅ Step-up MFA verified for user %s (risk delta: %d)", principal, riskDelta)
+			// Record MFA verification timestamp for continuous verification.
+			nowUnix := time.Now().Unix()
+			if iamClaims != nil {
+				iamClaims.LastVerifiedAt = nowUnix
+			} else if legacyClaims != nil {
+				legacyClaims.LastVerifiedAt = nowUnix
+			}
+		}
+
+		// Propagate risk data into claims for downstream consumers and next token.
+		if iamClaims != nil {
+			iamClaims.LastRiskScore = riskScore
+			iamClaims.RiskScore = riskScore
+			iamClaims.LastIPAddress = currentIP
+			iamClaims.LastDeviceFP = currentFP
+		} else if legacyClaims != nil {
+			legacyClaims.LastRiskScore = riskScore
+			legacyClaims.RiskScore = riskScore
+			legacyClaims.LastIPAddress = currentIP
+			legacyClaims.LastDeviceFP = currentFP
+		}
+
+		// ── Risk-based MFA enforcement (Phase 5) ────────────────────────
 		//
 		// Score ≥ 90 → reject outright (critical risk).
 		// Score ≥ 70 → require X-MFA-Token header with a valid TOTP code.
