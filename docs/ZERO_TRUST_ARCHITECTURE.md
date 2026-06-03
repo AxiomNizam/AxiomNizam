@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~90%** (Phases 1-11 complete)
+**Current Zero Trust coverage: ~91%** (Phases 1-12 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -25,7 +25,7 @@ AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF
 | Identity-centric security | 4/10 | IAM exists; session lifecycle enforced with idle timeout + max lifespan (Phase 11) |
 | Device trust | 2/10 | Trusted device service built + WebAuthn credential storage with clone detection |
 | Data classification | 0/10 | No labels on fields, encryption is manual |
-| Supply chain security | 0/10 | No dependency scanning, no SBOM |
+| Supply chain security | 2/10 | govulncheck + SBOM + cosign signing + Dependabot + hardened Dockerfile (Phase 12) |
 
 ---
 
@@ -610,19 +610,19 @@ Auto Field Encryption                  Security Headers
 Persistent Audit Sink                  Audit Hash Chain
 External KMS Integration               Rate Limiting
 Data Classification Labels             Storage Access Keys
-Supply Chain / SBOM                    Tenant Isolation
-Service Mesh / mTLS                    Request ID Tracing
-DPoP Token Binding                     Presigned URL Validation
-IP-based Rate Limiting                 TOTP Secret Encryption
-Request Schema Validation              Domain Audit Loggers
-Response Field Filtering               Keyring Rotation
-Anomaly Detection                      API Scanner (XSS/SQLi)
-Automated Incident Response            Body Size Limits
-Secret Rotation                        Security Headers
-Identity Federation                    Cipher Config
-Just-in-time Privilege                 API Scanner
-API Gateway                            Per-bucket Rate Limiting
-User Behavior Profiling                Brute Force Protection (IAM)
+Service Mesh / mTLS                    Tenant Isolation
+DPoP Token Binding                     Request ID Tracing
+IP-based Rate Limiting                 Presigned URL Validation
+Request Schema Validation              TOTP Secret Encryption
+Response Field Filtering               Domain Audit Loggers
+Anomaly Detection                      Keyring Rotation
+Automated Incident Response            API Scanner (XSS/SQLi)
+Secret Rotation                        Body Size Limits
+Identity Federation                    Security Headers
+Just-in-time Privilege                 Cipher Config
+API Gateway                            API Scanner
+User Behavior Profiling                Per-bucket Rate Limiting
+                                     Brute Force Protection (IAM)
                                      Password Policy (IAM)
                                      MFA Challenge State Machine
                                      Trusted Device Service
@@ -643,6 +643,12 @@ User Behavior Profiling                Brute Force Protection (IAM)
                                      Session Max Lifespan [Phase 11]
                                      Session LastAccessAt Tracking [Phase 11]
                                      Session-Expired Header [Phase 11]
+                                     govulncheck CI [Phase 12]
+                                     SBOM Generation [Phase 12]
+                                     Cosign Image Signing [Phase 12]
+                                     Dependency Pinning [Phase 12]
+                                     Dependabot Config [Phase 12]
+                                     Hardened Dockerfile [Phase 12]
 ```
 
 ---
@@ -755,13 +761,14 @@ User Behavior Profiling                Brute Force Protection (IAM)
 - [x] Frontend can intercept `Session-Expired` header → redirect to login with `returnTo`
 - [x] Track `LastAccessAt` on each authenticated request via async `Touch()` call to etcd session store
 
-### Phase 12: Supply Chain Security (1 day)
+### Phase 12: Supply Chain Security (1 day) ✅ DONE (2026-06-03)
 
-- [ ] `govulncheck` in CI pipeline
-- [ ] SBOM generation on each build
-- [ ] Container image signing with cosign
-- [ ] Dependency pinning verification
-- [ ] Automated security-only dependency updates
+- [x] `govulncheck` in CI pipeline — `.github/workflows/supply-chain-security.yml` with daily cron scan
+- [x] SBOM generation on each build — CycloneDX via `cyclonedx-gomod` + dependency manifest
+- [x] Container image signing with cosign — keyless signing via Sigstore/Fulcio in CI
+- [x] Dependency pinning verification — `go mod verify` + tidy check in CI + `scripts/verify-deps.sh`
+- [x] Automated security-only dependency updates — `.github/dependabot.yml` for Go, Actions, Docker
+- [x] Hardened Dockerfile — non-root user, no .env copy, OCI labels, health check
 
 ### Phase 13: Security Observability (2 days)
 
@@ -876,6 +883,14 @@ User Behavior Profiling                Brute Force Protection (IAM)
 | Session model | `internal/iam/authn/authn.go` | 14 (LastAccessAt field) |
 | Session Touch() | `internal/iam/storage/storage.go` | Touch method for LastAccessAt updates |
 | Session lifecycle | `main.go` | 933-1030 (idle timeout + max lifespan enforcement) |
+| Supply chain CI | `.github/workflows/supply-chain-security.yml` | Full file (govulncheck, SBOM, signing, scan) |
+| Dependabot | `.github/dependabot.yml` | Full file (Go, Actions, Docker) |
+| Dependency verify | `scripts/verify-deps.sh` | Full file (go.sum integrity) |
+| SBOM generation | `scripts/generate-sbom.sh` | Full file (CycloneDX) |
+| Image signing | `scripts/sign-image.sh` | Full file (cosign) |
+| Vuln scan | `scripts/vuln-scan.sh` | Full file (govulncheck + Trivy) |
+| Hardened Dockerfile | `Dockerfile` | Full file (non-root, OCI labels) |
+| Security Makefile | `Makefile` | Full file (vuln-check, sbom, verify-deps, sign, scan) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
 | External KMS models | `internal/encryption/models.go` | 78-91 |

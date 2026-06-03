@@ -40,6 +40,10 @@ go.work.sum
 /.openclaude/
 /.continue/
 /.kilo/
+/.github/
+/scripts/
+
+Makefile
 # AI context tracking
 claude.md
 
