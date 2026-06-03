@@ -638,13 +638,13 @@ User Behavior Profiling
 
 ## Implementation Roadmap
 
-### Phase 0: Critical Configuration (2 hours)
+### Phase 0: Critical Configuration (2 hours) ✅ DONE (2026-06-03)
 
-- [ ] Fix `TRUSTED_PROXIES` — set to actual proxy CIDRs, not `0.0.0.0/0`
-- [ ] Change default database credentials
+- [x] Fix `TRUSTED_PROXIES` — set to actual proxy CIDRs (`10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`)
+- [x] Change default database credentials (strong passwords for MySQL, MariaDB, Percona, PostgreSQL, MongoDB, Oracle, RabbitMQ)
 - [x] Disable demo token fallback (gated behind `ALLOW_DEMO_TOKENS=true` env var)
-- [ ] Fix CORS wildcard in gatekeeper middleware
-- [ ] Set `SECURITY_GUARDRAILS_MODE=enforce`
+- [x] Fix CORS wildcard in gatekeeper middleware — `CORSMiddleware()` now requires explicit origin allowlist
+- [x] Set `SECURITY_GUARDRAILS_MODE=enforce` + upgraded default DB credential checks from warnings to blocking
 
 ### Phase 1: Unify JWT Validation (1 day) ✅ DONE (2026-06-01)
 

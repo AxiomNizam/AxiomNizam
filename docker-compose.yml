@@ -232,9 +232,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: app_db
+      POSTGRES_USER: ${POSTGRES_USER:-axiomnizam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-app_db}
       POSTGRES_INITDB_ARGS: "-c shared_buffers=256MB -c max_connections=200"
     networks:
       - app-network
@@ -242,7 +242,7 @@ services:
       - postgres-data:/var/lib/postgresql
       - ./init-postgres.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-axiomnizam}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -254,8 +254,8 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-axiomnizam}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:?MONGODB_PASSWORD must be set}
     networks:
       - app-network
     volumes:
@@ -268,8 +268,8 @@ services:
     ports:
       - "3308:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: app_db
+      MYSQL_ROOT_PASSWORD: ${PERCONA_PASSWORD:?PERCONA_PASSWORD must be set}
+      MYSQL_DATABASE: ${PERCONA_DATABASE:-app_db}
     networks:
       - app-network
     volumes:
@@ -366,9 +366,9 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-axiom}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-axiom}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-axiomnizam}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/axiom}
     networks:
       - app-network
     volumes:
