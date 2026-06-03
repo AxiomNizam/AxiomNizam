@@ -85,6 +85,7 @@ import (
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
 	"example.com/axiomnizam/internal/workflows"
+	"example.com/axiomnizam/internal/secretmanager"
 	"example.com/axiomnizam/internal/securitymon"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -619,6 +620,27 @@ func main() {
 	secDashboard.RegisterRoutes(router)
 
 	log.Println("✅ Security observability initialized (Phase 13)")
+
+	// ── Phase 14: Secret Management ─────────────────────────────────────
+	// Centralized secret management with Vault support, versioning, grace
+	// period, and scheduled rotation. Falls back to env vars when Vault
+	// is not configured.
+	secStore := secretmanager.LoadSecretStoreFromEnv()
+	secMgr := secretmanager.NewSecretManager(secStore, 5, 24*time.Hour)
+	secMgr.StartCleanupLoop(1 * time.Hour)
+
+	// Preload existing env secrets into the manager for versioning
+	for _, key := range []string{
+		"POSTGRES_PASSWORD", "MYSQL_PASSWORD", "MARIADB_PASSWORD",
+		"MONGODB_PASSWORD", "RABBITMQ_PASSWORD", "GATEKEEPER_ENCRYPTION_KEY",
+		"GATEKEEPER_HMAC_KEY", "DEMO_JWT_SECRET",
+	} {
+		if val, err := secStore.Get(key); err == nil && val != "" {
+			_ = secMgr.Put(key, val)
+		}
+	}
+
+	log.Printf("✅ Secret manager initialized (store: %s)", secStore.Name())
 
 	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware

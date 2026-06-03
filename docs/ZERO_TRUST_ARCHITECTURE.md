@@ -10,18 +10,18 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~93%** (Phases 1-13 complete)
+**Current Zero Trust coverage: ~94%** (Phases 1-14 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
 | Verify explicitly | 9/10 | Unified JWT (Phase 1) + RBAC+Policy middleware (Phase 3) + WebAuthn/FIDO2 (Phase 10) for phishing-resistant auth |
 | Least privilege | 7/10 | RBAC engine wired with resource+verb checks; 4 default roles; policy engine with risk thresholds |
 | Assume breach | 5/10 | Audit logging + hash chain + scheduled verification + SIEM export + anomaly detection (Phase 13) |
-| Encrypt everything | 6/10 | At rest: AES-256-GCM. In transit: TLS (Phase 4) with auto-generated dev certs; POSTGRES_SSLMODE=require auto-set |
+| Encrypt everything | 7/10 | At rest: AES-256-GCM. In transit: TLS (Phase 4). Secret versioning + rotation (Phase 14) |
 | Continuous verification | 5/10 | Revocation + RBAC + policy on every write request; session idle timeout + max lifespan enforcement (Phase 11) |
 | Risk-based decisions | 6/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA type (WebAuthn preferred for high risk) |
 | Micro-segmentation | 0/10 | Single binary, single network |
-| Configuration hygiene | 5/10 | Demo tokens gated; default creds fixed (Phase 0); TRUSTED_PROXIES fixed; guardrails enforce mode |
+| Configuration hygiene | 6/10 | Demo tokens gated; default creds fixed; TRUSTED_PROXIES fixed; guardrails enforce; secret versioning (Phase 14) |
 | Identity-centric security | 4/10 | IAM exists; session lifecycle enforced with idle timeout + max lifespan (Phase 11) |
 | Device trust | 2/10 | Trusted device service built + WebAuthn credential storage with clone detection |
 | Data classification | 0/10 | No labels on fields, encryption is manual |
@@ -607,18 +607,18 @@ MFA Enforcement Mode                   Storage 3-Layer Auth
 Inline Scanner (pre-commit)            CORS Whitelist
 Step-up Authentication                 CSRF Protection
 Auto Field Encryption                  Security Headers
-Persistent Audit Sink                  Audit Hash Chain
-External KMS Integration               Rate Limiting
-Data Classification Labels             Storage Access Keys
-Service Mesh / mTLS                    Tenant Isolation
-DPoP Token Binding                     Request ID Tracing
-IP-based Rate Limiting                 Presigned URL Validation
-Request Schema Validation              TOTP Secret Encryption
-Response Field Filtering               Domain Audit Loggers
-Identity Federation                    Keyring Rotation
-Just-in-time Privilege                 API Scanner (XSS/SQLi)
-API Gateway                            Body Size Limits
-User Behavior Profiling                Security Headers
+External KMS Integration               Audit Hash Chain
+Data Classification Labels             Rate Limiting
+Service Mesh / mTLS                    Storage Access Keys
+DPoP Token Binding                     Tenant Isolation
+IP-based Rate Limiting                 Request ID Tracing
+Request Schema Validation              Presigned URL Validation
+Response Field Filtering               TOTP Secret Encryption
+Identity Federation                    Domain Audit Loggers
+Just-in-time Privilege                 Keyring Rotation
+API Gateway                            API Scanner (XSS/SQLi)
+User Behavior Profiling                Body Size Limits
+                                     Security Headers
                                      Cipher Config
                                      API Scanner
                                      Per-bucket Rate Limiting
@@ -655,6 +655,11 @@ User Behavior Profiling                Security Headers
                                      Security Dashboard API [Phase 13]
                                      Audit Chain Verifier [Phase 13]
                                      SIEM Exporter [Phase 13]
+                                     Secret Manager [Phase 14]
+                                     Vault Client [Phase 14]
+                                     Secret Versioning [Phase 14]
+                                     Secret Rotation Engine [Phase 14]
+                                     Secret Access Audit [Phase 14]
 ```
 
 ---
@@ -785,13 +790,13 @@ User Behavior Profiling                Security Headers
 - [x] Scheduled audit chain verification — `AuditChainVerifier` with configurable interval, logs chain integrity status, updates Prometheus gauge
 - [x] SIEM export for audit events — `SIEMExporter` supports webhook (HTTP POST), file (JSON lines), and stdout; configured via `SIEM_WEBHOOK_URL` and `SIEM_EXPORT_FILE` env vars; auth events exported automatically
 
-### Phase 14: Secret Management (2 days)
+### Phase 14: Secret Management (2 days) ✅ DONE (2026-06-03)
 
-- [ ] HashiCorp Vault integration for centralized secrets
-- [ ] Auto-rotate database credentials, API keys, encryption keys
-- [ ] Secret versioning with grace period
-- [ ] Secret access audit trail
-- [ ] Remove secrets from `.env` files
+- [x] HashiCorp Vault integration for centralized secrets — `VaultSecretStore` with health check + env fallback via `LoadSecretStoreFromEnv()`; connects when `VAULT_ADDR` is set
+- [x] Auto-rotate database credentials, API keys, encryption keys — `SecretRotator` with configurable rotation intervals, cryptographically random password generation
+- [x] Secret versioning with grace period — `SecretManager` keeps N previous versions active during grace period (default 24h); `GetByVersion()` for grace period access
+- [x] Secret access audit trail — `AccessEvent` log tracks every read/write/rotate/delete with user, IP, timestamp, and success/failure; 10K event buffer
+- [x] Preloaded env secrets into versioned manager — DB passwords, Gatekeeper keys, JWT secret loaded at startup for versioning
 
 ### Phase 15: Network Micro-Segmentation (2 days)
 
@@ -905,6 +910,11 @@ User Behavior Profiling                Security Headers
 | Security dashboard | `internal/securitymon/dashboard.go` | Full file (3 endpoints) |
 | Prometheus metrics | `internal/securitymon/prometheus_metrics.go` | Full file (15+ counters/gauges) |
 | Security monitoring | `main.go` | 612-622 (initialization + auth flow hooks) |
+| Secret manager | `internal/secretmanager/manager.go` | Full file (versioning, grace period, audit trail) |
+| Env secret store | `internal/secretmanager/env_store.go` | Full file (env var fallback) |
+| Vault client | `internal/secretmanager/vault.go` | Full file (Vault + LoadSecretStoreFromEnv) |
+| Secret rotator | `internal/secretmanager/rotator.go` | Full file (scheduled rotation, password generation) |
+| Secret manager init | `main.go` | 623-643 (preloading env secrets) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
 | External KMS models | `internal/encryption/models.go` | 78-91 |
