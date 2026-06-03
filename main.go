@@ -930,13 +930,15 @@ func main() {
 			}
 		}
 
-		// ── Phase 9: Session idle timeout ──────────────────────────────────
+		// ── Phase 11: Session lifecycle enforcement ──────────────────────────
 		//
-		// Uses JWT `iat` (issued-at) as a proxy for last activity time.
-		// If the token was issued more than SESSION_IDLE_TIMEOUT_MINUTES ago,
-		// reject the request and require re-authentication.
-		// This is separate from token expiry — idle timeout catches sessions
-		// that are technically valid but have been inactive.
+		// Proper session-based idle timeout and max lifespan enforcement.
+		// Replaces Phase 9's token `iat`-based approximation with actual
+		// session LastAccessAt tracking from etcd/Raft.
+		//
+		// Idle timeout: if no activity for SESSION_IDLE_TIMEOUT_MINUTES → 401
+		// Max lifespan: if session older than SESSION_MAX_LIFESPAN_HOURS → 401
+		// Both return `Session-Expired` header so frontend can redirect to login.
 
 		idleTimeoutMinutes := 30 // default
 		if v := strings.TrimSpace(os.Getenv("SESSION_IDLE_TIMEOUT_MINUTES")); v != "" {
@@ -945,24 +947,93 @@ func main() {
 			}
 		}
 
-		var tokenIssuedAt time.Time
-		if iamClaims != nil {
-			tokenIssuedAt = iamClaims.IssuedAt.Time
-		} else if legacyClaims != nil {
-			tokenIssuedAt = legacyClaims.IssuedAt.Time
+		maxLifespanHours := 10 // default 10 hours
+		if v := strings.TrimSpace(os.Getenv("SESSION_MAX_LIFESPAN_HOURS")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				maxLifespanHours = n
+			}
 		}
-		if !tokenIssuedAt.IsZero() {
-			idleDuration := time.Since(tokenIssuedAt)
-			if idleDuration > time.Duration(idleTimeoutMinutes)*time.Minute {
-				log.Printf("⏰ Session idle timeout for %s: token issued %s ago (limit: %d min)",
-					principal, idleDuration.Round(time.Second), idleTimeoutMinutes)
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error":   "session expired due to inactivity",
-					"reason":  "idle_timeout",
-					"message": fmt.Sprintf("your session has been idle for more than %d minutes. please re-authenticate", idleTimeoutMinutes),
-				})
-				c.Abort()
-				return false
+
+		// Extract session ID from JWT claims
+		var sessionID string
+		if iamClaims != nil {
+			sessionID = strings.TrimSpace(iamClaims.SessionID)
+		}
+
+		// Session-based lifecycle enforcement (only when we have a session ID and IAM system)
+		if sessionID != "" && iamSystem != nil && iamSystem.Sessions != nil {
+			sess, sessErr := iamSystem.Sessions.GetByID(sessionID)
+			if sessErr == nil && sess != nil {
+				now := time.Now().UTC()
+
+				// Check max lifespan (absolute session duration)
+				if !sess.CreatedAt.IsZero() {
+					sessionAge := now.Sub(sess.CreatedAt)
+					if sessionAge > time.Duration(maxLifespanHours)*time.Hour {
+						log.Printf("⏰ Session max lifespan exceeded for %s: session age %s (limit: %d hours)",
+							principal, sessionAge.Round(time.Second), maxLifespanHours)
+						_ = iamSystem.Sessions.Revoke(sessionID)
+						c.Header("Session-Expired", "max_lifespan")
+						c.JSON(http.StatusUnauthorized, gin.H{
+							"error":   "session expired",
+							"reason":  "max_lifespan",
+							"message": fmt.Sprintf("your session has exceeded the maximum lifespan of %d hours. please re-authenticate", maxLifespanHours),
+						})
+						c.Abort()
+						return false
+					}
+				}
+
+				// Check idle timeout (time since last activity)
+				lastAccess := sess.LastAccessAt
+				if lastAccess.IsZero() {
+					lastAccess = sess.CreatedAt // fallback for sessions created before Phase 11
+				}
+				if !lastAccess.IsZero() {
+					idleDuration := now.Sub(lastAccess)
+					if idleDuration > time.Duration(idleTimeoutMinutes)*time.Minute {
+						log.Printf("⏰ Session idle timeout for %s: idle %s (limit: %d min)",
+							principal, idleDuration.Round(time.Second), idleTimeoutMinutes)
+						_ = iamSystem.Sessions.Revoke(sessionID)
+						c.Header("Session-Expired", "idle_timeout")
+						c.JSON(http.StatusUnauthorized, gin.H{
+							"error":   "session expired due to inactivity",
+							"reason":  "idle_timeout",
+							"message": fmt.Sprintf("your session has been idle for more than %d minutes. please re-authenticate", idleTimeoutMinutes),
+						})
+						c.Abort()
+						return false
+					}
+				}
+
+				// Update LastAccessAt asynchronously (don't block the request)
+				go func(sid string) {
+					_ = iamSystem.Sessions.Touch(sid)
+				}(sessionID)
+			}
+		} else if sessionID == "" {
+			// Fallback for tokens without session ID (legacy/demo tokens):
+			// Use token `iat` as proxy for last activity.
+			var tokenIssuedAt time.Time
+			if iamClaims != nil {
+				tokenIssuedAt = iamClaims.IssuedAt.Time
+			} else if legacyClaims != nil {
+				tokenIssuedAt = legacyClaims.IssuedAt.Time
+			}
+			if !tokenIssuedAt.IsZero() {
+				idleDuration := time.Since(tokenIssuedAt)
+				if idleDuration > time.Duration(idleTimeoutMinutes)*time.Minute {
+					log.Printf("⏰ Token idle timeout for %s: issued %s ago (limit: %d min)",
+						principal, idleDuration.Round(time.Second), idleTimeoutMinutes)
+					c.Header("Session-Expired", "idle_timeout")
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":   "session expired due to inactivity",
+						"reason":  "idle_timeout",
+						"message": fmt.Sprintf("your session has been idle for more than %d minutes. please re-authenticate", idleTimeoutMinutes),
+					})
+					c.Abort()
+					return false
+				}
 			}
 		}
 

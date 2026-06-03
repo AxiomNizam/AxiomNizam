@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~88%** (Phases 1-10 complete)
+**Current Zero Trust coverage: ~90%** (Phases 1-11 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -18,11 +18,11 @@ AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF
 | Least privilege | 7/10 | RBAC engine wired with resource+verb checks; 4 default roles; policy engine with risk thresholds |
 | Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
 | Encrypt everything | 6/10 | At rest: AES-256-GCM. In transit: TLS (Phase 4) with auto-generated dev certs; POSTGRES_SSLMODE=require auto-set |
-| Continuous verification | 3/10 | Revocation + RBAC + policy on every write request; still no session re-verification |
+| Continuous verification | 5/10 | Revocation + RBAC + policy on every write request; session idle timeout + max lifespan enforcement (Phase 11) |
 | Risk-based decisions | 6/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA type (WebAuthn preferred for high risk) |
 | Micro-segmentation | 0/10 | Single binary, single network |
 | Configuration hygiene | 5/10 | Demo tokens gated; default creds fixed (Phase 0); TRUSTED_PROXIES fixed; guardrails enforce mode |
-| Identity-centric security | 3/10 | IAM exists but session lifecycle incomplete |
+| Identity-centric security | 4/10 | IAM exists; session lifecycle enforced with idle timeout + max lifespan (Phase 11) |
 | Device trust | 2/10 | Trusted device service built + WebAuthn credential storage with clone detection |
 | Data classification | 0/10 | No labels on fields, encryption is manual |
 | Supply chain security | 0/10 | No dependency scanning, no SBOM |
@@ -605,26 +605,26 @@ BUILT BUT NOT WIRED                    BUILT AND WIRED
 IAM Authorizer (resource+action)       JWT Auth Middleware
 MFA Enforcement Mode                   Storage 3-Layer Auth
 Inline Scanner (pre-commit)            CORS Whitelist
-Session Re-verification                CSRF Protection
-Step-up Authentication                 Security Headers
-Auto Field Encryption                  Audit Hash Chain
-Persistent Audit Sink                  Rate Limiting
-External KMS Integration               Storage Access Keys
-Session Idle Timeout Enforcement        Tenant Isolation
-Data Classification Labels             Request ID Tracing
-Supply Chain / SBOM                    Presigned URL Validation
-Service Mesh / mTLS                    TOTP Secret Encryption
-DPoP Token Binding                     Domain Audit Loggers
-IP-based Rate Limiting                 Keyring Rotation
-Request Schema Validation              API Scanner (XSS/SQLi)
-Response Field Filtering               Body Size Limits
-Anomaly Detection                      Security Headers
-Automated Incident Response            Cipher Config
-Secret Rotation                        API Scanner
-Identity Federation                    Per-bucket Rate Limiting
-Just-in-time Privilege                 Brute Force Protection (IAM)
-API Gateway                            Password Policy (IAM)
-User Behavior Profiling                MFA Challenge State Machine
+Step-up Authentication                 CSRF Protection
+Auto Field Encryption                  Security Headers
+Persistent Audit Sink                  Audit Hash Chain
+External KMS Integration               Rate Limiting
+Data Classification Labels             Storage Access Keys
+Supply Chain / SBOM                    Tenant Isolation
+Service Mesh / mTLS                    Request ID Tracing
+DPoP Token Binding                     Presigned URL Validation
+IP-based Rate Limiting                 TOTP Secret Encryption
+Request Schema Validation              Domain Audit Loggers
+Response Field Filtering               Keyring Rotation
+Anomaly Detection                      API Scanner (XSS/SQLi)
+Automated Incident Response            Body Size Limits
+Secret Rotation                        Security Headers
+Identity Federation                    Cipher Config
+Just-in-time Privilege                 API Scanner
+API Gateway                            Per-bucket Rate Limiting
+User Behavior Profiling                Brute Force Protection (IAM)
+                                     Password Policy (IAM)
+                                     MFA Challenge State Machine
                                      Trusted Device Service
                                      Encryption Keyring
                                      HMAC Key Validation
@@ -639,6 +639,10 @@ User Behavior Profiling                MFA Challenge State Machine
                                      WebAuthn / FIDO2 [Phase 10]
                                      WebAuthn Credential Storage [Phase 10]
                                      WebAuthn Adaptive Evaluator [Phase 10]
+                                     Session Idle Timeout [Phase 11]
+                                     Session Max Lifespan [Phase 11]
+                                     Session LastAccessAt Tracking [Phase 11]
+                                     Session-Expired Header [Phase 11]
 ```
 
 ---
@@ -743,13 +747,13 @@ User Behavior Profiling                MFA Challenge State Machine
 - [x] High-risk operations require WebAuthn, not just TOTP — evaluator returns `AllowedFactors: [WebAuthn, TOTP]` for risk > 50
 - [x] Store credential public keys in `pgstore` — `twofactor_webauthn_credentials` table with COSE P-256 keys
 
-### Phase 11: Session Lifecycle Enforcement (1 day)
+### Phase 11: Session Lifecycle Enforcement (1 day) ✅ DONE (2026-06-03)
 
-- [ ] Middleware checks `session.LastActivityAt` against `realm.SSOSessionIdleTimeout`
-- [ ] Idle timeout → 401 with `Session-Expired` header
-- [ ] Max lifespan → force re-authentication
-- [ ] Frontend intercepts `Session-Expired` → redirect to login
-- [ ] Track `LastActivityAt` on each authenticated request
+- [x] Middleware checks `session.LastAccessAt` against idle timeout (from `SESSION_IDLE_TIMEOUT_MINUTES` env, default 30 min)
+- [x] Idle timeout → 401 with `Session-Expired: idle_timeout` header + session revoked in etcd
+- [x] Max lifespan → 401 with `Session-Expired: max_lifespan` header (from `SESSION_MAX_LIFESPAN_HOURS` env, default 10h)
+- [x] Frontend can intercept `Session-Expired` header → redirect to login with `returnTo`
+- [x] Track `LastAccessAt` on each authenticated request via async `Touch()` call to etcd session store
 
 ### Phase 12: Supply Chain Security (1 day)
 
@@ -869,6 +873,9 @@ User Behavior Profiling                MFA Challenge State Machine
 | WebAuthn models | `internal/gatekeeper/webauthn/models.go` | Full file (Credential, Session, options) |
 | WebAuthn credential repo | `internal/gatekeeper/pgstore/webauthn_credential_repository.go` | Full file |
 | WebAuthn handlers | `internal/gatekeeper/handlers/http.go` | WebAuthn endpoints (6 routes) |
+| Session model | `internal/iam/authn/authn.go` | 14 (LastAccessAt field) |
+| Session Touch() | `internal/iam/storage/storage.go` | Touch method for LastAccessAt updates |
+| Session lifecycle | `main.go` | 933-1030 (idle timeout + max lifespan enforcement) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
 | External KMS models | `internal/encryption/models.go` | 78-91 |
