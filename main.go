@@ -85,6 +85,7 @@ import (
 	"example.com/axiomnizam/internal/versioning"
 	"example.com/axiomnizam/internal/webhooks"
 	"example.com/axiomnizam/internal/workflows"
+	"example.com/axiomnizam/internal/securitymon"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -602,6 +603,23 @@ func main() {
 	// Prometheus /metrics endpoint
 	metrics.RegisterMetricsEndpoint(router)
 
+	// ── Phase 13: Security Observability ──────────────────────────────────
+	// Initialize security monitoring: metrics, anomaly detection, threat
+	// response, audit chain verification, SIEM export, and dashboard.
+	secMetrics := securitymon.NewSecurityMetrics()
+	secSIEM := securitymon.LoadSIEMExporterFromEnv(secMetrics)
+	secDetector := securitymon.NewAnomalyDetector(5*time.Minute, 3.0, nil) // callback set after responder init
+	secResponder := securitymon.NewThreatResponder(nil, nil, secMetrics, securitymon.DefaultThreatThresholds())
+	secDetector = securitymon.NewAnomalyDetector(5*time.Duration(1)*time.Minute, 3.0, func(evt securitymon.AnomalyEvent) {
+		secResponder.HandleAnomaly(evt)
+	})
+
+	// Dashboard endpoint (no auth required — internal ops visibility)
+	secDashboard := securitymon.NewDashboardHandler(secMetrics, secDetector, secResponder, nil, secSIEM)
+	secDashboard.RegisterRoutes(router)
+
+	log.Println("✅ Security observability initialized (Phase 13)")
+
 	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware
 	apiMetricsTracker := metrics.NewAPIMetricsTracker(conns.Valkey)
@@ -716,6 +734,10 @@ func main() {
 	//   Primary:  IAM Issuer (RSA-256 + etcd revocation check)
 	//   Fallback: legacy auth.TokenValidator (only when IAM is unavailable)
 	authenticateRequest := func(c *gin.Context) bool {
+		// Phase 13: Record request for anomaly detection
+		secMetrics.RecordTotalRequest()
+		secDetector.RecordRequest(c.ClientIP(), "")
+
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			// WebSocket connections cannot send custom headers from browsers;
@@ -915,9 +937,11 @@ func main() {
 		// Phase 9: Revoke session on critical risk (>= 90).
 		if riskScore >= 90 {
 			log.Printf("🚨 Critical risk %d for %s — revoking session", riskScore, principal)
+			secMetrics.RecordHighRisk()
 			// Revoke the session if we have a session ID.
 			if iamClaims != nil && iamClaims.SessionID != "" && iamSystem != nil && iamSystem.Sessions != nil {
 				_ = iamSystem.Sessions.Revoke(iamClaims.SessionID)
+				secMetrics.RecordSessionRevoked()
 			}
 			// Revoke the current token JTI so it can't be reused.
 			if iamSystem != nil && iamSystem.RevokedStore != nil {
@@ -1049,9 +1073,12 @@ func main() {
 		// This catches sudden risk increases even when absolute risk is moderate.
 
 		if riskDelta > 30 && riskScore >= 50 {
+			secMetrics.RecordRiskDeltaTrigger()
+			secMetrics.RecordStepUp()
 			mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
 			if mfaToken == "" {
 				log.Printf("⚠️  Risk delta %d requires step-up MFA for user %s", riskDelta, principal)
+				secMetrics.RecordMFAChallenge("totp")
 				c.JSON(http.StatusForbidden, gin.H{
 					"error":        "step-up mfa required",
 					"risk_score":   riskScore,
@@ -1069,6 +1096,7 @@ func main() {
 				deltaUserID = strings.TrimSpace(legacyClaims.Sub)
 			}
 			if !validateTOTPForUser(c, deltaUserID, mfaToken) {
+				secMetrics.RecordMFAFailure()
 				c.JSON(http.StatusForbidden, gin.H{
 					"error":      "step-up mfa verification failed",
 					"risk_delta": riskDelta,
@@ -1078,6 +1106,7 @@ func main() {
 				return false
 			}
 			log.Printf("✅ Step-up MFA verified for user %s (risk delta: %d)", principal, riskDelta)
+			secMetrics.RecordMFASuccess()
 			// Record MFA verification timestamp for continuous verification.
 			nowUnix := time.Now().Unix()
 			if iamClaims != nil {
@@ -1118,6 +1147,8 @@ func main() {
 		if riskScore >= 90 {
 			log.Printf("🚫 Critical risk — %d for user %s from %s — requiring MFA challenge",
 				riskScore, principal, c.ClientIP())
+			secMetrics.RecordHighRisk()
+			secMetrics.RecordMFAChallenge("totp")
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":          "challenge_rejected",
 				"risk_score":     riskScore,
@@ -1180,6 +1211,7 @@ func main() {
 				}
 				if !validateTOTPForUser(c, mfaUserID, mfaToken) {
 					log.Printf("🚫 MFA verification failed — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
+					secMetrics.RecordMFAFailure()
 					c.JSON(http.StatusForbidden, gin.H{
 						"error":      "mfa verification failed",
 						"risk_score": riskScore,
@@ -1189,6 +1221,7 @@ func main() {
 					return false
 				}
 				log.Printf("✅ MFA verified for user %s (risk score: %d)", principal, riskScore)
+				secMetrics.RecordMFASuccess()
 			}
 		}
 
@@ -1280,6 +1313,17 @@ func main() {
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
 		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", principal, callsRemaining)
+		secMetrics.RecordAuthSuccess()
+		// Phase 13: Export auth success to SIEM
+		go secSIEM.Export(context.Background(), securitymon.SIEMEvent{
+			Timestamp: time.Now().UTC(),
+			EventType: "auth_success",
+			Severity:  "info",
+			UserID:    principal,
+			IPAddress: c.ClientIP(),
+			Outcome:   "success",
+			Message:   fmt.Sprintf("User %s authenticated successfully", principal),
+		})
 		return true
 	}
 
@@ -1464,6 +1508,7 @@ func main() {
 				if policyResult.ShouldBlock() {
 					log.Printf("🚫 Policy engine blocked request: user=%s resource=%s verb=%s reason=%s",
 						userIDStr, resource, verb, policyResult.Reason)
+					secMetrics.RecordPolicyBlock()
 					c.JSON(http.StatusForbidden, gin.H{
 						"error":  "request blocked by policy",
 						"reason": policyResult.Reason,
@@ -1543,6 +1588,7 @@ func main() {
 		if !allowed {
 			log.Printf("🚫 RBAC denied: user=%s resource=%s verb=%s reason=%s",
 				userIDStr, resource, verb, reason)
+			secMetrics.RecordRBACDenial()
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":    "insufficient permissions",
 				"resource": resource,
