@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"example.com/axiomnizam/internal/gatekeeper/audit"
 	"example.com/axiomnizam/internal/gatekeeper/backupcodes"
@@ -23,6 +24,7 @@ import (
 	"example.com/axiomnizam/internal/gatekeeper/risk"
 	"example.com/axiomnizam/internal/gatekeeper/totp"
 	"example.com/axiomnizam/internal/gatekeeper/trusteddevices"
+	"example.com/axiomnizam/internal/gatekeeper/webauthn"
 	platformstore "example.com/axiomnizam/internal/platform/store"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -51,6 +53,7 @@ type System struct {
 	DeviceService     *trusteddevices.Service
 	PolicyService     *policy.Engine
 	RiskService       *risk.Engine
+	WebAuthnService   *webauthn.Service
 
 	// Controllers/Reconcilers (K8s-style)
 	FactorController *gkcontroller.FactorReconciler
@@ -308,6 +311,18 @@ func (s *System) initialize() error {
 	// 10. Initialize risk engine
 	s.RiskService = risk.NewEngine(&risk.DefaultScorer{})
 
+	// 10b. Initialize WebAuthn service (FIDO2 / security keys)
+	rpID := os.Getenv("WEBAUTHN_RP_ID")
+	if rpID == "" {
+		rpID = "localhost"
+	}
+	rpOrigin := os.Getenv("WEBAUTHN_RP_ORIGIN")
+	if rpOrigin == "" {
+		rpOrigin = "http://localhost:8000"
+	}
+	credStore := pgstore.NewWebAuthnCredentialRepository(s.db)
+	s.WebAuthnService = webauthn.NewService(rpID, rpOrigin, credStore)
+
 	// 11. Initialize audit logging
 	var auditBackend audit.AuditBackend = audit.NewInMemoryBackend()
 	if s.db != nil {
@@ -334,6 +349,7 @@ func (s *System) initialize() error {
 		wrapRiskService(s.RiskService),
 		wrapTrustedDeviceService(s.DeviceService),
 		wrapBackupCodeService(s.BackupCodeService),
+		wrapWebAuthnService(s.WebAuthnService),
 	)
 
 	return nil

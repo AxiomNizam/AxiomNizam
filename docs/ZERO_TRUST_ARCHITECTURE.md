@@ -10,20 +10,20 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~85%** (Phases 1-9 complete)
+**Current Zero Trust coverage: ~88%** (Phases 1-10 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
-| Verify explicitly | 8/10 | Unified JWT (Phase 1) + RBAC+Policy middleware (Phase 3) on all write routes |
+| Verify explicitly | 9/10 | Unified JWT (Phase 1) + RBAC+Policy middleware (Phase 3) + WebAuthn/FIDO2 (Phase 10) for phishing-resistant auth |
 | Least privilege | 7/10 | RBAC engine wired with resource+verb checks; 4 default roles; policy engine with risk thresholds |
 | Assume breach | 4/10 | Audit logging exists but in-memory only; no TLS |
 | Encrypt everything | 6/10 | At rest: AES-256-GCM. In transit: TLS (Phase 4) with auto-generated dev certs; POSTGRES_SSLMODE=require auto-set |
 | Continuous verification | 3/10 | Revocation + RBAC + policy on every write request; still no session re-verification |
-| Risk-based decisions | 5/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA and blocking |
+| Risk-based decisions | 6/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA type (WebAuthn preferred for high risk) |
 | Micro-segmentation | 0/10 | Single binary, single network |
-| Configuration hygiene | 4/10 | Demo tokens gated; still have default creds, trusted proxies open |
+| Configuration hygiene | 5/10 | Demo tokens gated; default creds fixed (Phase 0); TRUSTED_PROXIES fixed; guardrails enforce mode |
 | Identity-centric security | 3/10 | IAM exists but session lifecycle incomplete |
-| Device trust | 1/10 | Trusted device service built, bypass logic missing |
+| Device trust | 2/10 | Trusted device service built + WebAuthn credential storage with clone detection |
 | Data classification | 0/10 | No labels on fields, encryption is manual |
 | Supply chain security | 0/10 | No dependency scanning, no SBOM |
 
@@ -602,36 +602,43 @@ If an attacker compromises the backend process, they have direct access to the d
 ```
 BUILT BUT NOT WIRED                    BUILT AND WIRED
 ─────────────────────                  ────────────────
-Risk Engine (18 signals)               JWT Auth Middleware
-Policy Engine (4 rule types)           Storage 3-Layer Auth
-RBAC Engine (K8s-style)               CORS Whitelist
-IAM Authorizer (resource+action)       CSRF Protection
-Trusted Device Bypass                  Security Headers
-MFA Enforcement Mode                   Audit Hash Chain
-Adaptive Evaluator                     Rate Limiting
-Inline Scanner (pre-commit)            Storage Access Keys
-Session Re-verification                Tenant Isolation
-Step-up Authentication                 Request ID Tracing
-TLS/HTTPS [Phase 4]                   Presigned URL Validation
-Auto Field Encryption                  TOTP Secret Encryption
-Persistent Audit Sink                  Domain Audit Loggers
-External KMS Integration               Keyring Rotation
-WebAuthn (FIDO2)                       API Scanner (XSS/SQLi)
-Session Idle Timeout Enforcement        Body Size Limits
-Data Classification Labels             Security Headers
-Supply Chain / SBOM                    Adaptive Evaluator (built)
-Service Mesh / mTLS                    Cipher Config
-DPoP Token Binding                     API Scanner
-IP-based Rate Limiting                 Per-bucket Rate Limiting
-Request Schema Validation              Brute Force Protection (IAM)
-Response Field Filtering               Password Policy (IAM)
-Anomaly Detection                      MFA Challenge State Machine
-Automated Incident Response            Trusted Device Service
-Secret Rotation                        Encryption Keyring
-Identity Federation                    HMAC Key Validation
-Just-in-time Privilege                 Audit Hash Chain
-API Gateway                            Request ID Propagation
-User Behavior Profiling
+IAM Authorizer (resource+action)       JWT Auth Middleware
+MFA Enforcement Mode                   Storage 3-Layer Auth
+Inline Scanner (pre-commit)            CORS Whitelist
+Session Re-verification                CSRF Protection
+Step-up Authentication                 Security Headers
+Auto Field Encryption                  Audit Hash Chain
+Persistent Audit Sink                  Rate Limiting
+External KMS Integration               Storage Access Keys
+Session Idle Timeout Enforcement        Tenant Isolation
+Data Classification Labels             Request ID Tracing
+Supply Chain / SBOM                    Presigned URL Validation
+Service Mesh / mTLS                    TOTP Secret Encryption
+DPoP Token Binding                     Domain Audit Loggers
+IP-based Rate Limiting                 Keyring Rotation
+Request Schema Validation              API Scanner (XSS/SQLi)
+Response Field Filtering               Body Size Limits
+Anomaly Detection                      Security Headers
+Automated Incident Response            Cipher Config
+Secret Rotation                        API Scanner
+Identity Federation                    Per-bucket Rate Limiting
+Just-in-time Privilege                 Brute Force Protection (IAM)
+API Gateway                            Password Policy (IAM)
+User Behavior Profiling                MFA Challenge State Machine
+                                     Trusted Device Service
+                                     Encryption Keyring
+                                     HMAC Key Validation
+                                     Audit Hash Chain
+                                     Request ID Propagation
+                                     Risk Engine (18 signals) [Phase 2]
+                                     Policy Engine (4 rule types) [Phase 3]
+                                     RBAC Engine (K8s-style) [Phase 3]
+                                     EngineRuleCondition eval [Phase 3]
+                                     authorizeRequest middleware [Phase 3]
+                                     authzMiddleware (80+ routes) [Phase 3]
+                                     WebAuthn / FIDO2 [Phase 10]
+                                     WebAuthn Credential Storage [Phase 10]
+                                     WebAuthn Adaptive Evaluator [Phase 10]
 ```
 
 ---
@@ -727,14 +734,14 @@ User Behavior Profiling
 - [x] Session revocation on critical risk (>= 90) — session + token revoked
 - [ ] Session idle timeout — `SESSION_IDLE_TIMEOUT_MINUTES` env var parsed, `LastAccessAt` field exists on SSO session, enforcement deferred
 
-### Phase 10: WebAuthn / FIDO2 Integration (3 days)
+### Phase 10: WebAuthn / FIDO2 Integration (3 days) ✅ DONE (2026-06-03)
 
-- [ ] Integrate `go-webauthn` library
-- [ ] Registration ceremony with security key / biometric
-- [ ] Authentication ceremony in Gatekeeper challenge flow
-- [ ] Wire as `FactorTypeWebAuthn` in adaptive evaluator
-- [ ] High-risk operations require WebAuthn, not just TOTP
-- [ ] Store credential public keys in `pgstore` (new table)
+- [x] Implement WebAuthn protocol directly in Go (pure crypto, no external library)
+- [x] Registration ceremony with security key / biometric — `BeginRegistration` + `FinishRegistration`
+- [x] Authentication ceremony in Gatekeeper challenge flow — `BeginAuthentication` + `FinishAuthentication`
+- [x] Wire as `FactorTypeWebAuthn` in adaptive evaluator — high-risk and sensitive ops prefer WebAuthn
+- [x] High-risk operations require WebAuthn, not just TOTP — evaluator returns `AllowedFactors: [WebAuthn, TOTP]` for risk > 50
+- [x] Store credential public keys in `pgstore` — `twofactor_webauthn_credentials` table with COSE P-256 keys
 
 ### Phase 11: Session Lifecycle Enforcement (1 day)
 
@@ -857,7 +864,11 @@ User Behavior Profiling
 | Adaptive evaluator | `internal/gatekeeper/policy/evaluator.go` | Full file |
 | Challenge service | `internal/gatekeeper/challenge/service.go` | 116 (`VerifyChallenge`) |
 | Trusted devices | `internal/gatekeeper/trusteddevices/service.go` | Full file |
-| WebAuthn stub | `internal/gatekeeper/webauthn/service.go` | Full file (all stubs) |
+| WebAuthn service | `internal/gatekeeper/webauthn/service.go` | Full file (registration + authentication ceremonies) |
+| WebAuthn crypto | `internal/gatekeeper/webauthn/crypto.go` | Full file (CBOR, COSE, ECDSA P-256) |
+| WebAuthn models | `internal/gatekeeper/webauthn/models.go` | Full file (Credential, Session, options) |
+| WebAuthn credential repo | `internal/gatekeeper/pgstore/webauthn_credential_repository.go` | Full file |
+| WebAuthn handlers | `internal/gatekeeper/handlers/http.go` | WebAuthn endpoints (6 routes) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
 | External KMS models | `internal/encryption/models.go` | 78-91 |
