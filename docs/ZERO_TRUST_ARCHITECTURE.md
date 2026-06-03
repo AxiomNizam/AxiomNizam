@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~94%** (Phases 1-14 complete)
+**Current Zero Trust coverage: ~95%** (Phases 1-15 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -20,7 +20,7 @@ AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF
 | Encrypt everything | 7/10 | At rest: AES-256-GCM. In transit: TLS (Phase 4). Secret versioning + rotation (Phase 14) |
 | Continuous verification | 5/10 | Revocation + RBAC + policy on every write request; session idle timeout + max lifespan enforcement (Phase 11) |
 | Risk-based decisions | 6/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA type (WebAuthn preferred for high risk) |
-| Micro-segmentation | 0/10 | Single binary, single network |
+| Micro-segmentation | 3/10 | Docker: 4-tier network segmentation (Phase 15); K8s: 7 NetworkPolicies with default-deny |
 | Configuration hygiene | 6/10 | Demo tokens gated; default creds fixed; TRUSTED_PROXIES fixed; guardrails enforce; secret versioning (Phase 14) |
 | Identity-centric security | 4/10 | IAM exists; session lifecycle enforced with idle timeout + max lifespan (Phase 11) |
 | Device trust | 2/10 | Trusted device service built + WebAuthn credential storage with clone detection |
@@ -609,15 +609,15 @@ Step-up Authentication                 CSRF Protection
 Auto Field Encryption                  Security Headers
 External KMS Integration               Audit Hash Chain
 Data Classification Labels             Rate Limiting
-Service Mesh / mTLS                    Storage Access Keys
-DPoP Token Binding                     Tenant Isolation
-IP-based Rate Limiting                 Request ID Tracing
-Request Schema Validation              Presigned URL Validation
-Response Field Filtering               TOTP Secret Encryption
-Identity Federation                    Domain Audit Loggers
-Just-in-time Privilege                 Keyring Rotation
-API Gateway                            API Scanner (XSS/SQLi)
-User Behavior Profiling                Body Size Limits
+DPoP Token Binding                     Storage Access Keys
+IP-based Rate Limiting                 Tenant Isolation
+Request Schema Validation              Request ID Tracing
+Response Field Filtering               Presigned URL Validation
+Identity Federation                    TOTP Secret Encryption
+Just-in-time Privilege                 Domain Audit Loggers
+API Gateway                            Keyring Rotation
+User Behavior Profiling                API Scanner (XSS/SQLi)
+                                     Body Size Limits
                                      Security Headers
                                      Cipher Config
                                      API Scanner
@@ -660,6 +660,11 @@ User Behavior Profiling                Body Size Limits
                                      Secret Versioning [Phase 14]
                                      Secret Rotation Engine [Phase 14]
                                      Secret Access Audit [Phase 14]
+                                     4-Tier Docker Networks [Phase 15]
+                                     K8s NetworkPolicies (7) [Phase 15]
+                                     Internal Data Tier [Phase 15]
+                                     Egress Proxy Config [Phase 15]
+                                     Service-to-Service TLS [Phase 15]
 ```
 
 ---
@@ -798,13 +803,13 @@ User Behavior Profiling                Body Size Limits
 - [x] Secret access audit trail — `AccessEvent` log tracks every read/write/rotate/delete with user, IP, timestamp, and success/failure; 10K event buffer
 - [x] Preloaded env secrets into versioned manager — DB passwords, Gatekeeper keys, JWT secret loaded at startup for versioning
 
-### Phase 15: Network Micro-Segmentation (2 days)
+### Phase 15: Network Micro-Segmentation (2 days) ✅ DONE (2026-06-03)
 
-- [ ] Docker Compose: separate networks per tier
-- [ ] Kubernetes NetworkPolicies
-- [ ] Database/etcd/Redis on internal networks only
-- [ ] Egress filtering through proxy
-- [ ] Service-to-service TLS for all external connections
+- [x] Docker Compose: separate networks per tier — `frontend-net` (172.28.1.0/24), `backend-net` (172.28.2.0/24), `data-net` (172.28.3.0/24, internal), `mq-net` (172.28.4.0/24, internal)
+- [x] Kubernetes NetworkPolicies — `k8s/network-policies.yaml` with default-deny ingress + per-tier policies (7 policies total)
+- [x] Database/etcd/Redis on internal networks only — `data-net` and `mq-net` are `internal: true` (no outbound internet); no host port exposure by default
+- [x] Egress filtering through proxy — `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` configuration documented in `.env.example`; `backend-net` allows outbound HTTPS
+- [x] Service-to-service TLS configuration — `k8s/service-tls.yaml` with cert-manager Certificate resources for PostgreSQL, etcd, RabbitMQ, Kafka; TLS env vars documented
 
 ### Phase 16: Identity Federation (2 days)
 
@@ -915,6 +920,11 @@ User Behavior Profiling                Body Size Limits
 | Vault client | `internal/secretmanager/vault.go` | Full file (Vault + LoadSecretStoreFromEnv) |
 | Secret rotator | `internal/secretmanager/rotator.go` | Full file (scheduled rotation, password generation) |
 | Secret manager init | `main.go` | 623-643 (preloading env secrets) |
+| Micro-segmented compose | `docker-compose.yml` | Full file (4-tier networks, no host DB ports) |
+| Dev port override | `docker-compose.dev.yml` | Full file (exposes DB ports for local dev) |
+| K8s NetworkPolicies | `k8s/network-policies.yaml` | Full file (7 policies + default-deny) |
+| Service TLS config | `k8s/service-tls.yaml` | Full file (cert-manager + TLS env docs) |
+| Cluster compose | `docker-compose.cluster.yml` | Full file (multi-node Raft with segmented nets) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
 | External KMS models | `internal/encryption/models.go` | 78-91 |
