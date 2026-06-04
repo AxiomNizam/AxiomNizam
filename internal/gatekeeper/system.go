@@ -376,6 +376,10 @@ func (s *System) RegisterRoutes(api *gin.RouterGroup) error {
 
 // StartControllers starts the K8s-style reconciliation loops.
 func (s *System) StartControllers(ctx context.Context) {
+	if s.db == nil {
+		logging.Z().Info("⚠️  Gatekeeper: skipping controller manager (no PostgreSQL)")
+		return
+	}
 	if s.ctrlMgr != nil {
 		s.ctrlMgr.Start(ctx)
 		logging.Z().Info("✅ Gatekeeper: Controller manager started")
