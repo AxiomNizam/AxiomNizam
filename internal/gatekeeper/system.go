@@ -76,6 +76,17 @@ func NewSystem(gormDB *gorm.DB) (*System, error) {
 		return nil, fmt.Errorf("gatekeeper config validation: %w", err)
 	}
 
+	// Guard against nil DB — PostgreSQL may be unavailable (e.g., TLS mismatch, connection refused).
+	if gormDB == nil {
+		logging.Z().Warn("⚠️  Gatekeeper: PostgreSQL unavailable — running in degraded mode (no persistence)")
+		s := &System{cfg: cfg, db: nil}
+		if err := s.initialize(); err != nil {
+			return nil, err
+		}
+		logging.Z().Info("⚠️  Gatekeeper 2FA module initialized in degraded mode")
+		return s, nil
+	}
+
 	// Auto-migrate Gatekeeper tables (same pattern as IAM pgstore.New)
 	if err := pgstore.MigrateGatekeeperTables(gormDB); err != nil {
 		return nil, fmt.Errorf("gatekeeper migration: %w", err)
