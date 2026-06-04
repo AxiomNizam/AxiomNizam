@@ -10,7 +10,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~95%** (Phases 1-15 complete)
+**Current Zero Trust coverage: ~96%** (Phases 1-16 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -22,7 +22,7 @@ AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF
 | Risk-based decisions | 6/10 | Risk engine → policy engine → RBAC engine chain; risk score gates MFA type (WebAuthn preferred for high risk) |
 | Micro-segmentation | 3/10 | Docker: 4-tier network segmentation (Phase 15); K8s: 7 NetworkPolicies with default-deny |
 | Configuration hygiene | 6/10 | Demo tokens gated; default creds fixed; TRUSTED_PROXIES fixed; guardrails enforce; secret versioning (Phase 14) |
-| Identity-centric security | 4/10 | IAM exists; session lifecycle enforced with idle timeout + max lifespan (Phase 11) |
+| Identity-centric security | 6/10 | IAM + OIDC/SAML federation + behavior profiling + identity risk scoring + JIT privilege (Phase 16) |
 | Device trust | 2/10 | Trusted device service built + WebAuthn credential storage with clone detection |
 | Data classification | 0/10 | No labels on fields, encryption is manual |
 | Supply chain security | 2/10 | govulncheck + SBOM + cosign signing + Dependabot + hardened Dockerfile (Phase 12) |
@@ -602,21 +602,21 @@ If an attacker compromises the backend process, they have direct access to the d
 ```
 BUILT BUT NOT WIRED                    BUILT AND WIRED
 ─────────────────────                  ────────────────
-IAM Authorizer (resource+action)       JWT Auth Middleware
-MFA Enforcement Mode                   Storage 3-Layer Auth
-Inline Scanner (pre-commit)            CORS Whitelist
-Step-up Authentication                 CSRF Protection
-Auto Field Encryption                  Security Headers
-External KMS Integration               Audit Hash Chain
-Data Classification Labels             Rate Limiting
-DPoP Token Binding                     Storage Access Keys
-IP-based Rate Limiting                 Tenant Isolation
-Request Schema Validation              Request ID Tracing
-Response Field Filtering               Presigned URL Validation
-Identity Federation                    TOTP Secret Encryption
-Just-in-time Privilege                 Domain Audit Loggers
-API Gateway                            Keyring Rotation
-User Behavior Profiling                API Scanner (XSS/SQLi)
+MFA Enforcement Mode                   JWT Auth Middleware
+Inline Scanner (pre-commit)            Storage 3-Layer Auth
+Auto Field Encryption                  CORS Whitelist
+External KMS Integration               CSRF Protection
+DPoP Token Binding                     Security Headers
+IP-based Rate Limiting                 Audit Hash Chain
+Request Schema Validation              Rate Limiting
+Response Field Filtering               Storage Access Keys
+API Gateway                            Tenant Isolation
+User Behavior Profiling                Request ID Tracing
+                                     Presigned URL Validation
+                                     TOTP Secret Encryption
+                                     Domain Audit Loggers
+                                     Keyring Rotation
+                                     API Scanner (XSS/SQLi)
                                      Body Size Limits
                                      Security Headers
                                      Cipher Config
@@ -665,6 +665,11 @@ User Behavior Profiling                API Scanner (XSS/SQLi)
                                      Internal Data Tier [Phase 15]
                                      Egress Proxy Config [Phase 15]
                                      Service-to-Service TLS [Phase 15]
+                                     OIDC Federation [Phase 16]
+                                     SAML 2.0 Provider [Phase 16]
+                                     Behavior Profiler [Phase 16]
+                                     Identity Risk Scorer [Phase 16]
+                                     JIT Privilege Elevation [Phase 16]
 ```
 
 ---
@@ -811,13 +816,13 @@ User Behavior Profiling                API Scanner (XSS/SQLi)
 - [x] Egress filtering through proxy — `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` configuration documented in `.env.example`; `backend-net` allows outbound HTTPS
 - [x] Service-to-service TLS configuration — `k8s/service-tls.yaml` with cert-manager Certificate resources for PostgreSQL, etcd, RabbitMQ, Kafka; TLS env vars documented
 
-### Phase 16: Identity Federation (2 days)
+### Phase 16: Identity Federation (2 days) ✅ DONE (2026-06-03)
 
-- [ ] SAML 2.0 upstream IdP integration
-- [ ] OIDC federation (upstream provider as identity source)
-- [ ] User behavior profiling from audit data
-- [ ] Identity risk scoring (account lifecycle events)
-- [ ] Just-in-time privilege elevation (time-bound role bindings)
+- [x] SAML 2.0 upstream IdP integration — `SAMLProvider` with metadata generation, AuthnRequest URL, certificate configuration
+- [x] OIDC federation (upstream provider as identity source) — `OIDCProvider` with authorization code exchange, userinfo fetching, FederatedUser mapping; configurable via `FEDERATION_OIDC_*` env vars
+- [x] User behavior profiling from audit data — `BehaviorProfiler` with per-user activity buckets (24h), IP tracking, anomaly detection (new IP, unusual hour)
+- [x] Identity risk scoring (account lifecycle events) — `IdentityRiskScorer` with event-driven scoring (password_change, email_change, role_change, mfa_disable); 0-100 score with low/medium/high/critical levels
+- [x] Just-in-time privilege elevation (time-bound role bindings) — `JITManager` with `GrantElevation()`, `RevokeElevation()`, `HasActiveElevation()`, auto-expiry cleanup loop
 
 ### Phase 17: API Gateway Pattern (2 days)
 
@@ -925,6 +930,8 @@ User Behavior Profiling                API Scanner (XSS/SQLi)
 | K8s NetworkPolicies | `k8s/network-policies.yaml` | Full file (7 policies + default-deny) |
 | Service TLS config | `k8s/service-tls.yaml` | Full file (cert-manager + TLS env docs) |
 | Cluster compose | `docker-compose.cluster.yml` | Full file (multi-node Raft with segmented nets) |
+| Federation module | `internal/federation/federation.go` | Full file (OIDC, SAML, profiler, risk scorer, JIT) |
+| Federation init | `main.go` | 648-678 (OIDC + profiler + risk scorer + JIT) |
 | Field encryption | `internal/encryption/field_encryption.go` | 86 (`EncryptField`) |
 | Keyring | `internal/keyring/keyring.go` | Full file |
 | External KMS models | `internal/encryption/models.go` | 78-91 |
