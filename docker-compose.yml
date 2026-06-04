@@ -183,28 +183,28 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.1.0/24
+        - subnet: 172.32.1.0/24
   # Backend tier — backend ↔ message queues
   backend-net:
     driver: bridge
     internal: false   # needs outbound for webhooks, SIEM, etc.
     ipam:
       config:
-        - subnet: 172.28.2.0/24
+        - subnet: 172.32.2.0/24
   # Data tier — internal only (databases, etcd)
   data-net:
     driver: bridge
     internal: true    # Phase 15: no outbound internet access
     ipam:
       config:
-        - subnet: 172.28.3.0/24
+        - subnet: 172.32.3.0/24
   # Message queue tier — internal only
   mq-net:
     driver: bridge
     internal: true    # Phase 15: no outbound internet access
     ipam:
       config:
-        - subnet: 172.28.4.0/24
+        - subnet: 172.32.4.0/24
 
 volumes:
   mysql-data:

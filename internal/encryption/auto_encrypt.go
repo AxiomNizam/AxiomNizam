@@ -10,11 +10,15 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 // Classification levels for struct tags.
@@ -152,4 +156,44 @@ func HasEncryptedFields(obj any) bool {
 		}
 	}
 	return false
+}
+
+// ── Default key management ─────────────────────────────────────────────────
+
+var (
+	defaultKey     []byte
+	defaultKeyOnce sync.Once
+)
+
+// GetDefaultKey returns the 32-byte AES key for auto-encryption.
+// Priority: ENCRYPTION_AUTO_KEY env var (base64) > ENCRYPTION_MASTER_KEY env var (raw) > generate ephemeral key.
+// The key is loaded once and cached for the process lifetime.
+func GetDefaultKey() []byte {
+	defaultKeyOnce.Do(func() {
+		// 1. Try ENCRYPTION_AUTO_KEY (base64-encoded 32 bytes)
+		if b64 := strings.TrimSpace(os.Getenv("ENCRYPTION_AUTO_KEY")); b64 != "" {
+			if key, err := base64.StdEncoding.DecodeString(b64); err == nil && len(key) == 32 {
+				defaultKey = key
+				log.Println("✅ Auto-encryption key loaded from ENCRYPTION_AUTO_KEY")
+				return
+			}
+		}
+
+		// 2. Try ENCRYPTION_MASTER_KEY (raw string, hashed to 32 bytes)
+		if raw := strings.TrimSpace(os.Getenv("ENCRYPTION_MASTER_KEY")); raw != "" {
+			hash := sha256.Sum256([]byte(raw))
+			defaultKey = hash[:]
+			log.Println("✅ Auto-encryption key derived from ENCRYPTION_MASTER_KEY")
+			return
+		}
+
+		// 3. Generate ephemeral key (dev only — data encrypted with this key is NOT restart-safe)
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			panic("encryption: failed to generate ephemeral key: " + err.Error())
+		}
+		defaultKey = key
+		log.Println("⚠️  Auto-encryption using ephemeral key (set ENCRYPTION_AUTO_KEY for persistence)")
+	})
+	return defaultKey
 }

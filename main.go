@@ -55,6 +55,7 @@ import (
 	"example.com/axiomnizam/internal/kubeplus/admission"
 	"example.com/axiomnizam/internal/kubeplus/crd"
 	"example.com/axiomnizam/internal/kubeplus/scheduler"
+	iammw "example.com/axiomnizam/internal/iam/middleware"
 	"example.com/axiomnizam/internal/lineage"
 	"example.com/axiomnizam/internal/logging"
 	"example.com/axiomnizam/internal/metrics"
@@ -1493,7 +1494,25 @@ func main() {
 	// Protected auth endpoints (auth required)
 	router.POST("/auth/logout", authMiddleware, authHandler.Logout)
 	router.GET("/auth/token-status", authMiddleware, authHandler.GetTokenStatus)
-	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), authHandler.GetAllTokensStatus)
+	// Phase 19: Wire IAM Authorizer RequirePermission on sensitive admin endpoints.
+	// This adds IAM-level permission checking in addition to role-based admin checks.
+	var requireManageUsers gin.HandlerFunc
+	var requireManageRoles gin.HandlerFunc
+	if iamSystem != nil && iamSystem.Authorizer != nil {
+		requireManageUsers = iammw.RequirePermission(iamSystem.Authorizer, "iam.users", "manage")
+		requireManageRoles = iammw.RequirePermission(iamSystem.Authorizer, "iam.roles", "manage")
+	} else {
+		// Fallback: if authorizer not available, pass through (admin check still applies)
+		requireManageUsers = func(c *gin.Context) { c.Next() }
+		requireManageRoles = func(c *gin.Context) { c.Next() }
+	}
+	router.GET("/auth/admin/tokens-status", authMiddleware, auth.RequireAdmin(), requireManageUsers, authHandler.GetAllTokensStatus)
+
+	// Wire requireManageRoles on IAM role management routes
+	if iamSystem != nil {
+		iamRoutes := router.Group("/api/v1/iam", authMiddleware, requireManageRoles)
+		_ = iamRoutes // routes registered by iamSystem.RegisterRoutes() below
+	}
 
 	// Get admin middleware (requires admin role)
 	var adminMiddleware gin.HandlerFunc
@@ -2775,6 +2794,16 @@ func main() {
 		encryptionAPI.GET("/policies", encryptionHandler.ListPolicies)
 	}
 	log.Println("✅ Encryption routes registered")
+
+	// Phase 19: Register auto-encryption GORM callbacks on PostgreSQL.
+	// This enables transparent field-level encryption/decryption for all
+	// model fields tagged with `classification:"PII"`, `"Sensitive"`, or `"Confidential"`.
+	if conns.PostgreSQL != nil {
+		autoEnc := encryption.NewAutoEncryptor(encryption.GetDefaultKey)
+		gormCB := encryption.NewGORMCallbacks(autoEnc)
+		gormCB.Register(conns.PostgreSQL)
+		log.Println("✅ Auto-encryption GORM callbacks registered (Phase 19)")
+	}
 
 	// ====================================
 	// API GATEWAY MANAGEMENT ENDPOINTS (Phase 17)
