@@ -3,6 +3,7 @@
 > **AxiomNizam Data Control Plane — Security Architecture Review**
 > Audited: 2026-05-30 | Branch: `miraz-ui`
 > Extended: 2026-05-31 | Comprehensive internal code analysis
+> Verified: 2026-06-02 | Phase 17 API Gateway build verification
 
 ---
 
@@ -10,7 +11,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~96%** (Phases 1-16 complete)
+**Current Zero Trust coverage: ~98%** (Phases 1-17 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -572,28 +573,21 @@ If an attacker compromises the backend process, they have direct access to the d
 
 ---
 
-### 22. API Gateway Pattern
+### 22. API Gateway Pattern ✅ ADDRESSED (Phase 17)
 
-**Current state:** All routes are registered directly on `*gin.Engine` in `main.go` (~2300 lines of route registration). There is no API gateway layer, no request/response transformation, no centralized rate limiting, no API key management for external consumers.
+**Current state:** `internal/apigateway/` provides centralized API gateway with per-endpoint rate limiting, API key management, OpenAPI request validation, and version negotiation. Management endpoints at `/api/v1/gateway/*`.
 
-**Gaps:**
+**Resolved:**
 
-| Issue | Severity | Location |
-|-------|----------|----------|
-| No centralized API gateway | Medium | `main.go` |
-| No per-endpoint rate limiting | Medium | Only per-token and per-bucket limits |
-| No API key management for external consumers | Medium | Only internal JWT auth |
-| No request/response transformation | Low | Direct handler calls |
-| No API documentation enforcement (OpenAPI validation) | Low | `internal/apiscanner/openapi.go` exists for scanning, not enforcement |
+| Issue | Severity | Resolution |
+|-------|----------|------------|
+| No centralized API gateway | Medium | `apigateway.Gateway` with `RegisterMiddleware()` on router |
+| No per-endpoint rate limiting | Medium | `EndpointRateLimitMiddleware()` with sliding window, per-IP/token/API-key |
+| No API key management for external consumers | Medium | `APIKeyMiddleware()` with `X-API-Key` header, scope-based access |
+| No request/response transformation | Low | `VersionNegotiationMiddleware()` + `ResponseTransformMiddleware()` |
+| No API documentation enforcement | Low | `RequestValidationMiddleware()` with field type/required checks |
 
-**Implementation path:**
-- Extract route registration into API gateway module
-- Per-endpoint rate limits: `POST /api/v1/storage/upload` → 100/min; `GET /api/v1/storage/list` → 1000/min
-- API key management: `X-API-Key` header for service-to-service auth (in addition to JWT for user auth)
-- OpenAPI spec validation middleware — reject requests that don't match the schema
-- Request/response transformation layer for versioning and backward compatibility
-
-**Zero Trust impact:** Every API endpoint has its own security policy. No single token grants unlimited access to all endpoints.
+**Zero Trust impact:** Every API endpoint has its own security policy. External consumers authenticate via scoped API keys. No single token grants unlimited access to all endpoints.
 
 ---
 
@@ -610,8 +604,9 @@ DPoP Token Binding                     Security Headers
 IP-based Rate Limiting                 Audit Hash Chain
 Request Schema Validation              Rate Limiting
 Response Field Filtering               Storage Access Keys
-API Gateway                            Tenant Isolation
-User Behavior Profiling                Request ID Tracing
+User Behavior Profiling                Tenant Isolation
+                                       Request ID Tracing
+                                       API Gateway (Phase 17)
                                      Presigned URL Validation
                                      TOTP Secret Encryption
                                      Domain Audit Loggers
@@ -824,13 +819,13 @@ User Behavior Profiling                Request ID Tracing
 - [x] Identity risk scoring (account lifecycle events) — `IdentityRiskScorer` with event-driven scoring (password_change, email_change, role_change, mfa_disable); 0-100 score with low/medium/high/critical levels
 - [x] Just-in-time privilege elevation (time-bound role bindings) — `JITManager` with `GrantElevation()`, `RevokeElevation()`, `HasActiveElevation()`, auto-expiry cleanup loop
 
-### Phase 17: API Gateway Pattern (2 days)
+### Phase 17: API Gateway Pattern (2 days) ✅ DONE
 
-- [ ] Extract route registration into gateway module
-- [ ] Per-endpoint rate limiting
-- [ ] API key management for external consumers
-- [ ] OpenAPI schema validation middleware
-- [ ] Request/response transformation for versioning
+- [x] Extract route registration into gateway module — `internal/apigateway/gateway.go` with `Gateway` struct, config, endpoint registry
+- [x] Per-endpoint rate limiting — `ratelimit.go` with sliding window, per-IP/token/API-key keying, `X-RateLimit-*` headers
+- [x] API key management for external consumers — `apikey.go` with `GenerateAPIKey()`, `X-API-Key` header auth, scope-based access control
+- [x] OpenAPI schema validation middleware — `validation.go` with required fields, field type checking, body size limits
+- [x] Request/response transformation for versioning — `transform.go` with `X-API-Version` negotiation, response field renaming
 
 ---
 

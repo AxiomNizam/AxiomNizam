@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"example.com/axiomnizam/internal/apibanks"
+	"example.com/axiomnizam/internal/apigateway"
 	"example.com/axiomnizam/internal/apiscanner"
 	"example.com/axiomnizam/internal/audit"
 	"example.com/axiomnizam/internal/auth"
@@ -671,6 +672,14 @@ func main() {
 	}
 
 	log.Println("✅ Identity federation initialized (Phase 16)")
+
+	// ── Phase 17: API Gateway ──────────────────────────────────────────────
+	// Centralized API gateway with per-endpoint rate limiting, API key
+	// management for external consumers, OpenAPI request validation, and
+	// API version negotiation.
+	gwSystem := apigateway.NewSystem()
+	gwSystem.RegisterMiddleware(router)
+	log.Println("✅ API Gateway initialized (Phase 17)")
 
 	// Add API Metrics tracking middleware
 	// Initialize first before adding middleware
@@ -2711,6 +2720,13 @@ func main() {
 		encryptionAPI.GET("/policies", encryptionHandler.ListPolicies)
 	}
 	log.Println("✅ Encryption routes registered")
+
+	// ====================================
+	// API GATEWAY MANAGEMENT ENDPOINTS (Phase 17)
+	// ====================================
+	gwAPI := router.Group("/api/v1/gateway", authMiddleware)
+	gwSystem.RegisterRoutes(gwAPI)
+	log.Println("✅ API Gateway management routes registered (/api/v1/gateway)")
 
 	// ====================================
 	// RECONCILER CONTROLLERS (P2 — AxiomNizam architecture)
