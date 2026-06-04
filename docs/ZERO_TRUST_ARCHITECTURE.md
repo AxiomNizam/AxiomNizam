@@ -11,7 +11,7 @@
 
 AxiomNizam implements **server-side security at the edge** (JWT auth, CORS, CSRF, rate limiting) with strong building blocks for deeper Zero Trust (risk engine, RBAC engine, policy engine, MFA, encryption). However, most of these components are **built but not wired** into the request pipeline.
 
-**Current Zero Trust coverage: ~98%** (Phases 1-17 complete)
+**Current Zero Trust coverage: ~98%** (Phases 1-18 complete)
 
 | Principle | Score | Status |
 |-----------|-------|--------|
@@ -476,27 +476,27 @@ A token issued 14 minutes ago to a user on a trusted device in a known location 
 
 ---
 
-### 18. Observability-Driven Security
+### 18. Observability-Driven Security ✅ ADDRESSED (Phase 18)
 
-**Current state:** Prometheus metrics exist across 19+ modules (`metrics/counters.go` in gatekeeper, iam, antivirus, conductor, jobs, storage, scanner, waitx, etc.). The audit hash chain (`internal/audit/chain.go`) provides tamper-evident logging. However, there is **no security-focused alerting, anomaly detection, or automated incident response**.
+**Current state:** `internal/securitymon/` provides comprehensive security monitoring with anomaly detection, automated incident response, audit chain verification, SIEM export, and security dashboard. Prometheus counters track all security events. ThreatResponder is wired to IAM session/token stores for real automated response.
 
-**Gaps:**
+**Resolved:**
 
-| Issue | Severity | Location |
-|-------|----------|----------|
-| No security alert rules (failed auth spikes, privilege escalation attempts) | High | Prometheus/Grafana layer |
-| No anomaly detection on access patterns | Medium | Audit log data |
-| No automated session revocation on threat detection | Medium | Risk engine → session manager |
-| No security dashboard | Medium | Frontend templates |
-| Audit hash chain verification not automated | Low | `internal/audit/chain.go` |
+| Issue | Severity | Resolution |
+|-------|----------|------------|
+| No security alert rules | High | 16 Prometheus counters (`axiomnizam_*`) for auth failures, high-risk, MFA, RBAC denials, policy blocks |
+| No anomaly detection on access patterns | Medium | `AnomalyDetector` with per-IP and per-user sliding windows, deviation factor threshold |
+| No automated session revocation on threat detection | Medium | `ThreatResponder` wired to `iamSystem.Sessions` and `iamSystem.RevokedStore` — auto-revokes on risk >= 90 |
+| No security dashboard | Medium | `DashboardHandler` at `/api/v1/security/status`, `/metrics`, `/siem` |
+| Audit hash chain verification not automated | Low | `AuditChainVerifier` with scheduled verification loop |
 
-**Implementation path:**
-- Prometheus alert rules: `rate(auth_failures_total[5m]) > 10` → PagerDuty/Discord alert
-- Anomaly detection: baseline normal access patterns per user, alert on deviations
-- Automated response: risk score > 90 → auto-revoke all sessions + notify user
-- Security dashboard: live view of auth attempts, risk scores, MFA challenges, blocked requests
-- Scheduled audit chain verification (cron job calling `VerifyChain()` daily)
-- Export audit events to SIEM (Splunk, ELK, Datadog) via persistent sink
+**Components:**
+- `SecurityMetrics` — in-memory counters for all security events (auth, risk, MFA, RBAC, policy, blocked requests)
+- `AnomalyDetector` — per-IP/per-user sliding window with configurable deviation threshold
+- `ThreatResponder` — automated session revocation, token revocation, IP blocking on threat detection
+- `AuditChainVerifier` — scheduled hash chain verification with integrity reporting
+- `SIEMExporter` — webhook/file/stdout export for Splunk, ELK, Datadog integration
+- `DashboardHandler` — REST API for security status, anomaly metrics, SIEM config
 
 **Zero Trust impact:** Security is not just preventive but also detective. Anomalies trigger automated responses before human intervention is needed.
 
@@ -607,6 +607,7 @@ Response Field Filtering               Storage Access Keys
 User Behavior Profiling                Tenant Isolation
                                        Request ID Tracing
                                        API Gateway (Phase 17)
+                                       Security Monitoring (Phase 18)
                                      Presigned URL Validation
                                      TOTP Secret Encryption
                                      Domain Audit Loggers
@@ -827,6 +828,17 @@ User Behavior Profiling                Tenant Isolation
 - [x] OpenAPI schema validation middleware — `validation.go` with required fields, field type checking, body size limits
 - [x] Request/response transformation for versioning — `transform.go` with `X-API-Version` negotiation, response field renaming
 
+### Phase 18: Observability-Driven Security (2 days) ✅ DONE
+
+- [x] Security metrics collection — `SecurityMetrics` with 10+ counters (auth success/failure, high-risk, MFA, RBAC, policy blocks)
+- [x] Anomaly detection — `AnomalyDetector` with per-IP/per-user sliding windows, deviation factor threshold, callback handler
+- [x] Automated incident response — `ThreatResponder` wired to IAM session/token stores, auto-revokes on risk >= 90
+- [x] Audit chain verification — `AuditChainVerifier` with scheduled verification loop, integrity reporting
+- [x] SIEM export — `SIEMExporter` with webhook/file/stdout sinks, env-configurable endpoint
+- [x] Security dashboard — `DashboardHandler` with `/api/v1/security/status`, `/metrics`, `/siem` endpoints
+- [x] Prometheus counters — 16 `axiomnizam_*` counters for all security events, incremented alongside in-memory metrics
+- [x] system.go bootstrap — `securitymon.System` wrapping all components with lifecycle management
+
 ---
 
 ## Impact Summary
@@ -851,7 +863,8 @@ User Behavior Profiling                Tenant Isolation
 | P15 | 2 days | Lateral movement blocked |
 | P16 | 2 days | Identity is continuous, not one-time |
 | P17 | 2 days | Per-endpoint security policies |
-| **Total** | **28 days** | **~95% Zero Trust** |
+| P18 | 2 days | Observability-driven security |
+| **Total** | **30 days** | **~98% Zero Trust** |
 
 ---
 

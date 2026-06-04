@@ -8,6 +8,10 @@ import (
 // Prometheus counters and gauges for security observability.
 // These are auto-registered with the default Prometheus registry.
 var (
+	PromTotalRequests = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "axiomnizam_total_requests_total",
+		Help: "Total number of requests processed",
+	})
 	PromAuthFailures = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "axiomnizam_auth_failures_total",
 		Help: "Total number of authentication failures",

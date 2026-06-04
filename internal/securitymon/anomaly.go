@@ -151,6 +151,16 @@ func (d *AnomalyDetector) RecordRequest(ip, userID string) {
 	}
 }
 
+// BaselineWindow returns the configured baseline window duration.
+func (d *AnomalyDetector) BaselineWindow() time.Duration {
+	return d.baselineWindow
+}
+
+// Threshold returns the configured anomaly threshold multiplier.
+func (d *AnomalyDetector) Threshold() float64 {
+	return d.threshold
+}
+
 // GetStats returns current tracking stats.
 func (d *AnomalyDetector) GetStats() (uniqueIPs, uniqueUsers int) {
 	d.mu.RLock()

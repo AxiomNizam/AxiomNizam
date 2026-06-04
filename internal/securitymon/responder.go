@@ -84,6 +84,11 @@ func (r *ThreatResponder) HandleAnomaly(evt AnomalyEvent) {
 	}
 }
 
+// Thresholds returns the current threat thresholds.
+func (r *ThreatResponder) Thresholds() ThreatThresholds {
+	return r.thresholds
+}
+
 // HandleCriticalRisk processes a critical risk score event.
 // Called from main.go authenticateRequest() when risk >= threshold.
 func (r *ThreatResponder) HandleCriticalRisk(userID, sessionID string, riskScore int) {

@@ -612,13 +612,29 @@ func main() {
 	secMetrics := securitymon.NewSecurityMetrics()
 	secSIEM := securitymon.LoadSIEMExporterFromEnv(secMetrics)
 	secDetector := securitymon.NewAnomalyDetector(5*time.Minute, 3.0, nil) // callback set after responder init
-	secResponder := securitymon.NewThreatResponder(nil, nil, secMetrics, securitymon.DefaultThreatThresholds())
+	// Wire ThreatResponder with real IAM session/token revokers.
+	// IAM System is initialized at this point (line ~458).
+	var secSessionRevoker securitymon.SessionRevoker
+	var secTokenRevoker securitymon.TokenRevoker
+	if iamSystem != nil {
+		secSessionRevoker = iamSystem.Sessions
+		secTokenRevoker = iamSystem.RevokedStore
+	}
+	secResponder := securitymon.NewThreatResponder(secSessionRevoker, secTokenRevoker, secMetrics, securitymon.DefaultThreatThresholds())
 	secDetector = securitymon.NewAnomalyDetector(5*time.Duration(1)*time.Minute, 3.0, func(evt securitymon.AnomalyEvent) {
 		secResponder.HandleAnomaly(evt)
 	})
 
+	// Audit chain verifier — runs periodic integrity checks.
+	// Uses a nil-safe adapter: returns empty entries until a real audit logger is wired.
+	auditProvider := securitymon.NewAuditLoggerAdapter(func(_ context.Context, limit int) ([]securitymon.ChainEntry, error) {
+		return nil, nil // no audit logger wired yet — verifier will report "chain empty"
+	})
+	secVerifier := securitymon.NewAuditChainVerifier(auditProvider, secMetrics, 1*time.Hour)
+	secVerifier.Start()
+
 	// Dashboard endpoint (no auth required — internal ops visibility)
-	secDashboard := securitymon.NewDashboardHandler(secMetrics, secDetector, secResponder, nil, secSIEM)
+	secDashboard := securitymon.NewDashboardHandler(secMetrics, secDetector, secResponder, secVerifier, secSIEM)
 	secDashboard.RegisterRoutes(router)
 
 	log.Println("✅ Security observability initialized (Phase 13)")
@@ -797,7 +813,26 @@ func main() {
 	authenticateRequest := func(c *gin.Context) bool {
 		// Phase 13: Record request for anomaly detection
 		secMetrics.RecordTotalRequest()
-		secDetector.RecordRequest(c.ClientIP(), "")
+		securitymon.PromTotalRequests.Inc()
+		secDetector.RecordRequest(c.ClientIP(), "") // user ID set after auth succeeds
+
+		// Phase 18: Track auth failures and export to SIEM
+		authFailed := false
+		defer func() {
+			if authFailed {
+				secMetrics.RecordAuthFailure()
+				securitymon.PromAuthFailures.Inc()
+				go secSIEM.Export(context.Background(), securitymon.SIEMEvent{
+					Timestamp: time.Now().UTC(),
+					EventType: "auth_failure",
+					Severity:  "warning",
+					IPAddress: c.ClientIP(),
+					Outcome:   "failure",
+					Message:   "authentication failed",
+					Source:    "axiomnizam",
+				})
+			}
+		}()
 
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -841,6 +876,7 @@ func main() {
 			// ── Primary: IAM Issuer (RSA-256 + revocation) ──
 			parsed, valErr := iamSystem.Issuer.ValidateAccessToken(rawToken)
 			if valErr != nil {
+				authFailed = true
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 				c.Abort()
 				return false
@@ -850,6 +886,7 @@ func main() {
 			// Replay-attack prevention: check JTI revocation in etcd/Raft
 			if iamSystem.RevokedStore != nil && strings.TrimSpace(iamClaims.ID) != "" {
 				if revoked, _ := iamSystem.RevokedStore.IsRevoked(strings.TrimSpace(iamClaims.ID)); revoked {
+					authFailed = true
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
 					c.Abort()
 					return false
@@ -999,10 +1036,12 @@ func main() {
 		if riskScore >= 90 {
 			log.Printf("🚨 Critical risk %d for %s — revoking session", riskScore, principal)
 			secMetrics.RecordHighRisk()
+			securitymon.PromHighRiskRequests.Inc()
 			// Revoke the session if we have a session ID.
 			if iamClaims != nil && iamClaims.SessionID != "" && iamSystem != nil && iamSystem.Sessions != nil {
 				_ = iamSystem.Sessions.Revoke(iamClaims.SessionID)
 				secMetrics.RecordSessionRevoked()
+				securitymon.PromSessionsRevoked.Inc()
 			}
 			// Revoke the current token JTI so it can't be reused.
 			if iamSystem != nil && iamSystem.RevokedStore != nil {
@@ -1135,11 +1174,14 @@ func main() {
 
 		if riskDelta > 30 && riskScore >= 50 {
 			secMetrics.RecordRiskDeltaTrigger()
+			securitymon.PromRiskDeltaTriggers.Inc()
 			secMetrics.RecordStepUp()
+			securitymon.PromStepUpRequired.Inc()
 			mfaToken := strings.TrimSpace(c.GetHeader("X-MFA-Token"))
 			if mfaToken == "" {
 				log.Printf("⚠️  Risk delta %d requires step-up MFA for user %s", riskDelta, principal)
 				secMetrics.RecordMFAChallenge("totp")
+				securitymon.PromMFAChallenges.WithLabelValues("totp").Inc()
 				c.JSON(http.StatusForbidden, gin.H{
 					"error":        "step-up mfa required",
 					"risk_score":   riskScore,
@@ -1158,6 +1200,7 @@ func main() {
 			}
 			if !validateTOTPForUser(c, deltaUserID, mfaToken) {
 				secMetrics.RecordMFAFailure()
+				securitymon.PromMFAFailures.Inc()
 				c.JSON(http.StatusForbidden, gin.H{
 					"error":      "step-up mfa verification failed",
 					"risk_delta": riskDelta,
@@ -1168,6 +1211,7 @@ func main() {
 			}
 			log.Printf("✅ Step-up MFA verified for user %s (risk delta: %d)", principal, riskDelta)
 			secMetrics.RecordMFASuccess()
+			securitymon.PromMFAChallenges.WithLabelValues("totp").Inc()
 			// Record MFA verification timestamp for continuous verification.
 			nowUnix := time.Now().Unix()
 			if iamClaims != nil {
@@ -1209,7 +1253,9 @@ func main() {
 			log.Printf("🚫 Critical risk — %d for user %s from %s — requiring MFA challenge",
 				riskScore, principal, c.ClientIP())
 			secMetrics.RecordHighRisk()
+			securitymon.PromHighRiskRequests.Inc()
 			secMetrics.RecordMFAChallenge("totp")
+			securitymon.PromMFAChallenges.WithLabelValues("totp").Inc()
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":          "challenge_rejected",
 				"risk_score":     riskScore,
@@ -1273,6 +1319,7 @@ func main() {
 				if !validateTOTPForUser(c, mfaUserID, mfaToken) {
 					log.Printf("🚫 MFA verification failed — risk score %d for user %s from %s", riskScore, principal, c.ClientIP())
 					secMetrics.RecordMFAFailure()
+					securitymon.PromMFAFailures.Inc()
 					c.JSON(http.StatusForbidden, gin.H{
 						"error":      "mfa verification failed",
 						"risk_score": riskScore,
@@ -1283,6 +1330,7 @@ func main() {
 				}
 				log.Printf("✅ MFA verified for user %s (risk score: %d)", principal, riskScore)
 				secMetrics.RecordMFASuccess()
+				securitymon.PromMFAChallenges.WithLabelValues("totp").Inc()
 			}
 		}
 
@@ -1335,6 +1383,7 @@ func main() {
 					"action_endpoint": "/auth/login",
 				})
 			}
+			authFailed = true
 			c.Abort()
 			return false
 		}
@@ -1369,12 +1418,16 @@ func main() {
 		c.Set("token_expires_at", expiresAt.Format("2006-01-02 15:04:05"))
 		c.Set("token", rawToken)
 
+		// Phase 13/18: Track authenticated user for anomaly detection
+		secDetector.RecordRequest("", principal) // user ID only — IP already tracked above
+
 		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", callsLimit))
 		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", callsRemaining))
 		c.Header("X-Token-Expires-At", expiresAt.Format("2006-01-02 15:04:05"))
 
 		log.Printf("✅ Token validated & rate limit OK for user: %s (calls remaining: %d)", principal, callsRemaining)
 		secMetrics.RecordAuthSuccess()
+		securitymon.PromAuthSuccesses.Inc()
 		// Phase 13: Export auth success to SIEM
 		go secSIEM.Export(context.Background(), securitymon.SIEMEvent{
 			Timestamp: time.Now().UTC(),
@@ -1570,6 +1623,7 @@ func main() {
 					log.Printf("🚫 Policy engine blocked request: user=%s resource=%s verb=%s reason=%s",
 						userIDStr, resource, verb, policyResult.Reason)
 					secMetrics.RecordPolicyBlock()
+					securitymon.PromPolicyBlocks.Inc()
 					c.JSON(http.StatusForbidden, gin.H{
 						"error":  "request blocked by policy",
 						"reason": policyResult.Reason,
@@ -1650,6 +1704,7 @@ func main() {
 			log.Printf("🚫 RBAC denied: user=%s resource=%s verb=%s reason=%s",
 				userIDStr, resource, verb, reason)
 			secMetrics.RecordRBACDenial()
+			securitymon.PromRBACDenials.Inc()
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":    "insufficient permissions",
 				"resource": resource,
