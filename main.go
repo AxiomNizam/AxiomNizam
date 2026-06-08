@@ -341,7 +341,11 @@ func main() {
 	addValidatorJWKSBase(os.Getenv("IAM_INTERNAL_BASE_URL"))
 	addValidatorJWKSBase(iamIssuerURL)
 	addValidatorJWKSBase(cfg.GetIAMURL())
-	addValidatorJWKSBase("http://localhost:8000")
+	jwksScheme := "http"
+	if tlsCfg.Enabled {
+		jwksScheme = "https"
+	}
+	addValidatorJWKSBase(fmt.Sprintf("%s://localhost:%s", jwksScheme, cfg.API.Port))
 
 	buildValidatorConfig := func(jwksBase string) *auth.TokenValidatorConfig {
 		validatorConfig := &auth.TokenValidatorConfig{
