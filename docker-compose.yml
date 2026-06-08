@@ -45,6 +45,7 @@ services:
       - query_logs:/data/query_logs
       - storage-data:/data/storage
       - raft-data:/data/raft
+      - certs-data:/data/certs
     networks:
       - frontend-net
       - backend-net
@@ -65,7 +66,10 @@ services:
       TLS_ENABLED: ${TLS_ENABLED:-true}
       TLS_AUTO_GENERATE: ${TLS_AUTO_GENERATE:-true}
     depends_on:
-      - axiomnizam
+      axiomnizam:
+        condition: service_healthy
+    volumes:
+      - certs-data:/data/certs:ro
     networks:
       - frontend-net    # Only frontend-net — cannot reach databases directly
 
@@ -223,5 +227,6 @@ volumes:
   query_logs:
   storage-data:
   raft-data:
+  certs-data:
   openclaw-config:
   ollama-data:

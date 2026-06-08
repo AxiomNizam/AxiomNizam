@@ -277,7 +277,7 @@ func main() {
 		cfg.TLS.CertFile,
 		cfg.TLS.KeyFile,
 		cfg.TLS.AutoGenerate,
-		"data",
+		"/data",
 	)
 	if tlsErr != nil {
 		log.Fatalf("TLS initialization failed: %v", tlsErr)
@@ -294,11 +294,9 @@ func main() {
 		log.Println("⚠️  TLS disabled — server running on plain HTTP")
 	}
 
-	// Auto-set POSTGRES_SSLMODE=require when TLS is enabled and sslmode is still "disable"
-	if tlsCfg.Enabled && cfg.PostgreSQL.SSLMode == "disable" {
-		cfg.PostgreSQL.SSLMode = "require"
-		log.Println("🔒 POSTGRES_SSLMODE auto-set to 'require' (TLS is enabled)")
-	}
+	// NOTE: Do NOT auto-set POSTGRES_SSLMODE=require — internal Docker PostgreSQL
+	// runs on an isolated data-net without TLS. Set POSTGRES_SSLMODE=require only
+	// when connecting to an external PostgreSQL instance with SSL configured.
 
 	iamOnlyAuthRaw := strings.TrimSpace(os.Getenv("IAM_ONLY_AUTH"))
 	iamOnlyAuth := true

@@ -57,9 +57,9 @@ WORKDIR /app
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     libpq5 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get purge -y --auto-remove
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (Phase 12 — principle of least privilege)
 RUN groupadd --gid 1000 axiomnizam \
@@ -82,8 +82,8 @@ USER axiomnizam
 
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/app/axiomnizam", "--health"] || exit 1
+# Health check (uses curl -sk for self-signed TLS certs)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sk -f https://localhost:8000/health || exit 1
 
 CMD ["/app/axiomnizam"]
