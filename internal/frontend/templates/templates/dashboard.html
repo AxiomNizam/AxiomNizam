@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AxiomNizam Backend Dashboard</title>
+    <link rel="icon" href="/static/axiomnizam-logo-minimal.svg" type="image/svg+xml">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #008C63 0%, #004D38 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1000px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 3px solid #008C63;
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background: #008C63;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1em;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #004D38;
+        }
+
+        .refresh-time {
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 25px;
+            border-left: 5px solid #008C63;
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .status-item {
+            margin: 15px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+
+        .status-label {
+            font-weight: bold;
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .status-value {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-ok {
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .status-error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        .status-disconnected {
+            color: #f39c12;
+            font-weight: bold;
+        }
+
+        .database-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .database-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .db-checklist {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .db-item {
+            background: white;
+            padding: 12px;
+            border-radius: 5px;
+            border-left: 4px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .db-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .db-item.connected {
+            border-left-color: #27ae60;
+            background: #f0fff4;
+        }
+
+        .db-item.disconnected {
+            border-left-color: #e74c3c;
+            background: #fff5f5;
+        }
+
+        .db-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .db-icon {
+            font-size: 1.2em;
+            width: 25px;
+        }
+
+        .db-name {
+            font-weight: 600;
+            color: #333;
+            min-width: 120px;
+        }
+
+        .db-status {
+            font-size: 0.9em;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .db-status.connected {
+            color: #27ae60;
+            background: #d4edda;
+        }
+
+        .db-status.disconnected {
+            color: #e74c3c;
+            background: #f8d7da;
+        }
+
+        .status-icon {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .connected {
+            color: #27ae60;
+        }
+
+        .disconnected {
+            color: #e74c3c;
+        }
+
+        .loading {
+            text-align: center;
+            color: #008C63;
+            font-size: 1.2em;
+        }
+
+        .error-message {
+            background: #ffe6e6;
+            color: #e74c3c;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #e74c3c;
+        }
+
+        .success-message {
+            background: #e6ffe6;
+            color: #27ae60;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #27ae60;
+        }
+
+        .backend-info {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .auto-refresh-toggle {
+            margin-top: 10px;
+        }
+
+        .auto-refresh-toggle label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .auto-refresh-toggle input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .api-item {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #008C63;
+            transition: all 0.3s ease;
+        }
+
+        .api-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .api-method {
+            display: inline-block;
+            font-weight: bold;
+            font-size: 0.75em;
+            padding: 4px 8px;
+            border-radius: 3px;
+            margin-bottom: 8px;
+        }
+
+        .api-method.get {
+            background: #d4edff;
+            color: #0066cc;
+        }
+
+        .api-method.post {
+            background: #fff4d4;
+            color: #cc6600;
+        }
+
+        .api-method.put {
+            background: #fff0f6;
+            color: #cc0066;
+        }
+
+        .api-method.delete {
+            background: #ffe6e6;
+            color: #cc0000;
+        }
+
+        .api-path {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #333;
+            word-break: break-all;
+            margin-bottom: 6px;
+        }
+
+        .api-description {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .api-auth {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-top: 5px;
+        }
+
+        .api-auth.required {
+            background: #fff4d4;
+            color: #cc6600;
+        }
+
+        .api-auth.optional {
+            background: #e6f7ff;
+            color: #0066cc;
+        }
+
+        .api-category {
+            margin-bottom: 25px;
+        }
+
+        .api-category-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #008C63;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #008C63;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><img src="/static/axiomnizam-logo-minimal.svg" alt="AxiomNizam" style="height: 1.2em; vertical-align: bottom; margin-right: 8px;"> AxiomNizam Dashboard</h1>
+            <p class="subtitle">Backend Status & Health Monitor</p>
+        </header>
+
+        <div class="controls">
+            <button onclick="refreshData()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Refresh Now</button>
+            <div class="auto-refresh-toggle">
+                <label>
+                    <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()" checked>
+                    Auto-refresh every 5 seconds
+                </label>
+            </div>
+            <div class="refresh-time">Last updated: <span id="lastUpdate">-</span></div>
+        </div>
+
+        <div id="messages"></div>
+
+        <div class="content">
+            <!-- Health Card -->
+            <div class="card">
+                <h2>💚 Health Status</h2>
+                <div id="healthContent" class="loading">Loading...</div>
+            </div>
+
+            <!-- Database Status Card -->
+            <div class="card">
+                <h2><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Database Connections</h2>
+                <div id="statusContent" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- APIs List Card -->
+        <div class="card" style="margin-top: 30px;">
+            <h2><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg> Available APIs</h2>
+            <div id="apisContent" class="loading">Loading...</div>
+        </div>
+
+        <div class="backend-info">
+            <p><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg> Connected to: <strong id="backendInfo"></strong></p>
+        </div>
+    </div>
+
+    <div id="backendURL" style="display:none;">{{ .backendURL }}</div>
+    <script src="/static/dashboard.js?v=20260405-2"></script>
+</body>
+</html>

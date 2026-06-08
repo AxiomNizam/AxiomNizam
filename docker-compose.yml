@@ -1,7 +1,7 @@
-# docker-compose.yml — Phase 15: Network Micro-Segmentation
+# docker-compose.yml — Single Service (API + Frontend merged)
 #
 # Network topology:
-#   frontend-net  — frontend ↔ backend (public-facing)
+#   frontend-net  — public-facing
 #   backend-net   — backend ↔ message queues
 #   data-net      — backend ↔ databases (internal only, no host exposure)
 #   mq-net        — message queues internal
@@ -10,7 +10,7 @@
 # For development access: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
 services:
-  # ── Backend ──────────────────────────────────────────────────────────────
+  # ── AxiomNizam (API + Frontend merged) ───────────────────────────────────
   axiomnizam:
     build: .
     container_name: axiomnizam
@@ -51,27 +51,6 @@ services:
       - backend-net
       - data-net
       - mq-net
-
-  # ── Frontend ─────────────────────────────────────────────────────────────
-  axiomnizam-frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "7000:7000"
-    environment:
-      BACKEND_URL: ${PUBLIC_PLATFORM_URL:-https://axiomnizam-platform.bitbd.net}
-      BACKEND_PROXY_URL: ${BACKEND_PROXY_URL:-https://axiomnizam-platform.bitbd.net}
-      FRONTEND_PORT: ${FRONTEND_PORT:-7000}
-      IAM_ISSUER_URL: ${IAM_ISSUER_URL:-https://axiomnizam-platform.bitbd.net}
-      TLS_ENABLED: ${TLS_ENABLED:-true}
-      TLS_AUTO_GENERATE: ${TLS_AUTO_GENERATE:-true}
-    depends_on:
-      axiomnizam:
-        condition: service_healthy
-    volumes:
-      - certs-data:/data/certs:ro
-    networks:
-      - frontend-net    # Only frontend-net — cannot reach databases directly
 
   # ── Data Tier (internal only — no host port exposure) ────────────────────
   postgres:

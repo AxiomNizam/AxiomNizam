@@ -1,0 +1,640 @@
+{{ define "cdc-etl-dashboard" }}
+<div class="cdc-etl-dashboard" id="cdcEtlApp">
+    <!-- Tab Navigation -->
+    <div class="cdc-etl-tabs">
+        <button class="cdc-etl-tab active" onclick="switchTab('etl')" id="tab-etl">
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span> ETL Pipelines <span class="tab-badge" id="etl-count">0</span>
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('cdc')" id="tab-cdc">
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg></span> CDC Pipelines <span class="tab-badge" id="cdc-count">0</span>
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('observability')" id="tab-obs">
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bar-chart-3"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span> Observability
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('connectors')" id="tab-conn">
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plug-2"><path d="M9 2v6"/><path d="M15 2v6"/><path d="M12 17v5"/><path d="M5 8h14"/><path d="M6 11V8h12v3a6 6 0 1 1-12 0v0Z"/></svg></span> Connectors
+        </button>
+        <button class="cdc-etl-tab" onclick="switchTab('orchestration')" id="tab-orch">
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-brain"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg></span> Orchestration
+        </button>
+    </div>
+
+    <!-- ===================== ETL Tab ===================== -->
+    <div class="panel-tab-content active" id="panel-etl">
+        <div class="kpi-grid" id="etl-kpis"></div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>ETL Pipelines</h3>
+                <button class="btn-create" onclick="openCreateModal('etl')">+ New Pipeline</button>
+            </div>
+            <table class="pipeline-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Steps</th>
+                        <th>Schedule</th>
+                        <th>Runs</th>
+                        <th>Last Run</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="etl-pipeline-body"></tbody>
+            </table>
+        </div>
+
+        <!-- ETL Runs -->
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Recent Runs</h3>
+            </div>
+            <table class="pipeline-table">
+                <thead>
+                    <tr>
+                        <th>Run ID</th>
+                        <th>Pipeline</th>
+                        <th>Status</th>
+                        <th>Trigger</th>
+                        <th>Rows Read</th>
+                        <th>Rows Written</th>
+                        <th>Duration</th>
+                        <th>Started</th>
+                    </tr>
+                </thead>
+                <tbody id="etl-runs-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===================== CDC Tab ===================== -->
+    <div class="panel-tab-content" id="panel-cdc">
+        <div class="kpi-grid" id="cdc-kpis"></div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>CDC Pipelines</h3>
+                <button class="btn-create" onclick="openCreateModal('cdc')">+ New Pipeline</button>
+            </div>
+            <table class="pipeline-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Source</th>
+                        <th>Sink</th>
+                        <th>Events</th>
+                        <th>Errors</th>
+                        <th>Lag</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="cdc-pipeline-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===================== Observability Tab ===================== -->
+    <div class="panel-tab-content" id="panel-observability">
+        <h3 class="section-title"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bar-chart-3"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg> Platform Observability</h3>
+        <div class="kpi-grid" id="obs-kpis"></div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h4>ETL Run History</h4>
+                <canvas id="chart-etl-runs"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>CDC Events/sec Throughput</h4>
+                <canvas id="chart-cdc-throughput"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>ETL Step Type Distribution</h4>
+                <canvas id="chart-etl-steps"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>CDC Events by Operation</h4>
+                <canvas id="chart-cdc-ops"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h4>Error Breakdown (ETL)</h4>
+                <ul class="error-list" id="etl-error-list"></ul>
+            </div>
+            <div class="chart-card">
+                <h4>Error Breakdown (CDC)</h4>
+                <ul class="error-list" id="cdc-error-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== Connectors Tab ===================== -->
+    <div class="panel-tab-content" id="panel-connectors">
+        <div class="connector-toolbar">
+            <div class="connector-toolbar-left">
+                <label for="connector-search" class="sr-only">Search connectors</label>
+                <input type="text" id="connector-search" placeholder="Search by connector name, id, or description" oninput="refreshConnectorView()">
+                <label for="connector-category" class="sr-only">Filter by category</label>
+                <select id="connector-category" onchange="refreshConnectorView()">
+                    <option value="">All Categories</option>
+                    <option value="database">Database</option>
+                    <option value="file">File</option>
+                    <option value="api">API</option>
+                    <option value="stream">Stream</option>
+                    <option value="queue">Queue</option>
+                    <option value="storage">Storage</option>
+                    <option value="search">Search</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="lakehouse">Lakehouse</option>
+                </select>
+            </div>
+            <button class="btn-create" onclick="loadConnectors()">Refresh</button>
+        </div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Add ETL Connector</h3>
+            </div>
+            <div class="connector-form-grid">
+                <div class="modal-form-group">
+                    <label for="new-connector-id">Connector ID</label>
+                    <input type="text" id="new-connector-id" placeholder="snowflake">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-name">Display Name</label>
+                    <input type="text" id="new-connector-name" placeholder="Snowflake">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-category">Category</label>
+                    <select id="new-connector-category">
+                        <option value="database">Database</option>
+                        <option value="warehouse">Warehouse</option>
+                        <option value="lakehouse">Lakehouse</option>
+                        <option value="api">API</option>
+                        <option value="stream">Stream</option>
+                        <option value="storage">Storage</option>
+                    </select>
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-icon">Icon</label>
+                    <input type="text" id="new-connector-icon" placeholder="Icon">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-version">Version</label>
+                    <input type="text" id="new-connector-version" placeholder="1.0">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-supported-as">Supported As (comma separated)</label>
+                    <input type="text" id="new-connector-supported-as" placeholder="extract,load">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-auth">Auth Modes (comma separated)</label>
+                    <input type="text" id="new-connector-auth" placeholder="apikey,oauth2">
+                </div>
+                <div class="modal-form-group">
+                    <label for="new-connector-config">Config Keys (comma separated)</label>
+                    <input type="text" id="new-connector-config" placeholder="account,warehouse,database,role">
+                </div>
+                <div class="connector-credential-section connector-form-span-2">
+                    <div class="connector-credential-title">Database Credential Keys</div>
+                    <div class="connector-credential-grid">
+                        <div class="modal-form-group"><label for="new-connector-db-host">Host Key</label><input type="text" id="new-connector-db-host" placeholder="host"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-port">Port Key</label><input type="text" id="new-connector-db-port" placeholder="port"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-user">User Key</label><input type="text" id="new-connector-db-user" placeholder="username"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-password">Password Key</label><input type="text" id="new-connector-db-password" placeholder="password"></div>
+                        <div class="modal-form-group"><label for="new-connector-db-name">Database Key</label><input type="text" id="new-connector-db-name" placeholder="database"></div>
+                    </div>
+                    <p class="connector-credential-note">Optional key names merged into Config Keys when provided.</p>
+                </div>
+                <div class="connector-credential-section connector-form-span-2">
+                    <div class="connector-credential-title">Other Connector Credential Keys</div>
+                    <div class="connector-credential-grid">
+                        <div class="modal-form-group"><label for="new-connector-cred-api-key">API Key Key</label><input type="text" id="new-connector-cred-api-key" placeholder="api_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-client-id">Client ID Key</label><input type="text" id="new-connector-cred-client-id" placeholder="client_id"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-client-secret">Client Secret Key</label><input type="text" id="new-connector-cred-client-secret" placeholder="client_secret"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-access-key">Access Key Key</label><input type="text" id="new-connector-cred-access-key" placeholder="access_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-secret-key">Secret Key Key</label><input type="text" id="new-connector-cred-secret-key" placeholder="secret_key"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-token">Token Key</label><input type="text" id="new-connector-cred-token" placeholder="token"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-sasl-user">SASL User Key</label><input type="text" id="new-connector-cred-sasl-user" placeholder="sasl_username"></div>
+                        <div class="modal-form-group"><label for="new-connector-cred-sasl-pass">SASL Password Key</label><input type="text" id="new-connector-cred-sasl-pass" placeholder="sasl_password"></div>
+                    </div>
+                    <p class="connector-credential-note">Auth modes are inferred from these fields (for example: password, apikey, oauth2, access_key, sasl, bearer).</p>
+                </div>
+                <div class="modal-form-group connector-form-span-2">
+                    <label for="new-connector-description">Description</label>
+                    <textarea id="new-connector-description" placeholder="Connector details, usage and constraints"></textarea>
+                </div>
+                <div class="connector-flags connector-form-span-2">
+                    <label><input type="checkbox" id="new-connector-incremental"> Supports Incremental Loads</label>
+                    <label><input type="checkbox" id="new-connector-schema"> Supports Schema Discovery</label>
+                    <label><input type="checkbox" id="new-connector-cdc"> Supports CDC</label>
+                </div>
+            </div>
+            <div class="modal-actions connector-actions">
+                <button class="btn-submit" onclick="submitNewConnector()">Add Connector</button>
+            </div>
+        </div>
+
+        <h3 class="section-title"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plug-2"><path d="M9 2v6"/><path d="M15 2v6"/><path d="M12 17v5"/><path d="M5 8h14"/><path d="M6 11V8h12v3a6 6 0 1 1-12 0v0Z"/></svg> ETL Connectors</h3>
+        <div class="connector-grid" id="etl-connectors"></div>
+
+        <h3 class="section-title"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-radio"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg> CDC Sources</h3>
+        <div class="connector-grid" id="cdc-sources"></div>
+
+        <h3 class="section-title"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload-cloud"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg> CDC Sinks</h3>
+        <div class="connector-grid" id="cdc-sinks"></div>
+    </div>
+
+    <!-- ===================== Orchestration Tab ===================== -->
+    <div class="panel-tab-content" id="panel-orchestration">
+        <h3 class="section-title"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-brain"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg> Airflow-Style Orchestration Capabilities</h3>
+        <div class="feature-grid" id="orchestration-feature-grid"></div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Pipeline Blueprints</h3>
+            </div>
+            <div class="blueprint-grid" id="etl-blueprints"></div>
+        </div>
+
+        <div class="pipeline-table-wrap">
+            <div class="pipeline-table-header">
+                <h3>Orchestration Health</h3>
+            </div>
+            <div class="orchestration-health" id="etl-orchestration-health"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Pipeline Modal -->
+<div class="cdc-etl-modal-overlay" id="createModal">
+    <div class="cdc-etl-modal">
+        <h3 id="modal-title">Create Pipeline</h3>
+        <div class="modal-form-group">
+            <label for="modal-name">Name</label>
+            <input type="text" id="modal-name" placeholder="Pipeline name">
+        </div>
+        <div class="modal-form-group">
+            <label for="modal-desc">Description</label>
+            <textarea id="modal-desc" placeholder="Describe this pipeline"></textarea>
+        </div>
+        <div class="modal-form-group" id="modal-schedule-group">
+            <label for="modal-schedule">Schedule (cron)</label>
+            <input type="text" id="modal-schedule" placeholder="*/30 * * * *">
+        </div>
+        <div class="modal-form-group" id="modal-blueprint-group">
+            <label for="modal-blueprint">Blueprint</label>
+            <select id="modal-blueprint" onchange="previewBlueprintSelection()">
+                <option value="">Custom Pipeline</option>
+            </select>
+        </div>
+        <div class="modal-form-group" id="modal-etl-connector-group">
+            <label for="modal-etl-extract-connector">Extract Connector</label>
+            <select id="modal-etl-extract-connector" onchange="onExtractConnectorChange()"></select>
+            <div id="modal-extract-db-options" style="display:none;margin-top:8px;">
+                <label for="modal-extract-db-host">DB Host</label>
+                <input type="text" id="modal-extract-db-host" placeholder="localhost">
+                <label for="modal-extract-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="modal-extract-db-port" placeholder="5432">
+                <label for="modal-extract-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="modal-extract-db-user" placeholder="etl_user">
+                <label for="modal-extract-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="modal-extract-db-password" placeholder="******">
+                <label for="modal-extract-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="modal-extract-db-name" placeholder="mydb">
+                <label for="modal-extract-db-table" style="margin-top:4px;">Table (optional if SQL query used)</label>
+                <input type="text" id="modal-extract-db-table" placeholder="users">
+                <label for="modal-extract-sql" style="margin-top:4px;">SQL Query (optional)</label>
+                <textarea id="modal-extract-sql" rows="3" placeholder="SELECT * FROM users WHERE active = true" style="font-family:monospace;font-size:13px;width:100%;"></textarea>
+            </div>
+            <div id="modal-extract-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="modal-extract-cred-api-key">API Key</label>
+                <input type="text" id="modal-extract-cred-api-key" placeholder="api_key_value">
+                <label for="modal-extract-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="modal-extract-cred-token" placeholder="bearer_token">
+                <label for="modal-extract-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="modal-extract-cred-client-id" placeholder="oauth_client_id">
+                <label for="modal-extract-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="modal-extract-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="modal-extract-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="modal-extract-cred-access-key" placeholder="access_key">
+                <label for="modal-extract-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="modal-extract-cred-secret-key" placeholder="secret_key">
+                <label for="modal-extract-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="modal-extract-cred-username" placeholder="username">
+                <label for="modal-extract-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="modal-extract-cred-password" placeholder="password">
+                <label for="modal-extract-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="modal-extract-cred-sasl-user" placeholder="sasl_username">
+                <label for="modal-extract-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="modal-extract-cred-sasl-pass" placeholder="sasl_password">
+            </div>
+            <label for="modal-etl-load-connector" style="margin-top:8px;">Load Connector</label>
+            <select id="modal-etl-load-connector" onchange="onLoadConnectorChange()"></select>
+            <div id="modal-load-db-options" style="display:none;margin-top:8px;">
+                <label for="modal-load-db-host">DB Host</label>
+                <input type="text" id="modal-load-db-host" placeholder="localhost">
+                <label for="modal-load-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="modal-load-db-port" placeholder="5432">
+                <label for="modal-load-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="modal-load-db-user" placeholder="etl_writer">
+                <label for="modal-load-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="modal-load-db-password" placeholder="******">
+                <label for="modal-load-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="modal-load-db-name" placeholder="warehouse_db">
+                <label for="modal-load-db-table" style="margin-top:4px;">Target Table</label>
+                <input type="text" id="modal-load-db-table" placeholder="dim_users">
+                <label for="modal-load-sql" style="margin-top:4px;">SQL Upsert/Insert Query (optional)</label>
+                <textarea id="modal-load-sql" rows="3" placeholder="INSERT INTO dim_users SELECT * FROM staging_users ON CONFLICT (id) DO UPDATE SET ..." style="font-family:monospace;font-size:13px;width:100%;"></textarea>
+            </div>
+            <div id="modal-load-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="modal-load-cred-api-key">API Key</label>
+                <input type="text" id="modal-load-cred-api-key" placeholder="api_key_value">
+                <label for="modal-load-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="modal-load-cred-token" placeholder="bearer_token">
+                <label for="modal-load-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="modal-load-cred-client-id" placeholder="oauth_client_id">
+                <label for="modal-load-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="modal-load-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="modal-load-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="modal-load-cred-access-key" placeholder="access_key">
+                <label for="modal-load-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="modal-load-cred-secret-key" placeholder="secret_key">
+                <label for="modal-load-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="modal-load-cred-username" placeholder="username">
+                <label for="modal-load-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="modal-load-cred-password" placeholder="password">
+                <label for="modal-load-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="modal-load-cred-sasl-user" placeholder="sasl_username">
+                <label for="modal-load-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="modal-load-cred-sasl-pass" placeholder="sasl_password">
+            </div>
+            <label style="margin-top:8px;"><input type="checkbox" id="modal-etl-quality-gate"> Add Quality Gate (validate + dedupe)</label>
+        </div>
+        <div class="modal-form-group" id="modal-source-group" style="display:none">
+            <label for="modal-source-type">Source Type</label>
+            <select id="modal-source-type"></select>
+        </div>
+        <div class="modal-form-group" id="modal-sink-group" style="display:none">
+            <label for="modal-sink-type">Sink Type</label>
+            <select id="modal-sink-type"></select>
+        </div>
+        <div class="advanced-grid" id="modal-orchestration-group">
+            <div class="modal-form-group">
+                <label for="modal-owner">Owner</label>
+                <input type="text" id="modal-owner" placeholder="data-platform">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-queue">Queue</label>
+                <input type="text" id="modal-queue" placeholder="default">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-retries">Retries</label>
+                <input type="number" id="modal-retries" min="0" value="2">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-retry-delay">Retry Delay (sec)</label>
+                <input type="number" id="modal-retry-delay" min="1" value="60">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-timeout">Timeout (sec)</label>
+                <input type="number" id="modal-timeout" min="30" value="1800">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-sla-seconds">SLA (sec)</label>
+                <input type="number" id="modal-sla-seconds" min="60" value="3600">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-max-active-runs">Max Active Runs</label>
+                <input type="number" id="modal-max-active-runs" min="1" value="1">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-concurrency">Concurrency</label>
+                <input type="number" id="modal-concurrency" min="1" value="4">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-priority">Priority Weight</label>
+                <input type="number" id="modal-priority" min="1" value="5">
+            </div>
+            <div class="modal-form-group">
+                <label for="modal-alert-channels">Alert Channels (comma separated)</label>
+                <input type="text" id="modal-alert-channels" placeholder="slack,email">
+            </div>
+        </div>
+        <div class="connector-flags" id="modal-orchestration-flags">
+            <label><input type="checkbox" id="modal-catchup"> Catchup Enabled</label>
+            <label><input type="checkbox" id="modal-depends-past"> Depends On Past</label>
+        </div>
+        <div class="modal-form-group">
+            <label for="modal-tags">Tags (comma separated)</label>
+            <input type="text" id="modal-tags" placeholder="critical,warehouse,nightly">
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeCreateModal()">Cancel</button>
+            <button class="btn-submit" onclick="submitCreate()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Pipeline Modal -->
+<div class="cdc-etl-modal-overlay" id="editPipelineModal">
+    <div class="cdc-etl-modal">
+        <h3 id="edit-pipeline-title">Edit Pipeline</h3>
+        <input type="hidden" id="edit-pipeline-id">
+        <input type="hidden" id="edit-pipeline-type">
+        <div class="modal-form-group">
+            <label for="edit-pipeline-name">Name</label>
+            <input type="text" id="edit-pipeline-name">
+        </div>
+        <div class="modal-form-group">
+            <label for="edit-pipeline-desc">Description</label>
+            <textarea id="edit-pipeline-desc"></textarea>
+        </div>
+        <div class="modal-form-group" id="edit-pipeline-schedule-group">
+            <label for="edit-pipeline-schedule">Schedule (cron)</label>
+            <input type="text" id="edit-pipeline-schedule">
+        </div>
+        <div class="modal-form-group">
+            <label for="edit-pipeline-tags">Tags (comma separated)</label>
+            <input type="text" id="edit-pipeline-tags">
+        </div>
+        <div class="modal-form-group" id="edit-pipeline-etl-connector-group" style="display:none">
+            <label for="edit-etl-extract-connector">Extract Connector</label>
+            <select id="edit-etl-extract-connector" onchange="onEditExtractConnectorChange()"></select>
+            <div id="edit-extract-db-options" style="display:none;margin-top:8px;">
+                <label for="edit-extract-db-host">DB Host</label>
+                <input type="text" id="edit-extract-db-host" placeholder="localhost">
+                <label for="edit-extract-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="edit-extract-db-port" placeholder="5432">
+                <label for="edit-extract-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="edit-extract-db-user" placeholder="etl_user">
+                <label for="edit-extract-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="edit-extract-db-password" placeholder="******">
+                <label for="edit-extract-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="edit-extract-db-name" placeholder="mydb">
+                <label for="edit-extract-db-table" style="margin-top:4px;">Table</label>
+                <input type="text" id="edit-extract-db-table" placeholder="users">
+                <label for="edit-extract-sql" style="margin-top:4px;">SQL Query</label>
+                <textarea id="edit-extract-sql" rows="3" placeholder="SELECT * FROM users"></textarea>
+            </div>
+            <div id="edit-extract-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="edit-extract-cred-api-key">API Key</label>
+                <input type="text" id="edit-extract-cred-api-key" placeholder="api_key_value">
+                <label for="edit-extract-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="edit-extract-cred-token" placeholder="bearer_token">
+                <label for="edit-extract-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="edit-extract-cred-client-id" placeholder="oauth_client_id">
+                <label for="edit-extract-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="edit-extract-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="edit-extract-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="edit-extract-cred-access-key" placeholder="access_key">
+                <label for="edit-extract-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="edit-extract-cred-secret-key" placeholder="secret_key">
+                <label for="edit-extract-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="edit-extract-cred-username" placeholder="username">
+                <label for="edit-extract-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="edit-extract-cred-password" placeholder="password">
+                <label for="edit-extract-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="edit-extract-cred-sasl-user" placeholder="sasl_username">
+                <label for="edit-extract-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="edit-extract-cred-sasl-pass" placeholder="sasl_password">
+            </div>
+
+            <label for="edit-etl-load-connector" style="margin-top:8px;">Load Connector</label>
+            <select id="edit-etl-load-connector" onchange="onEditLoadConnectorChange()"></select>
+            <div id="edit-load-db-options" style="display:none;margin-top:8px;">
+                <label for="edit-load-db-host">DB Host</label>
+                <input type="text" id="edit-load-db-host" placeholder="localhost">
+                <label for="edit-load-db-port" style="margin-top:4px;">DB Port</label>
+                <input type="number" id="edit-load-db-port" placeholder="5432">
+                <label for="edit-load-db-user" style="margin-top:4px;">DB User</label>
+                <input type="text" id="edit-load-db-user" placeholder="etl_writer">
+                <label for="edit-load-db-password" style="margin-top:4px;">DB Password</label>
+                <input type="password" id="edit-load-db-password" placeholder="******">
+                <label for="edit-load-db-name" style="margin-top:4px;">Database</label>
+                <input type="text" id="edit-load-db-name" placeholder="warehouse_db">
+                <label for="edit-load-db-table" style="margin-top:4px;">Target Table</label>
+                <input type="text" id="edit-load-db-table" placeholder="dim_users">
+                <label for="edit-load-sql" style="margin-top:4px;">SQL Query</label>
+                <textarea id="edit-load-sql" rows="3" placeholder="INSERT INTO dim_users ..."></textarea>
+            </div>
+            <div id="edit-load-other-cred-options" style="display:none;margin-top:8px;">
+                <label for="edit-load-cred-api-key">API Key</label>
+                <input type="text" id="edit-load-cred-api-key" placeholder="api_key_value">
+                <label for="edit-load-cred-token" style="margin-top:4px;">Token / Bearer</label>
+                <input type="text" id="edit-load-cred-token" placeholder="bearer_token">
+                <label for="edit-load-cred-client-id" style="margin-top:4px;">Client ID</label>
+                <input type="text" id="edit-load-cred-client-id" placeholder="oauth_client_id">
+                <label for="edit-load-cred-client-secret" style="margin-top:4px;">Client Secret</label>
+                <input type="password" id="edit-load-cred-client-secret" placeholder="oauth_client_secret">
+                <label for="edit-load-cred-access-key" style="margin-top:4px;">Access Key</label>
+                <input type="text" id="edit-load-cred-access-key" placeholder="access_key">
+                <label for="edit-load-cred-secret-key" style="margin-top:4px;">Secret Key</label>
+                <input type="password" id="edit-load-cred-secret-key" placeholder="secret_key">
+                <label for="edit-load-cred-username" style="margin-top:4px;">Username</label>
+                <input type="text" id="edit-load-cred-username" placeholder="username">
+                <label for="edit-load-cred-password" style="margin-top:4px;">Password</label>
+                <input type="password" id="edit-load-cred-password" placeholder="password">
+                <label for="edit-load-cred-sasl-user" style="margin-top:4px;">SASL Username</label>
+                <input type="text" id="edit-load-cred-sasl-user" placeholder="sasl_username">
+                <label for="edit-load-cred-sasl-pass" style="margin-top:4px;">SASL Password</label>
+                <input type="password" id="edit-load-cred-sasl-pass" placeholder="sasl_password">
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeEditPipelineModal()">Cancel</button>
+            <button class="btn-submit" onclick="submitEditPipeline()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Connector Modal -->
+<div class="cdc-etl-modal-overlay" id="editConnectorModal">
+    <div class="cdc-etl-modal">
+        <h3>Edit Connector</h3>
+        <input type="hidden" id="edit-connector-id">
+        <div class="connector-form-grid">
+            <div class="modal-form-group">
+                <label for="edit-connector-name">Display Name</label>
+                <input type="text" id="edit-connector-name">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-category">Category</label>
+                <select id="edit-connector-category">
+                    <option value="database">Database</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="lakehouse">Lakehouse</option>
+                    <option value="api">API</option>
+                    <option value="stream">Stream</option>
+                    <option value="storage">Storage</option>
+                    <option value="file">File</option>
+                    <option value="queue">Queue</option>
+                    <option value="search">Search</option>
+                </select>
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-icon">Icon</label>
+                <input type="text" id="edit-connector-icon">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-version">Version</label>
+                <input type="text" id="edit-connector-version">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-supported-as">Supported As (comma separated)</label>
+                <input type="text" id="edit-connector-supported-as">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-auth">Auth Modes (comma separated)</label>
+                <input type="text" id="edit-connector-auth">
+            </div>
+            <div class="modal-form-group">
+                <label for="edit-connector-config">Config Keys (comma separated)</label>
+                <input type="text" id="edit-connector-config">
+            </div>
+            <div class="connector-credential-section connector-form-span-2">
+                <div class="connector-credential-title">Database Credential Keys</div>
+                <div class="connector-credential-grid">
+                    <div class="modal-form-group"><label for="edit-connector-db-host">Host Key</label><input type="text" id="edit-connector-db-host" placeholder="host"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-port">Port Key</label><input type="text" id="edit-connector-db-port" placeholder="port"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-user">User Key</label><input type="text" id="edit-connector-db-user" placeholder="username"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-password">Password Key</label><input type="text" id="edit-connector-db-password" placeholder="password"></div>
+                    <div class="modal-form-group"><label for="edit-connector-db-name">Database Key</label><input type="text" id="edit-connector-db-name" placeholder="database"></div>
+                </div>
+            </div>
+            <div class="connector-credential-section connector-form-span-2">
+                <div class="connector-credential-title">Other Connector Credential Keys</div>
+                <div class="connector-credential-grid">
+                    <div class="modal-form-group"><label for="edit-connector-cred-api-key">API Key Key</label><input type="text" id="edit-connector-cred-api-key" placeholder="api_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-client-id">Client ID Key</label><input type="text" id="edit-connector-cred-client-id" placeholder="client_id"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-client-secret">Client Secret Key</label><input type="text" id="edit-connector-cred-client-secret" placeholder="client_secret"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-access-key">Access Key Key</label><input type="text" id="edit-connector-cred-access-key" placeholder="access_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-secret-key">Secret Key Key</label><input type="text" id="edit-connector-cred-secret-key" placeholder="secret_key"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-token">Token Key</label><input type="text" id="edit-connector-cred-token" placeholder="token"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-sasl-user">SASL User Key</label><input type="text" id="edit-connector-cred-sasl-user" placeholder="sasl_username"></div>
+                    <div class="modal-form-group"><label for="edit-connector-cred-sasl-pass">SASL Password Key</label><input type="text" id="edit-connector-cred-sasl-pass" placeholder="sasl_password"></div>
+                </div>
+            </div>
+            <div class="modal-form-group connector-form-span-2">
+                <label for="edit-connector-description">Description</label>
+                <textarea id="edit-connector-description"></textarea>
+            </div>
+            <div class="connector-flags connector-form-span-2">
+                <label><input type="checkbox" id="edit-connector-incremental"> Supports Incremental</label>
+                <label><input type="checkbox" id="edit-connector-schema"> Schema Discovery</label>
+                <label><input type="checkbox" id="edit-connector-cdc"> Supports CDC</label>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeEditConnectorModal()">Cancel</button>
+            <button class="btn-submit" onclick="submitEditConnector()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/cdc-etl-dashboard.js?v=20260405-5"></script>
+{{ end }}

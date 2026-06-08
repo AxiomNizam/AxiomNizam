@@ -1,0 +1,1061 @@
+{{ define "admin" }}
+<!-- Admin Interface -->
+<div class="admin-container">
+    <!-- Header -->
+    <div class="admin-header">
+        <div class="header-left">
+            <h1>Admin Dashboard</h1>
+            <p class="subtitle">API Builder · File Analytics · Dashboard Converter · File Scanner</p>
+        </div>
+        
+        <div class="header-stats" id="adminHeaderStats">
+            <div class="stat-box">
+                <span class="stat-label">Rate Limit</span>
+                <span class="stat-value">24 / 100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Token Time</span>
+                <span class="stat-value" id="headerTokenExpiry">59m 12s</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Current IP</span>
+                <span class="stat-value" id="headerCurrentIP">...</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">System</span>
+                <span class="stat-value" style="color: var(--primary-color);">Secure</span>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <div class="branding-logo" style="display: flex; align-items: center; justify-content: center;">
+                <img src="/static/axiomnizam-logo-minimal.svg?v=20260318" alt="AxiomNizam Logo" style="height: 180px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-navigation">
+        <button class="tab-btn active" onclick="switchTab('api-builder')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M2 12a10 10 0 0 1 10-10"/><path d="M2 16a6 6 0 0 1 6-6"/><path d="M2 20a2 2 0 0 1 2-2"/><path d="M19 19m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0"/><path d="M16 16l-4-4"/></svg></span> API Builder
+        </button>
+        <button class="tab-btn" onclick="switchTab('graphql-api-builder')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></span> GraphQL API Builder
+        </button>
+        <button class="tab-btn" onclick="switchTab('csv-upload')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> File → Dashboard
+        </button>
+        <button class="tab-btn" onclick="switchTab('converter')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Dashboard ↔ GIS
+        </button>
+        <button class="tab-btn" onclick="switchTab('file-scanner')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span> File Scanner
+        </button>
+        <button class="tab-btn" onclick="switchTab('api-testing')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> API Testing
+        </button>
+        <button class="tab-btn" onclick="switchTab('graphql-studio')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span> GraphQL Studio
+        </button>
+        <button class="tab-btn" onclick="switchTab('control-plane')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> Control Plane
+        </button>
+        <button class="tab-btn" onclick="switchTab('logs')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> Logs
+        </button>
+        <button class="tab-btn" onclick="switchTab('settings')">
+            <span class="tab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg></span> Settings
+        </button>
+    </div>
+
+    <!-- ===================== API BUILDER TAB ===================== -->
+    <div id="api-builder" class="tab-content active">
+        <!-- Summary Cards -->
+        <div class="builder-summary" id="builderSummary"></div>
+
+        <div class="cp-card" style="margin:0 0 24px 0; border-top: 4px solid var(--primary-color);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                <div>
+                    <h4 style="margin-bottom:6px; font-size: 1.2rem;">
+                        <svg style="width:20px;height:20px;vertical-align:middle;margin-right:8px;color:var(--primary-color);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="15" y2="10"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+                        SQL AI Chat & Suggestions
+                    </h4>
+                    <p style="margin:0;color:var(--text-muted);font-size:0.9rem;">Generate SQL query ideas for API Builder. Uses OpenClaw when configured, otherwise local fallback suggestions.</p>
+                </div>
+            </div>
+
+            <div class="cp-grid-two">
+                <!-- Left: Input Form -->
+                <div class="cp-card" style="margin:0; background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2);">
+                    <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Query Prompt</h5>
+                    <div class="form-group">
+                        <label for="sqlAssistantPrompt">What SQL do you want to build?</label>
+                        <textarea id="sqlAssistantPrompt" rows="4" placeholder="Example: Create a paginated query for active users with optional name search" style="font-family:var(--font-mono);"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sqlAssistantDialect">Dialect</label>
+                            <select id="sqlAssistantDialect" style="font-weight:600; color:var(--primary-light);">
+                                <option value="postgres">PostgreSQL</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="mariadb">MariaDB</option>
+                                <option value="percona">Percona</option>
+                                <option value="oracle">Oracle</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="sqlAssistantSchemaHint">Schema / Table Hint (optional)</label>
+                        <textarea id="sqlAssistantSchemaHint" rows="3" placeholder="users(id, name, email, status, created_at)&#10;orders(id, user_id, total_amount, created_at)" style="font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted);"></textarea>
+                    </div>
+                    <div class="cp-actions" style="margin-top: 16px;">
+                        <button id="sqlAssistantAskBtn" class="btn-primary" onclick="askSQLAssistant()">
+                            <svg style="width:16px;height:16px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                            Ask SQL AI
+                        </button>
+                        <button class="btn-secondary" onclick="applyTopSQLAISuggestion()">Use Top SQL</button>
+                        <button class="btn-secondary" onclick="clearSQLAssistantPanel()">
+                            <svg style="width:16px;height:16px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right: Chat Interface -->
+                <div class="cp-card" style="margin:0; background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2);">
+                    <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Assistant Chat</h5>
+                    <div id="sqlAssistantChat" class="csv-history" style="min-height:300px;max-height:400px;overflow:auto;padding:12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid var(--border-color);">
+                        <div class="empty-state" style="margin:0;">Ask a SQL question to start the conversation.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:24px;">
+                <h5 style="margin-top:0; margin-bottom: 12px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">SQL Suggestions</h5>
+                <div class="table-responsive" style="background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2); border-radius: 8px; overflow: hidden;">
+                    <div id="sqlAssistantSuggestions" class="empty-state" style="margin:0; padding:20px;">No suggestions yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="builder-toolbar">
+            <div class="toolbar-left">
+                <h3>Custom APIs</h3>
+                <select id="apiCategoryFilter" onchange="loadCustomAPIs()">
+                    <option value="">All Categories</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="external">External</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="iot">IoT</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <select id="apiStatusFilter" onchange="loadCustomAPIs()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="openCreateAPIModal()">+ Create API</button>
+        </div>
+
+        <!-- API List -->
+        <div class="api-builder-list" id="apiBuilderList">
+            <div class="loading">Loading APIs...</div>
+        </div>
+    </div>
+
+    <!-- ===================== GRAPHQL API BUILDER TAB ===================== -->
+    <div id="graphql-api-builder" class="tab-content">
+        <div class="builder-summary" id="graphqlBuilderSummary"></div>
+
+        <div class="builder-toolbar">
+            <div class="toolbar-left">
+                <h3>GraphQL APIs</h3>
+                <select id="graphqlApiCategoryFilter" onchange="loadGraphQLCustomAPIs()">
+                    <option value="">All Categories</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="external">External</option>
+                    <option value="warehouse">Warehouse</option>
+                    <option value="iot">IoT</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <select id="graphqlApiStatusFilter" onchange="loadGraphQLCustomAPIs()">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="openCreateGraphQLAPIModal()">+ Create GraphQL API</button>
+        </div>
+
+        <div class="api-builder-list" id="graphqlApiBuilderList">
+            <div class="loading">Loading GraphQL APIs...</div>
+        </div>
+    </div>
+
+    <!-- ===================== CSV UPLOAD TAB ===================== -->
+    <div id="csv-upload" class="tab-content">
+        <div class="csv-section">
+            <div class="csv-upload-area" id="csvDropZone">
+                <div class="upload-icon">📄</div>
+                <h3>Upload Data File</h3>
+                <p>Drop a CSV, JSON, or Excel file here or click to browse</p>
+                <p class="upload-hint">Supports <strong>.csv</strong>, <strong>.json</strong>, and <strong>.xlsx</strong> files.<br>
+                Auto-generates Analytics Dashboard with charts, graphs, and tables.<br>
+                If data contains lat/lng columns, you can also generate a GIS dashboard.</p>
+                <input type="file" id="csvFileInput" accept=".csv,.json,.xlsx,.xls" style="display:none" onchange="handleFileUpload()">
+                <button class="btn-primary" onclick="document.getElementById('csvFileInput').click()">Browse Files</button>
+            </div>
+
+            <!-- Upload Analysis Result -->
+            <div id="csvAnalysisResult" style="display:none;">
+                <div class="analysis-header">
+                    <h3 id="csvFilenameDisplay">Selected file</h3>
+                    <div class="analysis-badges" id="csvAnalysisBadges"></div>
+                </div>
+                <div class="analysis-columns" id="csvColumnAnalysis"></div>
+                <div class="analysis-sample" id="csvSampleTable"></div>
+                <div class="analysis-actions">
+                    <button class="btn-primary" id="btnGenerateDashboard" onclick="generateCSVDashboard()"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg> Generate Analytics Dashboard</button>
+                    <button class="btn-secondary" id="btnGenerateGIS" onclick="generateCSVGIS()" style="display:none"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Generate GIS Dashboard</button>
+                </div>
+            </div>
+
+            <!-- Previous Uploads -->
+            <div class="csv-history">
+                <h3>Previous Uploads</h3>
+                <div id="csvUploadHistory"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== CONVERTER TAB ===================== -->
+    <div id="converter" class="tab-content">
+        <div class="converter-section">
+            <div class="converter-header">
+                <h3><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Dashboard ↔ GIS Converter</h3>
+                <p>Convert Analytics dashboards to GIS map views, or GIS datasets to Analytics dashboards.</p>
+            </div>
+
+            <div class="converter-panels">
+                <!-- Dashboard → GIS -->
+                <div class="converter-panel">
+                    <div class="panel-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg> → <svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+                    <h4>Dashboard → GIS</h4>
+                    <p>Convert an analytics dashboard with geographic data into a GIS map dataset with markers.</p>
+                    <select id="dashboardSelect" onchange="analyzeDashToGIS()">
+                        <option value="">Select a dashboard...</option>
+                    </select>
+                    <div id="dashToGISAnalysis" class="analysis-result" style="display:none;"></div>
+                    <button class="btn-primary" id="btnConvertToGIS" onclick="convertDashboardToGIS()" style="display:none">Convert to GIS</button>
+                </div>
+
+                <!-- GIS → Dashboard -->
+                <div class="converter-panel">
+                    <div class="panel-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> → <svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg></div>
+                    <h4>GIS → Dashboard</h4>
+                    <p>Convert a GIS dataset into an analytics dashboard with auto-generated charts and tables.</p>
+                    <select id="gisDatasetSelect" onchange="analyzeGISToDash()">
+                        <option value="">Select a GIS dataset...</option>
+                    </select>
+                    <div id="gisToDashAnalysis" class="analysis-result" style="display:none;"></div>
+                    <button class="btn-primary" id="btnConvertToDash" onclick="convertGISToDashboard()" style="display:none">Convert to Dashboard</button>
+                </div>
+            </div>
+
+            <!-- Conversion History -->
+            <div class="conversion-history">
+                <h3>Conversion History</h3>
+                <div id="conversionHistoryList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== FILE SCANNER TAB ===================== -->
+    <div id="file-scanner" class="tab-content">
+        <div class="csv-section">
+            <div class="csv-upload-area" id="scanDropZone">
+                <div class="upload-icon"><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                <h3>SafeGate File Scanner</h3>
+                <p>Drop any file here to scan for security threats</p>
+                <p class="upload-hint">6-stage pipeline: Metadata · MIME Type · SVG XSS · Macro/Script · Archive Bomb · ClamAV Antivirus</p>
+                <input type="file" id="scanFileInput" style="display:none" onchange="handleFileScan()">
+                <button class="btn-primary" onclick="document.getElementById('scanFileInput').click()">Select File to Scan</button>
+            </div>
+
+            <!-- Scan Result -->
+            <div id="scanResult" style="display:none;">
+                <div class="analysis-header">
+                    <h3 id="scanFilenameDisplay">Scanned file</h3>
+                    <div class="analysis-badges" id="scanBadges"></div>
+                </div>
+                <div id="scanFindings"></div>
+            </div>
+
+            <!-- Scanner Health -->
+            <div class="csv-history">
+                <h3>Scanner Status</h3>
+                <div id="scannerHealth"></div>
+            </div>
+
+            <!-- Scan History -->
+            <div class="csv-history">
+                <h3>Scan History</h3>
+                <div id="scanHistory"></div>
+            </div>
+
+            <!-- Suspicious Files -->
+            <div class="csv-history">
+                <h3>Suspicious Files</h3>
+                <p class="upload-hint" style="margin-bottom:10px;">Files flagged as unsafe by SafeGate are listed here for later review.</p>
+                <div id="scanSuspiciousFiles"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== API TESTING TAB ===================== -->
+    <div id="api-testing" class="tab-content">
+        <div class="api-testing-section">
+            <div class="section-header">
+                <h3>Custom API Runtime Testing</h3>
+                <button class="btn-secondary" onclick="loadAPIs()">Refresh Runtime Endpoints</button>
+            </div>
+
+            <div class="cp-card" style="margin:0 0 24px 0; border-top: 4px solid var(--primary-color);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                    <div>
+                        <h4 style="margin-bottom:6px; font-size: 1.2rem;">
+                            <svg style="width:20px;height:20px;vertical-align:middle;margin-right:8px;color:var(--primary-color);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+                            API Security Scanner
+                        </h4>
+                        <p style="margin:0;color:var(--text-muted);font-size:0.9rem;">Run comprehensive runtime scans, API discovery, or domain enumeration. Review and download reports.</p>
+                    </div>
+                </div>
+
+                <div class="cp-grid-two">
+                    <!-- Left: Configuration Form -->
+                    <div class="cp-card" style="margin:0; background: var(--darker-bg); border: 1px solid rgba(var(--primary-rgb),0.2);">
+                        <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Scan Configuration</h5>
+                        
+                        <div class="form-group">
+                            <label for="adminApiScanType">Scan Type</label>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span id="adminApiScanTypeIcon" style="display:flex; align-items:center; color:var(--primary-light);">
+                                    <!-- Icon injected via JS -->
+                                </span>
+                                <select id="adminApiScanType" onchange="toggleAdminApiScanFields()" style="flex:1; font-weight:600; color:var(--primary-light);">
+                                    <option value="runtime">Runtime API Scan</option>
+                                    <option value="discover-api">API Discovery</option>
+                                    <option value="discover-domain">Domain Discovery</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="adminApiScanTarget">Target URL / Domain</label>
+                            <input type="text" id="adminApiScanTarget" placeholder="https://api.example.com/users or example.com" style="font-family:var(--font-mono);">
+                        </div>
+                        <div class="form-row scan-runtime-only" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="form-group">
+                                <label for="adminApiScanMethod">HTTP Method</label>
+                                <select id="adminApiScanMethod">
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="PATCH">PATCH</option>
+                                    <option value="DELETE">DELETE</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanTimeout">Timeout (seconds)</label>
+                                <input type="number" id="adminApiScanTimeout" min="5" max="300" value="30">
+                            </div>
+                        </div>
+                        <div class="form-group scan-runtime-only">
+                            <label for="adminApiScanBody">Request Body (JSON or text, optional)</label>
+                            <textarea id="adminApiScanBody" rows="3" spellcheck="false" placeholder='{"query":"status"}'></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="adminApiScanHeaders">Headers (Key: Value per line)</label>
+                            <textarea id="adminApiScanHeaders" rows="3" spellcheck="false" placeholder="Authorization: Bearer token"></textarea>
+                        </div>
+                        <div class="form-row scan-discovery-only" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="form-group">
+                                <label for="adminApiScanIncludeIDs">Include Scan IDs</label>
+                                <textarea id="adminApiScanIncludeIDs" rows="2" spellcheck="false" placeholder="well-known.health"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanExcludeIDs">Exclude Scan IDs</label>
+                                <textarea id="adminApiScanExcludeIDs" rows="2" spellcheck="false" placeholder="fingerprint.headers"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-row scan-discover-api-only" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="form-group">
+                                <label for="adminApiScanMaxPaths">Max Paths</label>
+                                <input type="number" id="adminApiScanMaxPaths" min="1" max="1000" value="64">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanInsecure">TLS Insecure Skip Verify</label>
+                                <div class="toggle" style="margin-top:8px;">
+                                    <input type="checkbox" id="adminApiScanInsecure" aria-label="Skip TLS verification">
+                                    <span class="toggle-switch"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-row scan-discover-domain-only" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="form-group">
+                                <label for="adminApiScanMaxSubdomains">Max Subdomains</label>
+                                <input type="number" id="adminApiScanMaxSubdomains" min="1" max="1000" value="32">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminApiScanMaxHints">Max Hints</label>
+                                <input type="number" id="adminApiScanMaxHints" min="1" max="1000" value="48">
+                            </div>
+                        </div>
+                        <div class="form-group scan-discover-domain-only" style="display:none;">
+                            <label for="adminApiScanSchemes">Schemes (comma/new line)</label>
+                            <textarea id="adminApiScanSchemes" rows="2" spellcheck="false" placeholder="https,http">https,http</textarea>
+                        </div>
+                        <div class="cp-actions" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                            <button id="adminRunApiScanBtn" class="btn-primary" onclick="runAdminApiScan()">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                Run Scan
+                            </button>
+                            <button id="adminDownloadApiScanBtn" class="btn-secondary" onclick="downloadLatestAdminApiScanReport()" disabled>
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Download JSON
+                            </button>
+                            <button class="btn-secondary" onclick="loadAdminApiScanReports()" title="Refresh">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                            </button>
+                            <button class="btn-secondary" onclick="copyLatestAdminApiScanReportId()" title="Copy ID">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                            <button class="btn-warning" onclick="clearAdminApiScanView()" title="Clear Form">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Scan Results Viewer -->
+                    <div class="cp-card" style="margin:0; display: flex; flex-direction: column;">
+                        <h5 style="margin-top:0; margin-bottom: 16px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px; color:var(--text-secondary);">Latest Analysis Report</h5>
+                        <div id="adminApiScanSummary" class="analysis-badges" style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+                        <div id="adminApiScanStructured" class="csv-history api-scan-viewer" style="flex:1; margin-bottom:16px;"></div>
+                        <details style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                            <summary style="cursor:pointer;color:var(--primary-light);font-weight:600; outline:none; user-select:none; display:flex; align-items:center; gap:8px;">
+                                <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                View Raw JSON Report
+                            </summary>
+                            <pre id="adminApiScanReportOutput" class="cp-output" style="margin-top:12px; background:#0B0F19; color:#A6ACCD;">Run a scan or select a report to view details.</pre>
+                        </details>
+                    </div>
+                </div>
+
+                <div style="margin-top:32px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h4 style="margin:0;">Archive & Recent Reports</h4>
+                        <div class="cp-actions" style="margin:0;">
+                            <span id="adminApiScanSelectedCount" class="badge badge-default" style="margin-right:12px;">0 selected</span>
+                            <button class="btn-sm btn-del" onclick="deleteSelectedAdminApiScanReports()" style="display:inline-flex; align-items:center; gap:4px;">
+                                <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                Delete Selected
+                            </button>
+                            <button class="btn-sm btn-del" onclick="deleteAllAdminApiScanReports()" style="display:inline-flex; align-items:center; gap:4px; opacity:0.8;">
+                                <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                Delete All
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <div id="adminApiScanReportsList" class="empty-state">No API scan reports yet.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Search & Filter -->
+            <div class="api-controls">
+                <div class="search-box">
+                    <input type="text" id="apiSearch" placeholder="Search custom runtime endpoints..." onkeyup="filterAPIs()">
+                </div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterByMethod('ALL')">All</button>
+                    <button class="filter-btn" onclick="filterByMethod('GET')">GET</button>
+                    <button class="filter-btn" onclick="filterByMethod('POST')">POST</button>
+                    <button class="filter-btn" onclick="filterByMethod('PUT')">PUT</button>
+                    <button class="filter-btn" onclick="filterByMethod('DELETE')">DELETE</button>
+                </div>
+            </div>
+
+            <!-- API Categories with Test Buttons -->
+            <div class="api-categories" id="apiCategories">
+                <div class="loading">Loading APIs...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== GRAPHQL STUDIO TAB ===================== -->
+    <div id="graphql-studio" class="tab-content">
+        <div class="api-testing-section">
+            <div class="section-header">
+                <h3>GraphQL Studio</h3>
+                <button class="btn-secondary" onclick="loadAdminGraphQLSchemaInfo()">Refresh Schema Info</button>
+            </div>
+
+            <div class="cp-grid-two">
+                <div class="cp-card">
+                    <h4>Query</h4>
+                    <div class="form-group">
+                        <label for="adminGraphQLOperation">Operation Name (optional)</label>
+                        <input type="text" id="adminGraphQLOperation" placeholder="e.g. ListUsers">
+                    </div>
+                    <div class="form-group">
+                        <label for="adminGraphQLQuery">GraphQL Query</label>
+                        <textarea id="adminGraphQLQuery" rows="10" spellcheck="false">query {
+  users {
+    id
+    name
+  }
+}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminGraphQLVariables">Variables (JSON)</label>
+                        <textarea id="adminGraphQLVariables" rows="6" spellcheck="false">{}</textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-primary" onclick="runAdminGraphQLQuery()">Run Query</button>
+                    </div>
+                </div>
+
+                <div class="cp-card">
+                    <h4>Response</h4>
+                    <pre id="adminGraphQLResult" class="cp-output">Waiting for query execution...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== CONTROL PLANE TAB ===================== -->
+    <div id="control-plane" class="tab-content">
+        <div class="api-testing-section">
+            <div class="section-header">
+                <h3>Control Plane Console</h3>
+                <button class="btn-secondary" onclick="refreshAdminControlPlaneData()">Refresh All</button>
+            </div>
+
+            <div class="cp-grid-two">
+                <div class="cp-card">
+                    <h4>Resource Commands (kubectl-style)</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="adminCpNamespace">Namespace</label>
+                            <input type="text" id="adminCpNamespace" value="default">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminCpKind">Kind</label>
+                            <input type="text" id="adminCpKind" value="apis" placeholder="apis, policies, workflows">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminCpName">Resource Name</label>
+                        <input type="text" id="adminCpName" placeholder="users-api">
+                    </div>
+                    <div class="form-group">
+                        <label for="adminCpBody">Resource Body (JSON)</label>
+                        <textarea id="adminCpBody" rows="8" spellcheck="false">{
+  "apiVersion": "axiom-nizam.io/v1",
+  "kind": "API",
+  "metadata": {
+    "name": "users-api"
+  },
+  "spec": {
+    "path": "/api/users",
+    "method": "GET"
+  }
+}</textarea>
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-primary" onclick="adminApplyResource()">Apply</button>
+                        <button class="btn-secondary" onclick="adminListResources()">List</button>
+                        <button class="btn-secondary" onclick="adminGetResource()">Get</button>
+                        <button class="btn-secondary" onclick="adminGetResourceStatus()">Status</button>
+                        <button class="btn-secondary" onclick="adminGetResourceEvents()">Events</button>
+                        <button class="btn-danger" onclick="adminDeleteResource()">Delete</button>
+                    </div>
+                    <div class="form-row" style="margin-top:12px;">
+                        <div class="form-group">
+                            <label for="adminWorkflowName">Workflow Name</label>
+                            <input type="text" id="adminWorkflowName" placeholder="daily-etl">
+                        </div>
+                        <div class="form-group" style="display:flex;align-items:flex-end;">
+                            <button class="btn-warning" onclick="adminRunWorkflow()">Run Workflow</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cp-card">
+                    <h4>DataSource & Job Commands</h4>
+                    <div class="form-group">
+                        <label for="adminDatasourceName">DataSource Name</label>
+                        <input type="text" id="adminDatasourceName" placeholder="reporting-postgres">
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-secondary" onclick="adminListDatasources()">List DataSources</button>
+                        <button class="btn-secondary" onclick="adminGetDatasource()">Get DataSource</button>
+                        <button class="btn-secondary" onclick="adminTestDatasource()">Test DataSource</button>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="adminJobId">Job ID or Name</label>
+                        <input type="text" id="adminJobId" placeholder="job-123 or 8-char-id">
+                    </div>
+                    <div class="cp-actions">
+                        <button class="btn-secondary" onclick="adminListJobs()">List Jobs</button>
+                        <button class="btn-secondary" onclick="adminGetJob()">Get Job</button>
+                        <button class="btn-warning" onclick="adminRunJob()">Run Job</button>
+                        <button class="btn-warning" onclick="adminGetJobLogs()">Job Logs</button>
+                        <button class="btn-danger" onclick="adminCancelJob()">Cancel Job</button>
+                    </div>
+                    <pre id="adminControlPlaneOutput" class="cp-output">Ready. Execute GraphQL or control-plane commands.</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== LOGS TAB ===================== -->
+    <div id="logs" class="tab-content">
+        <div class="logs-section">
+            <div class="logs-header">
+                <h3>System Logs</h3>
+                <button class="btn-secondary" onclick="clearLogs()">Clear Logs</button>
+            </div>
+            <div class="logs-viewer" id="logsViewer">
+                <div class="log-entry info">
+                    <span class="log-time">[2026-01-22 10:00:00]</span>
+                    <span class="log-level">INFO</span>
+                    <span class="log-message">Admin Dashboard loaded</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== SETTINGS TAB ===================== -->
+    <div id="settings" class="tab-content">
+        <div class="settings-section">
+            <h3>System Settings</h3>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <div class="setting-label">Backend URL</div>
+                    <div class="setting-value">{{ .backendURL }}</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">Authentication</div>
+                    <div class="setting-value">AxiomNizam IAM (OAuth2/OIDC)</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">API Timeout</div>
+                    <input type="number" class="setting-input" value="30" min="1" max="300"> seconds
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">Auto-refresh</div>
+                    <div class="toggle">
+                        <input type="checkbox" id="autoRefreshToggle" aria-label="Auto-refresh" checked>
+                        <span class="toggle-switch"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section" style="margin-top:16px;">
+            <h3>Kubernetes Certificate Management</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label for="adminCertName">Certificate Name (optional)</label>
+                    <input type="text" id="adminCertName" placeholder="all or apiserver" value="all">
+                </div>
+            </div>
+            <div class="cp-actions">
+                <button id="adminCertCheckBtn" class="btn-secondary">Check Expiry</button>
+                <button id="adminCertDryRunBtn" class="btn-warning">Renew (Dry Run)</button>
+                <button id="adminCertRenewBtn" class="btn-danger">Renew Now</button>
+            </div>
+            <pre id="adminCertificateOutput" class="cp-output">Certificate lifecycle status will appear here.</pre>
+        </div>
+    </div>
+</div>
+
+<!-- Create API Modal -->
+<div id="createAPIModal" class="modal">
+    <div class="modal-content" style="max-width:700px;">
+        <div class="modal-header">
+            <h2>🏗️ Create Custom API</h2>
+            <button class="modal-close" onclick="closeCreateAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="createAPIForm" onsubmit="submitCreateAPI(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="apiNameInput">API Name</label>
+                        <input type="text" id="apiNameInput" placeholder="e.g. List Products" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiCategoryInput">Category</label>
+                        <select id="apiCategoryInput">
+                            <option value="custom">Custom</option>
+                            <option value="e-commerce">E-Commerce</option>
+                            <option value="analytics">Analytics</option>
+                            <option value="external">External</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="iot">IoT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="apiMethodInput">HTTP Method</label>
+                        <select id="apiMethodInput">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiPathInput">Path</label>
+                        <input type="text" id="apiPathInput" list="restEndpointSuggestions" placeholder="/api/custom/..." required>
+                        <small style="display:block; margin-top:6px; color:var(--text-muted);">Suggestions show existing API endpoints. Duplicate method + path is blocked.</small>
+                        <small id="apiPathDuplicateWarning" style="display:none; margin-top:6px; color:#ef4444; font-weight:600;"></small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="apiSourceDatabaseInput">Source Database</label>
+                        <select id="apiSourceDatabaseInput" onchange="updateBuilderSourceServers()">
+                            <option value="">Select database...</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="mariadb">MariaDB</option>
+                            <option value="percona">Percona</option>
+                            <option value="oracle">Oracle</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiSourceServerInput">Source Server</label>
+                        <select id="apiSourceServerInput">
+                            <option value="">Default server for selected database</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="apiDescInput">Description</label>
+                    <textarea id="apiDescInput" rows="2" placeholder="What does this API do?"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="apiAuthInput"> Requires Authentication</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="apiRateLimitInput">Rate Limit (req/min)</label>
+                        <input type="number" id="apiRateLimitInput" value="60" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="apiCacheInput" onchange="toggleCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="cacheTTLGroup" style="display:none">
+                        <label for="apiCacheTTLInput">Cache TTL (seconds)</label>
+                        <input type="number" id="apiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="apiSQLTemplateInput">SQL Template (read-only, use ? placeholders)</label>
+                    <textarea id="apiSQLTemplateInput" rows="4" placeholder="SELECT id, name FROM users LIMIT ? OFFSET ?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="apiMockResponseInput">Mock Response (JSON)</label>
+                    <textarea id="apiMockResponseInput" rows="4" placeholder='{"data": [], "total": 0}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="apiQueryParamsInput">Query Parameters (one per line: name:type:required)</label>
+                    <textarea id="apiQueryParamsInput" rows="3" placeholder="page:number:false
+limit:number:false
+search:string:false"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Create API</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create GraphQL API Modal -->
+<div id="createGraphQLAPIModal" class="modal">
+    <div class="modal-content" style="max-width:760px;">
+        <div class="modal-header">
+            <h2>🧩 Create GraphQL API</h2>
+            <button class="modal-close" onclick="closeCreateGraphQLAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="createGraphQLAPIForm" onsubmit="submitCreateGraphQLAPI(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="gqlApiNameInput">API Name</label>
+                        <input type="text" id="gqlApiNameInput" placeholder="e.g. Get Customer Insights" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlApiCategoryInput">Category</label>
+                        <select id="gqlApiCategoryInput">
+                            <option value="custom">Custom</option>
+                            <option value="e-commerce">E-Commerce</option>
+                            <option value="analytics">Analytics</option>
+                            <option value="external">External</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="iot">IoT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="gqlOperationNameInput">Operation Name</label>
+                        <input type="text" id="gqlOperationNameInput" placeholder="GetCustomerInsights">
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlPathInput">GraphQL Endpoint</label>
+                        <input type="text" id="gqlPathInput" list="graphqlEndpointSuggestions" value="/api/graphql" placeholder="/api/graphql" required>
+                        <small style="display:block; margin-top:6px; color:var(--text-muted);">Suggestions show existing GraphQL endpoints. Duplicate GraphQL endpoint entries are blocked.</small>
+                        <small id="gqlPathDuplicateWarning" style="display:none; margin-top:6px; color:#ef4444; font-weight:600;"></small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="gqlSourceDatabaseInput">Source Database</label>
+                        <select id="gqlSourceDatabaseInput" onchange="updateGraphQLBuilderSourceServers()">
+                            <option value="">Select database...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlSourceServerInput">Source Server</label>
+                        <select id="gqlSourceServerInput">
+                            <option value="">Default server for selected database</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="gqlDescInput">Description</label>
+                    <textarea id="gqlDescInput" rows="2" placeholder="What does this GraphQL API do?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="gqlQueryInput">GraphQL Query</label>
+                    <textarea id="gqlQueryInput" rows="7" placeholder="query GetSomething {\n  users { id name }\n}" required></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="gqlAuthInput"> Requires Authentication</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="gqlRateLimitInput">Rate Limit (req/min)</label>
+                        <input type="number" id="gqlRateLimitInput" value="60" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="gqlCacheInput" onchange="toggleGraphQLCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="gqlCacheTTLGroup" style="display:none">
+                        <label for="gqlCacheTTLInput">Cache TTL (seconds)</label>
+                        <input type="number" id="gqlCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="gqlMockResponseInput">Mock Response (JSON)</label>
+                    <textarea id="gqlMockResponseInput" rows="4" placeholder='{"data": {"users": []}}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="gqlQueryParamsInput">Variables (one per line: name:type:required)</label>
+                    <textarea id="gqlQueryParamsInput" rows="3" placeholder="userId:string:true\nlimit:number:false"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Create GraphQL API</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit API Modal -->
+<div id="editAPIModal" class="modal">
+    <div class="modal-content" style="max-width:700px;">
+        <div class="modal-header">
+            <h2><svg class="ax-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit Custom API</h2>
+            <button class="modal-close" onclick="closeEditAPIModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editAPIForm" onsubmit="submitEditAPI(event)">
+                <input type="hidden" id="editApiIdInput">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiNameInput">API Name</label>
+                        <input type="text" id="editApiNameInput" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiCategoryInput">Category</label>
+                        <select id="editApiCategoryInput">
+                            <option value="custom">Custom</option>
+                            <option value="e-commerce">E-Commerce</option>
+                            <option value="analytics">Analytics</option>
+                            <option value="external">External</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="iot">IoT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiMethodInput">HTTP Method</label>
+                        <select id="editApiMethodInput">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiPathInput">Path</label>
+                        <input type="text" id="editApiPathInput" list="restEndpointSuggestions" required>
+                        <small id="editApiPathDuplicateWarning" style="display:none; margin-top:6px; color:#ef4444; font-weight:600;"></small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiStatusInput">Status</label>
+                        <select id="editApiStatusInput">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiRateLimitInput">Rate Limit (req/min)</label>
+                        <input type="number" id="editApiRateLimitInput" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editApiSourceDatabaseInput">Source Database</label>
+                        <select id="editApiSourceDatabaseInput" onchange="updateEditBuilderSourceServers()">
+                            <option value="">Select database...</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="mariadb">MariaDB</option>
+                            <option value="percona">Percona</option>
+                            <option value="oracle">Oracle</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editApiSourceServerInput">Source Server</label>
+                        <select id="editApiSourceServerInput">
+                            <option value="">Default server for selected database</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="editApiDescInput">Description</label>
+                    <textarea id="editApiDescInput" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editApiSQLTemplateInput">SQL Template (read-only, use ? placeholders)</label>
+                    <textarea id="editApiSQLTemplateInput" rows="4" placeholder="SELECT id, name FROM users LIMIT ? OFFSET ?"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="editApiAuthInput"> Requires Authentication</label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label><input type="checkbox" id="editApiCacheInput" onchange="toggleEditCacheTTL()"> Enable Response Cache</label>
+                    </div>
+                    <div class="form-group" id="editCacheTTLGroup" style="display:none">
+                        <label for="editApiCacheTTLInput">Cache TTL (seconds)</label>
+                        <input type="number" id="editApiCacheTTLInput" value="300" min="1" max="86400" placeholder="300">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:10px;">Save Changes</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<datalist id="restEndpointSuggestions"></datalist>
+<datalist id="graphqlEndpointSuggestions"></datalist>
+
+<div id="backendURL" style="display:none;">{{ .backendURL }}</div>
+<script src="/static/admin.js?v=20260416-3"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Fetch IP
+        fetch('https://api.ipify.org?format=json').then(r => r.json()).then(data => {
+            document.querySelectorAll('[id$="CurrentIP"]').forEach(el => el.textContent = data.ip);
+        }).catch(e => console.log('IP fetch failed', e));
+
+        // Setup live token countdown
+        let tokenSeconds = 0;
+        const updateTokenTime = () => {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                     const payload = JSON.parse(atob(token.split('.')[1]));
+                     if (payload.exp) {
+                         tokenSeconds = payload.exp - Math.floor(Date.now() / 1000);
+                     }
+                } catch(e) {}
+            }
+        };
+        updateTokenTime();
+
+        setInterval(() => {
+            if (tokenSeconds > 0) {
+                tokenSeconds--;
+                const wH = Math.floor(tokenSeconds / 3600);
+                const wM = Math.floor((tokenSeconds % 3600) / 60);
+                const wS = tokenSeconds % 60;
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => {
+                    el.textContent = `${wH > 0 ? wH + 'h ' : ''}${wM}m ${wS}s`;
+                });
+            } else {
+                document.querySelectorAll('[id$="TokenExpiry"]').forEach(el => el.textContent = "Expired");
+            }
+        }, 1000);
+
+        // Listen for all fetch responses to catch rate limit headers
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch.apply(this, args);
+            try {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const limit = response.headers.get('X-RateLimit-Limit');
+                if (remaining && limit) {
+                    document.querySelectorAll('.stat-box').forEach(box => {
+                        const label = box.querySelector('.stat-label');
+                        if (label && label.textContent.includes('Rate Limit')) {
+                            const val = box.querySelector('.stat-value');
+                            if (val) {
+                                val.textContent = `${remaining} / ${limit}`;
+                                if (parseInt(remaining) < 50) {
+                                    val.style.color = '#ef4444'; // Red warning if low
+                                } else {
+                                    val.style.color = 'var(--primary-color)';
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {}
+            return response;
+        };
+    });
+</script>
+{{ end }}

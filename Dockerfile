@@ -69,6 +69,12 @@ RUN groupadd --gid 1000 axiomnizam \
 COPY --from=builder /app/axiomnizam /app/axiomnizam
 COPY --from=builder /app/axiomnizamctl /usr/local/bin/axiomnizamctl
 
+# Copy frontend templates and static assets
+COPY --from=builder /app/internal/frontend/templates /app/internal/frontend/templates
+
+# Copy frontend templates (HTML, CSS, JS, fonts)
+COPY --from=builder /app/internal/frontend/templates /app/internal/frontend/templates
+
 # Set ownership and permissions
 RUN chown -R axiomnizam:axiomnizam /app \
     && chmod +x /app/axiomnizam /usr/local/bin/axiomnizamctl

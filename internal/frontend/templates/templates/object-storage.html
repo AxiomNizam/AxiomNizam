@@ -1,0 +1,1306 @@
+{{ define "object-storage" }}
+<style>
+    .os-container { animation: fadeIn 0.3s ease; }
+    .os-header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+    .os-header h1 { font-size:1.6rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .os-header .subtitle { color:var(--text-muted); font-size:.9rem; margin-top:4px; }
+    .os-header-icon { width:28px; height:28px; fill:var(--primary-light); }
+    .os-stat-row { display:flex; gap:12px; flex-wrap:wrap; }
+    .os-stat-box { background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:12px 18px; min-width:120px; text-align:center; }
+    .os-stat-label { font-size:.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+    .os-stat-value { font-size:1.4rem; font-weight:700; color:var(--primary-light); margin-top:2px; }
+
+    .os-tabs { display:flex; gap:0; border-bottom:1px solid var(--border-color); margin-bottom:24px; overflow-x:auto; }
+    .os-tab { padding:12px 24px; border:none; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:.9rem; font-weight:500; border-bottom:3px solid transparent; transition:var(--transition); white-space:nowrap; display:flex; align-items:center; gap:8px; }
+    .os-tab:hover { color:var(--primary-light); }
+    .os-tab.active { color:var(--primary-light); border-bottom-color:var(--primary-light); }
+    .os-tab svg { width:16px; height:16px; }
+    .os-panel { display:none; animation:fadeIn .3s ease; }
+    .os-panel.active { display:block; }
+
+    .os-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .os-search { padding:8px 14px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; min-width:220px; }
+    .os-search:focus { outline:none; border-color:var(--primary-light); }
+
+    .os-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+    .os-table thead th { background:var(--darker-bg); color:var(--text-muted); padding:10px 14px; text-align:left; font-weight:600; text-transform:uppercase; font-size:.75rem; letter-spacing:.5px; border-bottom:2px solid var(--border-color); white-space:nowrap; }
+    .os-table tbody td { padding:10px 14px; border-bottom:1px solid var(--border-color); color:var(--text-primary); vertical-align:middle; }
+    .os-table tbody tr:hover { background:rgba(var(--primary-rgb,96,165,250),.06); }
+
+    .os-badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:.78rem; font-weight:600; }
+    .os-badge-ready { background:rgba(34,197,94,.15); color:#22c55e; }
+    .os-badge-pending { background:rgba(250,204,21,.15); color:#facc15; }
+    .os-badge-error { background:rgba(239,68,68,.15); color:#ef4444; }
+    .os-badge-enabled { background:rgba(96,165,250,.15); color:#60a5fa; }
+    .os-badge-disabled { background:rgba(148,163,184,.15); color:#94a3b8; }
+
+    .os-btn { padding:7px 16px; border:none; border-radius:6px; cursor:pointer; font-size:.85rem; font-weight:500; transition:var(--transition); }
+    .os-btn-primary { background:var(--primary-color); color:#fff; }
+    .os-btn-primary:hover { opacity:.85; }
+    .os-btn-secondary { background:var(--darker-bg); color:var(--text-primary); border:1px solid var(--border-color); }
+    .os-btn-secondary:hover { border-color:var(--primary-light); }
+    .os-btn-danger { background:rgba(239,68,68,.15); color:#ef4444; border:1px solid rgba(239,68,68,.3); }
+    .os-btn-danger:hover { background:rgba(239,68,68,.25); }
+    .os-btn-sm { padding:4px 10px; font-size:.8rem; }
+
+    .os-card { background:var(--card-bg); border:1px solid var(--border-color); border-radius:10px; padding:20px; margin-bottom:16px; }
+    .os-card h3 { font-size:1.1rem; font-weight:600; margin-bottom:12px; }
+    .os-card h4 { font-size:1rem; font-weight:600; margin-bottom:10px; }
+
+    .os-grid-three { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:16px; }
+    .os-grid-two { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-bottom:16px; }
+
+    .os-upload-zone { border:2px dashed var(--border-color); border-radius:10px; padding:40px 20px; text-align:center; cursor:pointer; transition:var(--transition); }
+    .os-upload-zone:hover, .os-upload-zone.dragover { border-color:var(--primary-light); background:rgba(var(--primary-rgb,96,165,250),.05); }
+    .os-upload-zone svg { width:48px; height:48px; fill:var(--text-muted); margin-bottom:12px; }
+
+    .os-breadcrumb { display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--text-muted); margin-bottom:12px; }
+    .os-breadcrumb a { color:var(--primary-light); text-decoration:none; }
+    .os-breadcrumb a:hover { text-decoration:underline; }
+
+    .os-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center; }
+    .os-modal.show { display:flex; }
+    .os-modal-content { background:var(--card-bg); border-radius:12px; max-width:560px; width:90%; max-height:85vh; overflow-y:auto; }
+    .os-modal-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border-color); }
+    .os-modal-header h2 { font-size:1.1rem; font-weight:600; }
+    .os-modal-close { background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted); }
+    .os-modal-body { padding:20px; }
+    .os-form-group { margin-bottom:14px; }
+    .os-form-group label { display:block; font-size:.85rem; font-weight:500; margin-bottom:4px; color:var(--text-secondary); }
+    .os-form-group input, .os-form-group select, .os-form-group textarea { width:100%; padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; box-sizing:border-box; }
+    .os-form-group input:focus, .os-form-group select:focus { outline:none; border-color:var(--primary-light); }
+    .os-form-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+
+    .os-toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:8px; font-size:.9rem; z-index:2000; animation:fadeIn .3s ease; }
+    .os-toast-success { background:#166534; color:#fff; }
+    .os-toast-error { background:#991b1b; color:#fff; }
+
+    .os-empty { text-align:center; padding:40px 20px; color:var(--text-muted); }
+    .os-empty svg { width:64px; height:64px; fill:var(--text-muted); opacity:.5; margin-bottom:12px; }
+
+    .os-size { font-family:var(--font-mono, monospace); font-size:.85rem; }
+    .os-mono { font-family:var(--font-mono, monospace); font-size:.85rem; word-break:break-all; }
+
+    .os-progress { width:100%; height:6px; background:var(--darker-bg); border-radius:3px; overflow:hidden; margin-top:8px; }
+    .os-progress-bar { height:100%; background:var(--primary-light); border-radius:3px; transition:width .3s ease; }
+
+    .os-event-row:hover td { background:rgba(var(--primary-rgb,96,165,250),.04); }
+    .os-metric-highlight { font-size:1.4rem; font-weight:700; }
+    .os-tag-table td { padding:6px 10px; }
+    .os-dash-bucket-select {
+        background:none;
+        border:none;
+        color:var(--text-primary);
+        font:inherit;
+        font-weight:600;
+        cursor:pointer;
+        padding:0;
+        text-align:left;
+    }
+    .os-dash-bucket-select:hover {
+        color:var(--primary-light);
+        text-decoration:underline;
+    }
+    .os-dash-bucket-select.active {
+        color:var(--primary-light);
+    }
+    .os-bucket-hover-anchor {
+        display:inline-block;
+        cursor:default;
+        outline:none;
+    }
+    .os-bucket-hover-anchor:focus {
+        color:var(--primary-light);
+        text-decoration:underline;
+    }
+    .os-bucket-hover-metrics {
+        position:fixed;
+        z-index:2100;
+        min-width:300px;
+        max-width:min(430px, calc(100vw - 24px));
+        display:none;
+        pointer-events:none;
+        transform:translateX(-50%);
+        padding:12px 14px;
+        border-radius:10px;
+        border:1px solid rgba(148,163,184,.35);
+        box-shadow:0 14px 36px rgba(0,0,0,.45);
+        background:linear-gradient(180deg, rgba(21,28,39,.98), rgba(13,19,30,.98));
+        color:var(--text-primary);
+        backdrop-filter:blur(4px);
+    }
+    .os-bucket-hover-metrics.show {
+        display:block;
+        animation:fadeIn .15s ease;
+    }
+    .os-bucket-hover-title {
+        font-size:.95rem;
+        font-weight:700;
+        margin-bottom:2px;
+    }
+    .os-bucket-hover-subtitle {
+        font-size:.78rem;
+        color:var(--text-muted);
+        margin-bottom:8px;
+    }
+    .os-bucket-hover-status {
+        font-size:.78rem;
+        color:#93c5fd;
+        margin-bottom:8px;
+    }
+    .os-bucket-hover-grid {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
+        gap:6px;
+        margin-bottom:10px;
+    }
+    .os-bucket-hover-cell {
+        background:rgba(148,163,184,.12);
+        border:1px solid rgba(148,163,184,.2);
+        border-radius:7px;
+        padding:6px 7px;
+    }
+    .os-bucket-hover-cell span {
+        display:block;
+        font-size:.68rem;
+        color:var(--text-muted);
+        text-transform:uppercase;
+        letter-spacing:.4px;
+        margin-bottom:3px;
+    }
+    .os-bucket-hover-cell strong {
+        font-size:.82rem;
+        font-weight:600;
+    }
+    .os-bucket-hover-rate-row {
+        display:flex;
+        justify-content:space-between;
+        gap:10px;
+        font-size:.78rem;
+        margin-bottom:4px;
+    }
+    .os-bucket-hover-rate-row span {
+        color:var(--text-muted);
+        white-space:nowrap;
+    }
+    .os-bucket-hover-rate-row strong {
+        text-align:right;
+        overflow-wrap:anywhere;
+        font-weight:600;
+    }
+    .os-bucket-hover-footer {
+        margin-top:6px;
+        padding-top:6px;
+        border-top:1px solid rgba(148,163,184,.22);
+        font-size:.74rem;
+        color:var(--text-muted);
+    }
+    @media (max-width:768px) {
+        .os-grid-three { grid-template-columns:1fr; }
+        .os-grid-two { grid-template-columns:1fr; }
+        .os-stat-row { flex-direction:column; }
+        .os-toolbar { flex-direction:column; align-items:stretch; }
+        .os-bucket-hover-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    }
+</style>
+
+<div class="os-container">
+    <!-- Header -->
+    <div class="os-header">
+        <div>
+            <h1>
+                <svg class="os-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+                Object Storage
+            </h1>
+            <p class="subtitle">S3-Compatible Object Storage &middot; Buckets &middot; Objects &middot; Metrics &middot; Events</p>
+        </div>
+        <div class="os-stat-row" id="osHeaderStats">
+            <div class="os-stat-box">
+                <div class="os-stat-label">Buckets</div>
+                <div class="os-stat-value" id="osStatBuckets">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Objects</div>
+                <div class="os-stat-value" id="osStatObjects">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Total Size</div>
+                <div class="os-stat-value" id="osStatSize">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Backend</div>
+                <div class="os-stat-value" id="osStatHealth" style="font-size:1rem;">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Requests</div>
+                <div class="os-stat-value" id="osStatRequests">&ndash;</div>
+            </div>
+            <div class="os-stat-box">
+                <div class="os-stat-label">Errors</div>
+                <div class="os-stat-value" id="osStatErrors" style="color:#ef4444;">&ndash;</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="os-tabs">
+        <button class="os-tab active" onclick="osSwitch('os-dashboard')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-buckets')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            Buckets
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-browser')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            Object Browser
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-upload')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+            Upload
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-policies')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Access Policies
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-access-keys')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5 5 0 1 1 7.07 7.07L12 22l-2-2 1.32-1.32a5 5 0 0 1 0-7.07z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+            Access Keys
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-metrics')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Metrics
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-events')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Audit Events
+        </button>
+        <button class="os-tab" onclick="osSwitch('os-settings')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Bucket Settings
+        </button>
+    </div>
+
+    <!-- ===== DASHBOARD PANEL ===== -->
+    <div id="os-dashboard" class="os-panel active">
+        <div class="os-grid-three">
+            <div class="os-card" style="border-top:4px solid var(--primary-color); text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:var(--primary-light);" id="osDashBuckets">0</div>
+                <div style="color:var(--text-muted);">Buckets</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #22c55e; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#22c55e;" id="osDashObjects">0</div>
+                <div style="color:var(--text-muted);">Total Objects</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #f59e0b; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#f59e0b;" id="osDashSize">0 B</div>
+                <div style="color:var(--text-muted);">Storage Used</div>
+            </div>
+        </div>
+
+        <div class="os-grid-two">
+            <div class="os-card">
+                <h4>Quick Actions</h4>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="os-btn os-btn-primary" onclick="osSwitch('os-buckets'); osShowCreateBucket();">+ Create Bucket</button>
+                    <button class="os-btn os-btn-primary" onclick="osSwitch('os-upload');">Upload Object</button>
+                    <button class="os-btn os-btn-secondary" onclick="osSwitch('os-metrics');">View Metrics</button>
+                    <button class="os-btn os-btn-secondary" onclick="osSwitch('os-events');">View Events</button>
+                    <button class="os-btn os-btn-secondary" onclick="osLoadDashboard();">Refresh</button>
+                </div>
+            </div>
+
+            <div class="os-card">
+                <h4>Activity Summary</h4>
+                <div class="os-grid-three" style="margin-bottom:0;">
+                    <div style="text-align:center;">
+                        <div style="font-size:1.3rem; font-weight:700; color:var(--primary-light);" id="osDashRequests">0</div>
+                        <div style="color:var(--text-muted); font-size:.8rem;">Requests</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:1.3rem; font-weight:700; color:#ef4444;" id="osDashErrors">0</div>
+                        <div style="color:var(--text-muted); font-size:.8rem;">Errors</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:1.3rem; font-weight:700; color:#a78bfa;" id="osDashLatency">0 ms</div>
+                        <div style="color:var(--text-muted); font-size:.8rem;">Avg Latency</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="os-card">
+            <h4>Backend Health</h4>
+            <pre id="osDashHealth" style="background:var(--darker-bg); padding:14px; border-radius:8px; font-size:.85rem; overflow-x:auto;">Checking...</pre>
+        </div>
+
+        <div class="os-card">
+            <h4>Recent Buckets</h4>
+            <p style="font-size:.82rem; color:var(--text-muted); margin-top:0; margin-bottom:10px;">Hover a bucket name to see live metrics and latest rate-limit remaining values.</p>
+            <div id="osDashRecentBuckets" style="overflow-x:auto;">
+                <p style="color:var(--text-muted);">Loading...</p>
+            </div>
+        </div>
+
+        <div class="os-card">
+            <h4>Bucket Policy (S3 JSON) Template</h4>
+            <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">
+                Template bucket: <span id="osDashPolicyBucketName" class="os-mono">your-bucket-name</span>
+            </p>
+            <textarea id="osDashboardPolicyTemplate" rows="11" readonly style="width:100%; background:var(--darker-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:8px; padding:14px; font-family:var(--font-mono, monospace); font-size:.85rem;"></textarea>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCopyDashboardPolicyTemplate()">Copy Template</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== BUCKETS PANEL ===== -->
+    <div id="os-buckets" class="os-panel">
+        <div class="os-toolbar">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" class="os-search" id="osBucketSearch" placeholder="Search buckets..." oninput="osFilterBuckets()">
+                <div class="os-form-group" style="margin:0; min-width:160px;">
+                    <select id="osTenantFilter" onchange="osLoadBuckets()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem;">
+                        <option value="">All Tenants</option>
+                        <option value="default">default</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="os-btn os-btn-primary" onclick="osShowCreateBucket()">+ Create Bucket</button>
+                <button class="os-btn os-btn-secondary" onclick="osLoadBuckets()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table" id="osBucketsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Tenant</th>
+                        <th>Phase</th>
+                        <th>Versioning</th>
+                        <th>Objects</th>
+                        <th>Size</th>
+                        <th>Tags</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osBucketsBody">
+                    <tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== OBJECT BROWSER PANEL ===== -->
+    <div id="os-browser" class="os-panel">
+        <div class="os-toolbar">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <select id="osBrowserBucket" onchange="osBrowseBucket()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; min-width:200px;">
+                    <option value="">Select a bucket...</option>
+                </select>
+                <input type="text" class="os-search" id="osBrowserPrefix" placeholder="Filter by prefix..." oninput="osBrowseBucket()">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="os-btn os-btn-danger os-btn-sm" id="osBatchDeleteBtn" onclick="osBatchDelete()" style="display:none;">Delete Selected</button>
+                <button class="os-btn os-btn-secondary os-btn-sm" id="osCopyObjectBtn" onclick="osShowCopyModal()" style="display:none;">Copy Selected</button>
+                <button class="os-btn os-btn-secondary" onclick="osBrowseBucket()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-breadcrumb" id="osBrowserBreadcrumb"></div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th style="width:30px;"><input type="checkbox" id="osSelectAll" onchange="osToggleSelectAll(this.checked)"></th>
+                        <th>Key</th>
+                        <th>Size</th>
+                        <th>Content Type</th>
+                        <th>Last Modified</th>
+                        <th>ETag</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osBrowserBody">
+                    <tr><td colspan="7" class="os-empty">Select a bucket to browse objects</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== UPLOAD PANEL ===== -->
+    <div id="os-upload" class="os-panel">
+        <div class="os-grid-two">
+            <div class="os-card">
+                <h4>Upload Object</h4>
+                <div class="os-form-group">
+                    <label for="osUploadBucket">Bucket</label>
+                    <select id="osUploadBucket" style="width:100%;">
+                        <option value="">Select bucket...</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osUploadTenant">Tenant ID</label>
+                    <input type="text" id="osUploadTenant" value="default" placeholder="default">
+                </div>
+                <div class="os-form-group">
+                    <label for="osUploadKey">Object Key (path)</label>
+                    <input type="text" id="osUploadKey" placeholder="e.g. documents/report.pdf">
+                </div>
+                <div id="osUploadZone" class="os-upload-zone"
+                     ondrop="osHandleDrop(event)" ondragover="osHandleDragOver(event)" ondragleave="osHandleDragLeave(event)"
+                     onclick="document.getElementById('osUploadFile').click()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polyline points="16 16 12 12 8 16"/>
+                        <line x1="12" y1="12" x2="12" y2="21"/>
+                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                    </svg>
+                    <p>Drag &amp; drop a file here or click to browse</p>
+                    <p id="osUploadFileName" style="color:var(--primary-light); font-weight:600; margin-top:8px;"></p>
+                    <input type="file" id="osUploadFile" style="display:none;" onchange="osFileSelected(event)">
+                </div>
+                <div class="os-progress" id="osUploadProgress" style="display:none;">
+                    <div class="os-progress-bar" id="osUploadProgressBar" style="width:0%;"></div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osUploadObject()">Upload</button>
+                </div>
+            </div>
+
+            <div class="os-card">
+                <h4>Generate Pre-Signed URL</h4>
+                <div class="os-form-group">
+                    <label for="osPresignBucket">Bucket</label>
+                    <select id="osPresignBucket" style="width:100%;">
+                        <option value="">Select bucket...</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignTenant">Tenant ID</label>
+                    <input type="text" id="osPresignTenant" value="default" placeholder="default">
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignKey">Object Key</label>
+                    <input type="text" id="osPresignKey" placeholder="e.g. documents/report.pdf">
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignMethod">Method</label>
+                    <select id="osPresignMethod">
+                        <option value="GET">GET (Download)</option>
+                        <option value="PUT">PUT (Upload)</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osPresignExpiry">Expires In (seconds)</label>
+                    <input type="number" id="osPresignExpiry" value="900" min="60" max="604800">
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osGeneratePresign()">Generate URL</button>
+                </div>
+                <div id="osPresignResult" style="display:none; margin-top:14px;">
+                    <label style="font-size:.85rem; color:var(--text-muted);">Pre-Signed URL:</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="text" id="osPresignURL" readonly style="flex:1; padding:8px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-family:var(--font-mono, monospace); font-size:.8rem;">
+                        <button class="os-btn os-btn-secondary os-btn-sm" onclick="osCopyPresign()">Copy</button>
+                    </div>
+                    <p style="font-size:.8rem; color:var(--text-muted); margin-top:4px;">Expires: <span id="osPresignExpires"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== POLICIES PANEL ===== -->
+    <div id="os-policies" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">Access Policies</h3>
+            <div style="display:flex; gap:10px;">
+                <button class="os-btn os-btn-primary" onclick="osShowCreatePolicy()">+ Create Policy</button>
+                <button class="os-btn os-btn-secondary" onclick="osLoadPolicies()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th>Tenant</th>
+                        <th>User</th>
+                        <th>Bucket</th>
+                        <th>Role</th>
+                        <th>Prefix</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osPoliciesBody">
+                    <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== ACCESS KEYS PANEL ===== -->
+    <div id="os-access-keys" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">Access Keys</h3>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <select id="osAccessKeysFilter" onchange="osApplyAccessKeyFilter()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.85rem;">
+                    <option value="active" selected>Active Keys</option>
+                    <option value="old">Old Keys</option>
+                    <option value="all">All Keys</option>
+                </select>
+                <span id="osAccessKeysCount" style="font-size:.85rem; color:var(--text-muted);">0 key(s)</span>
+                <button class="os-btn os-btn-secondary" onclick="osLoadAccessKeys()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-grid-two">
+            <div class="os-card">
+                <h4>Create Access Key</h4>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyName">Name *</label>
+                    <input type="text" id="osNewAccessKeyName" placeholder="e.g. ci-reader-key">
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyRole">Role *</label>
+                    <select id="osNewAccessKeyRole">
+                        <option value="storage-reader" selected>storage-reader</option>
+                        <option value="storage-browser">storage-browser</option>
+                        <option value="storage-writer">storage-writer</option>
+                        <option value="storage-uploader">storage-uploader</option>
+                        <option value="storage-admin">storage-admin</option>
+                    </select>
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyDescription">Description</label>
+                    <input type="text" id="osNewAccessKeyDescription" placeholder="Optional purpose note">
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyBucketScope">Bucket Scope (comma-separated, optional)</label>
+                    <input type="text" id="osNewAccessKeyBucketScope" list="osBucketNameSuggestions" placeholder="m, axiom-tenant-m" autocomplete="off">
+                    <div id="osAccessKeyScopeSuggestions" style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+                </div>
+                <div class="os-form-group">
+                    <label for="osNewAccessKeyExpiresAt">Expires At (optional)</label>
+                    <input type="datetime-local" id="osNewAccessKeyExpiresAt">
+                </div>
+                <p style="font-size:.8rem; color:var(--text-muted); margin:0;">Leave scope empty to allow all buckets available to this key.</p>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-secondary" onclick="osClearAccessKeyForm()">Clear</button>
+                    <button class="os-btn os-btn-primary" onclick="osCreateAccessKeyFromTab()">Create Access Key</button>
+                </div>
+            </div>
+
+            <div class="os-card">
+                <h4>Created Key</h4>
+                <div id="osAccessKeyCreateResult" style="display:none;">
+                    <p style="font-size:.85rem; color:#f59e0b; margin-top:0;">Copy these credentials now. The secret is shown only once.</p>
+                    <div class="os-form-group">
+                        <label for="osCreatedAccessKeyIdField">Access Key ID</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="text" id="osCreatedAccessKeyIdField" readonly style="flex:1;" value="">
+                            <button class="os-btn os-btn-secondary os-btn-sm" onclick="osCopyCreatedAccessKeyId()">Copy</button>
+                        </div>
+                        <div id="osCreatedAccessKeyId" style="display:none;"></div>
+                    </div>
+                    <div class="os-form-group">
+                        <label for="osCreatedAccessKeySecret">Secret Access Key</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="text" id="osCreatedAccessKeySecret" readonly style="flex:1; font-family:var(--font-mono, monospace);">
+                            <button class="os-btn os-btn-secondary os-btn-sm" onclick="osCopyCreatedAccessKeySecret()">Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="osAccessKeyCreateResultEmpty" style="color:var(--text-muted); font-size:.9rem;">No key created in this session yet.</div>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Access Key ID</th>
+                        <th>Role</th>
+                        <th>Scope</th>
+                        <th>Expires</th>
+                        <th>Last Used</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="osAccessKeysBody">
+                    <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">Open this tab or click Refresh to load access keys</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== METRICS PANEL ===== -->
+    <div id="os-metrics" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">System &amp; Bucket Metrics</h3>
+            <button class="os-btn os-btn-secondary" onclick="osLoadMetrics()">Refresh</button>
+        </div>
+
+        <div class="os-grid-three" id="osMetricsSystemCards">
+            <div class="os-card" style="border-top:4px solid var(--primary-color); text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:var(--primary-light);" id="osMetricRequests">0</div>
+                <div style="color:var(--text-muted);">Total Requests</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #22c55e; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#22c55e;" id="osMetricBytesIn">0 B</div>
+                <div style="color:var(--text-muted);">Bytes Ingested</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #f59e0b; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#f59e0b;" id="osMetricBytesOut">0 B</div>
+                <div style="color:var(--text-muted);">Bytes Served</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #ef4444; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#ef4444;" id="osMetricErrors">0</div>
+                <div style="color:var(--text-muted);">Total Errors</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #a78bfa; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#a78bfa;" id="osMetricAvgLatency">0 ms</div>
+                <div style="color:var(--text-muted);">Avg Latency</div>
+            </div>
+            <div class="os-card" style="border-top:4px solid #06b6d4; text-align:center;">
+                <div style="font-size:2rem; font-weight:700; color:#06b6d4;" id="osMetricUptime">-</div>
+                <div style="color:var(--text-muted);">Uptime</div>
+            </div>
+        </div>
+
+        <div class="os-card">
+            <h4>Per-Bucket Metrics</h4>
+            <div style="overflow-x:auto;">
+                <table class="os-table" id="osMetricsBucketTable">
+                    <thead>
+                        <tr>
+                            <th>Bucket</th>
+                            <th>Requests</th>
+                            <th>GETs</th>
+                            <th>PUTs</th>
+                            <th>DELETEs</th>
+                            <th>Bytes In</th>
+                            <th>Bytes Out</th>
+                            <th>Errors</th>
+                            <th>Avg Latency</th>
+                            <th>Last Access</th>
+                        </tr>
+                    </thead>
+                    <tbody id="osMetricsBucketBody">
+                        <tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SafeGate Scan Results -->
+        <div class="os-card" style="border-top:4px solid #8b5cf6;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h4 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    SafeGate Scan Results
+                </h4>
+                <span id="osScanHealthBadge" class="os-badge" style="background:#22c55e22; color:#22c55e;">Loading...</span>
+            </div>
+
+            <div class="os-grid-three" style="margin-bottom:20px;" id="osScanMetricCards">
+                <div style="text-align:center; padding:16px; background:var(--darker-bg); border-radius:8px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:var(--primary-light);" id="osScanTotal">0</div>
+                    <div style="color:var(--text-muted); font-size:.85rem;">Total Scans</div>
+                </div>
+                <div style="text-align:center; padding:16px; background:var(--darker-bg); border-radius:8px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#22c55e;" id="osScanSafe">0</div>
+                    <div style="color:var(--text-muted); font-size:.85rem;">Safe Files</div>
+                </div>
+                <div style="text-align:center; padding:16px; background:var(--darker-bg); border-radius:8px;">
+                    <div style="font-size:1.8rem; font-weight:700; color:#ef4444;" id="osScanUnsafe">0</div>
+                    <div style="color:var(--text-muted); font-size:.85rem;">Unsafe / Rejected</div>
+                </div>
+            </div>
+
+            <!-- Findings by Severity -->
+            <div style="margin-bottom:20px;">
+                <div style="font-size:.85rem; color:var(--text-muted); margin-bottom:8px;">Findings by Severity</div>
+                <div id="osScanSeverityBar" style="display:flex; height:28px; border-radius:6px; overflow:hidden; background:var(--darker-bg);">
+                    <div id="osSevCritical" style="background:#ef4444; transition:width .4s;" title="Critical"></div>
+                    <div id="osSevHigh" style="background:#f59e0b; transition:width .4s;" title="High"></div>
+                    <div id="osSevMedium" style="background:#3b82f6; transition:width .4s;" title="Medium"></div>
+                    <div id="osSevLow" style="background:#22c55e; transition:width .4s;" title="Low"></div>
+                    <div id="osSevInfo" style="background:#94a3b8; transition:width .4s;" title="Info"></div>
+                </div>
+                <div style="display:flex; gap:16px; margin-top:6px; flex-wrap:wrap; font-size:.8rem;">
+                    <span style="color:#ef4444;">&#9679; Critical: <strong id="osSevCriticalN">0</strong></span>
+                    <span style="color:#f59e0b;">&#9679; High: <strong id="osSevHighN">0</strong></span>
+                    <span style="color:#3b82f6;">&#9679; Medium: <strong id="osSevMediumN">0</strong></span>
+                    <span style="color:#22c55e;">&#9679; Low: <strong id="osSevLowN">0</strong></span>
+                    <span style="color:#94a3b8;">&#9679; Info: <strong id="osSevInfoN">0</strong></span>
+                </div>
+            </div>
+
+            <!-- Per-Scanner Performance -->
+            <div style="overflow-x:auto;">
+                <div style="font-size:.85rem; color:var(--text-muted); margin-bottom:8px;">Per-Scanner Performance</div>
+                <table class="os-table" id="osScannerPerfTable">
+                    <thead>
+                        <tr>
+                            <th>Scanner</th>
+                            <th>Runs</th>
+                            <th>Findings</th>
+                            <th>Errors</th>
+                            <th>Timeouts</th>
+                            <th>Avg Latency</th>
+                            <th>Total Time</th>
+                            <th>Throughput</th>
+                        </tr>
+                    </thead>
+                    <tbody id="osScannerPerfBody">
+                        <tr><td colspan="8" style="text-align:center; padding:16px; color:var(--text-muted);">Loading scan metrics...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== EVENTS PANEL ===== -->
+    <div id="os-events" class="os-panel">
+        <div class="os-toolbar">
+            <h3 style="margin:0;">Audit Events</h3>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <select id="osEventsTypeFilter" onchange="osLoadEvents()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem;">
+                    <option value="">All Event Types</option>
+                    <option value="bucket.created">Bucket Created</option>
+                    <option value="bucket.deleted">Bucket Deleted</option>
+                    <option value="object.uploaded">Object Uploaded</option>
+                    <option value="object.downloaded">Object Downloaded</option>
+                    <option value="object.deleted">Object Deleted</option>
+                    <option value="object.copied">Object Copied</option>
+                    <option value="object.multi-deleted">Multi Delete</option>
+                    <option value="policy.created">Policy Created</option>
+                    <option value="policy.deleted">Policy Deleted</option>
+                    <option value="presign.generated">Presign Generated</option>
+                    <option value="object.shared">Object Shared</option>
+                </select>
+                <select id="osEventsLimitFilter" onchange="osLoadEvents()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem;">
+                    <option value="50">Last 50</option>
+                    <option value="100" selected>Last 100</option>
+                    <option value="500">Last 500</option>
+                    <option value="1000">Last 1000</option>
+                </select>
+                <button class="os-btn os-btn-secondary" onclick="osLoadEvents()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="os-card" style="padding:0; overflow:hidden;">
+            <table class="os-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Tenant</th>
+                        <th>Bucket</th>
+                        <th>Key</th>
+                        <th>Size</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="osEventsBody">
+                    <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== BUCKET SETTINGS PANEL ===== -->
+    <div id="os-settings" class="os-panel">
+        <div class="os-toolbar">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <h3 style="margin:0;">Bucket Settings</h3>
+                <select id="osSettingsBucket" onchange="osLoadBucketSettings()" style="padding:8px 12px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-size:.9rem; min-width:200px;">
+                    <option value="">Select a bucket...</option>
+                </select>
+            </div>
+            <button class="os-btn os-btn-secondary" onclick="osLoadBucketSettings()">&#8635; Refresh</button>
+        </div>
+
+        <div id="osSettingsContent" style="display:none;">
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+                    Application Access Endpoints
+                </h4>
+                <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">
+                    Bucket: <span id="osAppEndpointBucket" class="os-mono">-</span> &middot; Tenant: <span id="osAppEndpointTenant" class="os-mono">-</span>
+                </p>
+                <div class="os-form-group">
+                    <label for="osAppEndpointAuthHeaders">Required Headers</label>
+                    <textarea id="osAppEndpointAuthHeaders" rows="2" readonly style="font-family:var(--font-mono, monospace);"></textarea>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="os-table">
+                        <thead>
+                            <tr>
+                                <th style="width:90px;">Method</th>
+                                <th style="width:240px;">Purpose</th>
+                                <th>Full URL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="osAppAccessEndpointsBody">
+                            <tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-muted);">Select a bucket to load endpoint URLs</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Encryption -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Encryption
+                </h4>
+                <div class="os-grid-two">
+                    <div>
+                        <div class="os-form-group">
+                            <label>Algorithm</label>
+                            <select id="osEncAlgo" style="width:100%;">
+                                <option value="">None (Disabled)</option>
+                                <option value="AES256">AES-256 (SSE-S3)</option>
+                                <option value="aws:kms">AWS KMS (SSE-KMS)</option>
+                            </select>
+                        </div>
+                        <div class="os-form-group">
+                            <label>KMS Key ID (optional)</label>
+                            <input type="text" id="osEncKeyId" placeholder="arn:aws:kms:...">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="os-card" style="background:var(--darker-bg); margin:0;">
+                            <div style="font-size:.85rem; color:var(--text-muted);">Current Encryption</div>
+                            <div id="osEncCurrent" style="font-size:1rem; font-weight:600; margin-top:4px; color:var(--primary-light);">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-danger os-btn-sm" onclick="osRemoveEncryption()">Remove Encryption</button>
+                    <button class="os-btn os-btn-primary" onclick="osSaveEncryption()">Save Encryption</button>
+                </div>
+            </div>
+
+            <!-- Object Lock -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg>
+                    Object Lock &amp; Retention
+                </h4>
+                <div class="os-grid-two">
+                    <div>
+                        <div class="os-form-group">
+                            <label>Retention Mode</label>
+                            <select id="osLockMode" style="width:100%;">
+                                <option value="">Disabled</option>
+                                <option value="GOVERNANCE">Governance</option>
+                                <option value="COMPLIANCE">Compliance</option>
+                            </select>
+                        </div>
+                        <div class="os-form-group">
+                            <label>Retention Days</label>
+                            <input type="number" id="osLockDays" value="0" min="0" max="36500">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="os-card" style="background:var(--darker-bg); margin:0;">
+                            <div style="font-size:.85rem; color:var(--text-muted);">Current Object Lock</div>
+                            <div id="osLockCurrent" style="font-size:1rem; font-weight:600; margin-top:4px; color:var(--primary-light);">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osSaveObjectLock()">Save Object Lock</button>
+                </div>
+            </div>
+
+            <!-- CORS -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    CORS Configuration
+                </h4>
+                <div class="os-form-group">
+                    <label>Allowed Origins (one per line)</label>
+                    <textarea id="osCorsOrigins" rows="3" placeholder="https://example.com&#10;https://app.example.com"></textarea>
+                </div>
+                <div class="os-grid-two">
+                    <div class="os-form-group">
+                        <label>Allowed Methods</label>
+                        <input type="text" id="osCorsMethods" value="GET, PUT, DELETE, HEAD" placeholder="GET, PUT, DELETE, HEAD">
+                    </div>
+                    <div class="os-form-group">
+                        <label>Allowed Headers</label>
+                        <input type="text" id="osCorsHeaders" value="*" placeholder="*">
+                    </div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-danger os-btn-sm" onclick="osRemoveCORS()">Remove CORS</button>
+                    <button class="os-btn os-btn-primary" onclick="osSaveCORS()">Save CORS</button>
+                </div>
+            </div>
+
+            <!-- Bucket Quota -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                    Bucket Quota &amp; Info
+                </h4>
+                <div id="osQuotaInfo" class="os-grid-three" style="margin-bottom:0;">
+                    <div style="text-align:center;">
+                        <div style="font-size:.85rem; color:var(--text-muted);">Quota Limit</div>
+                        <div id="osQuotaLimit" style="font-size:1.2rem; font-weight:700; color:var(--primary-light);">&ndash;</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:.85rem; color:var(--text-muted);">Current Usage</div>
+                        <div id="osQuotaUsage" style="font-size:1.2rem; font-weight:700; color:#22c55e;">&ndash;</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:.85rem; color:var(--text-muted);">Objects</div>
+                        <div id="osQuotaObjects" style="font-size:1.2rem; font-weight:700; color:#f59e0b;">&ndash;</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bucket Object Rate Limits -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+                    Bucket Object Rate Limits
+                </h4>
+                <p style="font-size:.85rem; color:var(--text-muted); margin-top:0;">Set how many object operations this bucket allows per minute. Use 0 to apply system defaults.</p>
+                <div class="os-grid-two" style="margin-bottom:0;">
+                    <div>
+                        <div class="os-form-group">
+                            <label for="osRateReadLimit">Read Ops Per Minute</label>
+                            <input type="number" id="osRateReadLimit" min="0" step="1" value="0" placeholder="0 = default">
+                        </div>
+                        <div style="font-size:.85rem; color:var(--text-muted);">Effective: <span id="osRateReadCurrent">-</span></div>
+                    </div>
+                    <div>
+                        <div class="os-form-group">
+                            <label for="osRateWriteLimit">Write Ops Per Minute</label>
+                            <input type="number" id="osRateWriteLimit" min="0" step="1" value="0" placeholder="0 = default">
+                        </div>
+                        <div style="font-size:.85rem; color:var(--text-muted);">Effective: <span id="osRateWriteCurrent">-</span></div>
+                    </div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osSaveBucketRateLimit()">Save Rate Limits</button>
+                </div>
+            </div>
+
+            <!-- Notifications -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    Event Notifications
+                </h4>
+                <div id="osNotifCurrent" style="margin-bottom:12px;">
+                    <p style="color:var(--text-muted); font-size:.9rem;">Loading...</p>
+                </div>
+                <div class="os-grid-two">
+                    <div class="os-form-group">
+                        <label>Webhook URL</label>
+                        <input type="text" id="osNotifURL" placeholder="https://hooks.example.com/storage">
+                    </div>
+                    <div class="os-form-group">
+                        <label>Events (comma-separated)</label>
+                        <input type="text" id="osNotifEvents" value="s3:ObjectCreated:*,s3:ObjectRemoved:*" placeholder="s3:ObjectCreated:*">
+                    </div>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-primary" onclick="osSaveNotifications()">Save Notifications</button>
+                </div>
+            </div>
+
+            <!-- Bucket Policy (S3 JSON Policy) -->
+            <div class="os-card">
+                <h4 style="display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Bucket Policy (S3 JSON)
+                </h4>
+                <div class="os-form-group">
+                    <textarea id="osBucketPolicyJSON" rows="8" placeholder='{"Version":"2012-10-17","Statement":[...]}' style="font-family:var(--font-mono, monospace); font-size:.85rem;"></textarea>
+                </div>
+                <div class="os-form-actions">
+                    <button class="os-btn os-btn-secondary os-btn-sm" onclick="osUseBucketPolicyTemplate()">Use Template</button>
+                    <button class="os-btn os-btn-danger os-btn-sm" onclick="osRemoveBucketPolicy()">Remove Policy</button>
+                    <button class="os-btn os-btn-primary" onclick="osSaveBucketPolicy()">Save Policy</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="osSettingsPlaceholder" style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+            <svg style="width:64px; height:64px; opacity:.4;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <p style="margin-top:12px; font-size:1rem;">Select a bucket above to manage its settings</p>
+            <p style="font-size:.85rem;">Configure encryption, object lock, CORS, quotas, rate limits, notifications, and bucket policies</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CREATE BUCKET MODAL ===== -->
+<div id="osCreateBucketModal" class="os-modal">
+    <div class="os-modal-content">
+        <div class="os-modal-header">
+            <h2>Create Bucket</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osCreateBucketModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label for="osNewBucketName">Bucket Name *</label>
+                <input type="text" id="osNewBucketName" list="osBucketNameSuggestions" placeholder="my-data-bucket" autocomplete="off">
+                <small id="osNewBucketNameHint" style="display:block; margin-top:6px; color:var(--text-muted);">Suggestions show existing bucket names. Duplicate bucket name is blocked.</small>
+            </div>
+            <div class="os-form-group">
+                <label for="osNewBucketTenant">Tenant ID *</label>
+                <input type="text" id="osNewBucketTenant" value="default" placeholder="default">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewBucketVersioning">Versioning</label>
+                <select id="osNewBucketVersioning">
+                    <option value="Disabled">Disabled</option>
+                    <option value="Enabled">Enabled</option>
+                </select>
+            </div>
+            <div class="os-form-group">
+                <label for="osNewBucketRegion">Region</label>
+                <input type="text" id="osNewBucketRegion" placeholder="us-east-1">
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osCreateBucketModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osCreateBucket()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CREATE POLICY MODAL ===== -->
+<div id="osCreatePolicyModal" class="os-modal">
+    <div class="os-modal-content">
+        <div class="os-modal-header">
+            <h2>Create Access Policy</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osCreatePolicyModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label for="osNewPolicyTenant">Tenant ID (optional)</label>
+                <input type="text" id="osNewPolicyTenant" placeholder="Leave empty to use current tenant context">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyUser">User ID *</label>
+                <input type="text" id="osNewPolicyUser" placeholder="user-123">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyBucket">Bucket Name *</label>
+                <input type="text" id="osNewPolicyBucket" placeholder="my-data-bucket">
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyRole">Role *</label>
+                <select id="osNewPolicyRole">
+                    <option value="storage-admin">Storage Admin (Full Access)</option>
+                    <option value="storage-writer">Storage Writer (Read + Write)</option>
+                    <option value="storage-reader" selected>Storage Reader (Read Only)</option>
+                    <option value="storage-uploader">Storage Uploader (Write Only)</option>
+                </select>
+            </div>
+            <div class="os-form-group">
+                <label for="osNewPolicyPrefix">Path Prefix (optional)</label>
+                <input type="text" id="osNewPolicyPrefix" placeholder="e.g. uploads/">
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osCreatePolicyModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osCreatePolicy()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== VIEW POLICY MODAL ===== -->
+<div id="osViewPolicyModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:640px;">
+        <div class="os-modal-header">
+            <h2>Policy Document</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osViewPolicyModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <pre id="osViewPolicyJSON" style="background:var(--darker-bg); padding:16px; border-radius:8px; font-size:.85rem; overflow-x:auto; white-space:pre-wrap;"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- ===== BUCKET TAGS MODAL ===== -->
+<div id="osBucketTagsModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:640px;">
+        <div class="os-modal-header">
+            <h2>Bucket Tags: <span id="osTagsBucketName"></span></h2>
+            <button class="os-modal-close" onclick="osCloseModal('osBucketTagsModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div id="osTagsList" style="margin-bottom:16px;"></div>
+            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                <div class="os-form-group" style="margin:0; flex:1;">
+                    <label>Key</label>
+                    <input type="text" id="osNewTagKey" placeholder="tag-key">
+                </div>
+                <div class="os-form-group" style="margin:0; flex:1;">
+                    <label>Value</label>
+                    <input type="text" id="osNewTagValue" placeholder="tag-value">
+                </div>
+                <button class="os-btn os-btn-primary os-btn-sm" onclick="osAddTag()">Add</button>
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-danger" onclick="osDeleteAllTags()">Delete All Tags</button>
+                <button class="os-btn os-btn-primary" onclick="osSaveTags()">Save Tags</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== COPY OBJECT MODAL ===== -->
+<div id="osCopyObjectModal" class="os-modal">
+    <div class="os-modal-content">
+        <div class="os-modal-header">
+            <h2>Copy Object</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osCopyObjectModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label>Source</label>
+                <input type="text" id="osCopySrc" readonly style="background:var(--darker-bg);">
+            </div>
+            <div class="os-form-group">
+                <label for="osCopyDestBucket">Destination Bucket *</label>
+                <select id="osCopyDestBucket" style="width:100%;">
+                    <option value="">Select bucket...</option>
+                </select>
+            </div>
+            <div class="os-form-group">
+                <label for="osCopyDestKey">Destination Key *</label>
+                <input type="text" id="osCopyDestKey" placeholder="e.g. copies/report.pdf">
+            </div>
+            <div class="os-form-group">
+                <label for="osCopyTenant">Tenant ID</label>
+                <input type="text" id="osCopyTenant" value="default">
+            </div>
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osCopyObjectModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osDoCopy()">Copy</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SHARE SETUP MODAL ===== -->
+<div id="osShareSetupModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:720px;">
+        <div class="os-modal-header">
+            <h2>Share Object Setup</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osShareSetupModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label for="osShareSetupObject">Object</label>
+                <input type="text" id="osShareSetupObject" readonly style="font-family:var(--font-mono, monospace);">
+            </div>
+
+            <div class="os-grid-two">
+                <div class="os-form-group">
+                    <label for="osShareSetupExpiry">Expires In (seconds)</label>
+                    <input type="number" id="osShareSetupExpiry" value="86400" min="60" max="604800">
+                </div>
+                <div class="os-form-group">
+                    <label for="osShareAccessKey">Access Key</label>
+                    <select id="osShareAccessKey">
+                        <option value="">Loading access keys...</option>
+                    </select>
+                    <div id="osShareAccessKeyHint" style="font-size:.8rem; color:var(--text-muted); margin-top:4px;"></div>
+                </div>
+            </div>
+
+            <div class="os-card" style="margin:0 0 14px 0; background:var(--darker-bg);">
+                <h4 style="margin-bottom:10px;">Create Access Key</h4>
+                <div class="os-grid-two" style="margin-bottom:8px;">
+                    <div class="os-form-group" style="margin-bottom:0;">
+                        <label for="osShareNewAccessKeyName">Key Name</label>
+                        <input type="text" id="osShareNewAccessKeyName" placeholder="share-reader-m-...">
+                    </div>
+                    <div class="os-form-group" style="margin-bottom:0;">
+                        <label for="osShareRestrictToBucket">Scope</label>
+                        <label style="display:flex; align-items:center; gap:8px; margin:0; cursor:pointer;">
+                            <input type="checkbox" id="osShareRestrictToBucket" checked style="width:auto;">
+                            Restrict to this bucket
+                        </label>
+                        <div style="font-size:.8rem; color:var(--text-muted); margin-top:4px;">
+                            API bucket: <span id="osShareSetupBucketScope" class="os-mono">-</span><br>
+                            Storage bucket: <span id="osShareSetupStorageBucket" class="os-mono">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="os-btn os-btn-secondary os-btn-sm" onclick="osShareReloadAccessKeys()">Refresh Keys</button>
+                    <button class="os-btn os-btn-primary os-btn-sm" onclick="osShareCreateAccessKeyFromModal()">Create Access Key</button>
+                </div>
+            </div>
+
+            <div id="osShareSetupError" style="display:none; padding:10px 12px; border-radius:8px; background:rgba(239,68,68,.15); color:#ef4444; font-size:.85rem; margin-bottom:8px;"></div>
+
+            <div class="os-form-actions">
+                <button class="os-btn os-btn-secondary" onclick="osCloseModal('osShareSetupModal')">Cancel</button>
+                <button class="os-btn os-btn-primary" onclick="osShareGenerateFromModal()">Generate Share Link</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SHARE OBJECT MODAL ===== -->
+<div id="osShareObjectModal" class="os-modal">
+    <div class="os-modal-content" style="max-width:600px;">
+        <div class="os-modal-header">
+            <h2>Share Object</h2>
+            <button class="os-modal-close" onclick="osCloseModal('osShareObjectModal')">&times;</button>
+        </div>
+        <div class="os-modal-body">
+            <div class="os-form-group">
+                <label>Object</label>
+                <div id="osShareObjectKey" class="os-mono" style="padding:8px 12px; background:var(--darker-bg); border-radius:6px; font-size:.9rem;"></div>
+            </div>
+            <div class="os-form-group">
+                <label>Shareable URL</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="osShareURL" readonly style="flex:1; padding:8px; border:1px solid var(--border-color); border-radius:6px; background:var(--darker-bg); color:var(--text-primary); font-family:var(--font-mono, monospace); font-size:.8rem;">
+                    <button class="os-btn os-btn-primary os-btn-sm" onclick="osCopyShareURL()">Copy</button>
+                </div>
+            </div>
+            <p style="font-size:.85rem; color:var(--text-muted); margin-top:8px;">
+                <svg style="width:14px; height:14px; vertical-align:middle; margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Expires: <span id="osShareExpires" style="font-weight:600;"></span>
+            </p>
+            <p style="font-size:.8rem; color:var(--text-muted); margin-top:4px;">Anyone with this link can download the object until it expires. No authentication required.</p>
+        </div>
+    </div>
+</div>
+
+<datalist id="osBucketNameSuggestions"></datalist>
+
+<div id="osBucketHoverMetricsCard" class="os-bucket-hover-metrics" aria-hidden="true"></div>
+
+<script src="/static/object-storage.js?v=20260417-10"></script>
+{{ end }}
+

@@ -31,6 +31,7 @@ import (
 	datasourceresource "example.com/axiomnizam/internal/datasource"
 	"example.com/axiomnizam/internal/encryption"
 	"example.com/axiomnizam/internal/etl"
+	"example.com/axiomnizam/internal/frontend"
 	"example.com/axiomnizam/internal/eventbus"
 	exportpkg "example.com/axiomnizam/internal/export"
 	"example.com/axiomnizam/internal/gatekeeper"
@@ -563,8 +564,9 @@ func main() {
 	}
 	if len(allowedOriginSet) == 0 {
 		addAllowedOrigin("https://axiomnizam.bitbd.net")
-		addAllowedOrigin("http://localhost:7000")
-		addAllowedOrigin("http://127.0.0.1:7000")
+		addAllowedOrigin("http://localhost:8000")
+		addAllowedOrigin("http://127.0.0.1:8000")
+		addAllowedOrigin("https://localhost:8000")
 	}
 
 	isAllowedOrigin := func(origin string) bool {
@@ -605,6 +607,10 @@ func main() {
 	router.Use(observability.SecurityHeadersMiddleware())
 	router.Use(observability.RequestValidationMiddleware(observability.DefaultRequestValidationConfig()))
 	router.Use(observability.CSRFMiddleware(observability.CSRFConfigWithTLS(cfg.TLS.Enabled)))
+
+	// ── Frontend (merged from separate frontend service) ─────────────────
+	frontendHandler := frontend.NewHandler("")
+	frontend.RegisterRoutes(router, frontendHandler)
 
 	// Prometheus /metrics endpoint
 	metrics.RegisterMetricsEndpoint(router)
