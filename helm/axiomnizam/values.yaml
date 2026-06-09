@@ -2,9 +2,11 @@
 replicaCount: 1
 
 image:
-  repository: axiomnizam
+  repository: ghcr.io/shafiunmiraz0/axiomnizam
   tag: latest
   pullPolicy: IfNotPresent
+  pullSecrets: []
+  # - name: ghcr-auth
 
 # -- Service configuration
 service:
