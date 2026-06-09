@@ -43,7 +43,6 @@ go.work.sum
 /.github/
 /scripts/
 
-Makefile
 # AI context tracking
 claude.md
 
