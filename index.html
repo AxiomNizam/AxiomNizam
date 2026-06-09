@@ -16,6 +16,7 @@
 
   /* Header */
   .hero{text-align:center;padding:4rem 0 2rem}
+  .logo{margin-bottom:1.25rem;filter:drop-shadow(0 0 20px rgba(16,185,129,.25))}
   .hero h1{font-size:2.8rem;font-weight:800;background:linear-gradient(135deg,var(--green),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.02em}
   .hero .subtitle{color:var(--muted);font-size:1.1rem;margin-top:.5rem}
   .badge{display:inline-block;background:var(--green-dim);color:var(--green);font-size:.75rem;font-weight:600;padding:.25rem .75rem;border-radius:9999px;margin-top:1rem;letter-spacing:.05em}
@@ -38,7 +39,7 @@
   .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin:1.5rem 0}
   .feature{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.25rem;transition:border-color .2s}
   .feature:hover{border-color:var(--green)}
-  .feature-icon{font-size:1.5rem;margin-bottom:.5rem}
+  .feature-icon{width:36px;height:36px;margin-bottom:.6rem}
   .feature h3{font-size:.95rem;font-weight:600;margin-bottom:.35rem;color:var(--white)}
   .feature p{font-size:.8rem;color:var(--muted);line-height:1.5}
 
@@ -80,6 +81,19 @@
 
   <!-- Hero -->
   <div class="hero">
+    <svg class="logo" width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="4" width="64" height="64" rx="14" fill="#111827" stroke="url(#logo-grad)" stroke-width="2"/>
+      <path d="M36 16L52 28V44L36 56L20 44V28L36 16Z" fill="url(#logo-grad)" opacity="0.15"/>
+      <path d="M36 20L49 30V42L36 52L23 42V30L36 20Z" stroke="url(#logo-grad)" stroke-width="1.5" fill="none"/>
+      <circle cx="36" cy="36" r="8" fill="url(#logo-grad)"/>
+      <path d="M36 28V36L42 42" stroke="#0a0e17" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs>
+        <linearGradient id="logo-grad" x1="20" y1="16" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#10b981"/>
+          <stop offset="1" stop-color="#3b82f6"/>
+        </linearGradient>
+      </defs>
+    </svg>
     <h1>AxiomNizam</h1>
     <p class="subtitle">Enterprise Data Control Plane &mdash; Helm Repository</p>
     <span class="badge">CHART v0.1.0</span>
@@ -126,32 +140,32 @@ helm install axiomnizam axiomnizam/axiomnizam \
   <!-- Features -->
   <div class="features">
     <div class="feature">
-      <div class="feature-icon">&#x1F512;</div>
+      <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/></svg>
       <h3>Zero Trust Security</h3>
       <p>TLS everywhere, risk-based auth, MFA enforcement, RBAC, field-level encryption, and continuous verification.</p>
     </div>
     <div class="feature">
-      <div class="feature-icon">&#x2699;&#xFE0F;</div>
+      <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.657 3.582 3 8 3s8-1.343 8-3V6"/><path d="M4 12v6c0 1.657 3.582 3 8 3s8-1.343 8-3v-6"/></svg>
       <h3>Bundled PostgreSQL</h3>
       <p>Self-contained StatefulSet with init scripts. Disable for external databases with one flag.</p>
     </div>
     <div class="feature">
-      <div class="feature-icon">&#x1F4E6;</div>
+      <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
       <h3>Persistent Storage</h3>
       <p>4 PVCs for Raft consensus, object storage, TLS certs, and query logs. All configurable.</p>
     </div>
     <div class="feature">
-      <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
+      <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
       <h3>SafeGate Scanner</h3>
       <p>Built-in 6-stage file scanning pipeline: metadata, MIME, SVG XSS, macros, archive bombs, and native AV.</p>
     </div>
     <div class="feature">
-      <div class="feature-icon">&#x1F511;</div>
+      <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
       <h3>Gatekeeper 2FA</h3>
       <p>TOTP-based MFA with risk engine, trusted devices, backup codes, and step-up challenges.</p>
     </div>
     <div class="feature">
-      <div class="feature-icon">&#x1F310;</div>
+      <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
       <h3>Micro-Segmentation</h3>
       <p>Optional K8s NetworkPolicies and cert-manager integration for production-grade network isolation.</p>
     </div>
