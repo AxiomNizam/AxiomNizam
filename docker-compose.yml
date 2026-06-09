@@ -73,93 +73,93 @@ services:
     networks:
       - data-net
 
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    # Phase 15: NO host port — only accessible via data-net
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-axiomnizam}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:?MONGODB_PASSWORD must be set}
-    volumes:
-      - mongodb-data:/data/db
-    networks:
-      - data-net
+  # mongodb:
+  #   image: mongo:latest
+  #   container_name: mongodb
+  #   # Phase 15: NO host port — only accessible via data-net
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-axiomnizam}
+  #     MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:?MONGODB_PASSWORD must be set}
+  #   volumes:
+  #     - mongodb-data:/data/db
+  #   networks:
+  #     - data-net
 
-  percona:
-    image: percona:latest
-    container_name: percona
-    # Phase 15: NO host port — only accessible via data-net
-    environment:
-      MYSQL_ROOT_PASSWORD: ${PERCONA_PASSWORD:?PERCONA_PASSWORD must be set}
-      MYSQL_DATABASE: ${PERCONA_DATABASE:-app_db}
-    volumes:
-      - percona-data:/var/lib/mysql
-    networks:
-      - data-net
+  # percona:
+  #   image: percona:latest
+  #   container_name: percona
+  #   # Phase 15: NO host port — only accessible via data-net
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${PERCONA_PASSWORD:?PERCONA_PASSWORD must be set}
+  #     MYSQL_DATABASE: ${PERCONA_DATABASE:-app_db}
+  #   volumes:
+  #     - percona-data:/var/lib/mysql
+  #   networks:
+  #     - data-net
 
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.9
-    container_name: etcd
-    profiles:
-      - etcd
-      - default
-    # Phase 15: NO host port — only accessible via data-net
-    environment:
-      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
-      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
-      ETCD_UNSUPPORTED_ARCH: arm64
-      ETCD_DATA_DIR: /etcd-data
-    volumes:
-      - etcd-data:/etcd-data
-    networks:
-      - data-net
+  # etcd:
+  #   image: quay.io/coreos/etcd:v3.5.9
+  #   container_name: etcd
+  #   profiles:
+  #     - etcd
+  #     - default
+  #   # Phase 15: NO host port — only accessible via data-net
+  #   environment:
+  #     ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+  #     ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+  #     ETCD_UNSUPPORTED_ARCH: arm64
+  #     ETCD_DATA_DIR: /etcd-data
+  #   volumes:
+  #     - etcd-data:/etcd-data
+  #   networks:
+  #     - data-net
 
   # ── Message Queue Tier ──────────────────────────────────────────────────
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
-    # Management UI on mq-net only; AMQP accessible via backend-net
-    ports:
-      - "15672:15672"  # Management UI (optional, for ops)
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-axiomnizam}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/axiom}
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - mq-net
-      - backend-net
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   container_name: rabbitmq
+  #   # Management UI on mq-net only; AMQP accessible via backend-net
+  #   ports:
+  #     - "15672:15672"  # Management UI (optional, for ops)
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-axiomnizam}
+  #     RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+  #     RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/axiom}
+  #   volumes:
+  #     - rabbitmq-data:/var/lib/rabbitmq
+  #   healthcheck:
+  #     test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   networks:
+  #     - mq-net
+  #     - backend-net
 
-  kafka:
-    image: apache/kafka:latest
-    container_name: kafka
-    # Phase 15: NO host port — only accessible via mq-net
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-    networks:
-      - mq-net
+  # kafka:
+  #   image: apache/kafka:latest
+  #   container_name: kafka
+  #   # Phase 15: NO host port — only accessible via mq-net
+  #   environment:
+  #     KAFKA_NODE_ID: 1
+  #     KAFKA_PROCESS_ROLES: broker,controller
+  #     KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+  #     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+  #     KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+  #     KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  #     KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  #     KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+  #     KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+  #     CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+  #     interval: 15s
+  #     timeout: 10s
+  #     retries: 10
+  #   networks:
+  #     - mq-net
 
 # ── Networks (Phase 15: Micro-segmentation) ─────────────────────────────────
 networks:

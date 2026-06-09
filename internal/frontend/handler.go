@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,7 +35,11 @@ type Handler struct {
 // NewHandler creates a frontend handler.
 // backendURL is the base URL for API proxy calls (empty = same server).
 func NewHandler(backendURL string) *Handler {
-	client := &http.Client{Timeout: 5 * time.Second}
+	// TLS-aware client — trusts self-signed certs for internal health checks
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // self-signed certs in dev
+	}
+	client := &http.Client{Timeout: 5 * time.Second, Transport: transport}
 	return &Handler{
 		backendURL: strings.TrimRight(backendURL, "/"),
 		httpClient: client,
@@ -108,6 +113,19 @@ func (h *Handler) requireFrontendRoles(allowed ...string) gin.HandlerFunc {
 	}
 }
 
+// backendURLFromRequest derives the backend URL from the incoming request
+// so client-side JS always uses the correct scheme and host.
+func (h *Handler) backendURLFromRequest(c *gin.Context) string {
+	if h.backendURL != "" {
+		return h.backendURL
+	}
+	scheme := "https"
+	if c.Request.TLS == nil && c.GetHeader("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	return scheme + "://" + c.Request.Host
+}
+
 // templateData builds the common template data map.
 func (h *Handler) templateData(c *gin.Context, title, pageName string, extra gin.H) gin.H {
 	authToken := c.GetHeader("Authorization")
@@ -127,7 +145,7 @@ func (h *Handler) templateData(c *gin.Context, title, pageName string, extra gin
 		"page":       pageName,
 		"isAuth":     isAuth,
 		"userName":   userName,
-		"backendURL": h.backendURL,
+		"backendURL": h.backendURLFromRequest(c),
 	}
 	for k, v := range extra {
 		data[k] = v
@@ -168,7 +186,7 @@ func (h *Handler) Signup(c *gin.Context) {
 		"page":       "signup",
 		"isAuth":     false,
 		"userName":   "Guest",
-		"backendURL": h.backendURL,
+		"backendURL": h.backendURLFromRequest(c),
 		"health":     health,
 		"hideChrome": true,
 	})
@@ -198,7 +216,7 @@ func (h *Handler) Login(c *gin.Context) {
 		"page":       "login",
 		"isAuth":     false,
 		"userName":   "Guest",
-		"backendURL": h.backendURL,
+		"backendURL": h.backendURLFromRequest(c),
 		"health":     health,
 		"hideChrome": true,
 	})
@@ -333,13 +351,14 @@ func (h *Handler) APIStatus(c *gin.Context) {
 
 // fetchHealth makes a request to the backend health endpoint.
 func (h *Handler) fetchHealth() (*HealthResponse, error) {
-	// When backendURL is empty, use the local server
+	// When backendURL is empty, use the local server (HTTPS since TLS is enabled)
 	baseURL := h.backendURL
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:" + os.Getenv("PORT")
-		if baseURL == "http://127.0.0.1:" {
-			baseURL = "http://127.0.0.1:8000"
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8000"
 		}
+		baseURL = "https://127.0.0.1:" + port
 	}
 
 	// Build candidate URLs with fallbacks for Docker networking
@@ -389,10 +408,11 @@ func (h *Handler) fetchHealth() (*HealthResponse, error) {
 func (h *Handler) fetchStatus() (*StatusResponse, error) {
 	baseURL := h.backendURL
 	if baseURL == "" {
-		baseURL = "http://127.0.0.1:" + os.Getenv("PORT")
-		if baseURL == "http://127.0.0.1:" {
-			baseURL = "http://127.0.0.1:8000"
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8000"
 		}
+		baseURL = "https://127.0.0.1:" + port
 	}
 
 	resp, err := h.httpClient.Get(fmt.Sprintf("%s/status", baseURL))

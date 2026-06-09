@@ -52,6 +52,10 @@ func RegisterRoutes(router *gin.Engine, handler *Handler) {
 	router.GET("/two-factor", handler.TwoFactor)
 	router.GET("/favicon.ico", handler.Favicon)
 
+	// API proxy routes (used by frontend JS for health/status checks)
+	router.GET("/api/health", handler.APIHealth)
+	router.GET("/api/status", handler.APIStatus)
+
 	log.Printf("🌐 Frontend pages registered (templates: %s)", templateDir)
 }
 
