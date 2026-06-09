@@ -1,6 +1,328 @@
 <!DOCTYPE html>
-<html><head><title>AxiomNizam Helm Repository</title></head>
-<body><h1>AxiomNizam Helm Repository</h1>
-<pre>helm repo add axiomnizam https://shafiunmiraz0.github.io/AxiomNizam/charts
-helm install axiomnizam axiomnizam/axiomnizam -n axiomnizam --create-namespace</pre>
-</body></html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AxiomNizam Helm Repository</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0e17;--surface:#111827;--border:#1e293b;
+    --green:#10b981;--green-dim:#065f46;--blue:#3b82f6;
+    --text:#e2e8f0;--muted:#94a3b8;--white:#f8fafc;
+  }
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  .container{max-width:900px;width:100%;padding:2rem 1.5rem}
+
+  /* Header */
+  .hero{text-align:center;padding:4rem 0 2rem}
+  .hero h1{font-size:2.8rem;font-weight:800;background:linear-gradient(135deg,var(--green),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.02em}
+  .hero .subtitle{color:var(--muted);font-size:1.1rem;margin-top:.5rem}
+  .badge{display:inline-block;background:var(--green-dim);color:var(--green);font-size:.75rem;font-weight:600;padding:.25rem .75rem;border-radius:9999px;margin-top:1rem;letter-spacing:.05em}
+
+  /* Install card */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:1.5rem 0;position:relative;overflow:hidden}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--green),var(--blue))}
+  .card h2{font-size:1rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem;font-weight:600}
+  .step{display:flex;gap:1rem;margin-bottom:1.25rem;align-items:flex-start}
+  .step-num{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--green-dim);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700}
+  .step-content{flex:1}
+  .step-content p{color:var(--muted);font-size:.85rem;margin-bottom:.5rem}
+  .code-block{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;font-family:'Cascadia Code','Fira Code','JetBrains Mono',monospace;font-size:.85rem;color:var(--green);overflow-x:auto;position:relative;cursor:pointer;transition:border-color .2s}
+  .code-block:hover{border-color:var(--green)}
+  .code-block .copy{position:absolute;top:.5rem;right:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:.2rem .5rem;font-size:.65rem;color:var(--muted);cursor:pointer;opacity:0;transition:opacity .2s}
+  .code-block:hover .copy{opacity:1}
+  .copy.copied{color:var(--green);border-color:var(--green)}
+
+  /* Features grid */
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin:1.5rem 0}
+  .feature{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.25rem;transition:border-color .2s}
+  .feature:hover{border-color:var(--green)}
+  .feature-icon{font-size:1.5rem;margin-bottom:.5rem}
+  .feature h3{font-size:.95rem;font-weight:600;margin-bottom:.35rem;color:var(--white)}
+  .feature p{font-size:.8rem;color:var(--muted);line-height:1.5}
+
+  /* Values table */
+  .values-section{margin:2rem 0}
+  .values-section h2{font-size:1.1rem;color:var(--white);margin-bottom:1rem}
+  .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+  table{width:100%;border-collapse:collapse;font-size:.82rem}
+  thead{background:var(--surface)}
+  th{text-align:left;padding:.6rem 1rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:.7rem;border-bottom:1px solid var(--border)}
+  td{padding:.55rem 1rem;border-bottom:1px solid var(--border);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tr:hover{background:rgba(16,185,129,.03)}
+  code{background:#0d1117;padding:.15rem .4rem;border-radius:4px;font-family:'Cascadia Code','Fira Code',monospace;font-size:.78rem;color:var(--green)}
+  .tag{display:inline-block;font-size:.65rem;padding:.1rem .4rem;border-radius:4px;font-weight:600}
+  .tag-optional{background:#1e3a5f;color:#60a5fa}
+  .tag-required{background:#3b1818;color:#f87171}
+  .tag-default{background:#1a2e1a;color:#4ade80}
+
+  /* Links */
+  a{color:var(--green);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .2s}
+  a:hover{border-bottom-color:var(--green)}
+
+  /* Footer */
+  .footer{text-align:center;padding:2rem 0;color:var(--muted);font-size:.75rem;border-top:1px solid var(--border);margin-top:2rem;width:100%}
+  .footer a{color:var(--muted)}
+
+  /* Responsive */
+  @media(max-width:640px){
+    .hero h1{font-size:1.8rem}
+    .container{padding:1rem}
+    .features{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>AxiomNizam</h1>
+    <p class="subtitle">Enterprise Data Control Plane &mdash; Helm Repository</p>
+    <span class="badge">CHART v0.1.0</span>
+  </div>
+
+  <!-- Quick Install -->
+  <div class="card">
+    <h2>Quick Start</h2>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <p>Add the Helm repository</p>
+        <div class="code-block" onclick="copyCode(this)">
+          helm repo add axiomnizam https://shafiunmiraz0.github.io/AxiomNizam/charts
+          <span class="copy">Copy</span>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <p>Update your local chart cache</p>
+        <div class="code-block" onclick="copyCode(this)">
+          helm repo update
+          <span class="copy">Copy</span>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <p>Install the chart</p>
+        <div class="code-block" onclick="copyCode(this)">
+helm install axiomnizam axiomnizam/axiomnizam \
+  -n axiomnizam --create-namespace \
+  --set postgresql.password=YOUR_PASSWORD \
+  --set iam.sysadminPassword=YOUR_PASSWORD
+          <span class="copy">Copy</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">&#x1F512;</div>
+      <h3>Zero Trust Security</h3>
+      <p>TLS everywhere, risk-based auth, MFA enforcement, RBAC, field-level encryption, and continuous verification.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x2699;&#xFE0F;</div>
+      <h3>Bundled PostgreSQL</h3>
+      <p>Self-contained StatefulSet with init scripts. Disable for external databases with one flag.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F4E6;</div>
+      <h3>Persistent Storage</h3>
+      <p>4 PVCs for Raft consensus, object storage, TLS certs, and query logs. All configurable.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
+      <h3>SafeGate Scanner</h3>
+      <p>Built-in 6-stage file scanning pipeline: metadata, MIME, SVG XSS, macros, archive bombs, and native AV.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F511;</div>
+      <h3>Gatekeeper 2FA</h3>
+      <p>TOTP-based MFA with risk engine, trusted devices, backup codes, and step-up challenges.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#x1F310;</div>
+      <h3>Micro-Segmentation</h3>
+      <p>Optional K8s NetworkPolicies and cert-manager integration for production-grade network isolation.</p>
+    </div>
+  </div>
+
+  <!-- Values Reference -->
+  <div class="values-section">
+    <h2>Configuration Reference</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Deployment</td></tr>
+          <tr><td><code>replicaCount</code></td><td><code>1</code></td><td>Number of pod replicas</td></tr>
+          <tr><td><code>image.repository</code></td><td><code>ghcr.io/shafiunmiraz0/axiomnizam</code></td><td>Container image repository</td></tr>
+          <tr><td><code>image.tag</code></td><td><code>latest</code></td><td>Container image tag</td></tr>
+          <tr><td><code>image.pullPolicy</code></td><td><code>IfNotPresent</code></td><td>Image pull policy</td></tr>
+          <tr><td><code>image.pullSecrets</code></td><td><code>[]</code></td><td>Registry pull secrets</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Service &amp; Ingress</td></tr>
+          <tr><td><code>service.type</code></td><td><code>ClusterIP</code></td><td>K8s service type</td></tr>
+          <tr><td><code>service.port</code></td><td><code>8000</code></td><td>Service port</td></tr>
+          <tr><td><code>ingress.enabled</code></td><td><code>false</code></td><td>Enable Ingress resource</td></tr>
+          <tr><td><code>ingress.className</code></td><td><code>nginx</code></td><td>Ingress class name</td></tr>
+          <tr><td><code>ingress.hosts</code></td><td><code>axiomnizam.local</code></td><td>Hostnames and paths</td></tr>
+          <tr><td><code>ingress.tls</code></td><td><code>[]</code></td><td>TLS termination config</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Resources</td></tr>
+          <tr><td><code>resources.requests.cpu</code></td><td><code>250m</code></td><td>CPU request</td></tr>
+          <tr><td><code>resources.requests.memory</code></td><td><code>512Mi</code></td><td>Memory request</td></tr>
+          <tr><td><code>resources.limits.cpu</code></td><td><code>2</code></td><td>CPU limit</td></tr>
+          <tr><td><code>resources.limits.memory</code></td><td><code>2Gi</code></td><td>Memory limit</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Persistence</td></tr>
+          <tr><td><code>persistence.raft.enabled</code></td><td><code>true</code></td><td>Raft consensus data PVC</td></tr>
+          <tr><td><code>persistence.raft.size</code></td><td><code>5Gi</code></td><td>Raft PVC size</td></tr>
+          <tr><td><code>persistence.storage.enabled</code></td><td><code>true</code></td><td>Object storage PVC</td></tr>
+          <tr><td><code>persistence.storage.size</code></td><td><code>10Gi</code></td><td>Storage PVC size</td></tr>
+          <tr><td><code>persistence.certs.enabled</code></td><td><code>true</code></td><td>TLS certs PVC</td></tr>
+          <tr><td><code>persistence.certs.size</code></td><td><code>256Mi</code></td><td>Certs PVC size</td></tr>
+          <tr><td><code>persistence.queryLogs.enabled</code></td><td><code>true</code></td><td>Query audit logs PVC</td></tr>
+          <tr><td><code>persistence.queryLogs.size</code></td><td><code>2Gi</code></td><td>Query logs PVC size</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">PostgreSQL</td></tr>
+          <tr><td><code>postgresql.enabled</code></td><td><code>true</code></td><td>Bundle PostgreSQL StatefulSet</td></tr>
+          <tr><td><code>postgresql.image</code></td><td><code>postgres:latest</code></td><td>PostgreSQL image</td></tr>
+          <tr><td><code>postgresql.user</code></td><td><code>axiomnizam</code></td><td>Database user</td></tr>
+          <tr><td><code>postgresql.password</code></td><td><code>changeme</code></td><td><span class="tag tag-required">Required</span> Database password</td></tr>
+          <tr><td><code>postgresql.database</code></td><td><code>app_db</code></td><td>Database name</td></tr>
+          <tr><td><code>postgresql.port</code></td><td><code>5432</code></td><td>Database port</td></tr>
+          <tr><td><code>postgresql.storage.size</code></td><td><code>10Gi</code></td><td>Database PVC size</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">TLS</td></tr>
+          <tr><td><code>tls.enabled</code></td><td><code>true</code></td><td>Enable HTTPS</td></tr>
+          <tr><td><code>tls.autoGenerate</code></td><td><code>true</code></td><td>Auto-generate self-signed certs</td></tr>
+          <tr><td><code>tls.certFile</code></td><td><span class="tag tag-optional">Optional</span></td><td>Path to TLS certificate</td></tr>
+          <tr><td><code>tls.keyFile</code></td><td><span class="tag tag-optional">Optional</span></td><td>Path to TLS private key</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Public URLs</td></tr>
+          <tr><td><code>public.frontendHostname</code></td><td><code>axiomnizam.local</code></td><td>Frontend hostname</td></tr>
+          <tr><td><code>public.platformHostname</code></td><td><code>axiomnizam.local</code></td><td>Platform API hostname</td></tr>
+          <tr><td><code>public.frontendUrl</code></td><td><code>https://axiomnizam.local</code></td><td>Full frontend URL</td></tr>
+          <tr><td><code>public.platformUrl</code></td><td><code>https://axiomnizam.local</code></td><td>Full platform URL</td></tr>
+          <tr><td><code>public.corsOrigins</code></td><td><code>https://axiomnizam.local</code></td><td>Allowed CORS origins</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Application Config</td></tr>
+          <tr><td><code>config.apiPort</code></td><td><code>8000</code></td><td>Server listen port</td></tr>
+          <tr><td><code>config.apiHost</code></td><td><code>0.0.0.0</code></td><td>Server bind address</td></tr>
+          <tr><td><code>config.axiomnizamEnv</code></td><td><code>production</code></td><td>Environment profile</td></tr>
+          <tr><td><code>config.securityGuardrailsMode</code></td><td><code>enforce</code></td><td><code>enforce</code> or <code>audit</code></td></tr>
+          <tr><td><code>config.storageBackend</code></td><td><code>raft</code></td><td><code>raft</code> (embedded) or <code>etcd</code></td></tr>
+          <tr><td><code>config.trustedProxies</code></td><td><code>10.0.0.0/8,...</code></td><td>Trusted proxy CIDRs</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">IAM</td></tr>
+          <tr><td><code>iam.sysadminEmail</code></td><td><code>sysadmin@axiomnizam.local</code></td><td><span class="tag tag-required">Required</span> Bootstrap admin email</td></tr>
+          <tr><td><code>iam.sysadminPassword</code></td><td><code>changeme-on-first-login</code></td><td><span class="tag tag-required">Required</span> Bootstrap admin password</td></tr>
+          <tr><td><code>iam.rsaPrivateKey</code></td><td><code></code></td><td><span class="tag tag-optional">Optional</span> RSA PEM for JWT signing</td></tr>
+          <tr><td><code>iam.demoJwtSecret</code></td><td><code></code></td><td><span class="tag tag-optional">Optional</span> Demo JWT fallback secret</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">SafeGate / Antivirus</td></tr>
+          <tr><td><code>antivirus.enabled</code></td><td><code>true</code></td><td>Enable antivirus engine</td></tr>
+          <tr><td><code>antivirus.workers</code></td><td><code>4</code></td><td>Concurrent scan goroutines</td></tr>
+          <tr><td><code>antivirus.maxFileSize</code></td><td><code>104857600</code></td><td>Max scan file size (100MB)</td></tr>
+          <tr><td><code>antivirus.cacheSize</code></td><td><code>100000</code></td><td>LRU cache entries</td></tr>
+          <tr><td><code>antivirus.quarantineAction</code></td><td><code>tag</code></td><td><code>tag</code>, <code>delete</code>, or <code>move</code></td></tr>
+          <tr><td><code>safegate.maxFileSize</code></td><td><code>104857600</code></td><td>SafeGate scanner max file size</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Rate Limiting</td></tr>
+          <tr><td><code>rateLimit.maxCalls</code></td><td><code>500</code></td><td>Max API calls per window</td></tr>
+          <tr><td><code>rateLimit.validityMinutes</code></td><td><code>5</code></td><td>Rate limit window (minutes)</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Gatekeeper 2FA</td></tr>
+          <tr><td><code>gatekeeper.totpIssuer</code></td><td><code>AxiomNizam</code></td><td>TOTP issuer name</td></tr>
+          <tr><td><code>gatekeeper.encryptionKey</code></td><td><span class="tag tag-default">Auto-gen</span></td><td>AES-256 key for TOTP secrets</td></tr>
+          <tr><td><code>gatekeeper.hmacKey</code></td><td><span class="tag tag-default">Auto-gen</span></td><td>HMAC key for integrity</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Optional: Keycloak</td></tr>
+          <tr><td><code>keycloak.enabled</code></td><td><code>false</code></td><td>Enable Keycloak IdP</td></tr>
+          <tr><td><code>keycloak.url</code></td><td><code>keycloak</code></td><td>Keycloak service hostname</td></tr>
+          <tr><td><code>keycloak.realm</code></td><td><code>axiomnizam</code></td><td>Keycloak realm</td></tr>
+          <tr><td><code>keycloak.clientId</code></td><td><code>axiomnizam-backend</code></td><td>Backend OIDC client ID</td></tr>
+          <tr><td><code>keycloak.clientSecret</code></td><td><code></code></td><td><span class="tag tag-required">Required</span> if enabled</td></tr>
+          <tr><td><code>keycloak.adminUsername</code></td><td><code>admin</code></td><td>Keycloak admin username</td></tr>
+          <tr><td><code>keycloak.adminPassword</code></td><td><code>admin</code></td><td>Keycloak admin password</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Optional: OpenClaw SQL Assistant</td></tr>
+          <tr><td><code>openclaw.enabled</code></td><td><code>false</code></td><td>Enable SQL assistant</td></tr>
+          <tr><td><code>openclaw.host</code></td><td><code>openclaw-gateway</code></td><td>Gateway hostname</td></tr>
+          <tr><td><code>openclaw.port</code></td><td><code>18789</code></td><td>Gateway port</td></tr>
+          <tr><td><code>openclaw.model</code></td><td><code>ollama/tinyllama</code></td><td>LLM model reference</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Optional: RabbitMQ</td></tr>
+          <tr><td><code>rabbitmq.enabled</code></td><td><code>false</code></td><td>Enable RabbitMQ</td></tr>
+          <tr><td><code>rabbitmq.url</code></td><td><code></code></td><td>Full AMQP connection string</td></tr>
+          <tr><td><code>rabbitmq.user</code></td><td><code>axiomnizam</code></td><td>RabbitMQ user</td></tr>
+          <tr><td><code>rabbitmq.vhost</code></td><td><code>/axiom</code></td><td>RabbitMQ vhost</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Optional: Kafka</td></tr>
+          <tr><td><code>kafka.enabled</code></td><td><code>false</code></td><td>Enable Kafka</td></tr>
+          <tr><td><code>kafka.brokers</code></td><td><code>kafka:9092</code></td><td>Kafka broker list</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Network &amp; Security</td></tr>
+          <tr><td><code>networkPolicy.enabled</code></td><td><code>false</code></td><td>K8s NetworkPolicies</td></tr>
+          <tr><td><code>certManager.enabled</code></td><td><code>false</code></td><td>cert-manager TLS certs</td></tr>
+          <tr><td><code>certManager.issuerName</code></td><td><code>axiomnizam-ca-issuer</code></td><td>Cert issuer name</td></tr>
+          <tr><td><code>certManager.issuerKind</code></td><td><code>Issuer</code></td><td><code>Issuer</code> or <code>ClusterIssuer</code></td></tr>
+          <tr><td><code>discord.webhookUrl</code></td><td><code></code></td><td>Discord notification webhook</td></tr>
+
+          <tr><td colspan="3" style="color:var(--green);font-weight:600;font-size:.8rem;padding-top:1rem">Pod Scheduling &amp; Security</td></tr>
+          <tr><td><code>nodeSelector</code></td><td><code>{}</code></td><td>Node selection constraints</td></tr>
+          <tr><td><code>tolerations</code></td><td><code>[]</code></td><td>Pod tolerations</td></tr>
+          <tr><td><code>affinity</code></td><td><code>{}</code></td><td>Pod affinity rules</td></tr>
+          <tr><td><code>podAnnotations</code></td><td><code>{}</code></td><td>Additional pod annotations</td></tr>
+          <tr><td><code>podSecurityContext.runAsUser</code></td><td><code>1000</code></td><td>UID to run as</td></tr>
+          <tr><td><code>podSecurityContext.fsGroup</code></td><td><code>1000</code></td><td>Filesystem group ID</td></tr>
+          <tr><td><code>securityContext.runAsNonRoot</code></td><td><code>true</code></td><td>Enforce non-root</td></tr>
+          <tr><td><code>securityContext.allowPrivilegeEscalation</code></td><td><code>false</code></td><td>Disallow privilege escalation</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Links -->
+  <div class="card">
+    <h2>Resources</h2>
+    <p style="margin-bottom:.75rem;color:var(--muted);font-size:.85rem">
+      <a href="https://github.com/shafiunmiraz0/AxiomNizam">GitHub</a> &nbsp;&middot;&nbsp;
+      <a href="https://github.com/shafiunmiraz0/AxiomNizam/tree/main/helm/axiomnizam">Chart Source</a> &nbsp;&middot;&nbsp;
+      <a href="https://github.com/shafiunmiraz0/AxiomNizam/blob/main/docs/HELM_RELEASE_GUIDE.md">Release Guide</a> &nbsp;&middot;&nbsp;
+      <a href="https://github.com/shafiunmiraz0/AxiomNizam/blob/main/docs/HELM_VALUES_REFERENCE.md">Full Reference</a>
+    </p>
+  </div>
+
+</div>
+
+<div class="footer">
+  AxiomNizam &copy; 2026 &mdash; Enterprise Data Control Plane
+</div>
+
+<script>
+function copyCode(el){
+  const text=el.textContent.replace('Copy','').trim();
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=el.querySelector('.copy');
+    btn.textContent='Copied!';
+    btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied')},2000);
+  });
+}
+</script>
+</body>
+</html>
