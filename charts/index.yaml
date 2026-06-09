@@ -1,0 +1,22 @@
+apiVersion: v1
+entries:
+  axiomnizam:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-06-09T11:21:35.8221376+06:00"
+    description: AxiomNizam — Enterprise Data Control Plane
+    digest: 22a0b8715159659e1b3621a38e57ade389d7c26f59801eb9c9a7f45a2ad8bc8e
+    home: https://github.com/AxiomNizam/AxiomNizam
+    keywords:
+    - data-control-plane
+    - iam
+    - storage
+    - zero-trust
+    maintainers:
+    - name: AxiomNizam
+    name: axiomnizam
+    type: application
+    urls:
+    - https://shafiunmiraz0.github.io/AxiomNizam/charts/axiomnizam-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-06-09T11:21:35.8221376+06:00"
